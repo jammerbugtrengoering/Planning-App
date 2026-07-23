@@ -53,12 +53,18 @@ function isoWeekNumber(date) {
   const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
   return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
 }
-function weekMeta(offset) {
-  const monday = mondayOf(new Date());
-  monday.setDate(monday.getDate() + offset * 7);
-  const friday = new Date(monday); friday.setDate(monday.getDate() + 4);
+function weekMeta(weekNo) {
+  // weekNo is an ISO week number. Find the Monday of that week in the current year.
+  const now = new Date();
+  const jan4 = new Date(Date.UTC(now.getFullYear(), 0, 4));
+  const jan4Day = jan4.getUTCDay() || 7;
+  const weekOneMonday = new Date(jan4);
+  weekOneMonday.setUTCDate(jan4.getUTCDate() - (jan4Day - 1));
+  const monday = new Date(weekOneMonday);
+  monday.setUTCDate(weekOneMonday.getUTCDate() + (weekNo - 1) * 7);
+  const friday = new Date(monday); friday.setUTCDate(monday.getUTCDate() + 4);
   const fmt = (d) => d.toLocaleDateString("da-DK", { day: "numeric", month: "short" });
-  return { label: `${fmt(monday)} – ${fmt(friday)}`, weekNo: isoWeekNumber(monday), monday };
+  return { label: `${fmt(monday)} – ${fmt(friday)}`, weekNo, monday };
 }
 
 // ---------- Skill matching ----------
@@ -269,7 +275,7 @@ export default function App() {
   const [travelSettings, setTravelSettings] = useState({ defaultMinutes: 20, dayStart: "07:00", overrides: {} });
   const [loading, setLoading] = useState(true);
 
-  const [weekOffset, setWeekOffset] = useState(0);
+  const [weekOffset, setWeekOffset] = useState(() => isoWeekNumber(new Date()));
   const [view, setView] = useState("uge");
   const [showAddTask, setShowAddTask] = useState(false);
   const [showAddEmp, setShowAddEmp] = useState(false);
@@ -321,8 +327,9 @@ export default function App() {
       if (customersData) setCustomers(customersData);
 
       // Employees – saml skills og capacity op
+      let empMapped = [];
       if (empData?.length) {
-        const mapped = empData.map((e) => ({
+        empMapped = empData.map((e) => ({
           id: e.id, name: e.name, color: e.color,
           skills: Object.fromEntries(
             (empSkillsData || []).filter((s) => s.employee_id === e.id)
@@ -336,7 +343,7 @@ export default function App() {
               .map((c) => [c.weekday, c.minutes])
           ),
         }));
-        setEmployees(mapped);
+        setEmployees(empMapped);
       }
 
       // Checklist-skabeloner – saml items ind
@@ -371,6 +378,7 @@ export default function App() {
         setTemplates(mapped);
 
         // Opbyg instanser fra skabeloner + eksisterende instanser
+        const currentWeek = isoWeekNumber(new Date());
         const existingInst = (instData || []).map((i) => {
           const cust = customersData?.find((c) => c.id === i.customer_id);
           return {
@@ -382,7 +390,7 @@ export default function App() {
             accessInstructions: cust?.access_instructions ?? "",
           };
         });
-        const allInst = ensureWeekInstances(0, existingInst, mapped, []);
+        const allInst = ensureWeekInstances(currentWeek, existingInst, mapped, empMapped);
         setInstances(allInst);
       } else if (instData?.length) {
         setInstances(instData.map((i) => ({
@@ -485,19 +493,27 @@ export default function App() {
     if (payload.type === "fixed") {
       const tpl = { id: uid("tpl"), title: payload.title, requiredSkills: payload.requiredSkills, duration: payload.duration, days: payload.days, checklistItems: checklistItemsCombined, videoUrl: payload.videoUrl,
         customerName: payload.customerName, address: payload.address, poNumber: payload.poNumber, accessInstructions: payload.accessInstructions };
+      supabase.from("service_templates").insert({ id: tpl.id, title: tpl.title, duration: tpl.duration, days: tpl.days, video_url: tpl.videoUrl || "", po_number: tpl.poNumber || "" });
       setTemplates((prevT) => {
         const nextT = [...prevT, tpl];
-        setInstances((cur) => ensureWeekInstances(weekOffset, cur, nextT, employees));
+        setInstances((cur) => {
+          const next = ensureWeekInstances(weekOffset, cur, nextT, employees);
+          next.filter((i) => !cur.find((c) => c.id === i.id)).forEach(syncInstance);
+          return next;
+        });
         return nextT;
       });
     } else {
-      const base = { id: uid("i"), title: payload.title, requiredSkills: payload.requiredSkills, duration: payload.duration, assignees: [], status: "unscheduled", timeLog: [], week: weekOffset, checklist: instantiateChecklist(checklistItemsCombined), videoUrl: payload.videoUrl,
+      const adhocWeek = payload.adhocDate ? isoWeekNumber(new Date(payload.adhocDate)) : weekOffset;
+      const base = { id: uid("i"), title: payload.title, requiredSkills: payload.requiredSkills, duration: payload.duration, assignees: [], status: "unscheduled", timeLog: [], week: adhocWeek, checklist: instantiateChecklist(checklistItemsCombined), videoUrl: payload.videoUrl,
         customerName: payload.customerName, address: payload.address, poNumber: payload.poNumber, accessInstructions: payload.accessInstructions };
       const newInstance = payload.type === "adhoc" ? { ...base, type: "adhoc", day: payload.day } : { ...base, type: "flexible", day: null, deadline: payload.deadline };
       setInstances((prev) => {
         const thisWeek = [...prev.filter((t) => t.week === weekOffset), newInstance];
         const others = prev.filter((t) => t.week !== weekOffset);
-        return [...others, ...scheduleWeek(thisWeek, employees)];
+        const scheduled = scheduleWeek(thisWeek, employees);
+        scheduled.forEach(syncInstance);
+        return [...others, ...scheduled];
       });
     }
     setShowAddTask(false);
@@ -599,18 +615,8 @@ export default function App() {
     }));
   }
 
-  function toggleTimer(taskId, empId) {
-    const key = `${taskId}:${empId}`;
-    setRunning((prev) => {
-      const next = { ...prev };
-      if (next[key]) {
-        const startTs = next[key];
-        const minutes = Math.max((Date.now() - startTs) / 60000, 1);
-        updateInstance(taskId, (t) => ({ ...t, timeLog: [...(t.timeLog || []), { minutes, empId }] }));
-        delete next[key];
-      } else next[key] = Date.now();
-      return next;
-    });
+  function logMinutes(taskId, empId, minutes) {
+    updateInstance(taskId, (t) => ({ ...t, timeLog: [...(t.timeLog || []), { minutes, empId }] }));
   }
 
   function exportCSV() {
@@ -629,6 +635,7 @@ export default function App() {
     notify("Eksport downloadet (til løn/faktura)");
   }
 
+  const currentIsoWeek = isoWeekNumber(new Date());
   const weekInstancesList = instances.filter((t) => t.week === weekOffset);
   const unplaced = weekInstancesList.filter((t) => !(t.assignees && t.assignees.length));
   const totalLogged = useMemo(() => instances.reduce((s, t) => s + (t.timeLog || []).reduce((s2, l) => s2 + l.minutes, 0), 0), [instances]);
@@ -670,7 +677,7 @@ export default function App() {
           onOpenTask={setOpenTaskId}
           dragId={dragId} setDragId={setDragId}
           weekLabel={wk.label} weekNo={wk.weekNo} weekOffset={weekOffset}
-          onPrevWeek={() => changeWeek(-1)} onNextWeek={() => changeWeek(1)} onTodayWeek={() => changeWeek(-weekOffset)}
+          onPrevWeek={() => changeWeek(-1)} onNextWeek={() => changeWeek(1)} onTodayWeek={() => setWeekOffset(currentIsoWeek)}
           travelSettings={travelSettings} onOpenTravelSettings={() => setShowTravelSettings(true)}
         />
       )}
@@ -690,8 +697,8 @@ export default function App() {
 
       {view === "mobil" && (
         <EmployeeAppView
-          employees={employees} instances={weekInstancesList} running={running}
-          onToggleTimer={toggleTimer} onSetStatus={setTaskStatus} onToggleChecklistItem={toggleChecklistItem} weekLabel={wk.label}
+          employees={employees} instances={weekInstancesList}
+          onLogMinutes={logMinutes} onSetStatus={setTaskStatus} onToggleChecklistItem={toggleChecklistItem} weekLabel={wk.label}
           travelSettings={travelSettings}
         />
       )}
@@ -728,7 +735,7 @@ function todayKeyGuess() {
   return map[new Date().getDay()] || "Mon";
 }
 
-function EmployeeAppView({ employees, instances, running, onToggleTimer, onSetStatus, onToggleChecklistItem, weekLabel, travelSettings }) {
+function EmployeeAppView({ employees, instances, onLogMinutes, onSetStatus, onToggleChecklistItem, weekLabel, travelSettings }) {
   const [empId, setEmpId] = useState(employees[0]?.id || "");
   const [day, setDay] = useState(todayKeyGuess());
   const [openTaskId, setOpenTaskId] = useState(null);
@@ -766,8 +773,6 @@ function EmployeeAppView({ employees, instances, running, onToggleTimer, onSetSt
                 );
               }
               const t = seg.task;
-              const isRunning = !!running[`${t.id}:${empId}`];
-              const logged = t.timeLog.reduce((s, l) => s + l.minutes, 0);
               const myLogged = t.timeLog.filter((l) => l.empId === empId).reduce((s, l) => s + l.minutes, 0);
               const shared = (t.assignees || []).length > 1;
               const open = openTaskId === t.id;
@@ -846,11 +851,23 @@ function EmployeeAppView({ employees, instances, running, onToggleTimer, onSetSt
                   )}
 
                   <div style={styles.phoneCardFooter}>
-                    <span style={styles.phoneTimeLogged}><Clock size={12} /> Din tid: {fmtMin(myLogged)}{shared ? ` · Total: ${fmtMin(logged)}` : ""} / {fmtMin(t.duration)}</span>
-                    <div style={{ display: "flex", gap: 6 }}>
-                      <button style={isRunning ? styles.timerBtnActive : styles.timerBtn} onClick={() => onToggleTimer(t.id, empId)}>
-                        {isRunning ? <><Square size={12} /> Stop</> : <><Play size={12} /> Start</>}
-                      </button>
+                    <span style={styles.phoneTimeLogged}><Clock size={12} /> Registreret: {fmtMin(myLogged)} / {fmtMin(t.duration)}</span>
+                    <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                      <input
+                        type="number" min={1} step={5} placeholder="min"
+                        style={{ width: 60, padding: "5px 6px", borderRadius: 7, border: "1px solid #E2E8F0", fontSize: 12.5, textAlign: "center", color: "#111111", background: "#fff" }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && Number(e.target.value) > 0) {
+                            onLogMinutes(t.id, empId, Number(e.target.value));
+                            e.target.value = "";
+                          }
+                        }}
+                      />
+                      <button style={styles.timerBtn} onClick={(e) => {
+                        const inp = e.currentTarget.previousSibling;
+                        const val = Number(inp.value);
+                        if (val > 0) { onLogMinutes(t.id, empId, val); inp.value = ""; }
+                      }}><Clock size={12} /> Gem</button>
                       <button style={done ? styles.doneBtnActive : styles.doneBtn} onClick={() => onSetStatus(t.id, done ? "planlagt" : "udført")}>
                         <CheckCircle2 size={12} /> {done ? "Udført ✓" : "Marker udført"}
                       </button>
@@ -882,10 +899,10 @@ function WeekView({ employees, instances, unplaced, onAdd, onImport, onAuto, onP
           <button style={styles.weekNavBtn} onClick={onPrevWeek}><ChevronLeft size={16} /></button>
           <div style={styles.weekNavLabel}>
             <span style={styles.weekNavStrong}>Uge {weekNo}</span> · {weekLabel}
-            {weekOffset === 0 && <span style={styles.weekNowTag}>Denne uge</span>}
+            {weekOffset === currentIsoWeek && <span style={styles.weekNowTag}>Denne uge</span>}
           </div>
           <button style={styles.weekNavBtn} onClick={onNextWeek}><ChevronRight size={16} /></button>
-          {weekOffset !== 0 && <button style={styles.secondaryBtn} onClick={onTodayWeek}>I dag</button>}
+          {weekOffset !== currentIsoWeek && <button style={styles.secondaryBtn} onClick={onTodayWeek}>I dag</button>}
         </div>
       </div>
 
@@ -1221,6 +1238,7 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills }) {
   const [requiredSkills, setRequiredSkills] = useState([{ skill: skills[0] ?? "", minLevel: 1 }]);
   const [days, setDays] = useState(["Mon"]);
   const [day, setDay] = useState("Mon");
+  const [adhocDate, setAdhocDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [deadline, setDeadline] = useState("Fri");
   const [checklistTemplateIds, setChecklistTemplateIds] = useState([]);
   const [extraItems, setExtraItems] = useState([]);
@@ -1302,8 +1320,13 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills }) {
       )}
       {type === "adhoc" && (
         <>
-          <label style={styles.label}>Dag (denne uge)</label>
-          <select style={styles.input} value={day} onChange={(e) => setDay(e.target.value)}>{DAYS.map((d) => <option key={d.key} value={d.key}>{d.label}</option>)}</select>
+          <label style={styles.label}>Dato for udførelse</label>
+          <input type="date" style={styles.input} value={adhocDate} onChange={(e) => {
+            setAdhocDate(e.target.value);
+            const d = new Date(e.target.value);
+            const dayKeys = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+            setDay(dayKeys[d.getDay()]);
+          }} />
         </>
       )}
       {type === "flexible" && (
@@ -1349,7 +1372,7 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills }) {
         <button
           style={styles.primaryBtn}
           disabled={!title.trim() || (type === "fixed" && days.length === 0) || requiredSkills.length === 0}
-          onClick={() => onSave({ type, title: title.trim(), requiredSkills, duration, days, day, deadline, checklistTemplateIds, extraItems, videoUrl: videoUrl.trim(), customerName: customerName.trim(), address: address.trim(), poNumber: poNumber.trim(), accessInstructions: accessInstructions.trim() })}
+          onClick={() => onSave({ type, title: title.trim(), requiredSkills, duration, days, day, adhocDate, deadline, checklistTemplateIds, extraItems, videoUrl: videoUrl.trim(), customerName: customerName.trim(), address: address.trim(), poNumber: poNumber.trim(), accessInstructions: accessInstructions.trim() })}
         >
           Gem og planlæg
         </button>
@@ -1606,7 +1629,7 @@ const globalCss = `
 `;
 
 const styles = {
-  app: { fontFamily: "'Inter', -apple-system, system-ui, sans-serif", background: "#FFF6FA", minHeight: "100vh", color: "#111111" },
+  app: { fontFamily: "'Inter', -apple-system, system-ui, sans-serif", background: "#FFF6FA", minHeight: "100vh", color: "#111111", display: "flex", flexDirection: "column" },
   header: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 24px", background: "#111111", color: "#fff", flexWrap: "wrap", gap: 12 },
   brand: { display: "flex", alignItems: "center", gap: 12 },
   brandMark: { width: 36, height: 36, borderRadius: 10, background: "#D6247A", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 14 },
@@ -1616,7 +1639,7 @@ const styles = {
   navBtn: { padding: "8px 14px", borderRadius: 8, border: "none", background: "transparent", color: "#D9A9C0", cursor: "pointer", fontSize: 13.5, fontWeight: 500 },
   navBtnActive: { padding: "8px 14px", borderRadius: 8, border: "none", background: "#D6247A", color: "#fff", cursor: "pointer", fontSize: 13.5, fontWeight: 600 },
   toast: { position: "fixed", top: 16, right: 24, background: "#111111", color: "#fff", padding: "10px 16px", borderRadius: 8, fontSize: 13.5, zIndex: 50, boxShadow: "0 8px 24px rgba(0,0,0,0.2)" },
-  page: { padding: "20px 24px 40px", maxWidth: 1500, margin: "0 auto" },
+  page: { padding: "16px 20px 40px", flex: 1 },
   toolbar: { display: "flex", alignItems: "center", gap: 10, marginBottom: 10, flexWrap: "wrap" },
   toolbarSpacer: { flex: 1 },
   primaryBtn: { display: "flex", alignItems: "center", gap: 6, padding: "9px 14px", borderRadius: 8, border: "none", background: "#D6247A", color: "#fff", fontWeight: 600, fontSize: 13.5, cursor: "pointer" },
@@ -1688,16 +1711,16 @@ const styles = {
   timerBtn: { display: "flex", alignItems: "center", gap: 5, padding: "7px 12px", borderRadius: 8, border: "1px solid #CBD5E1", background: "#fff", color: "#334155", fontSize: 12.5, fontWeight: 600, cursor: "pointer" },
   timerBtnActive: { display: "flex", alignItems: "center", gap: 5, padding: "7px 12px", borderRadius: 8, border: "1px solid #B91C1C", background: "#FEE2E2", color: "#B91C1C", fontSize: 12.5, fontWeight: 600, cursor: "pointer" },
   overlay: { position: "fixed", inset: 0, background: "rgba(15,42,40,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100, padding: 16 },
-  modal: { background: "#fff", borderRadius: 14, width: 460, maxWidth: "100%", maxHeight: "90vh", overflowY: "auto" },
+  modal: { background: "#fff", borderRadius: 14, width: 460, maxWidth: "100%", maxHeight: "90vh", overflowY: "auto", color: "#111111" },
   modalHeader: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 18px", borderBottom: "1px solid #FFF6FA" },
   modalTitle: { fontWeight: 700, fontSize: 15, fontFamily: "'Space Grotesk', sans-serif" },
   modalBody: { padding: "16px 18px" },
   modalActions: { display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 14 },
   label: { display: "block", fontSize: 12, fontWeight: 600, color: "#475569", marginTop: 12, marginBottom: 5 },
   hint: { fontSize: 11.5, color: "#64748B", marginTop: 4 },
-  input: { width: "100%", padding: "9px 10px", borderRadius: 8, border: "1px solid #E2E8F0", fontSize: 13.5, fontFamily: "inherit", background: "#F8FAFC" },
-  textarea: { width: "100%", padding: "9px 10px", borderRadius: 8, border: "1px solid #E2E8F0", fontSize: 13, fontFamily: "inherit", background: "#F8FAFC", resize: "vertical" },
-  inputSm: { flex: 1, padding: "7px 8px", borderRadius: 8, border: "1px solid #E2E8F0", fontSize: 12.5, fontFamily: "inherit", background: "#F8FAFC" },
+  input: { width: "100%", padding: "9px 10px", borderRadius: 8, border: "1px solid #E2E8F0", fontSize: 13.5, fontFamily: "inherit", background: "#fff", color: "#111111" },
+  textarea: { width: "100%", padding: "9px 10px", borderRadius: 8, border: "1px solid #E2E8F0", fontSize: 13, fontFamily: "inherit", background: "#fff", color: "#111111", resize: "vertical" },
+  inputSm: { flex: 1, padding: "7px 8px", borderRadius: 8, border: "1px solid #E2E8F0", fontSize: 12.5, fontFamily: "inherit", background: "#fff", color: "#111111" },
   typePicker: { display: "flex", gap: 6 },
   typePickBtn: { flex: 1, padding: "8px 6px", borderRadius: 8, border: "1px solid #E2E8F0", background: "#F8FAFC", color: "#475569", fontSize: 12, fontWeight: 600, cursor: "pointer" },
   skillPicker: { display: "flex", flexWrap: "wrap", gap: 6 },
