@@ -268,9 +268,10 @@ export default function App() {
   // ── Auth ──
   const [session, setSession] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
-  const [loginEmail, setLoginEmail] = useState("");
-  const [loginSent, setLoginSent] = useState(false);
-  const [loginLoading, setLoginLoading] = useState(false);
+const [loginEmail, setLoginEmail] = useState("");
+const [loginPassword, setLoginPassword] = useState("");
+const [loginLoading, setLoginLoading] = useState(false);
+const [loginError, setLoginError] = useState("");
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -282,19 +283,23 @@ export default function App() {
     return () => subscription.unsubscribe();
   }, []);
 
-  async function sendMagicLink() {
-    if (!loginEmail.trim()) return;
-    setLoginLoading(true);
-    await supabase.auth.signInWithOtp({
-      email: loginEmail.trim(),
-      options: { emailRedirectTo: window.location.origin },
-    });
-    setLoginLoading(false); setLoginSent(true);
-  }
+  async function login() {
+  if (!loginEmail.trim() || !loginPassword.trim()) return;
 
-  if (authLoading) {
-    return <div style={{ display:"flex",alignItems:"center",justifyContent:"center",height:"100svh",color:"#9C1B5D",fontFamily:"system-ui",fontSize:15 }}>Indlæser…</div>;
+  setLoginLoading(true);
+  setLoginError("");
+
+  const { error } = await supabase.auth.signInWithPassword({
+    email: loginEmail.trim(),
+    password: loginPassword,
+  });
+
+  setLoginLoading(false);
+
+  if (error) {
+    setLoginError(error.message);
   }
+}
 
   if (!session) {
     return (
@@ -307,30 +312,70 @@ export default function App() {
               <div style={{ fontSize:12,color:"#94A3B8" }}>Planlægningssystem</div>
             </div>
           </div>
-          {loginSent ? (
-            <div style={{ textAlign:"center",padding:"20px 0" }}>
-              <div style={{ fontSize:40,marginBottom:12 }}>📬</div>
-              <div style={{ fontWeight:700,fontSize:17,color:"#111111",marginBottom:8 }}>Tjek din mail</div>
-              <div style={{ fontSize:13.5,color:"#475569",lineHeight:1.6 }}>Vi har sendt et login-link til <strong>{loginEmail}</strong>. Klik på linket for at logge ind.</div>
-            </div>
-          ) : (
-            <>
-              <div style={{ fontSize:13,fontWeight:600,color:"#475569",marginBottom:6 }}>E-mailadresse</div>
-              <input
-                type="email" value={loginEmail} onChange={(e) => setLoginEmail(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter") sendMagicLink(); }}
-                placeholder="din@email.dk" autoFocus
-                style={{ width:"100%",padding:"11px 12px",borderRadius:10,border:"1px solid #E2E8F0",fontSize:15,color:"#111111",background:"#fff",boxSizing:"border-box",marginBottom:12 }}
-              />
-              <button
-                disabled={loginLoading || !loginEmail.trim()}
-                onClick={sendMagicLink}
-                style={{ width:"100%",padding:"13px 0",borderRadius:10,border:"none",background:"#D6247A",color:"#fff",fontWeight:700,fontSize:15,cursor:"pointer" }}>
-                {loginLoading ? "Sender…" : "Send login-link"}
-              </button>
-            </>
-          )}
-        </div>
+         <div style={{ fontSize:"13px",fontWeight:600,color:"#475569",marginBottom:6 }}>
+  E-mailadresse
+</div>
+
+<input
+  type="email"
+  value={loginEmail}
+  onChange={(e) => setLoginEmail(e.target.value)}
+  placeholder="mail@firma.dk"
+  style={{
+    width:"100%",
+    padding:"11px 12px",
+    borderRadius:10,
+    border:"1px solid #E2E8F0",
+    fontSize:15,
+    marginBottom:12
+  }}
+/>
+
+<div style={{ fontSize:"13px",fontWeight:600,color:"#475569",marginBottom:6 }}>
+  Password
+</div>
+
+<input
+  type="password"
+  value={loginPassword}
+  onChange={(e) => setLoginPassword(e.target.value)}
+  placeholder="Password"
+  onKeyDown={(e) => {
+    if (e.key === "Enter") login();
+  }}
+  style={{
+    width:"100%",
+    padding:"11px 12px",
+    borderRadius:10,
+    border:"1px solid #E2E8F0",
+    fontSize:15,
+    marginBottom:12
+  }}
+/>
+
+{loginError && (
+  <div style={{ color:"#B91C1C", marginBottom:10 }}>
+    {loginError}
+  </div>
+)}
+
+<button
+  disabled={loginLoading}
+  onClick={login}
+  style={{
+    width:"100%",
+    padding:"13px 0",
+    borderRadius:10,
+    border:"none",
+    background:"#D6247A",
+    color:"#fff",
+    fontWeight:700,
+    fontSize:15,
+    cursor:"pointer"
+  }}
+>
+  {loginLoading ? "Logger ind..." : "Log ind"}
+</button></div>
       </div>
     );
   }
