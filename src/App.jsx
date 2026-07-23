@@ -899,10 +899,10 @@ function WeekView({ employees, instances, unplaced, onAdd, onImport, onAuto, onP
           <button style={styles.weekNavBtn} onClick={onPrevWeek}><ChevronLeft size={16} /></button>
           <div style={styles.weekNavLabel}>
             <span style={styles.weekNavStrong}>Uge {weekNo}</span> · {weekLabel}
-            {weekOffset === currentIsoWeek && <span style={styles.weekNowTag}>Denne uge</span>}
+            {weekOffset === 0 && <span style={styles.weekNowTag}>Denne uge</span>}
           </div>
           <button style={styles.weekNavBtn} onClick={onNextWeek}><ChevronRight size={16} /></button>
-          {weekOffset !== currentIsoWeek && <button style={styles.secondaryBtn} onClick={onTodayWeek}>I dag</button>}
+          {weekOffset !== 0 && <button style={styles.secondaryBtn} onClick={onTodayWeek}>I dag</button>}
         </div>
       </div>
 
