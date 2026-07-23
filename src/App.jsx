@@ -265,6 +265,80 @@ function cycleStatus(s) { return { planlagt: "i_gang", i_gang: "udført", udfør
 function statusColor(s) { return { planlagt: "#9C1B5D", i_gang: "#D97706", udført: "#111111", unscheduled: "#94A3B8" }[s]; }
 
 export default function App() {
+  // ── Auth ──
+  const [session, setSession] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [loginEmail, setLoginEmail] = useState("");
+  const [loginSent, setLoginSent] = useState(false);
+  const [loginLoading, setLoginLoading] = useState(false);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session); setAuthLoading(false);
+    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, session) => {
+      setSession(session); setAuthLoading(false);
+    });
+    return () => subscription.unsubscribe();
+  }, []);
+
+  async function sendMagicLink() {
+    if (!loginEmail.trim()) return;
+    setLoginLoading(true);
+    await supabase.auth.signInWithOtp({
+      email: loginEmail.trim(),
+      options: { emailRedirectTo: window.location.origin },
+    });
+    setLoginLoading(false); setLoginSent(true);
+  }
+
+  if (authLoading) {
+    return <div style={{ display:"flex",alignItems:"center",justifyContent:"center",height:"100svh",color:"#9C1B5D",fontFamily:"system-ui",fontSize:15 }}>Indlæser…</div>;
+  }
+
+  if (!session) {
+    return (
+      <div style={{ display:"flex",alignItems:"center",justifyContent:"center",minHeight:"100svh",background:"#FFF6FA",fontFamily:"'Inter',system-ui,sans-serif" }}>
+        <div style={{ background:"#fff",borderRadius:18,padding:32,width:360,boxShadow:"0 8px 32px rgba(0,0,0,0.10)" }}>
+          <div style={{ display:"flex",alignItems:"center",gap:12,marginBottom:28 }}>
+            <div style={{ width:44,height:44,borderRadius:12,background:"#D6247A",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:16,color:"#fff" }}>RP</div>
+            <div>
+              <div style={{ fontWeight:700,fontSize:17,color:"#111111" }}>Rengøringsplan</div>
+              <div style={{ fontSize:12,color:"#94A3B8" }}>Planlægningssystem</div>
+            </div>
+          </div>
+          {loginSent ? (
+            <div style={{ textAlign:"center",padding:"20px 0" }}>
+              <div style={{ fontSize:40,marginBottom:12 }}>📬</div>
+              <div style={{ fontWeight:700,fontSize:17,color:"#111111",marginBottom:8 }}>Tjek din mail</div>
+              <div style={{ fontSize:13.5,color:"#475569",lineHeight:1.6 }}>Vi har sendt et login-link til <strong>{loginEmail}</strong>. Klik på linket for at logge ind.</div>
+            </div>
+          ) : (
+            <>
+              <div style={{ fontSize:13,fontWeight:600,color:"#475569",marginBottom:6 }}>E-mailadresse</div>
+              <input
+                type="email" value={loginEmail} onChange={(e) => setLoginEmail(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") sendMagicLink(); }}
+                placeholder="din@email.dk" autoFocus
+                style={{ width:"100%",padding:"11px 12px",borderRadius:10,border:"1px solid #E2E8F0",fontSize:15,color:"#111111",background:"#fff",boxSizing:"border-box",marginBottom:12 }}
+              />
+              <button
+                disabled={loginLoading || !loginEmail.trim()}
+                onClick={sendMagicLink}
+                style={{ width:"100%",padding:"13px 0",borderRadius:10,border:"none",background:"#D6247A",color:"#fff",fontWeight:700,fontSize:15,cursor:"pointer" }}>
+                {loginLoading ? "Sender…" : "Send login-link"}
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  return <PlanningApp session={session} onSignOut={() => supabase.auth.signOut()} />;
+}
+
+function PlanningApp({ session, onSignOut }) {
   // ── Dynamiske master-data fra Supabase ──
   const [skills, setSkills] = useState(SKILLS_FALLBACK);
   const [customers, setCustomers] = useState([]);
@@ -413,21 +487,25 @@ export default function App() {
 
   // ── Supabase: sync-helpers ──
   const syncEmployee = useCallback(async (emp) => {
-    // Upsert basis-række
+    const { data: skillRows_db } = await supabase.from("skills").select("id, name");
     await supabase.from("employees").upsert({ id: emp.id, name: emp.name, color: emp.color }, { onConflict: "id" });
-    // Skills: slet og genindsæt
     await supabase.from("employee_skills").delete().eq("employee_id", emp.id);
-    const skillRows = Object.entries(emp.skills || {}).map(([name, level]) => ({
-      employee_id: emp.id,
-      skill_id: name.toLowerCase().replace(/æ/g,"ae").replace(/ø/g,"oe").replace(/å/g,"aa").replace(/\s+/g,""),
-      level,
-    }));
+    const skillRows = Object.entries(emp.skills || {})
+      .map(([name, level]) => {
+        const match = skillRows_db?.find((s) => s.name === name);
+        return match ? { employee_id: emp.id, skill_id: match.id, level } : null;
+      }).filter(Boolean);
     if (skillRows.length) await supabase.from("employee_skills").insert(skillRows);
-    // Capacity: upsert pr. dag
-    const capRows = Object.entries(emp.capacity || {}).map(([weekday, minutes]) => ({
-      employee_id: emp.id, weekday, minutes,
-    }));
+    const capRows = Object.entries(emp.capacity || {}).map(([weekday, minutes]) => ({ employee_id: emp.id, weekday, minutes }));
     if (capRows.length) await supabase.from("employee_capacity").upsert(capRows, { onConflict: "employee_id,weekday" });
+    // Also ensure capacity rows exist for all days
+    const missingDays = ["Mon","Tue","Wed","Thu","Fri"].filter(d => !(emp.capacity || {})[d]);
+    if (missingDays.length) {
+      await supabase.from("employee_capacity").upsert(
+        missingDays.map(weekday => ({ employee_id: emp.id, weekday, minutes: 480 })),
+        { onConflict: "employee_id,weekday" }
+      );
+    }
   }, []);
 
   const removeEmployee = useCallback(async (id) => {
@@ -485,15 +563,41 @@ export default function App() {
     });
   }
 
-  function addTask(payload) {
+  async function addTask(payload) {
     const checklistItemsCombined = [
       ...payload.checklistTemplateIds.flatMap((id) => checklistTemplates.find((c) => c.id === id)?.items || []),
       ...payload.extraItems,
     ];
     if (payload.type === "fixed") {
-      const tpl = { id: uid("tpl"), title: payload.title, requiredSkills: payload.requiredSkills, duration: payload.duration, days: payload.days, checklistItems: checklistItemsCombined, videoUrl: payload.videoUrl,
-        customerName: payload.customerName, address: payload.address, poNumber: payload.poNumber, accessInstructions: payload.accessInstructions };
-      supabase.from("service_templates").insert({ id: tpl.id, title: tpl.title, duration: tpl.duration, days: tpl.days, video_url: tpl.videoUrl || "", po_number: tpl.poNumber || "" });
+      const tplId = uid("tpl");
+      const tpl = {
+        id: tplId, title: payload.title, requiredSkills: payload.requiredSkills,
+        duration: payload.duration, days: payload.days, checklistItems: checklistItemsCombined,
+        videoUrl: payload.videoUrl, customerName: payload.customerName, address: payload.address,
+        poNumber: payload.poNumber, accessInstructions: payload.accessInstructions,
+      };
+      // Persist template
+      await supabase.from("service_templates").insert({
+        id: tplId, title: tpl.title, duration: tpl.duration, days: tpl.days,
+        video_url: tpl.videoUrl || "", po_number: tpl.poNumber || "",
+      });
+      // Persist template skills
+      const { data: skillsDb } = await supabase.from("skills").select("id,name");
+      const skillRows = (payload.requiredSkills || []).map((r) => {
+        const sk = skillsDb?.find((s) => s.name === r.skill);
+        return sk ? { template_id: tplId, skill_id: sk.id, min_level: r.minLevel } : null;
+      }).filter(Boolean);
+      if (skillRows.length) await supabase.from("service_template_skills").insert(skillRows);
+      // Persist checklist items
+      if (checklistItemsCombined.length) {
+        await supabase.from("checklist_template_items").insert(
+          checklistItemsCombined.map((it, i) => ({
+            checklist_template_id: null, sort_order: i,
+            text: typeof it === "string" ? it : it.text,
+            description: it.description || "", video_url: it.videoUrl || "",
+          })).map(r => ({ ...r, checklist_template_id: undefined })) // stored on instance
+        );
+      }
       setTemplates((prevT) => {
         const nextT = [...prevT, tpl];
         setInstances((cur) => {
@@ -505,12 +609,19 @@ export default function App() {
       });
     } else {
       const adhocWeek = payload.adhocDate ? isoWeekNumber(new Date(payload.adhocDate)) : weekOffset;
-      const base = { id: uid("i"), title: payload.title, requiredSkills: payload.requiredSkills, duration: payload.duration, assignees: [], status: "unscheduled", timeLog: [], week: adhocWeek, checklist: instantiateChecklist(checklistItemsCombined), videoUrl: payload.videoUrl,
-        customerName: payload.customerName, address: payload.address, poNumber: payload.poNumber, accessInstructions: payload.accessInstructions };
-      const newInstance = payload.type === "adhoc" ? { ...base, type: "adhoc", day: payload.day } : { ...base, type: "flexible", day: null, deadline: payload.deadline };
+      const base = {
+        id: uid("i"), title: payload.title, requiredSkills: payload.requiredSkills,
+        duration: payload.duration, assignees: [], status: "unscheduled", timeLog: [],
+        week: adhocWeek, checklist: instantiateChecklist(checklistItemsCombined),
+        videoUrl: payload.videoUrl, customerName: payload.customerName,
+        address: payload.address, poNumber: payload.poNumber, accessInstructions: payload.accessInstructions,
+      };
+      const newInstance = payload.type === "adhoc"
+        ? { ...base, type: "adhoc", day: payload.day }
+        : { ...base, type: "flexible", day: null, deadline: payload.deadline };
       setInstances((prev) => {
-        const thisWeek = [...prev.filter((t) => t.week === weekOffset), newInstance];
-        const others = prev.filter((t) => t.week !== weekOffset);
+        const thisWeek = [...prev.filter((t) => t.week === adhocWeek), newInstance];
+        const others = prev.filter((t) => t.week !== adhocWeek);
         const scheduled = scheduleWeek(thisWeek, employees);
         scheduled.forEach(syncInstance);
         return [...others, ...scheduled];
@@ -661,9 +772,10 @@ export default function App() {
           </div>
         </div>
         <nav style={styles.nav}>
-          {[["uge", "Ugeplan"], ["employees", "Medarbejdere"], ["checklists", "Tjeklister"], ["time", "Tid & Eksport"], ["mobil", "Medarbejder-app"]].map(([k, l]) => (
+          {[["uge", "Ugeplan"], ["employees", "Medarbejdere"], ["checklists", "Tjeklister"], ["time", "Tid & Eksport"]].map(([k, l]) => (
             <button key={k} onClick={() => setView(k)} style={view === k ? styles.navBtnActive : styles.navBtn}>{l}</button>
           ))}
+          <button onClick={onSignOut} style={{ ...styles.navBtn, marginLeft: 8, color: "#E8AFC9", borderLeft: "1px solid #333" }}>Log ud</button>
         </nav>
       </header>
 
@@ -899,10 +1011,10 @@ function WeekView({ employees, instances, unplaced, onAdd, onImport, onAuto, onP
           <button style={styles.weekNavBtn} onClick={onPrevWeek}><ChevronLeft size={16} /></button>
           <div style={styles.weekNavLabel}>
             <span style={styles.weekNavStrong}>Uge {weekNo}</span> · {weekLabel}
-            {weekOffset === 0 && <span style={styles.weekNowTag}>Denne uge</span>}
+            {weekOffset === currentIsoWeek && <span style={styles.weekNowTag}>Denne uge</span>}
           </div>
           <button style={styles.weekNavBtn} onClick={onNextWeek}><ChevronRight size={16} /></button>
-          {weekOffset !== 0 && <button style={styles.secondaryBtn} onClick={onTodayWeek}>I dag</button>}
+          {weekOffset !== currentIsoWeek && <button style={styles.secondaryBtn} onClick={onTodayWeek}>I dag</button>}
         </div>
       </div>
 
@@ -1623,7 +1735,7 @@ function Modal({ title, children, onClose }) {
 // ---------- Styles ----------
 const globalCss = `
   * { box-sizing: border-box; }
-  body { margin: 0; }
+  html, body, #root { margin: 0; padding: 0; width: 100%; min-height: 100vh; }
   ::-webkit-scrollbar { width: 8px; height: 8px; }
   ::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 8px; }
 `;
