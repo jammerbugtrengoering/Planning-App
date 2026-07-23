@@ -1,4 +1,5 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect, useCallback } from "react";
+import { supabase } from "./supabaseClient";
 import {
   Plus, Upload, Download, X, Clock, Play, Square, AlertTriangle,
   Trash2, Pencil, Repeat, Zap, CalendarClock, Wand2, Star, ChevronLeft, ChevronRight,
@@ -6,7 +7,9 @@ import {
 } from "lucide-react";
 
 // ---------- Constants ----------
-const SKILLS = ["Gulvvask", "Vinduespolering", "Sanitær", "Højtryk", "Tæpperens", "Køkkenhygiejne"];
+// SKILLS og customers hentes fra Supabase – se loadAll() i App-komponenten.
+// Fallback bruges kun hvis databasen ikke svarer ved første render.
+const SKILLS_FALLBACK = ["Gulvvask", "Vinduespolering", "Sanitær", "Højtryk", "Tæpperens", "Køkkenhygiejne"];
 const LEVELS = [
   { v: 1, label: "Nybegynder", short: "N" },
   { v: 2, label: "Øvet", short: "Ø" },
@@ -256,11 +259,17 @@ function cycleStatus(s) { return { planlagt: "i_gang", i_gang: "udført", udfør
 function statusColor(s) { return { planlagt: "#9C1B5D", i_gang: "#D97706", udført: "#111111", unscheduled: "#94A3B8" }[s]; }
 
 export default function App() {
-  const [employees, setEmployees] = useState(seedEmployees);
-  const [templates, setTemplates] = useState(seedTemplates);
-  const [checklistTemplates, setChecklistTemplates] = useState(seedChecklistTemplates);
+  // ── Dynamiske master-data fra Supabase ──
+  const [skills, setSkills] = useState(SKILLS_FALLBACK);
+  const [customers, setCustomers] = useState([]);
+  const [employees, setEmployees] = useState([]);
+  const [templates, setTemplates] = useState([]);
+  const [checklistTemplates, setChecklistTemplates] = useState([]);
+  const [instances, setInstances] = useState([]);
+  const [travelSettings, setTravelSettings] = useState({ defaultMinutes: 20, dayStart: "07:00", overrides: {} });
+  const [loading, setLoading] = useState(true);
+
   const [weekOffset, setWeekOffset] = useState(0);
-  const [instances, setInstances] = useState(() => ensureWeekInstances(0, seedAdhocFlex, seedTemplates, seedEmployees));
   const [view, setView] = useState("uge");
   const [showAddTask, setShowAddTask] = useState(false);
   const [showAddEmp, setShowAddEmp] = useState(false);
@@ -269,10 +278,186 @@ export default function App() {
   const [running, setRunning] = useState({});
   const [dragId, setDragId] = useState(null);
   const [openTaskId, setOpenTaskId] = useState(null);
-  const [travelSettings, setTravelSettings] = useState({ defaultMinutes: 20, dayStart: "07:00", overrides: {} });
   const [showTravelSettings, setShowTravelSettings] = useState(false);
 
   function notify(msg) { setToast(msg); setTimeout(() => setToast(null), 2800); }
+
+  // ── Supabase: load alt ved opstart ──
+  useEffect(() => {
+    async function loadAll() {
+      setLoading(true);
+      const [
+        { data: skillsData },
+        { data: customersData },
+        { data: empData },
+        { data: empSkillsData },
+        { data: empCapData },
+        { data: clData },
+        { data: clItemsData },
+        { data: tplData },
+        { data: tplSkillsData },
+        { data: instData },
+        { data: travelData },
+        { data: overridesData },
+      ] = await Promise.all([
+        supabase.from("skills").select("*"),
+        supabase.from("customers").select("*"),
+        supabase.from("employees").select("*"),
+        supabase.from("employee_skills").select("*"),
+        supabase.from("employee_capacity").select("*"),
+        supabase.from("checklist_templates").select("*"),
+        supabase.from("checklist_template_items").select("*").order("sort_order"),
+        supabase.from("service_templates").select("*"),
+        supabase.from("service_template_skills").select("*"),
+        supabase.from("instances").select("*"),
+        supabase.from("travel_settings").select("*").eq("id","default").single(),
+        supabase.from("travel_overrides").select("*"),
+      ]);
+
+      // Skills
+      if (skillsData?.length) setSkills(skillsData.map((s) => s.name));
+
+      // Customers
+      if (customersData) setCustomers(customersData);
+
+      // Employees – saml skills og capacity op
+      if (empData?.length) {
+        const mapped = empData.map((e) => ({
+          id: e.id, name: e.name, color: e.color,
+          skills: Object.fromEntries(
+            (empSkillsData || []).filter((s) => s.employee_id === e.id)
+              .map((s) => {
+                const skill = skillsData?.find((sk) => sk.id === s.skill_id);
+                return [skill?.name ?? s.skill_id, s.level];
+              })
+          ),
+          capacity: Object.fromEntries(
+            (empCapData || []).filter((c) => c.employee_id === e.id)
+              .map((c) => [c.weekday, c.minutes])
+          ),
+        }));
+        setEmployees(mapped);
+      }
+
+      // Checklist-skabeloner – saml items ind
+      if (clData?.length) {
+        const mapped = clData.map((cl) => ({
+          id: cl.id, name: cl.name,
+          items: (clItemsData || []).filter((i) => i.checklist_template_id === cl.id)
+            .map((i) => ({ text: i.text, description: i.description, videoUrl: i.video_url })),
+        }));
+        setChecklistTemplates(mapped);
+      }
+
+      // Serviceordre-skabeloner – saml skills op + hent kundedata
+      if (tplData?.length) {
+        const mapped = tplData.map((t) => {
+          const cust = customersData?.find((c) => c.id === t.customer_id);
+          return {
+            id: t.id, title: t.title, duration: t.duration, days: t.days,
+            videoUrl: t.video_url, poNumber: t.po_number,
+            customerName: cust?.name ?? "",
+            address: cust?.address ?? "",
+            accessInstructions: cust?.access_instructions ?? "",
+            checklistItems: [],
+            requiredSkills: (tplSkillsData || [])
+              .filter((s) => s.template_id === t.id)
+              .map((s) => {
+                const skill = skillsData?.find((sk) => sk.id === s.skill_id);
+                return { skill: skill?.name ?? s.skill_id, minLevel: s.min_level };
+              }),
+          };
+        });
+        setTemplates(mapped);
+
+        // Opbyg instanser fra skabeloner + eksisterende instanser
+        const existingInst = (instData || []).map((i) => {
+          const cust = customersData?.find((c) => c.id === i.customer_id);
+          return {
+            ...i,
+            timeLog: i.time_log ?? [],
+            requiredSkills: i.required_skills ?? [],
+            customerName: cust?.name ?? i.customer_id ?? "",
+            address: cust?.address ?? "",
+            accessInstructions: cust?.access_instructions ?? "",
+          };
+        });
+        const allInst = ensureWeekInstances(0, existingInst, mapped, []);
+        setInstances(allInst);
+      } else if (instData?.length) {
+        setInstances(instData.map((i) => ({
+          ...i, timeLog: i.time_log ?? [], requiredSkills: i.required_skills ?? [],
+        })));
+      }
+
+      // Transport
+      if (travelData) {
+        const overrides = Object.fromEntries(
+          (overridesData || []).map((o) => [travelKey(o.addr_a, o.addr_b), o.minutes])
+        );
+        setTravelSettings({ defaultMinutes: travelData.default_minutes, dayStart: travelData.day_start, overrides });
+      }
+
+      setLoading(false);
+    }
+    loadAll();
+  }, []);
+
+  // ── Supabase: sync-helpers ──
+  const syncEmployee = useCallback(async (emp) => {
+    // Upsert basis-række
+    await supabase.from("employees").upsert({ id: emp.id, name: emp.name, color: emp.color }, { onConflict: "id" });
+    // Skills: slet og genindsæt
+    await supabase.from("employee_skills").delete().eq("employee_id", emp.id);
+    const skillRows = Object.entries(emp.skills || {}).map(([name, level]) => ({
+      employee_id: emp.id,
+      skill_id: name.toLowerCase().replace(/æ/g,"ae").replace(/ø/g,"oe").replace(/å/g,"aa").replace(/\s+/g,""),
+      level,
+    }));
+    if (skillRows.length) await supabase.from("employee_skills").insert(skillRows);
+    // Capacity: upsert pr. dag
+    const capRows = Object.entries(emp.capacity || {}).map(([weekday, minutes]) => ({
+      employee_id: emp.id, weekday, minutes,
+    }));
+    if (capRows.length) await supabase.from("employee_capacity").upsert(capRows, { onConflict: "employee_id,weekday" });
+  }, []);
+
+  const removeEmployee = useCallback(async (id) => {
+    await supabase.from("employees").delete().eq("id", id);
+  }, []);
+
+  const syncInstance = useCallback(async (inst) => {
+    await supabase.from("instances").upsert({
+      id: inst.id, template_id: inst.templateId ?? null, title: inst.title,
+      type: inst.type, week: inst.week, day: inst.day ?? null,
+      deadline: inst.deadline ?? null, duration: inst.duration,
+      status: inst.status, video_url: inst.videoUrl ?? "",
+      customer_id: null, po_number: inst.poNumber ?? "",
+      warning: inst.warning ?? null,
+      assignees: inst.assignees ?? [],
+      checklist: inst.checklist ?? [],
+      time_log: inst.timeLog ?? [],
+      required_skills: inst.requiredSkills ?? [],
+    }, { onConflict: "id" });
+  }, []);
+
+  const removeInstance = useCallback(async (id) => {
+    await supabase.from("instances").delete().eq("id", id);
+  }, []);
+
+  const syncChecklistTemplate = useCallback(async (cl) => {
+    await supabase.from("checklist_templates").upsert({ id: cl.id, name: cl.name }, { onConflict: "id" });
+    await supabase.from("checklist_template_items").delete().eq("checklist_template_id", cl.id);
+    const rows = (cl.items || []).map((it, i) => ({
+      checklist_template_id: cl.id, sort_order: i,
+      text: it.text, description: it.description || "", video_url: it.videoUrl || "",
+    }));
+    if (rows.length) await supabase.from("checklist_template_items").insert(rows);
+  }, []);
+
+  const removeChecklistTemplate = useCallback(async (id) => {
+    await supabase.from("checklist_templates").delete().eq("id", id);
+  }, []);
 
   function changeWeek(delta) {
     const next = weekOffset + delta;
@@ -332,40 +517,58 @@ export default function App() {
     notify(`${imported.length} opgaver importeret fra Excel og forsøgt planlagt for denne uge`);
   }
 
-  function manualPlace(taskId, day, empId) {
+  function updateInstance(taskId, updater) {
     setInstances((prev) => prev.map((t) => {
       if (t.id !== taskId) return t;
-      const already = t.assignees || [];
-      const nextAssignees = already.includes(empId) ? already : [...already, empId];
-      return { ...t, day, assignees: nextAssignees, status: t.status === "unscheduled" ? "planlagt" : t.status, warning: null };
+      const updated = updater(t);
+      syncInstance(updated);
+      return updated;
     }));
+  }
+
+  function manualPlace(taskId, day, empId) {
+    updateInstance(taskId, (t) => {
+      const nextAssignees = (t.assignees || []).includes(empId) ? t.assignees : [...(t.assignees || []), empId];
+      return { ...t, day, assignees: nextAssignees, status: t.status === "unscheduled" ? "planlagt" : t.status, warning: null };
+    });
   }
   function removeAssignee(taskId, empId) {
-    setInstances((prev) => prev.map((t) => {
-      if (t.id !== taskId) return t;
+    updateInstance(taskId, (t) => {
       const nextAssignees = (t.assignees || []).filter((id) => id !== empId);
-      if (nextAssignees.length === 0) {
-        return { ...t, assignees: [], day: t.type === "flexible" ? null : t.day, status: "unscheduled" };
-      }
-      return { ...t, assignees: nextAssignees };
-    }));
+      return nextAssignees.length === 0
+        ? { ...t, assignees: [], day: t.type === "flexible" ? null : t.day, status: "unscheduled" }
+        : { ...t, assignees: nextAssignees };
+    });
   }
   function unplace(taskId) {
-    setInstances((prev) => prev.map((t) => (t.id === taskId ? { ...t, day: t.type === "flexible" ? null : t.day, assignees: [], status: "unscheduled" } : t)));
+    updateInstance(taskId, (t) => ({ ...t, day: t.type === "flexible" ? null : t.day, assignees: [], status: "unscheduled" }));
   }
-  function deleteTask(taskId) { setInstances((prev) => prev.filter((t) => t.id !== taskId)); }
-  function bumpStatus(taskId) { setInstances((prev) => prev.map((t) => (t.id === taskId ? { ...t, status: cycleStatus(t.status) } : t))); }
-  function setTaskStatus(taskId, status) { setInstances((prev) => prev.map((t) => (t.id === taskId ? { ...t, status } : t))); }
+  function deleteTask(taskId) {
+    setInstances((prev) => prev.filter((t) => t.id !== taskId));
+    removeInstance(taskId);
+  }
+  function bumpStatus(taskId) {
+    updateInstance(taskId, (t) => ({ ...t, status: cycleStatus(t.status) }));
+  }
+  function setTaskStatus(taskId, status) {
+    updateInstance(taskId, (t) => ({ ...t, status }));
+  }
   function toggleChecklistItem(taskId, itemId) {
-    setInstances((prev) => prev.map((t) => (t.id === taskId ? { ...t, checklist: (t.checklist || []).map((i) => (i.id === itemId ? { ...i, done: !i.done } : i)) } : t)));
+    updateInstance(taskId, (t) => ({
+      ...t, checklist: (t.checklist || []).map((i) => (i.id === itemId ? { ...i, done: !i.done } : i)),
+    }));
   }
   function saveChecklistTemplate(tpl) {
     setChecklistTemplates((prev) => {
       const exists = prev.some((c) => c.id === tpl.id);
       return exists ? prev.map((c) => (c.id === tpl.id ? tpl : c)) : [...prev, tpl];
     });
+    syncChecklistTemplate(tpl);
   }
-  function deleteChecklistTemplate(id) { setChecklistTemplates((prev) => prev.filter((c) => c.id !== id)); }
+  function deleteChecklistTemplate(id) {
+    setChecklistTemplates((prev) => prev.filter((c) => c.id !== id));
+    removeChecklistTemplate(id);
+  }
 
   function saveEmployee(emp) {
     setEmployees((prev) => {
@@ -374,19 +577,25 @@ export default function App() {
       setInstances((cur) => {
         const thisWeek = cur.filter((t) => t.week === weekOffset);
         const others = cur.filter((t) => t.week !== weekOffset);
-        return [...others, ...scheduleWeek(thisWeek, next)];
+        const rescheduled = scheduleWeek(thisWeek, next);
+        rescheduled.forEach(syncInstance);
+        return [...others, ...rescheduled];
       });
       return next;
     });
+    syncEmployee(emp);
     notify(`Medarbejder ${emp.name} gemt`);
     setShowAddEmp(false); setEditEmp(null);
   }
   function deleteEmployee(id) {
     setEmployees((prev) => prev.filter((e) => e.id !== id));
+    removeEmployee(id);
     setInstances((prev) => prev.map((t) => {
       if (!(t.assignees || []).includes(id)) return t;
       const nextAssignees = t.assignees.filter((a) => a !== id);
-      return nextAssignees.length === 0 ? { ...t, assignees: [], status: "unscheduled" } : { ...t, assignees: nextAssignees };
+      const updated = nextAssignees.length === 0 ? { ...t, assignees: [], status: "unscheduled" } : { ...t, assignees: nextAssignees };
+      syncInstance(updated);
+      return updated;
     }));
   }
 
@@ -397,7 +606,7 @@ export default function App() {
       if (next[key]) {
         const startTs = next[key];
         const minutes = Math.max((Date.now() - startTs) / 60000, 1);
-        setInstances((ts) => ts.map((t) => (t.id === taskId ? { ...t, timeLog: [...t.timeLog, { minutes, empId }] } : t)));
+        updateInstance(taskId, (t) => ({ ...t, timeLog: [...(t.timeLog || []), { minutes, empId }] }));
         delete next[key];
       } else next[key] = Date.now();
       return next;
@@ -422,8 +631,16 @@ export default function App() {
 
   const weekInstancesList = instances.filter((t) => t.week === weekOffset);
   const unplaced = weekInstancesList.filter((t) => !(t.assignees && t.assignees.length));
-  const totalLogged = useMemo(() => instances.reduce((s, t) => s + t.timeLog.reduce((s2, l) => s2 + l.minutes, 0), 0), [instances]);
+  const totalLogged = useMemo(() => instances.reduce((s, t) => s + (t.timeLog || []).reduce((s2, l) => s2 + l.minutes, 0), 0), [instances]);
   const wk = weekMeta(weekOffset);
+
+  if (loading) {
+    return (
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100svh", fontFamily: "system-ui, sans-serif", color: "#9C1B5D", fontSize: 15 }}>
+        Indlæser data…
+      </div>
+    );
+  }
 
   return (
     <div style={styles.app}>
@@ -479,8 +696,8 @@ export default function App() {
         />
       )}
 
-      {showAddTask && <TaskModal onClose={() => setShowAddTask(false)} onSave={addTask} checklistTemplates={checklistTemplates} />}
-      {showAddEmp && <EmployeeModal emp={editEmp} onClose={() => { setShowAddEmp(false); setEditEmp(null); }} onSave={saveEmployee} />}
+      {showAddTask && <TaskModal onClose={() => setShowAddTask(false)} onSave={addTask} checklistTemplates={checklistTemplates} skills={skills} />}
+      {showAddEmp && <EmployeeModal emp={editEmp} onClose={() => { setShowAddEmp(false); setEditEmp(null); }} onSave={saveEmployee} skills={skills} />}
       {showTravelSettings && (
         <TravelSettingsModal
           settings={travelSettings}
@@ -997,11 +1214,11 @@ function TimeView({ instances, employees, totalLogged, onExport, weekLabel }) {
 }
 
 // ---------- Modals ----------
-function TaskModal({ onClose, onSave, checklistTemplates }) {
+function TaskModal({ onClose, onSave, checklistTemplates, skills }) {
   const [type, setType] = useState("fixed");
   const [title, setTitle] = useState("");
   const [duration, setDuration] = useState(60);
-  const [requiredSkills, setRequiredSkills] = useState([{ skill: SKILLS[0], minLevel: 1 }]);
+  const [requiredSkills, setRequiredSkills] = useState([{ skill: skills[0] ?? "", minLevel: 1 }]);
   const [days, setDays] = useState(["Mon"]);
   const [day, setDay] = useState("Mon");
   const [deadline, setDeadline] = useState("Fri");
@@ -1025,7 +1242,7 @@ function TaskModal({ onClose, onSave, checklistTemplates }) {
 
   function toggleDay(d) { setDays((prev) => (prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d])); }
   function addSkillRow() {
-    const unused = SKILLS.find((s) => !requiredSkills.some((r) => r.skill === s)) || SKILLS[0];
+    const unused = skills.find((s) => !requiredSkills.some((r) => r.skill === s)) || skills[0];
     setRequiredSkills((prev) => [...prev, { skill: unused, minLevel: 1 }]);
   }
   function updateSkillRow(i, field, value) {
@@ -1062,7 +1279,7 @@ function TaskModal({ onClose, onSave, checklistTemplates }) {
       {requiredSkills.map((r, i) => (
         <div key={i} style={styles.skillReqRow}>
           <select style={styles.inputSm} value={r.skill} onChange={(e) => updateSkillRow(i, "skill", e.target.value)}>
-            {SKILLS.map((s) => <option key={s} value={s}>{s}</option>)}
+            {skills.map((s) => <option key={s} value={s}>{s}</option>)}
           </select>
           <select style={styles.inputSm} value={r.minLevel} onChange={(e) => updateSkillRow(i, "minLevel", e.target.value)}>
             {LEVELS.map((l) => <option key={l.v} value={l.v}>≥ {l.label}</option>)}
@@ -1196,15 +1413,15 @@ function TravelSettingsModal({ settings, onClose, onSave }) {
   );
 }
 
-function EmployeeModal({ emp, onClose, onSave }) {
+function EmployeeModal({ emp, onClose, onSave, skills: skillList }) {
   const [name, setName] = useState(emp?.name || "");
-  const [skills, setSkills] = useState(emp?.skills || {});
+  const [empSkills, setEmpSkills] = useState(emp?.skills || {});
   const [capacity, setCapacity] = useState(emp?.capacity || defaultCapacity());
   const colorPool = ["#D6247A", "#111111", "#9C1B5D", "#5B5B60", "#C2487A", "#3A3A3E"];
   const [color] = useState(emp?.color || colorPool[Math.floor(Math.random() * colorPool.length)]);
 
   function setLevel(skill, level) {
-    setSkills((prev) => { const next = { ...prev }; if (level === 0) delete next[skill]; else next[skill] = level; return next; });
+    setEmpSkills((prev) => { const next = { ...prev }; if (level === 0) delete next[skill]; else next[skill] = level; return next; });
   }
   function setCap(day, hours) { setCapacity((prev) => ({ ...prev, [day]: Math.max(0, Number(hours)) * 60 })); }
 
@@ -1215,8 +1432,8 @@ function EmployeeModal({ emp, onClose, onSave }) {
 
       <label style={styles.label}>Kompetenceniveau pr. kompetence</label>
       <div style={styles.skillLevelGrid}>
-        {SKILLS.map((s) => {
-          const current = skills[s] || 0;
+        {(skillList || []).map((s) => {
+          const current = empSkills[s] || 0;
           return (
             <div key={s} style={styles.skillLevelRow}>
               <span style={styles.skillLevelName}>{s}</span>
@@ -1243,7 +1460,7 @@ function EmployeeModal({ emp, onClose, onSave }) {
 
       <div style={styles.modalActions}>
         <button style={styles.secondaryBtn} onClick={onClose}>Annuller</button>
-        <button style={styles.primaryBtn} disabled={!name.trim()} onClick={() => onSave({ id: emp?.id || uid("e"), name: name.trim(), skills, color: emp?.color || color, capacity })}>Gem medarbejder</button>
+        <button style={styles.primaryBtn} disabled={!name.trim()} onClick={() => onSave({ id: emp?.id || uid("e"), name: name.trim(), skills: empSkills, color: emp?.color || color, capacity })}>Gem medarbejder</button>
       </div>
     </Modal>
   );
