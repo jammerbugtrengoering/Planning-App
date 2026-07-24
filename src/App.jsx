@@ -1299,7 +1299,7 @@ function EmployeesView({ employees, instances, onAdd, onEdit, onDelete }) {
     if (!email) return;
     setInviteStatus((prev) => ({ ...prev, [emp.id]: "sending" }));
 
-    // signUp sender en bekræftelses-mail — brugeren sætter selv adgangskode
+    // signUp sender bekræftelses-mail — brugeren sætter selv adgangskode via linket
     const { data, error } = await supabase.auth.signUp({
       email,
       password: crypto.randomUUID().replace(/-/g, "") + "Aa1!",
@@ -1315,7 +1315,6 @@ function EmployeesView({ employees, instances, onAdd, onEdit, onDelete }) {
     const userId = data?.user?.id;
     if (userId) {
       await supabase.from("employees").update({ auth_user_id: userId }).eq("id", emp.id);
-      // Opdatér lokal state
       emp.auth_user_id = userId;
     }
 
