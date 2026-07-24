@@ -199,6 +199,11 @@ function scheduleWeek(weekInstances, employees) {
 function ensureWeekInstances(week, allInstances, templates, employees) {
   let list = [...allInstances];
   templates.forEach((tpl) => {
+    // Skip if past expiry date
+    if (tpl.expiryDate) {
+      const expiryWeek = isoWeekNumber(new Date(tpl.expiryDate));
+      if (week > expiryWeek) return;
+    }
     tpl.days.forEach((day) => {
       const exists = list.some((i) => i.templateId === tpl.id && i.week === week && i.day === day);
       if (!exists) {
@@ -206,7 +211,11 @@ function ensureWeekInstances(week, allInstances, templates, employees) {
           id: uid("i"), templateId: tpl.id, title: tpl.title, requiredSkills: tpl.requiredSkills,
           duration: tpl.duration, type: "fixed", day, week, assignees: [], status: "unscheduled", timeLog: [],
           checklist: instantiateChecklist(tpl.checklistItems || []), videoUrl: tpl.videoUrl || "",
-          customerName: tpl.customerName || "", address: tpl.address || "", poNumber: tpl.poNumber || "", accessInstructions: tpl.accessInstructions || "",
+          customerName: tpl.customerName || "", address: tpl.address || "", poNumber: tpl.poNumber || "",
+          accessInstructions: tpl.accessInstructions || "",
+          templateDays: tpl.days, // for off-schedule detection
+          contractType: tpl.contractType || "privat",
+          expiryDate: tpl.expiryDate || null,
         });
       }
     });
@@ -339,6 +348,13 @@ export default function App() {
 }
 
 function PlanningApp({ session, onSignOut }) {
+  const [lang, setLang] = useState(() => localStorage.getItem("rp_lang") || "da");
+  useEffect(() => { localStorage.setItem("rp_lang", lang); }, [lang]);
+
+  const L = {
+    da: { schedule:"Ugeplan", employees:"Medarbejdere", checklists:"Tjeklister", time:"Tid & Eksport", signOut:"Log ud", sub:"Ugeplanlægning · kapacitet · kompetenceniveauer" },
+    en: { schedule:"Schedule", employees:"Employees", checklists:"Checklists", time:"Time & Export", signOut:"Sign out", sub:"Weekly planning · capacity · skill levels" },
+  }[lang];
   // ── Dynamiske master-data fra Supabase ──
   const [skills, setSkills] = useState(SKILLS_FALLBACK);
   const [customers, setCustomers] = useState([]);
@@ -568,6 +584,27 @@ function PlanningApp({ session, onSignOut }) {
       ...payload.checklistTemplateIds.flatMap((id) => checklistTemplates.find((c) => c.id === id)?.items || []),
       ...payload.extraItems,
     ];
+
+    // Helper: all ISO week numbers from now until expiryDate
+    function weeksUntilExpiry(expiryDateStr) {
+      if (!expiryDateStr) return [weekOffset];
+      const weeks = [];
+      const expiry = new Date(expiryDateStr);
+      let current = weekOffset;
+      // Build weeks: current week up to the week containing expiryDate
+      const expiryWeek = isoWeekNumber(expiry);
+      const expiryYear = expiry.getFullYear();
+      const now = new Date();
+      const currentYear = now.getFullYear();
+      // Simple approach: iterate up to 104 weeks (2 years max)
+      for (let w = weekOffset; w <= (currentYear < expiryYear ? 52 : expiryWeek) + (expiryYear - currentYear) * 52; w++) {
+        weeks.push(w);
+        if (w >= expiryWeek && currentYear >= expiryYear) break;
+        if (weeks.length > 104) break;
+      }
+      return weeks;
+    }
+
     if (payload.type === "fixed") {
       const tplId = uid("tpl");
       const tpl = {
@@ -575,57 +612,80 @@ function PlanningApp({ session, onSignOut }) {
         duration: payload.duration, days: payload.days, checklistItems: checklistItemsCombined,
         videoUrl: payload.videoUrl, customerName: payload.customerName, address: payload.address,
         poNumber: payload.poNumber, accessInstructions: payload.accessInstructions,
+        contractType: payload.contractType, expiryDate: payload.expiryDate,
       };
-      // Persist template
       await supabase.from("service_templates").insert({
         id: tplId, title: tpl.title, duration: tpl.duration, days: tpl.days,
         video_url: tpl.videoUrl || "", po_number: tpl.poNumber || "",
       });
-      // Persist template skills
       const { data: skillsDb } = await supabase.from("skills").select("id,name");
       const skillRows = (payload.requiredSkills || []).map((r) => {
         const sk = skillsDb?.find((s) => s.name === r.skill);
         return sk ? { template_id: tplId, skill_id: sk.id, min_level: r.minLevel } : null;
       }).filter(Boolean);
       if (skillRows.length) await supabase.from("service_template_skills").insert(skillRows);
-      // Persist checklist items
-      if (checklistItemsCombined.length) {
-        await supabase.from("checklist_template_items").insert(
-          checklistItemsCombined.map((it, i) => ({
-            checklist_template_id: null, sort_order: i,
-            text: typeof it === "string" ? it : it.text,
-            description: it.description || "", video_url: it.videoUrl || "",
-          })).map(r => ({ ...r, checklist_template_id: undefined })) // stored on instance
-        );
-      }
+
       setTemplates((prevT) => {
         const nextT = [...prevT, tpl];
         setInstances((cur) => {
-          const next = ensureWeekInstances(weekOffset, cur, nextT, employees);
-          next.filter((i) => !cur.find((c) => c.id === i.id)).forEach(syncInstance);
+          const weeks = weeksUntilExpiry(payload.expiryDate);
+          let next = [...cur];
+          weeks.forEach((wk) => {
+            const expanded = ensureWeekInstances(wk, next, nextT, employees);
+            const newOnes = expanded.filter((i) => !next.find((c) => c.id === i.id));
+            newOnes.forEach((inst) => syncInstance({ ...inst, contractType: payload.contractType, expiryDate: payload.expiryDate }));
+            next = expanded;
+          });
           return next;
         });
         return nextT;
       });
     } else {
       const adhocWeek = payload.adhocDate ? isoWeekNumber(new Date(payload.adhocDate)) : weekOffset;
-      const base = {
-        id: uid("i"), title: payload.title, requiredSkills: payload.requiredSkills,
-        duration: payload.duration, assignees: [], status: "unscheduled", timeLog: [],
-        week: adhocWeek, checklist: instantiateChecklist(checklistItemsCombined),
-        videoUrl: payload.videoUrl, customerName: payload.customerName,
-        address: payload.address, poNumber: payload.poNumber, accessInstructions: payload.accessInstructions,
-      };
-      const newInstance = payload.type === "adhoc"
-        ? { ...base, type: "adhoc", day: payload.day }
-        : { ...base, type: "flexible", day: null, deadline: payload.deadline };
-      setInstances((prev) => {
-        const thisWeek = [...prev.filter((t) => t.week === adhocWeek), newInstance];
-        const others = prev.filter((t) => t.week !== adhocWeek);
-        const scheduled = scheduleWeek(thisWeek, employees);
-        scheduled.forEach(syncInstance);
-        return [...others, ...scheduled];
-      });
+
+      if (payload.type === "flexible" && payload.expiryDate) {
+        // Create one flexible instance per week until expiry
+        const weeks = weeksUntilExpiry(payload.expiryDate);
+        const newInstances = weeks.map((wk) => ({
+          id: uid("i"), title: payload.title, requiredSkills: payload.requiredSkills,
+          duration: payload.duration, assignees: [], status: "unscheduled", timeLog: [],
+          week: wk, checklist: instantiateChecklist(checklistItemsCombined),
+          videoUrl: payload.videoUrl, customerName: payload.customerName,
+          address: payload.address, poNumber: payload.poNumber, accessInstructions: payload.accessInstructions,
+          type: "flexible", day: null, deadline: payload.deadline,
+          contractType: payload.contractType, expiryDate: payload.expiryDate,
+        }));
+        setInstances((prev) => {
+          let next = [...prev];
+          newInstances.forEach((inst) => {
+            const thisWeek = [...next.filter((t) => t.week === inst.week), inst];
+            const others = next.filter((t) => t.week !== inst.week);
+            const scheduled = scheduleWeek(thisWeek, employees);
+            scheduled.forEach(syncInstance);
+            next = [...others, ...scheduled];
+          });
+          return next;
+        });
+      } else {
+        const base = {
+          id: uid("i"), title: payload.title, requiredSkills: payload.requiredSkills,
+          duration: payload.duration, assignees: [], status: "unscheduled", timeLog: [],
+          week: adhocWeek, checklist: instantiateChecklist(checklistItemsCombined),
+          videoUrl: payload.videoUrl, customerName: payload.customerName,
+          address: payload.address, poNumber: payload.poNumber, accessInstructions: payload.accessInstructions,
+          contractType: payload.contractType,
+        };
+        const newInstance = payload.type === "adhoc"
+          ? { ...base, type: "adhoc", day: payload.day }
+          : { ...base, type: "flexible", day: null, deadline: payload.deadline };
+        setInstances((prev) => {
+          const thisWeek = [...prev.filter((t) => t.week === adhocWeek), newInstance];
+          const others = prev.filter((t) => t.week !== adhocWeek);
+          const scheduled = scheduleWeek(thisWeek, employees);
+          scheduled.forEach(syncInstance);
+          return [...others, ...scheduled];
+        });
+      }
     }
     setShowAddTask(false);
   }
@@ -654,9 +714,31 @@ function PlanningApp({ session, onSignOut }) {
   }
 
   function manualPlace(taskId, day, empId) {
+    const task = instances.find((t) => t.id === taskId);
+    if (!task) return;
+
+    // Check if day is an agreed day for fixed tasks
+    const agreedDays = task.templateDays || task.days || [];
+    const isOffSchedule = task.type === "fixed" && agreedDays.length > 0 && !agreedDays.includes(day);
+
+    if (isOffSchedule) {
+      const dayLabel = DAYS.find((d) => d.key === day)?.label || day;
+      const agreedLabels = agreedDays.map((k) => DAYS.find((d) => d.key === k)?.label || k).join(", ");
+      const confirmed = window.confirm(
+        `Denne faste opgave er aftalt til: ${agreedLabels}.\n\nEr du sikker på at du vil planlægge den på ${dayLabel} — uden for aftalen?`
+      );
+      if (!confirmed) return;
+    }
+
     updateInstance(taskId, (t) => {
       const nextAssignees = (t.assignees || []).includes(empId) ? t.assignees : [...(t.assignees || []), empId];
-      return { ...t, day, assignees: nextAssignees, status: t.status === "unscheduled" ? "planlagt" : t.status, warning: null };
+      return {
+        ...t, day, assignees: nextAssignees,
+        status: t.status === "unscheduled" ? "planlagt" : t.status,
+        warning: null,
+        offSchedule: isOffSchedule ? true : (t.offSchedule || false),
+        onSchedule: !isOffSchedule,
+      };
     });
   }
   function removeAssignee(taskId, empId) {
@@ -781,17 +863,21 @@ function PlanningApp({ session, onSignOut }) {
       <style>{globalCss}</style>
       <header style={styles.header}>
         <div style={styles.brand}>
-          <div style={styles.brandMark}>RP</div>
+          <img src="/app-icon.png" alt="Worklist" style={{ width: 36, height: 36, borderRadius: 10, objectFit: "cover" }} />
           <div>
             <div style={styles.brandTitle}>Rengøringsplan</div>
-            <div style={styles.brandSub}>Ugeplanlægning · kapacitet · kompetenceniveauer</div>
+            <div style={styles.brandSub}>{L.sub}</div>
           </div>
         </div>
         <nav style={styles.nav}>
-          {[["uge", "Ugeplan"], ["employees", "Medarbejdere"], ["checklists", "Tjeklister"], ["time", "Tid & Eksport"]].map(([k, l]) => (
+          {[["uge", L.schedule], ["employees", L.employees], ["checklists", L.checklists], ["time", L.time]].map(([k, l]) => (
             <button key={k} onClick={() => setView(k)} style={view === k ? styles.navBtnActive : styles.navBtn}>{l}</button>
           ))}
-          <button onClick={onSignOut} style={{ ...styles.navBtn, marginLeft: 8, color: "#E8AFC9", borderLeft: "1px solid #333" }}>Log ud</button>
+          <div style={{ display:"flex", gap:4, marginLeft:12, borderLeft:"1px solid #333", paddingLeft:12 }}>
+            <button onClick={() => setLang("da")} style={{ fontSize:20, background:"none", border:"none", cursor:"pointer", opacity: lang==="da" ? 1 : 0.35, padding:"2px 4px", borderRadius:6 }}>🇩🇰</button>
+            <button onClick={() => setLang("en")} style={{ fontSize:20, background:"none", border:"none", cursor:"pointer", opacity: lang==="en" ? 1 : 0.35, padding:"2px 4px", borderRadius:6 }}>🇬🇧</button>
+          </div>
+          <button onClick={onSignOut} style={{ ...styles.navBtn, marginLeft: 4, color: "#E8AFC9", borderLeft: "1px solid #333", paddingLeft:12 }}>{L.signOut}</button>
         </nav>
       </header>
 
@@ -860,6 +946,7 @@ function PlanningApp({ session, onSignOut }) {
               .map((it) => ({ id: uid("ck"), text: it.text || it, description: it.description || "", videoUrl: it.videoUrl || "", done: false }));
             return { ...t, checklist: [...(t.checklist || []), ...newItems] };
           })}
+          onUpdateCustomer={(taskId, fields) => updateInstance(taskId, (t) => ({ ...t, ...fields }))}
           onAddAssignee={(taskId, empId) => { const t = instances.find((x) => x.id === taskId); if (t?.day) manualPlace(taskId, t.day, empId); }}
           onRemoveAssignee={removeAssignee}
           onUnplace={(taskId) => { unplace(taskId); setOpenTaskId(null); }}
@@ -1078,7 +1165,7 @@ function WeekView({ employees, instances, unplaced, onAdd, onImport, onAuto, onP
         </div>
 
         <div style={styles.gridWrap}>
-          <div style={{ display: "grid", gridTemplateColumns: `160px repeat(${DAYS.length}, 1fr)`, gap: 8 }}>
+          <div style={{ display: "grid", gridTemplateColumns: `160px repeat(${DAYS.length}, 1fr)`, gap: 8, minWidth: 700 }}>
             <div style={styles.gridCornerCell} />
             {DAYS.map((d, i) => (
               <div key={d.key} style={{ ...styles.gridHeaderCell, borderRight: i < DAYS.length - 1 ? "1px solid #CBD5E1" : "none" }}>{d.label}</div>
@@ -1101,7 +1188,23 @@ function WeekView({ employees, instances, unplaced, onAdd, onImport, onAuto, onP
                   return (
                     <div key={d.key} style={{ ...styles.gridCell, borderRight: i < DAYS.length - 1 ? "1px solid #CBD5E1" : "none" }}
                       onDragOver={(e) => e.preventDefault()}
-                      onDrop={() => { if (dragId) onPlace(dragId, d.key, emp.id); setDragId(null); }}>
+                      onDrop={() => {
+                        if (dragId) {
+                          const dragged = instances.find((t) => t.id === dragId);
+                          if (dragged) {
+                            const agreedDays = dragged.templateDays || dragged.days || [];
+                            const isOff = dragged.type === "fixed" && agreedDays.length > 0 && !agreedDays.includes(d.key);
+                            if (isOff) {
+                              const dayLabel = DAYS.find((x) => x.key === d.key)?.label || d.key;
+                              const agreedLabels = agreedDays.map((k) => DAYS.find((x) => x.key === k)?.label || k).join(", ");
+                              const ok = window.confirm(`Denne faste opgave er aftalt til: ${agreedLabels}.\n\nEr du sikker på at du vil planlægge den på ${dayLabel} — uden for aftalen?`);
+                              if (!ok) { setDragId(null); return; }
+                            }
+                          }
+                          onPlace(dragId, d.key, emp.id);
+                        }
+                        setDragId(null);
+                      }}>
                       <div style={styles.capBarTrack}>
                         <div style={{ ...styles.capBarFill, width: `${pct}%`, background: over ? "#DC2626" : pct > 80 ? "#D97706" : "#D6247A" }} />
                       </div>
@@ -1120,30 +1223,31 @@ function WeekView({ employees, instances, unplaced, onAdd, onImport, onAuto, onP
                         const menuOpen = addMenuTaskId === t.id;
                         const addable = employees.filter((e) => !(t.assignees || []).includes(e.id));
                         return (
-                          <div key={t.id} draggable onDragStart={() => setDragId(t.id)} style={styles.taskChip} onClick={() => onOpenTask(t.id)} title="Klik for at åbne serviceordren">
+                          <div key={t.id} draggable onDragStart={() => setDragId(t.id)}
+                            style={{ ...styles.taskChip, ...(t.offSchedule ? { borderLeft: "3px solid #F59E0B" } : t.onSchedule ? { borderLeft: "3px solid #22C55E" } : {}) }}
+                            onClick={() => onOpenTask(t.id)} title="Klik for at åbne serviceordren">
                             <div style={styles.chipTopRow}>
                               <TypeBadge type={t.type} mini />
                               <span style={styles.taskChipTitle}>{seg.start != null ? `${fmtClock(seg.start)} · ` : ""}{t.title}</span>
+                              {t.offSchedule && <span title="Planlagt uden for aftale" style={{ fontSize: 12, marginLeft: 2 }}>⚠️</span>}
+                              {t.onSchedule && !t.offSchedule && <span title="Planlagt på aftalt dag" style={{ fontSize: 12, marginLeft: 2 }}>✓</span>}
                               <span style={{ ...styles.statusDot, background: statusColor(t.status) }} />
-                              <button style={styles.chipXBtn} title="Fjern fra board (tilbage til Ikke tildelt)" onClick={(e) => { e.stopPropagation(); onUnplace(t.id); }}><X size={11} /></button>
+                              <button style={styles.chipXBtn} title="Fjern fra board" onClick={(e) => { e.stopPropagation(); onUnplace(t.id); }}><X size={11} /></button>
                             </div>
                             <div style={styles.chipSubRow}>
                               {t.customerName && <span style={styles.taskChipCustomer}>{t.customerName}</span>}
                               {prog.total > 0 && <span style={styles.taskChipDur}>{prog.done}/{prog.total}</span>}
                               <span style={styles.taskChipDur}>{fmtMin(t.duration)}</span>
                             </div>
-
                             <div style={styles.chipAssigneeRow} onClick={(e) => e.stopPropagation()}>
                               {assignedEmps.map((a) => (
-                                <button key={a.id} type="button" style={{ ...styles.chipAvatar, background: a.color }} title={`Fjern ${a.name} fra denne opgave`}
+                                <button key={a.id} type="button" style={{ ...styles.chipAvatar, background: a.color }} title={`Fjern ${a.name}`}
                                   onClick={() => onRemoveAssignee(t.id, a.id)}>
                                   {initials(a.name)}
                                 </button>
                               ))}
                               {addable.length > 0 && (
-                                <button type="button" style={styles.chipAddBtn} title="Tilføj flere medarbejdere" onClick={() => setAddMenuTaskId(menuOpen ? null : t.id)}>
-                                  <Plus size={10} />
-                                </button>
+                                <button type="button" style={styles.chipAddBtn} onClick={() => setAddMenuTaskId(menuOpen ? null : t.id)}><Plus size={10} /></button>
                               )}
                               {menuOpen && (
                                 <div style={styles.chipAddMenu}>
@@ -1374,6 +1478,7 @@ function TimeView({ instances, employees, totalLogged, onExport, weekLabel }) {
 // ---------- Modals ----------
 function TaskModal({ onClose, onSave, checklistTemplates, skills }) {
   const [type, setType] = useState("fixed");
+  const [contractType, setContractType] = useState("privat");
   const [title, setTitle] = useState("");
   const [duration, setDuration] = useState(60);
   const [requiredSkills, setRequiredSkills] = useState([{ skill: skills[0] ?? "", minLevel: 1 }]);
@@ -1381,6 +1486,10 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills }) {
   const [day, setDay] = useState("Mon");
   const [adhocDate, setAdhocDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [deadline, setDeadline] = useState("Fri");
+  const [expiryDate, setExpiryDate] = useState(() => {
+    const d = new Date(); d.setFullYear(d.getFullYear() + 1);
+    return d.toISOString().slice(0, 10);
+  });
   const [checklistTemplateIds, setChecklistTemplateIds] = useState([]);
   const [extraItems, setExtraItems] = useState([]);
   const [newItemText, setNewItemText] = useState("");
@@ -1389,6 +1498,154 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills }) {
   const [address, setAddress] = useState("");
   const [poNumber, setPoNumber] = useState("");
   const [accessInstructions, setAccessInstructions] = useState("");
+
+  function toggleTemplate(id) { setChecklistTemplateIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id])); }
+  function addExtraItem() { if (!newItemText.trim()) return; setExtraItems((prev) => [...prev, newItemText.trim()]); setNewItemText(""); }
+  function removeExtraItem(i) { setExtraItems((prev) => prev.filter((_, idx) => idx !== i)); }
+
+  const previewItems = [
+    ...checklistTemplateIds.flatMap((id) => checklistTemplates.find((c) => c.id === id)?.items || []),
+    ...extraItems,
+  ];
+
+  function toggleDay(d) { setDays((prev) => (prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d])); }
+  function addSkillRow() {
+    const unused = skills.find((s) => !requiredSkills.some((r) => r.skill === s)) || skills[0];
+    setRequiredSkills((prev) => [...prev, { skill: unused, minLevel: 1 }]);
+  }
+  function updateSkillRow(i, field, value) {
+    setRequiredSkills((prev) => prev.map((r, idx) => (idx === i ? { ...r, [field]: field === "minLevel" ? Number(value) : value } : r)));
+  }
+  function removeSkillRow(i) { setRequiredSkills((prev) => prev.filter((_, idx) => idx !== i)); }
+
+  return (
+    <Modal onClose={onClose} title="Ny opgave">
+      {/* Kontrakttype */}
+      <label style={styles.label}>Kontrakttype</label>
+      <div style={styles.typePicker}>
+        {[["privat","🏠 Privat"],["nexus","🏢 Nexus"]].map(([k,l]) => (
+          <button key={k} type="button" onClick={() => setContractType(k)}
+            style={contractType === k ? { ...styles.typePickBtn, borderColor:"#D6247A", color:"#D6247A", background:"#FCE4EF" } : styles.typePickBtn}>
+            {l}
+          </button>
+        ))}
+      </div>
+
+      <label style={styles.label}>Type</label>
+      <div style={styles.typePicker}>
+        {Object.entries(TYPE_META).map(([k, m]) => (
+          <button key={k} type="button" onClick={() => setType(k)} style={type === k ? { ...styles.typePickBtn, borderColor: m.color, color: m.color, background: m.bg } : styles.typePickBtn}>{m.label}</button>
+        ))}
+      </div>
+      {type === "fixed" && <div style={styles.hint}>Faste opgaver gentages automatisk hver uge på de valgte dage — frem til udløbsdatoen.</div>}
+      {type === "flexible" && <div style={styles.hint}>Fleksible opgaver oprettes hver uge frem til udløbsdatoen.</div>}
+
+      <label style={styles.label}>Titel</label>
+      <input style={styles.input} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="F.eks. Gulvvask kontor 2. sal" />
+
+      <label style={styles.label}>Kundenavn</label>
+      <input style={styles.input} value={customerName} onChange={(e) => setCustomerName(e.target.value)} placeholder="F.eks. Nordkraft A/S" />
+
+      <label style={styles.label}>Adresse for udførsel</label>
+      <input style={styles.input} value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Vejnavn 1, 9000 Aalborg" />
+
+      <label style={styles.label}>PO-nummer til fakturering (valgfrit)</label>
+      <input style={styles.input} value={poNumber} onChange={(e) => setPoNumber(e.target.value)} placeholder="F.eks. PO-2026-0311" />
+
+      <label style={styles.label}>Adgang (nøgleboks, koder, kontaktperson m.v.)</label>
+      <textarea style={styles.textarea} rows={2} value={accessInstructions} onChange={(e) => setAccessInstructions(e.target.value)} placeholder="F.eks. Nøgleboks ved hovedindgang, kode 4471" />
+
+      <label style={styles.label}>Krævede kompetencer (minimumsniveau)</label>
+      {requiredSkills.map((r, i) => (
+        <div key={i} style={styles.skillReqRow}>
+          <select style={styles.inputSm} value={r.skill} onChange={(e) => updateSkillRow(i, "skill", e.target.value)}>
+            {skills.map((s) => <option key={s} value={s}>{s}</option>)}
+          </select>
+          <select style={styles.inputSm} value={r.minLevel} onChange={(e) => updateSkillRow(i, "minLevel", e.target.value)}>
+            {LEVELS.map((l) => <option key={l.v} value={l.v}>≥ {l.label}</option>)}
+          </select>
+          {requiredSkills.length > 1 && <button type="button" style={styles.iconBtnGhostInline} onClick={() => removeSkillRow(i)}><X size={13} /></button>}
+        </div>
+      ))}
+      <button type="button" style={styles.addSkillBtn} onClick={addSkillRow}><Plus size={13} /> Tilføj kompetencekrav</button>
+
+      <label style={styles.label}>Varighed (minutter)</label>
+      <input type="number" min={5} step={5} style={styles.input} value={duration} onChange={(e) => setDuration(Number(e.target.value))} />
+
+      {type === "fixed" && (
+        <>
+          <label style={styles.label}>Ugedage (gentages hver uge)</label>
+          <div style={styles.skillPicker}>
+            {DAYS.map((d) => <button key={d.key} type="button" onClick={() => toggleDay(d.key)} style={days.includes(d.key) ? styles.skillPickBtnActive : styles.skillPickBtn}>{d.label}</button>)}
+          </div>
+          <label style={styles.label}>Udløbsdato (aftalen gælder til og med)</label>
+          <input type="date" style={styles.input} value={expiryDate} onChange={(e) => setExpiryDate(e.target.value)} />
+        </>
+      )}
+      {type === "adhoc" && (
+        <>
+          <label style={styles.label}>Dato for udførelse</label>
+          <input type="date" style={styles.input} value={adhocDate} onChange={(e) => {
+            setAdhocDate(e.target.value);
+            const d = new Date(e.target.value);
+            const dayKeys = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+            setDay(dayKeys[d.getDay()]);
+          }} />
+        </>
+      )}
+      {type === "flexible" && (
+        <>
+          <label style={styles.label}>Skal være udført senest (denne uge)</label>
+          <select style={styles.input} value={deadline} onChange={(e) => setDeadline(e.target.value)}>{DAYS.map((d) => <option key={d.key} value={d.key}>{d.label}</option>)}</select>
+          <label style={styles.label}>Udløbsdato (aftalen gælder til og med)</label>
+          <input type="date" style={styles.input} value={expiryDate} onChange={(e) => setExpiryDate(e.target.value)} />
+        </>
+      )}
+
+      <label style={styles.label}>Tjeklister (tasks der skal udføres)</label>
+      <div style={styles.skillPicker}>
+        {checklistTemplates.map((c) => (
+          <button key={c.id} type="button" onClick={() => toggleTemplate(c.id)} style={checklistTemplateIds.includes(c.id) ? styles.skillPickBtnActive : styles.skillPickBtn}>
+            <ListChecks size={11} style={{ marginRight: 4, verticalAlign: "-2px" }} />{c.name} ({c.items.length})
+          </button>
+        ))}
+      </div>
+
+      <div style={styles.extraItemRow}>
+        <input style={styles.inputSm} value={newItemText} onChange={(e) => setNewItemText(e.target.value)} placeholder="Tilføj enkelt task…" onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addExtraItem(); } }} />
+        <button type="button" style={styles.addSkillBtn} onClick={addExtraItem}><Plus size={13} /> Tilføj</button>
+      </div>
+
+      {previewItems.length > 0 && (
+        <div style={styles.previewBox}>
+          <div style={styles.instructionsTitle}><ListChecks size={13} /> Tasks på serviceordren ({previewItems.length})</div>
+          {previewItems.map((it, i) => (
+            <div key={i} style={styles.previewItemRow}>
+              <span style={styles.previewItemText}>{i + 1}. {itemText(it)}</span>
+              {i >= previewItems.length - extraItems.length && (
+                <button type="button" style={styles.iconBtnGhostInline} onClick={() => removeExtraItem(i - (previewItems.length - extraItems.length))}><X size={12} /></button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      <label style={styles.label}>Link til instruktionsvideo (valgfrit)</label>
+      <input style={styles.input} value={videoUrl} onChange={(e) => setVideoUrl(e.target.value)} placeholder="https://…" />
+
+      <div style={styles.modalActions}>
+        <button style={styles.secondaryBtn} onClick={onClose}>Annuller</button>
+        <button
+          style={styles.primaryBtn}
+          disabled={!title.trim() || (type === "fixed" && days.length === 0) || requiredSkills.length === 0}
+          onClick={() => onSave({ type, contractType, title: title.trim(), requiredSkills, duration, days, day, adhocDate, deadline, expiryDate, checklistTemplateIds, extraItems, videoUrl: videoUrl.trim(), customerName: customerName.trim(), address: address.trim(), poNumber: poNumber.trim(), accessInstructions: accessInstructions.trim() })}
+        >
+          Gem og planlæg
+        </button>
+      </div>
+    </Modal>
+  );
+}
 
   function toggleTemplate(id) { setChecklistTemplateIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id])); }
   function addExtraItem() { if (!newItemText.trim()) return; setExtraItems((prev) => [...prev, newItemText.trim()]); setNewItemText(""); }
@@ -1631,12 +1888,28 @@ function EmployeeModal({ emp, onClose, onSave, skills: skillList }) {
 }
 
 // ---------- Task / service order detail ----------
-function TaskDetailModal({ task, employees, checklistTemplates, onClose, onSetStatus, onToggleChecklistItem, onAddChecklistItem, onAddChecklistTemplate, onAddAssignee, onRemoveAssignee, onUnplace, onDelete }) {
+function TaskDetailModal({ task, employees, checklistTemplates, onClose, onSetStatus, onToggleChecklistItem, onAddChecklistItem, onAddChecklistTemplate, onAddAssignee, onRemoveAssignee, onUnplace, onDelete, onUpdateCustomer }) {
   const [addOpen, setAddOpen] = useState(false);
   const [newItemText, setNewItemText] = useState("");
   const [showTemplates, setShowTemplates] = useState(false);
+  const [editingCustomer, setEditingCustomer] = useState(false);
+  const [custName, setCustName] = useState("");
+  const [custAddress, setCustAddress] = useState("");
+  const [custPo, setCustPo] = useState("");
+  const [custAccess, setCustAccess] = useState("");
+
+  useEffect(() => {
+    if (task) {
+      setCustName(task.customerName || "");
+      setCustAddress(task.address || "");
+      setCustPo(task.poNumber || "");
+      setCustAccess(task.accessInstructions || "");
+    }
+  }, [task?.id]);
+
   if (!task) return null;
   const t = task;
+  const isDone = t.status === "udført";
   const assignedEmps = (t.assignees || []).map((id) => employees.find((e) => e.id === id)).filter(Boolean);
   const addable = employees.filter((e) => !(t.assignees || []).includes(e.id));
   const prog = checklistProgress(t);
@@ -1644,9 +1917,12 @@ function TaskDetailModal({ task, employees, checklistTemplates, onClose, onSetSt
   const totalLogged = (t.timeLog || []).reduce((s, l) => s + l.minutes, 0);
   const byEmployee = {};
   (t.timeLog || []).forEach((l) => { if (!l.empId) return; byEmployee[l.empId] = (byEmployee[l.empId] || 0) + l.minutes; });
-
-  // Which checklist templates are already fully applied (all their items present on this task)
   const existingTexts = new Set((t.checklist || []).map((i) => i.text));
+
+  function saveCustomer() {
+    onUpdateCustomer(t.id, { customerName: custName, address: custAddress, poNumber: custPo, accessInstructions: custAccess });
+    setEditingCustomer(false);
+  }
 
   function addItem() {
     if (!newItemText.trim()) return;
@@ -1654,28 +1930,71 @@ function TaskDetailModal({ task, employees, checklistTemplates, onClose, onSetSt
     setNewItemText("");
   }
 
+  const mapsUrl = (custAddress || t.address)
+    ? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(custAddress || t.address)}`
+    : null;
+
   return (
     <Modal onClose={onClose} title={t.title}>
       <div style={styles.detailMetaRow}>
         <TypeBadge type={t.type} />
         <span style={{ ...styles.typeChip, color: statusColor(t.status), background: "#F1EFE7" }}>{statusLabel(t.status)}</span>
+        {t.contractType && <span style={{ ...styles.typeChip, background: t.contractType === "nexus" ? "#EEF2FF" : "#FFF6FA", color: t.contractType === "nexus" ? "#4F46E5" : "#9C1B5D" }}>{t.contractType === "nexus" ? "🏢 Nexus" : "🏠 Privat"}</span>}
+        {t.offSchedule && <span style={{ ...styles.typeChip, background: "#FEF9C3", color: "#B45309" }}>⚠️ Uden for aftale</span>}
+        {t.onSchedule && !t.offSchedule && <span style={{ ...styles.typeChip, background: "#ECFDF5", color: "#16A34A" }}>✓ Aftalt dag</span>}
       </div>
-      <div style={styles.cardMeta}>{dayLabel} · {fmtMin(t.duration)}{t.deadline ? ` · senest ${DAYS.find((d) => d.key === t.deadline)?.label}` : ""}</div>
+      <div style={styles.cardMeta}>{dayLabel} · {fmtMin(t.duration)}{t.deadline ? ` · senest ${DAYS.find((d) => d.key === t.deadline)?.label}` : ""}{t.expiryDate ? ` · udløber ${t.expiryDate}` : ""}</div>
       <div style={styles.cardMeta}>{skillLabel(t)}</div>
 
-      {(t.customerName || t.address || t.poNumber) && (
-        <div style={styles.customerBox}>
-          {t.customerName && <div style={styles.customerName}>{t.customerName}</div>}
-          {t.address && <div style={styles.cardMeta}>{t.address}</div>}
-          {t.poNumber && <div style={styles.cardMeta}>PO-nummer: {t.poNumber}</div>}
+      {/* Kunde — redigerbar indtil udført */}
+      <div style={{ marginBottom: 12 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+          <label style={styles.label}>Kundeoplysninger</label>
+          {!isDone && !editingCustomer && (
+            <button style={{ ...styles.addSkillBtn, fontSize: 11 }} onClick={() => setEditingCustomer(true)}><Pencil size={11} /> Rediger</button>
+          )}
+          {isDone && <span style={{ fontSize: 11, color: "#94A3B8" }}>🔒 Låst (opgave udført)</span>}
         </div>
-      )}
-      {t.accessInstructions && (
-        <div style={styles.accessBox}>
-          <div style={styles.accessTitle}><Lock size={13} /> Adgang</div>
-          <div style={styles.checklistItemDescription}>{t.accessInstructions}</div>
-        </div>
-      )}
+
+        {editingCustomer ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <input style={styles.input} value={custName} onChange={(e) => setCustName(e.target.value)} placeholder="Kundenavn" />
+            <input style={styles.input} value={custAddress} onChange={(e) => setCustAddress(e.target.value)} placeholder="Adresse" />
+            <input style={styles.input} value={custPo} onChange={(e) => setCustPo(e.target.value)} placeholder="PO-nummer" />
+            <textarea style={{ ...styles.input, minHeight: 60 }} value={custAccess} onChange={(e) => setCustAccess(e.target.value)} placeholder="Adgangsinstruktioner" />
+            <div style={{ display: "flex", gap: 8 }}>
+              <button style={styles.primaryBtn} onClick={saveCustomer}>Gem</button>
+              <button style={styles.secondaryBtn} onClick={() => setEditingCustomer(false)}>Annuller</button>
+            </div>
+          </div>
+        ) : (
+          (custName || custAddress || custPo || custAccess) ? (
+            <div style={styles.customerBox}>
+              {custName && <div style={styles.customerName}>{custName}</div>}
+              {custAddress && (
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                  <div style={styles.cardMeta}>{custAddress}</div>
+                  {mapsUrl && (
+                    <a href={mapsUrl} target="_blank" rel="noreferrer"
+                      style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12, fontWeight: 700, color: "#D6247A", textDecoration: "none", flexShrink: 0 }}>
+                      <Navigation size={12} /> Naviger
+                    </a>
+                  )}
+                </div>
+              )}
+              {custPo && <div style={styles.cardMeta}>PO-nummer: {custPo}</div>}
+              {custAccess && (
+                <div style={{ ...styles.accessBox, marginTop: 8 }}>
+                  <div style={styles.accessTitle}><Lock size={13} /> Adgang</div>
+                  <div style={styles.checklistItemDescription}>{custAccess}</div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div style={styles.cardMeta}>Ingen kundeoplysninger — klik Rediger for at tilføje</div>
+          )
+        )}
+      </div>
       {t.warning === "no_skill" && <span style={styles.errorChip}><AlertTriangle size={12} /> Ingen har alle krævede kompetencer</span>}
       {t.warning === "overloaded" && <span style={styles.warnChip}><AlertTriangle size={12} /> Ingen ledig kapacitet den dag</span>}
 
@@ -1846,8 +2165,8 @@ const styles = {
   weekNavLabel: { fontSize: 13, color: "#334155", minWidth: 190, textAlign: "center" },
   weekNavStrong: { fontWeight: 700, color: "#111111" },
   weekNowTag: { marginLeft: 8, fontSize: 10.5, fontWeight: 700, color: "#D6247A", background: "#FCE4EF", padding: "1px 6px", borderRadius: 999 },
-  weekLayout: { display: "grid", gridTemplateColumns: "270px 1fr", gap: 16, alignItems: "start" },
-  backlog: { background: "#FCE9F1", borderRadius: 12, padding: 12, minHeight: 300 },
+  weekLayout: { display: "flex", gap: 16, alignItems: "flex-start", overflow: "hidden" },
+  backlog: { background: "#FCE9F1", borderRadius: 12, padding: 12, width: 240, flexShrink: 0, position: "sticky", top: 0, maxHeight: "calc(100vh - 180px)", overflowY: "auto" },
   backlogTitle: { fontWeight: 700, fontSize: 13, marginBottom: 10, color: "#111111" },
   backlogList: { display: "flex", flexDirection: "column", gap: 8 },
   backlogCard: { background: "#fff", borderRadius: 10, padding: 10, boxShadow: "0 1px 2px rgba(15,42,40,0.08)", cursor: "grab", position: "relative" },
@@ -1855,7 +2174,7 @@ const styles = {
   cardMeta: { fontSize: 11, color: "#64748B", marginTop: 2 },
   errorChip: { display: "flex", alignItems: "center", gap: 4, color: "#B91C1C", fontSize: 11, fontWeight: 600, marginTop: 6 },
   warnChip: { display: "flex", alignItems: "center", gap: 4, color: "#B45309", fontSize: 11, fontWeight: 600, marginTop: 6 },
-  gridWrap: { background: "#fff", borderRadius: 12, padding: 10, overflowX: "auto" },
+  gridWrap: { flex: 1, background: "#fff", borderRadius: 12, padding: 10, overflowX: "auto", overflowY: "auto", maxHeight: "calc(100vh - 180px)" },
   gridHeaderRow: { display: "grid", gap: 8, marginBottom: 6 },
   gridHeaderCell: { fontWeight: 700, fontSize: 12.5, color: "#111111", textAlign: "center", padding: "4px 0" },
   gridCornerCell: {},
