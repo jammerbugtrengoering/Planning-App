@@ -47,22 +47,23 @@ function mondayOf(date) {
   return d;
 }
 function isoWeekNumber(date) {
-  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
-  const dayNum = d.getUTCDay() || 7;
-  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
-  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
-  return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+  // Brug lokal dato for korrekt dansk tidszone
+  const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const dayNum = (d.getDay() + 6) % 7; // Man=0 ... Søn=6
+  d.setDate(d.getDate() - dayNum + 3); // Nærmeste torsdag
+  const yearStart = new Date(d.getFullYear(), 0, 1);
+  return Math.ceil(((d - yearStart) / 86400000 + 1) / 7);
 }
 function weekMeta(weekNo) {
-  // weekNo is an ISO week number. Find the Monday of that week in the current year.
   const now = new Date();
-  const jan4 = new Date(Date.UTC(now.getFullYear(), 0, 4));
-  const jan4Day = jan4.getUTCDay() || 7;
+  // Find mandag i uge 1 dette år
+  const jan4 = new Date(now.getFullYear(), 0, 4);
+  const jan4Day = (jan4.getDay() + 6) % 7;
   const weekOneMonday = new Date(jan4);
-  weekOneMonday.setUTCDate(jan4.getUTCDate() - (jan4Day - 1));
+  weekOneMonday.setDate(jan4.getDate() - jan4Day);
   const monday = new Date(weekOneMonday);
-  monday.setUTCDate(weekOneMonday.getUTCDate() + (weekNo - 1) * 7);
-  const friday = new Date(monday); friday.setUTCDate(monday.getUTCDate() + 4);
+  monday.setDate(weekOneMonday.getDate() + (weekNo - 1) * 7);
+  const friday = new Date(monday); friday.setDate(monday.getDate() + 4);
   const fmt = (d) => d.toLocaleDateString("da-DK", { day: "numeric", month: "short" });
   return { label: `${fmt(monday)} – ${fmt(friday)}`, weekNo, monday };
 }
