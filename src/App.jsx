@@ -543,6 +543,7 @@ function PlanningApp({ session, onSignOut }) {
       customer_name: inst.customerName ?? "",
       address_text: inst.address ?? "",
       access_instructions: inst.accessInstructions ?? "",
+      contract_type: inst.contractType ?? "privat",
     }, { onConflict: "id" });
   }, []);
 
