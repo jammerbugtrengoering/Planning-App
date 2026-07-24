@@ -23,6 +23,11 @@ const DAYS = [
   { key: "Thu", label: "Torsdag" },
   { key: "Fri", label: "Fredag" },
 ];
+const ALL_DAYS = [
+  ...DAYS,
+  { key: "Sat", label: "Lørdag" },
+  { key: "Sun", label: "Søndag" },
+];
 const TYPE_META = {
   fixed: { label: "Fast interval", icon: Repeat, color: "#9C1B5D", bg: "#FCE4EF" },
   adhoc: { label: "Ad hoc", icon: Zap, color: "#B45309", bg: "#FEF3C7" },
@@ -883,6 +888,13 @@ function PlanningApp({ session, onSignOut }) {
             <button onClick={() => setLang("da")} style={{ fontSize:20, background:"none", border:"none", cursor:"pointer", opacity: lang==="da" ? 1 : 0.35, padding:"2px 4px", borderRadius:6 }}>🇩🇰</button>
             <button onClick={() => setLang("en")} style={{ fontSize:20, background:"none", border:"none", cursor:"pointer", opacity: lang==="en" ? 1 : 0.35, padding:"2px 4px", borderRadius:6 }}>🇬🇧</button>
           </div>
+          <a
+            href={`https://translate.google.com/translate?sl=da&tl=en&u=${encodeURIComponent(window.location.href)}`}
+            target="_blank" rel="noreferrer"
+            style={{ fontSize:13, color:"#94A3B8", textDecoration:"none", padding:"4px 8px", borderRadius:6, border:"1px solid #333", marginLeft:4 }}
+            title="Oversæt siden til engelsk via Google Translate">
+            🌐 Oversæt
+          </a>
           <button onClick={onSignOut} style={{ ...styles.navBtn, marginLeft: 4, color: "#E8AFC9", borderLeft: "1px solid #333", paddingLeft:12 }}>{L.signOut}</button>
         </nav>
       </header>
@@ -1120,6 +1132,8 @@ function EmployeeAppView({ employees, instances, onLogMinutes, onSetStatus, onTo
 // ---------- Week view ----------
 function WeekView({ employees, instances, unplaced, onAdd, onImport, onAuto, onPlace, onUnplace, onRemoveAssignee, onDelete, onOpenTask, dragId, setDragId, weekLabel, weekNo, weekOffset, onPrevWeek, onNextWeek, onTodayWeek, travelSettings, onOpenTravelSettings, currentIsoWeek }) {
   const [addMenuTaskId, setAddMenuTaskId] = useState(null);
+  const [showWeekend, setShowWeekend] = useState(false);
+  const visibleDays = showWeekend ? ALL_DAYS : DAYS;
 
   return (
     <div style={styles.page}>
@@ -1128,6 +1142,12 @@ function WeekView({ employees, instances, unplaced, onAdd, onImport, onAuto, onP
         <button style={styles.secondaryBtn} onClick={onImport}><Upload size={16} /> Importer fra Excel</button>
         <button style={styles.secondaryBtn} onClick={onAuto}><Wand2 size={16} /> Planlæg ugen automatisk</button>
         <button style={styles.secondaryBtn} onClick={onOpenTravelSettings}><Car size={16} /> Transporttid</button>
+        <button
+          style={{ ...styles.secondaryBtn, ...(showWeekend ? { background: "#FCE4EF", color: "#D6247A", borderColor: "#D6247A" } : {}) }}
+          onClick={() => setShowWeekend((v) => !v)}
+          title="Vis/skjul weekend">
+          {showWeekend ? "Man–Søn ✓" : "Man–Fre"}
+        </button>
         <div style={styles.toolbarSpacer} />
         <div style={styles.weekNav}>
           <button style={styles.weekNavBtn} onClick={onPrevWeek}><ChevronLeft size={16} /></button>
@@ -1171,10 +1191,10 @@ function WeekView({ employees, instances, unplaced, onAdd, onImport, onAuto, onP
         </div>
 
         <div style={styles.gridWrap}>
-          <div style={{ display: "grid", gridTemplateColumns: `160px repeat(${DAYS.length}, 1fr)`, gap: 8, minWidth: 700 }}>
+          <div style={{ display: "grid", gridTemplateColumns: `160px repeat(${visibleDays.length}, 1fr)`, gap: 8, minWidth: 700 }}>
             <div style={styles.gridCornerCell} />
-            {DAYS.map((d, i) => (
-              <div key={d.key} style={{ ...styles.gridHeaderCell, borderRight: i < DAYS.length - 1 ? "1px solid #CBD5E1" : "none" }}>{d.label}</div>
+            {visibleDays.map((d, i) => (
+              <div key={d.key} style={{ ...styles.gridHeaderCell, borderRight: i < visibleDays.length - 1 ? "1px solid #CBD5E1" : "none", ...(["Sat","Sun"].includes(d.key) ? { background: "#F8FAFC", color: "#94A3B8" } : {}) }}>{d.label}</div>
             ))}
 
             {employees.map((emp) => (
@@ -1183,7 +1203,7 @@ function WeekView({ employees, instances, unplaced, onAdd, onImport, onAuto, onP
                   <span style={{ ...styles.avatar, background: emp.color }}>{initials(emp.name)}</span>
                   {emp.name}
                 </div>
-                {DAYS.map((d, i) => {
+                {visibleDays.map((d, i) => {
                   const dayTasks = instances.filter((t) => (t.assignees || []).includes(emp.id) && t.day === d.key);
                   const schedule = computeDaySchedule(dayTasks, travelSettings);
                   const transportMin = schedule.filter((s) => s.type === "transport").reduce((s2, seg) => s2 + seg.minutes, 0);
@@ -1192,7 +1212,7 @@ function WeekView({ employees, instances, unplaced, onAdd, onImport, onAuto, onP
                   const pct = cap ? Math.min((used / cap) * 100, 100) : 0;
                   const over = used > cap;
                   return (
-                    <div key={d.key} style={{ ...styles.gridCell, borderRight: i < DAYS.length - 1 ? "1px solid #CBD5E1" : "none" }}
+                    <div key={d.key} style={{ ...styles.gridCell, borderRight: i < visibleDays.length - 1 ? "1px solid #CBD5E1" : "none", ...(["Sat","Sun"].includes(d.key) ? { background: "#FAFAFA" } : {}) }}
                       onDragOver={(e) => e.preventDefault()}
                       onDrop={() => {
                         if (dragId) {
