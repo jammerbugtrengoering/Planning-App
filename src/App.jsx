@@ -540,6 +540,9 @@ function PlanningApp({ session, onSignOut }) {
       checklist: inst.checklist ?? [],
       time_log: inst.timeLog ?? [],
       required_skills: inst.requiredSkills ?? [],
+      customer_name: inst.customerName ?? "",
+      address_text: inst.address ?? "",
+      access_instructions: inst.accessInstructions ?? "",
     }, { onConflict: "id" });
   }, []);
 
