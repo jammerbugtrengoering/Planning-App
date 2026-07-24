@@ -269,7 +269,8 @@ export default function App() {
   const [session, setSession] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [loginEmail, setLoginEmail] = useState("");
-  const [loginSent, setLoginSent] = useState(false);
+  const [loginPassword, setLoginPassword] = useState("");
+  const [loginError, setLoginError] = useState("");
   const [loginLoading, setLoginLoading] = useState(false);
 
   useEffect(() => {
@@ -282,14 +283,15 @@ export default function App() {
     return () => subscription.unsubscribe();
   }, []);
 
-  async function sendMagicLink() {
-    if (!loginEmail.trim()) return;
-    setLoginLoading(true);
-    await supabase.auth.signInWithOtp({
+  async function signIn() {
+    if (!loginEmail.trim() || !loginPassword) return;
+    setLoginLoading(true); setLoginError("");
+    const { error } = await supabase.auth.signInWithPassword({
       email: loginEmail.trim(),
-      options: { emailRedirectTo: window.location.origin },
+      password: loginPassword,
     });
-    setLoginLoading(false); setLoginSent(true);
+    setLoginLoading(false);
+    if (error) setLoginError("Forkert e-mail eller adgangskode");
   }
 
   if (authLoading) {
@@ -307,29 +309,27 @@ export default function App() {
               <div style={{ fontSize:12,color:"#94A3B8" }}>Planlægningssystem</div>
             </div>
           </div>
-          {loginSent ? (
-            <div style={{ textAlign:"center",padding:"20px 0" }}>
-              <div style={{ fontSize:40,marginBottom:12 }}>📬</div>
-              <div style={{ fontWeight:700,fontSize:17,color:"#111111",marginBottom:8 }}>Tjek din mail</div>
-              <div style={{ fontSize:13.5,color:"#475569",lineHeight:1.6 }}>Vi har sendt et login-link til <strong>{loginEmail}</strong>. Klik på linket for at logge ind.</div>
-            </div>
-          ) : (
-            <>
-              <div style={{ fontSize:13,fontWeight:600,color:"#475569",marginBottom:6 }}>E-mailadresse</div>
-              <input
-                type="email" value={loginEmail} onChange={(e) => setLoginEmail(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter") sendMagicLink(); }}
-                placeholder="din@email.dk" autoFocus
-                style={{ width:"100%",padding:"11px 12px",borderRadius:10,border:"1px solid #E2E8F0",fontSize:15,color:"#111111",background:"#fff",boxSizing:"border-box",marginBottom:12 }}
-              />
-              <button
-                disabled={loginLoading || !loginEmail.trim()}
-                onClick={sendMagicLink}
-                style={{ width:"100%",padding:"13px 0",borderRadius:10,border:"none",background:"#D6247A",color:"#fff",fontWeight:700,fontSize:15,cursor:"pointer" }}>
-                {loginLoading ? "Sender…" : "Send login-link"}
-              </button>
-            </>
-          )}
+          <div style={{ fontSize:13,fontWeight:600,color:"#475569",marginBottom:6 }}>E-mailadresse</div>
+          <input
+            type="email" value={loginEmail} onChange={(e) => setLoginEmail(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") signIn(); }}
+            placeholder="din@email.dk" autoFocus
+            style={{ width:"100%",padding:"11px 12px",borderRadius:10,border:"1px solid #E2E8F0",fontSize:15,color:"#111111",background:"#fff",boxSizing:"border-box",marginBottom:10 }}
+          />
+          <div style={{ fontSize:13,fontWeight:600,color:"#475569",marginBottom:6 }}>Adgangskode</div>
+          <input
+            type="password" value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") signIn(); }}
+            placeholder="••••••••"
+            style={{ width:"100%",padding:"11px 12px",borderRadius:10,border:"1px solid #E2E8F0",fontSize:15,color:"#111111",background:"#fff",boxSizing:"border-box",marginBottom:10 }}
+          />
+          {loginError && <div style={{ fontSize:13,color:"#B91C1C",marginBottom:8,padding:"8px 10px",background:"#FEF2F2",borderRadius:8 }}>{loginError}</div>}
+          <button
+            disabled={loginLoading || !loginEmail.trim() || !loginPassword}
+            onClick={signIn}
+            style={{ width:"100%",padding:"13px 0",borderRadius:10,border:"none",background:"#D6247A",color:"#fff",fontWeight:700,fontSize:15,cursor:"pointer",opacity:(loginLoading||!loginEmail.trim()||!loginPassword)?0.6:1 }}>
+            {loginLoading ? "Logger ind…" : "Log ind"}
+          </button>
         </div>
       </div>
     );
@@ -845,6 +845,7 @@ function PlanningApp({ session, onSignOut }) {
         <TaskDetailModal
           task={instances.find((t) => t.id === openTaskId)}
           employees={employees}
+          checklistTemplates={checklistTemplates}
           onClose={() => setOpenTaskId(null)}
           onSetStatus={setTaskStatus}
           onToggleChecklistItem={toggleChecklistItem}
@@ -852,6 +853,13 @@ function PlanningApp({ session, onSignOut }) {
             ...t,
             checklist: [...(t.checklist || []), { id: uid("ck"), text, description: "", videoUrl: "", done: false }],
           }))}
+          onAddChecklistTemplate={(taskId, cl) => updateInstance(taskId, (t) => {
+            const existingTexts = new Set((t.checklist || []).map((i) => i.text));
+            const newItems = (cl.items || [])
+              .filter((it) => !existingTexts.has(it.text || it))
+              .map((it) => ({ id: uid("ck"), text: it.text || it, description: it.description || "", videoUrl: it.videoUrl || "", done: false }));
+            return { ...t, checklist: [...(t.checklist || []), ...newItems] };
+          })}
           onAddAssignee={(taskId, empId) => { const t = instances.find((x) => x.id === taskId); if (t?.day) manualPlace(taskId, t.day, empId); }}
           onRemoveAssignee={removeAssignee}
           onUnplace={(taskId) => { unplace(taskId); setOpenTaskId(null); }}
@@ -1623,9 +1631,10 @@ function EmployeeModal({ emp, onClose, onSave, skills: skillList }) {
 }
 
 // ---------- Task / service order detail ----------
-function TaskDetailModal({ task, employees, onClose, onSetStatus, onToggleChecklistItem, onAddChecklistItem, onAddAssignee, onRemoveAssignee, onUnplace, onDelete }) {
+function TaskDetailModal({ task, employees, checklistTemplates, onClose, onSetStatus, onToggleChecklistItem, onAddChecklistItem, onAddChecklistTemplate, onAddAssignee, onRemoveAssignee, onUnplace, onDelete }) {
   const [addOpen, setAddOpen] = useState(false);
   const [newItemText, setNewItemText] = useState("");
+  const [showTemplates, setShowTemplates] = useState(false);
   if (!task) return null;
   const t = task;
   const assignedEmps = (t.assignees || []).map((id) => employees.find((e) => e.id === id)).filter(Boolean);
@@ -1635,6 +1644,9 @@ function TaskDetailModal({ task, employees, onClose, onSetStatus, onToggleCheckl
   const totalLogged = (t.timeLog || []).reduce((s, l) => s + l.minutes, 0);
   const byEmployee = {};
   (t.timeLog || []).forEach((l) => { if (!l.empId) return; byEmployee[l.empId] = (byEmployee[l.empId] || 0) + l.minutes; });
+
+  // Which checklist templates are already fully applied (all their items present on this task)
+  const existingTexts = new Set((t.checklist || []).map((i) => i.text));
 
   function addItem() {
     if (!newItemText.trim()) return;
@@ -1706,36 +1718,67 @@ function TaskDetailModal({ task, employees, onClose, onSetStatus, onToggleCheckl
         )}
       </div>
 
+      <label style={styles.label}>{(t.checklist?.length > 0) ? "Tasks" : "Tilføj tasks"}</label>
+
+      {/* Existing checklist items */}
       {t.checklist && t.checklist.length > 0 && (
-        <>
-          <label style={styles.label}>Tasks ({prog.done}/{prog.total})</label>
-          <div style={styles.instructionsBox}>
-            {t.checklist.map((item) => (
-              <div key={item.id} style={styles.checklistItemBlock}>
-                <button type="button" onClick={() => onToggleChecklistItem(t.id, item.id)} style={styles.checklistItemRow}>
-                  <span style={item.done ? styles.checkboxDone : styles.checkboxEmpty}>{item.done && <Check size={11} color="#fff" />}</span>
-                  <span style={{ ...styles.checklistItemText, textDecoration: item.done ? "line-through" : "none", color: item.done ? "#94A3B8" : "#111111" }}>{item.text}</span>
-                </button>
-                {item.description && <div style={{ ...styles.checklistItemDescription, marginLeft: 25 }}>{item.description}</div>}
-                {item.videoUrl && (
-                  <a href={item.videoUrl} target="_blank" rel="noreferrer" style={{ ...styles.videoBtnSmall, marginLeft: 25 }}>
-                    <Video size={11} /> Se video til denne task
-                  </a>
-                )}
-              </div>
-            ))}
-          </div>
-        </>
+        <div style={styles.instructionsBox}>
+          {t.checklist.map((item) => (
+            <div key={item.id} style={styles.checklistItemBlock}>
+              <button type="button" onClick={() => onToggleChecklistItem(t.id, item.id)} style={styles.checklistItemRow}>
+                <span style={item.done ? styles.checkboxDone : styles.checkboxEmpty}>{item.done && <Check size={11} color="#fff" />}</span>
+                <span style={{ ...styles.checklistItemText, textDecoration: item.done ? "line-through" : "none", color: item.done ? "#94A3B8" : "#111111" }}>{item.text}</span>
+              </button>
+              {item.description && <div style={{ ...styles.checklistItemDescription, marginLeft: 25 }}>{item.description}</div>}
+              {item.videoUrl && (
+                <a href={item.videoUrl} target="_blank" rel="noreferrer" style={{ ...styles.videoBtnSmall, marginLeft: 25 }}>
+                  <Video size={11} /> Se video
+                </a>
+              )}
+            </div>
+          ))}
+        </div>
       )}
 
-      <label style={styles.label}>{t.checklist?.length > 0 ? "Tilføj ny task" : "Tasks"}</label>
-      <div style={{ display: "flex", gap: 6 }}>
+      {/* Tilføj fra eksisterende tasklister */}
+      {checklistTemplates && checklistTemplates.length > 0 && (
+        <div style={{ marginTop: 8 }}>
+          <button type="button" style={styles.addSkillBtn} onClick={() => setShowTemplates((v) => !v)}>
+            <ListChecks size={13} /> {showTemplates ? "Skjul tasklister" : "Tilføj fra taskliste"}
+          </button>
+          {showTemplates && (
+            <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 6 }}>
+              {checklistTemplates.map((cl) => {
+                const alreadyAdded = cl.items.every((it) => existingTexts.has(it.text || it));
+                return (
+                  <div key={cl.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 10px", borderRadius: 8, border: "1px solid #E2E8F0", background: alreadyAdded ? "#F8FAFC" : "#fff" }}>
+                    <div>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: "#111111" }}>{cl.name}</span>
+                      <span style={{ fontSize: 12, color: "#94A3B8", marginLeft: 6 }}>({cl.items.length} tasks)</span>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={alreadyAdded}
+                      style={{ ...styles.addSkillBtn, opacity: alreadyAdded ? 0.4 : 1 }}
+                      onClick={() => { onAddChecklistTemplate(t.id, cl); setShowTemplates(false); }}>
+                      {alreadyAdded ? "Tilføjet ✓" : <><Plus size={12} /> Tilføj</>}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Enkelt task */}
+      <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
         <input
           style={{ ...styles.input, flex: 1 }}
           value={newItemText}
           onChange={(e) => setNewItemText(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter") addItem(); }}
-          placeholder="Ny task-beskrivelse…"
+          placeholder="Tilføj enkelt task…"
         />
         <button style={styles.primaryBtn} onClick={addItem} disabled={!newItemText.trim()}>Tilføj</button>
       </div>
