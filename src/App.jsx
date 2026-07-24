@@ -806,6 +806,7 @@ function PlanningApp({ session, onSignOut }) {
           dragId={dragId} setDragId={setDragId}
           weekLabel={wk.label} weekNo={wk.weekNo} weekOffset={weekOffset}
           onPrevWeek={() => changeWeek(-1)} onNextWeek={() => changeWeek(1)} onTodayWeek={() => setWeekOffset(currentIsoWeek)}
+          currentIsoWeek={currentIsoWeek}
           travelSettings={travelSettings} onOpenTravelSettings={() => setShowTravelSettings(true)}
         />
       )}
@@ -1016,7 +1017,7 @@ function EmployeeAppView({ employees, instances, onLogMinutes, onSetStatus, onTo
 }
 
 // ---------- Week view ----------
-function WeekView({ employees, instances, unplaced, onAdd, onImport, onAuto, onPlace, onUnplace, onRemoveAssignee, onDelete, onOpenTask, dragId, setDragId, weekLabel, weekNo, weekOffset, onPrevWeek, onNextWeek, onTodayWeek, travelSettings, onOpenTravelSettings }) {
+function WeekView({ employees, instances, unplaced, onAdd, onImport, onAuto, onPlace, onUnplace, onRemoveAssignee, onDelete, onOpenTask, dragId, setDragId, weekLabel, weekNo, weekOffset, onPrevWeek, onNextWeek, onTodayWeek, travelSettings, onOpenTravelSettings, currentIsoWeek }) {
   const [addMenuTaskId, setAddMenuTaskId] = useState(null);
 
   return (
