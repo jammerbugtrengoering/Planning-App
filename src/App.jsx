@@ -421,6 +421,7 @@ function PlanningApp({ session, onSignOut }) {
       if (empData?.length) {
         empMapped = empData.map((e) => ({
           id: e.id, name: e.name, color: e.color,
+          auth_user_id: e.auth_user_id ?? null,
           skills: Object.fromEntries(
             (empSkillsData || []).filter((s) => s.employee_id === e.id)
               .map((s) => {
@@ -867,7 +868,7 @@ function PlanningApp({ session, onSignOut }) {
       <style>{globalCss}</style>
       <header style={styles.header}>
         <div style={styles.brand}>
-          <img src="/app-icon.png" alt="Worklist" style={{ width: 36, height: 36, borderRadius: 10, objectFit: "cover" }} />
+          <img src="/app-icon.png" alt="Worklist" style={{ width: 36, height: 36, minWidth: 36, borderRadius: 10, objectFit: "contain", display: "block" }} />
           <div>
             <div style={styles.brandTitle}>Rengøringsplan</div>
             <div style={styles.brandSub}>{L.sub}</div>
@@ -1290,6 +1291,44 @@ function TypeBadge({ type, mini }) {
 
 // ---------- Employees ----------
 function EmployeesView({ employees, instances, onAdd, onEdit, onDelete }) {
+  const [inviteEmail, setInviteEmail] = useState({});
+  const [inviteStatus, setInviteStatus] = useState({});
+
+  async function inviteUser(emp) {
+    const email = inviteEmail[emp.id]?.trim();
+    if (!email) return;
+    setInviteStatus((prev) => ({ ...prev, [emp.id]: "sending" }));
+    const { error } = await supabase.auth.admin.inviteUserByEmail(email);
+    if (error) {
+      // admin API ikke tilgængeligt fra browser — brug signUp i stedet
+      const { error: err2 } = await supabase.auth.signUp({
+        email,
+        password: Math.random().toString(36).slice(-12) + "Aa1!",
+        options: { emailRedirectTo: window.location.origin }
+      });
+      if (err2) {
+        setInviteStatus((prev) => ({ ...prev, [emp.id]: "error: " + err2.message }));
+        return;
+      }
+    }
+    // Kobl auth_user_id til employees-rækken
+    const { data: userData } = await supabase.from("auth.users").select("id").eq("email", email).single().catch(() => ({ data: null }));
+    if (userData?.id) {
+      await supabase.from("employees").update({ auth_user_id: userData.id }).eq("id", emp.id);
+    }
+    setInviteStatus((prev) => ({ ...prev, [emp.id]: "sent" }));
+    setInviteEmail((prev) => ({ ...prev, [emp.id]: "" }));
+  }
+
+  async function deactivateUser(emp) {
+    if (!window.confirm(`Luk adgang for ${emp.name}? De kan ikke længere logge ind på medarbejder-appen.`)) return;
+    setInviteStatus((prev) => ({ ...prev, [emp.id]: "deactivating" }));
+    await supabase.from("employees").update({ auth_user_id: null }).eq("id", emp.id);
+    // Opdatér local state så kortet opdateres med det samme
+    emp.auth_user_id = null;
+    setInviteStatus((prev) => ({ ...prev, [emp.id]: "deactivated" }));
+  }
+
   return (
     <div style={styles.page}>
       <div style={styles.toolbar}><button style={styles.primaryBtn} onClick={onAdd}><Plus size={16} /> Ny medarbejder</button></div>
@@ -1297,6 +1336,8 @@ function EmployeesView({ employees, instances, onAdd, onEdit, onDelete }) {
         {employees.map((e) => {
           const activeMin = DAYS.reduce((s, d) => s + usedMinutes(instances, e.id, d.key), 0);
           const capMin = DAYS.reduce((s, d) => s + (e.capacity[d.key] || 0), 0);
+          const status = inviteStatus[e.id];
+          const hasUser = !!e.auth_user_id;
           return (
             <div key={e.id} style={styles.empCard}>
               <div style={styles.empCardTop}>
@@ -1321,6 +1362,43 @@ function EmployeesView({ employees, instances, onAdd, onEdit, onDelete }) {
                     <div style={styles.capDayValue}>{(e.capacity[d.key] / 60).toFixed(1)}t</div>
                   </div>
                 ))}
+              </div>
+
+              {/* Brugeradgang */}
+              <div style={{ borderTop: "1px solid #F1F5F9", marginTop: 10, paddingTop: 10 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: hasUser ? "#16A34A" : "#94A3B8" }}>
+                    {hasUser ? "✓ Har app-adgang" : "○ Ingen app-adgang"}
+                  </span>
+                  {hasUser && (
+                    <button
+                      style={{ fontSize: 11, padding: "3px 8px", borderRadius: 6, border: "1px solid #FCA5A5", background: "#FEF2F2", color: "#DC2626", cursor: "pointer" }}
+                      onClick={() => deactivateUser(e)}>
+                      {status === "deactivating" ? "Lukker…" : "Luk adgang"}
+                    </button>
+                  )}
+                </div>
+                {!hasUser && (
+                  <div style={{ display: "flex", gap: 6 }}>
+                    <input
+                      type="email"
+                      placeholder="E-mail til medarbejder"
+                      style={{ ...styles.inputSm, flex: 1, fontSize: 12 }}
+                      value={inviteEmail[e.id] || ""}
+                      onChange={(ev) => setInviteEmail((prev) => ({ ...prev, [e.id]: ev.target.value }))}
+                      onKeyDown={(ev) => { if (ev.key === "Enter") inviteUser(e); }}
+                    />
+                    <button
+                      style={{ ...styles.primaryBtn, fontSize: 12, padding: "6px 10px" }}
+                      disabled={!inviteEmail[e.id]?.trim() || status === "sending"}
+                      onClick={() => inviteUser(e)}>
+                      {status === "sending" ? "Sender…" : "Opret"}
+                    </button>
+                  </div>
+                )}
+                {status === "sent" && <div style={{ fontSize: 12, color: "#16A34A", marginTop: 4 }}>✓ Login-mail sendt</div>}
+                {status === "deactivated" && <div style={{ fontSize: 12, color: "#DC2626", marginTop: 4 }}>Adgang lukket</div>}
+                {status?.startsWith("error") && <div style={{ fontSize: 12, color: "#DC2626", marginTop: 4 }}>{status}</div>}
               </div>
             </div>
           );
