@@ -1402,7 +1402,7 @@ function ChecklistModal({ checklist, onClose, onSave }) {
   function removeItem(i) { setItems((prev) => prev.filter((_, idx) => idx !== i)); if (editIndex === i) resetDraft(); }
 
   return (
-    <Modal onClose={onClose} title={checklist ? "Rediger tjekliste" : "Ny tjekliste"}>
+    <Modal onClose={onClose} title={checklist ? "Rediger tjekliste" : "Ny tjekliste"} persistent>
       <label style={styles.label}>Navn</label>
       <input style={styles.input} value={name} onChange={(e) => setName(e.target.value)} placeholder="F.eks. Gulvvask – standard" />
 
@@ -1519,7 +1519,7 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills }) {
   function removeSkillRow(i) { setRequiredSkills((prev) => prev.filter((_, idx) => idx !== i)); }
 
   return (
-    <Modal onClose={onClose} title="Ny opgave">
+    <Modal onClose={onClose} title="Ny opgave" persistent>
       {/* Kontrakttype */}
       <label style={styles.label}>Kontrakttype</label>
       <div style={styles.typePicker}>
@@ -1715,7 +1715,7 @@ function EmployeeModal({ emp, onClose, onSave, skills: skillList }) {
   function setCap(day, hours) { setCapacity((prev) => ({ ...prev, [day]: Math.max(0, Number(hours)) * 60 })); }
 
   return (
-    <Modal onClose={onClose} title={emp ? `Rediger ${emp.name}` : "Ny medarbejder"}>
+    <Modal onClose={onClose} title={emp ? `Rediger ${emp.name}` : "Ny medarbejder"} persistent>
       <label style={styles.label}>Navn</label>
       <input style={styles.input} value={name} onChange={(e) => setName(e.target.value)} placeholder="Fulde navn" />
 
@@ -1988,9 +1988,9 @@ function TaskDetailModal({ task, employees, checklistTemplates, onClose, onSetSt
   );
 }
 
-function Modal({ title, children, onClose }) {
+function Modal({ title, children, onClose, persistent = false }) {
   return (
-    <div style={styles.overlay} onClick={onClose}>
+    <div style={styles.overlay} onClick={persistent ? undefined : onClose}>
       <div style={styles.modal} onClick={(e) => e.stopPropagation()}>
         <div style={styles.modalHeader}>
           <span style={styles.modalTitle}>{title}</span>
