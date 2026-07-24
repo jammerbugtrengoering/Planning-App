@@ -268,10 +268,9 @@ export default function App() {
   // ── Auth ──
   const [session, setSession] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
-const [loginEmail, setLoginEmail] = useState("");
-const [loginPassword, setLoginPassword] = useState("");
-const [loginLoading, setLoginLoading] = useState(false);
-const [loginError, setLoginError] = useState("");
+  const [loginEmail, setLoginEmail] = useState("");
+  const [loginSent, setLoginSent] = useState(false);
+  const [loginLoading, setLoginLoading] = useState(false);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -283,23 +282,19 @@ const [loginError, setLoginError] = useState("");
     return () => subscription.unsubscribe();
   }, []);
 
-  async function login() {
-  if (!loginEmail.trim() || !loginPassword.trim()) return;
-
-  setLoginLoading(true);
-  setLoginError("");
-
-  const { error } = await supabase.auth.signInWithPassword({
-    email: loginEmail.trim(),
-    password: loginPassword,
-  });
-
-  setLoginLoading(false);
-
-  if (error) {
-    setLoginError(error.message);
+  async function sendMagicLink() {
+    if (!loginEmail.trim()) return;
+    setLoginLoading(true);
+    await supabase.auth.signInWithOtp({
+      email: loginEmail.trim(),
+      options: { emailRedirectTo: window.location.origin },
+    });
+    setLoginLoading(false); setLoginSent(true);
   }
-}
+
+  if (authLoading) {
+    return <div style={{ display:"flex",alignItems:"center",justifyContent:"center",height:"100svh",color:"#9C1B5D",fontFamily:"system-ui",fontSize:15 }}>Indlæser…</div>;
+  }
 
   if (!session) {
     return (
@@ -312,70 +307,30 @@ const [loginError, setLoginError] = useState("");
               <div style={{ fontSize:12,color:"#94A3B8" }}>Planlægningssystem</div>
             </div>
           </div>
-         <div style={{ fontSize:"13px",fontWeight:600,color:"#475569",marginBottom:6 }}>
-  E-mailadresse
-</div>
-
-<input
-  type="email"
-  value={loginEmail}
-  onChange={(e) => setLoginEmail(e.target.value)}
-  placeholder="mail@firma.dk"
-  style={{
-    width:"100%",
-    padding:"11px 12px",
-    borderRadius:10,
-    border:"1px solid #E2E8F0",
-    fontSize:15,
-    marginBottom:12
-  }}
-/>
-
-<div style={{ fontSize:"13px",fontWeight:600,color:"#475569",marginBottom:6 }}>
-  Password
-</div>
-
-<input
-  type="password"
-  value={loginPassword}
-  onChange={(e) => setLoginPassword(e.target.value)}
-  placeholder="Password"
-  onKeyDown={(e) => {
-    if (e.key === "Enter") login();
-  }}
-  style={{
-    width:"100%",
-    padding:"11px 12px",
-    borderRadius:10,
-    border:"1px solid #E2E8F0",
-    fontSize:15,
-    marginBottom:12
-  }}
-/>
-
-{loginError && (
-  <div style={{ color:"#B91C1C", marginBottom:10 }}>
-    {loginError}
-  </div>
-)}
-
-<button
-  disabled={loginLoading}
-  onClick={login}
-  style={{
-    width:"100%",
-    padding:"13px 0",
-    borderRadius:10,
-    border:"none",
-    background:"#D6247A",
-    color:"#fff",
-    fontWeight:700,
-    fontSize:15,
-    cursor:"pointer"
-  }}
->
-  {loginLoading ? "Logger ind..." : "Log ind"}
-</button></div>
+          {loginSent ? (
+            <div style={{ textAlign:"center",padding:"20px 0" }}>
+              <div style={{ fontSize:40,marginBottom:12 }}>📬</div>
+              <div style={{ fontWeight:700,fontSize:17,color:"#111111",marginBottom:8 }}>Tjek din mail</div>
+              <div style={{ fontSize:13.5,color:"#475569",lineHeight:1.6 }}>Vi har sendt et login-link til <strong>{loginEmail}</strong>. Klik på linket for at logge ind.</div>
+            </div>
+          ) : (
+            <>
+              <div style={{ fontSize:13,fontWeight:600,color:"#475569",marginBottom:6 }}>E-mailadresse</div>
+              <input
+                type="email" value={loginEmail} onChange={(e) => setLoginEmail(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") sendMagicLink(); }}
+                placeholder="din@email.dk" autoFocus
+                style={{ width:"100%",padding:"11px 12px",borderRadius:10,border:"1px solid #E2E8F0",fontSize:15,color:"#111111",background:"#fff",boxSizing:"border-box",marginBottom:12 }}
+              />
+              <button
+                disabled={loginLoading || !loginEmail.trim()}
+                onClick={sendMagicLink}
+                style={{ width:"100%",padding:"13px 0",borderRadius:10,border:"none",background:"#D6247A",color:"#fff",fontWeight:700,fontSize:15,cursor:"pointer" }}>
+                {loginLoading ? "Sender…" : "Send login-link"}
+              </button>
+            </>
+          )}
+        </div>
       </div>
     );
   }
@@ -779,22 +734,38 @@ function PlanningApp({ session, onSignOut }) {
     const rows = [["Uge", "Opgave", "Kunde", "Adresse", "PO-nummer", "Type", "Dag", "Krævede kompetencer", "Medarbejdere", "Status", "Varighed (min)", "Registreret (min)"]];
     instances.forEach((t) => {
       const names = (t.assignees || []).map((id) => employees.find((e) => e.id === id)?.name).filter(Boolean);
-      const logged = t.timeLog.reduce((s, l) => s + l.minutes, 0);
-      const wk = weekMeta(t.week);
-      rows.push([`Uge ${wk.weekNo}`, t.title, t.customerName || "", t.address || "", t.poNumber || "", TYPE_META[t.type].label, DAYS.find((d) => d.key === t.day)?.label || "-", skillLabel(t), names.length ? names.join(" + ") : "Ikke tildelt", statusLabel(t.status), t.duration, logged.toFixed(0)]);
+      const tl = t.timeLog || t.time_log || [];
+      const logged = tl.reduce((s, l) => s + (l.minutes || 0), 0);
+      rows.push([
+        `Uge ${t.week}`,
+        t.title,
+        t.customerName || "",
+        t.address || "",
+        t.poNumber || "",
+        TYPE_META[t.type]?.label || t.type,
+        DAYS.find((d) => d.key === t.day)?.label || "-",
+        skillLabel(t),
+        names.length ? names.join(" + ") : "Ikke tildelt",
+        statusLabel(t.status),
+        t.duration,
+        logged.toFixed(0),
+      ]);
     });
     const csv = rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
     const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a"); a.href = url; a.download = "ugeplan-eksport.csv"; a.click();
     URL.revokeObjectURL(url);
-    notify("Eksport downloadet (til løn/faktura)");
+    notify("Eksport downloadet");
   }
 
   const currentIsoWeek = isoWeekNumber(new Date());
   const weekInstancesList = instances.filter((t) => t.week === weekOffset);
   const unplaced = weekInstancesList.filter((t) => !(t.assignees && t.assignees.length));
-  const totalLogged = useMemo(() => instances.reduce((s, t) => s + (t.timeLog || []).reduce((s2, l) => s2 + l.minutes, 0), 0), [instances]);
+  const totalLogged = useMemo(() => instances.reduce((s, t) => {
+    const tl = t.timeLog || t.time_log || [];
+    return s + tl.reduce((s2, l) => s2 + (l.minutes || 0), 0);
+  }, 0), [instances]);
   const wk = weekMeta(weekOffset);
 
   if (loading) {
@@ -876,6 +847,10 @@ function PlanningApp({ session, onSignOut }) {
           onClose={() => setOpenTaskId(null)}
           onSetStatus={setTaskStatus}
           onToggleChecklistItem={toggleChecklistItem}
+          onAddChecklistItem={(taskId, text) => updateInstance(taskId, (t) => ({
+            ...t,
+            checklist: [...(t.checklist || []), { id: uid("ck"), text, description: "", videoUrl: "", done: false }],
+          }))}
           onAddAssignee={(taskId, empId) => { const t = instances.find((x) => x.id === taskId); if (t?.day) manualPlace(taskId, t.day, empId); }}
           onRemoveAssignee={removeAssignee}
           onUnplace={(taskId) => { unplace(taskId); setOpenTaskId(null); }}
@@ -1056,10 +1031,10 @@ function WeekView({ employees, instances, unplaced, onAdd, onImport, onAuto, onP
           <button style={styles.weekNavBtn} onClick={onPrevWeek}><ChevronLeft size={16} /></button>
           <div style={styles.weekNavLabel}>
             <span style={styles.weekNavStrong}>Uge {weekNo}</span> · {weekLabel}
-            {weekOffset === 0 && <span style={styles.weekNowTag}>Denne uge</span>}
+            {weekOffset === currentIsoWeek && <span style={styles.weekNowTag}>Denne uge</span>}
           </div>
           <button style={styles.weekNavBtn} onClick={onNextWeek}><ChevronRight size={16} /></button>
-          {weekOffset !== 0 && <button style={styles.secondaryBtn} onClick={onTodayWeek}>I dag</button>}
+          {weekOffset !== currentIsoWeek && <button style={styles.secondaryBtn} onClick={onTodayWeek}>I dag</button>}
         </div>
       </div>
 
@@ -1367,7 +1342,7 @@ function TimeView({ instances, employees, totalLogged, onExport, weekLabel }) {
       <div style={styles.timeList}>
         {placed.map((t) => {
           const emps = t.assignees.map((id) => employees.find((e) => e.id === id)).filter(Boolean);
-          const logged = t.timeLog.reduce((s, l) => s + l.minutes, 0);
+          const logged = (t.timeLog || t.time_log || []).reduce((s, l) => s + (l.minutes || 0), 0);
           return (
             <div key={t.id} style={styles.timeRow}>
               <div style={styles.timeRowAvatars}>
@@ -1647,17 +1622,24 @@ function EmployeeModal({ emp, onClose, onSave, skills: skillList }) {
 }
 
 // ---------- Task / service order detail ----------
-function TaskDetailModal({ task, employees, onClose, onSetStatus, onToggleChecklistItem, onAddAssignee, onRemoveAssignee, onUnplace, onDelete }) {
+function TaskDetailModal({ task, employees, onClose, onSetStatus, onToggleChecklistItem, onAddChecklistItem, onAddAssignee, onRemoveAssignee, onUnplace, onDelete }) {
   const [addOpen, setAddOpen] = useState(false);
+  const [newItemText, setNewItemText] = useState("");
   if (!task) return null;
   const t = task;
   const assignedEmps = (t.assignees || []).map((id) => employees.find((e) => e.id === id)).filter(Boolean);
   const addable = employees.filter((e) => !(t.assignees || []).includes(e.id));
   const prog = checklistProgress(t);
   const dayLabel = t.day ? DAYS.find((d) => d.key === t.day)?.label : "Ikke planlagt endnu";
-  const totalLogged = t.timeLog.reduce((s, l) => s + l.minutes, 0);
+  const totalLogged = (t.timeLog || []).reduce((s, l) => s + l.minutes, 0);
   const byEmployee = {};
-  t.timeLog.forEach((l) => { if (!l.empId) return; byEmployee[l.empId] = (byEmployee[l.empId] || 0) + l.minutes; });
+  (t.timeLog || []).forEach((l) => { if (!l.empId) return; byEmployee[l.empId] = (byEmployee[l.empId] || 0) + l.minutes; });
+
+  function addItem() {
+    if (!newItemText.trim()) return;
+    onAddChecklistItem(t.id, newItemText.trim());
+    setNewItemText("");
+  }
 
   return (
     <Modal onClose={onClose} title={t.title}>
@@ -1744,6 +1726,18 @@ function TaskDetailModal({ task, employees, onClose, onSetStatus, onToggleCheckl
           </div>
         </>
       )}
+
+      <label style={styles.label}>{t.checklist?.length > 0 ? "Tilføj ny task" : "Tasks"}</label>
+      <div style={{ display: "flex", gap: 6 }}>
+        <input
+          style={{ ...styles.input, flex: 1 }}
+          value={newItemText}
+          onChange={(e) => setNewItemText(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") addItem(); }}
+          placeholder="Ny task-beskrivelse…"
+        />
+        <button style={styles.primaryBtn} onClick={addItem} disabled={!newItemText.trim()}>Tilføj</button>
+      </div>
 
       {t.videoUrl && (
         <a href={t.videoUrl} target="_blank" rel="noreferrer" style={{ ...styles.videoBtn, marginTop: 10 }}>
