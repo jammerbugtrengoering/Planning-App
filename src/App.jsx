@@ -1298,24 +1298,27 @@ function EmployeesView({ employees, instances, onAdd, onEdit, onDelete }) {
     const email = inviteEmail[emp.id]?.trim();
     if (!email) return;
     setInviteStatus((prev) => ({ ...prev, [emp.id]: "sending" }));
-    const { error } = await supabase.auth.admin.inviteUserByEmail(email);
+
+    // signUp sender en bekræftelses-mail — brugeren sætter selv adgangskode
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password: crypto.randomUUID().replace(/-/g, "") + "Aa1!",
+      options: { emailRedirectTo: window.location.origin }
+    });
+
     if (error) {
-      // admin API ikke tilgængeligt fra browser — brug signUp i stedet
-      const { error: err2 } = await supabase.auth.signUp({
-        email,
-        password: Math.random().toString(36).slice(-12) + "Aa1!",
-        options: { emailRedirectTo: window.location.origin }
-      });
-      if (err2) {
-        setInviteStatus((prev) => ({ ...prev, [emp.id]: "error: " + err2.message }));
-        return;
-      }
+      setInviteStatus((prev) => ({ ...prev, [emp.id]: "error: " + error.message }));
+      return;
     }
-    // Kobl auth_user_id til employees-rækken
-    const { data: userData } = await supabase.from("auth.users").select("id").eq("email", email).single().catch(() => ({ data: null }));
-    if (userData?.id) {
-      await supabase.from("employees").update({ auth_user_id: userData.id }).eq("id", emp.id);
+
+    // Kobl auth_user_id hvis vi fik et id tilbage
+    const userId = data?.user?.id;
+    if (userId) {
+      await supabase.from("employees").update({ auth_user_id: userId }).eq("id", emp.id);
+      // Opdatér lokal state
+      emp.auth_user_id = userId;
     }
+
     setInviteStatus((prev) => ({ ...prev, [emp.id]: "sent" }));
     setInviteEmail((prev) => ({ ...prev, [emp.id]: "" }));
   }
@@ -1366,7 +1369,7 @@ function EmployeesView({ employees, instances, onAdd, onEdit, onDelete }) {
 
               {/* Brugeradgang */}
               <div style={{ borderTop: "1px solid #F1F5F9", marginTop: 10, paddingTop: 10 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
                   <span style={{ fontSize: 12, fontWeight: 600, color: hasUser ? "#16A34A" : "#94A3B8" }}>
                     {hasUser ? "✓ Har app-adgang" : "○ Ingen app-adgang"}
                   </span>
@@ -1378,25 +1381,26 @@ function EmployeesView({ employees, instances, onAdd, onEdit, onDelete }) {
                     </button>
                   )}
                 </div>
-                {!hasUser && (
-                  <div style={{ display: "flex", gap: 6 }}>
-                    <input
-                      type="email"
-                      placeholder="E-mail til medarbejder"
-                      style={{ ...styles.inputSm, flex: 1, fontSize: 12 }}
-                      value={inviteEmail[e.id] || ""}
-                      onChange={(ev) => setInviteEmail((prev) => ({ ...prev, [e.id]: ev.target.value }))}
-                      onKeyDown={(ev) => { if (ev.key === "Enter") inviteUser(e); }}
-                    />
-                    <button
-                      style={{ ...styles.primaryBtn, fontSize: 12, padding: "6px 10px" }}
-                      disabled={!inviteEmail[e.id]?.trim() || status === "sending"}
-                      onClick={() => inviteUser(e)}>
-                      {status === "sending" ? "Sender…" : "Opret"}
-                    </button>
-                  </div>
-                )}
-                {status === "sent" && <div style={{ fontSize: 12, color: "#16A34A", marginTop: 4 }}>✓ Login-mail sendt</div>}
+
+                {/* Vis altid invite-felt — enten for at oprette eller genoplive adgang */}
+                <div style={{ display: "flex", gap: 6 }}>
+                  <input
+                    type="email"
+                    placeholder={hasUser ? "Ny e-mail (skift bruger)" : "E-mail til medarbejder"}
+                    style={{ ...styles.inputSm, flex: 1, fontSize: 12, color: "#111111", background: "#fff" }}
+                    value={inviteEmail[e.id] || ""}
+                    onChange={(ev) => setInviteEmail((prev) => ({ ...prev, [e.id]: ev.target.value }))}
+                    onKeyDown={(ev) => { if (ev.key === "Enter") inviteUser(e); }}
+                  />
+                  <button
+                    style={{ ...styles.primaryBtn, fontSize: 12, padding: "6px 10px" }}
+                    disabled={!inviteEmail[e.id]?.trim() || status === "sending"}
+                    onClick={() => inviteUser(e)}>
+                    {status === "sending" ? "Sender…" : "Opret"}
+                  </button>
+                </div>
+
+                {status === "sent" && <div style={{ fontSize: 12, color: "#16A34A", marginTop: 4 }}>✓ Bekræftelses-mail sendt — medarbejderen skal klikke linket og sætte en adgangskode</div>}
                 {status === "deactivated" && <div style={{ fontSize: 12, color: "#DC2626", marginTop: 4 }}>Adgang lukket</div>}
                 {status?.startsWith("error") && <div style={{ fontSize: 12, color: "#DC2626", marginTop: 4 }}>{status}</div>}
               </div>
