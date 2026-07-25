@@ -610,37 +610,26 @@ function PlanningApp({ session, onSignOut }) {
 
     // Helper: all ISO week numbers from now until expiryDate
     function weeksUntilExpiry(expiryDateStr, startDateStr) {
-      const startWeek = startDateStr ? isoWeekNumber(new Date(startDateStr)) : weekOffset;
-      if (!expiryDateStr) return [startWeek];
-      const weeks = [];
-      const expiry = new Date(expiryDateStr);
-      const expiryWeek = isoWeekNumber(expiry);
-      const expiryYear = expiry.getFullYear();
-      const now = new Date();
-      const currentYear = now.getFullYear();
-      const startYear = startDateStr ? new Date(startDateStr).getFullYear() : currentYear;
-      // Convert to absolute week numbers (week + year*52) for simple iteration
-      const startAbs = startYear * 52 + startWeek;
-      const endAbs = expiryYear * 52 + expiryWeek;
-      let count = 0;
-      for (let abs = startAbs; abs <= endAbs && count < 104; abs++, count++) {
-        const yr = Math.floor(abs / 52);
-        const wk = abs % 52 || 52;
-        weeks.push(wk); // Use actual ISO week number
+      // Brug absolut ugenummer: år * 53 + uge
+      function absWeek(dateStr) {
+        const d = new Date(dateStr || new Date());
+        return d.getFullYear() * 53 + isoWeekNumber(d);
       }
-      // Simpler: just return ISO week numbers from startWeek to expiryWeek
-      // For same year:
-      weeks.length = 0;
-      const fromWeek = startWeek;
-      const toWeek = expiryYear > currentYear
-        ? expiryWeek + (expiryYear - currentYear) * 52
-        : expiryWeek;
-      const fromAbs2 = currentYear < startYear
-        ? fromWeek + (startYear - currentYear) * 52
-        : fromWeek;
-      for (let w = fromAbs2; w <= toWeek && weeks.length < 104; w++) {
-        // Convert back to actual ISO week (1-52/53)
-        weeks.push(w);
+      function isoWeekOf(absW) {
+        return absW % 53 || 53;
+      }
+
+      const startAbs = startDateStr
+        ? absWeek(startDateStr)
+        : new Date().getFullYear() * 53 + weekOffset;
+
+      const endAbs = expiryDateStr
+        ? absWeek(expiryDateStr)
+        : startAbs;
+
+      const weeks = [];
+      for (let w = startAbs; w <= endAbs && weeks.length < 104; w++) {
+        weeks.push(isoWeekOf(w));
       }
       return weeks.length ? weeks : [weekOffset];
     }
@@ -671,6 +660,7 @@ function PlanningApp({ session, onSignOut }) {
         const nextT = [...prevT, tpl];
         setInstances((cur) => {
           const weeks = weeksUntilExpiry(payload.expiryDate, payload.startDate);
+          console.log("weekOffset:", weekOffset, "weeks generated:", weeks.slice(0, 5), "total:", weeks.length);
           let next = [...cur];
           weeks.forEach((wk) => {
             const expanded = ensureWeekInstances(wk, next, nextT, employees);
