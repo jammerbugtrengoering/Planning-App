@@ -970,6 +970,7 @@ function PlanningApp({ session, onSignOut }) {
           task={instances.find((t) => t.id === openTaskId)}
           employees={employees}
           checklistTemplates={checklistTemplates}
+          skills={skills}
           onClose={() => setOpenTaskId(null)}
           onSetStatus={setTaskStatus}
           onToggleChecklistItem={toggleChecklistItem}
@@ -985,6 +986,7 @@ function PlanningApp({ session, onSignOut }) {
             return { ...t, checklist: [...(t.checklist || []), ...newItems] };
           })}
           onUpdateCustomer={(taskId, fields) => updateInstance(taskId, (t) => ({ ...t, ...fields }))}
+          onUpdateSkills={(taskId, newSkills) => updateInstance(taskId, (t) => ({ ...t, requiredSkills: newSkills }))}
           onAddAssignee={(taskId, empId) => { const t = instances.find((x) => x.id === taskId); if (t?.day) manualPlace(taskId, t.day, empId); }}
           onRemoveAssignee={removeAssignee}
           onUnplace={(taskId) => { unplace(taskId); setOpenTaskId(null); }}
@@ -1755,6 +1757,9 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom }) {
       });
       if (!dbErr) {
         created = true;
+        // Opdatér lokal customers state
+        const newCustomer = { id: newId, name: customerName, address, access_instructions: "" };
+        // customers state er ikke tilgængelig her, men vi gemmer i DB — det hentes ved næste load
       }
     }
 
@@ -2414,15 +2419,19 @@ function EmployeeModal({ emp, onClose, onSave, skills: skillList }) {
 }
 
 // ---------- Task / service order detail ----------
-function TaskDetailModal({ task, employees, checklistTemplates, onClose, onSetStatus, onToggleChecklistItem, onAddChecklistItem, onAddChecklistTemplate, onAddAssignee, onRemoveAssignee, onUnplace, onDelete, onUpdateCustomer, onCopy }) {
+function TaskDetailModal({ task, employees, checklistTemplates, skills, onClose, onSetStatus, onToggleChecklistItem, onAddChecklistItem, onAddChecklistTemplate, onAddAssignee, onRemoveAssignee, onUnplace, onDelete, onUpdateCustomer, onCopy, onUpdateSkills }) {
   const [addOpen, setAddOpen] = useState(false);
   const [newItemText, setNewItemText] = useState("");
   const [showTemplates, setShowTemplates] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState(false);
+  const [editingSkills, setEditingSkills] = useState(false);
   const [custName, setCustName] = useState("");
   const [custAddress, setCustAddress] = useState("");
   const [custPo, setCustPo] = useState("");
   const [custAccess, setCustAccess] = useState("");
+  const [taskSkills, setTaskSkills] = useState([]);
+  const [dineroSyncing, setDineroSyncing] = useState(false);
+  const [dineroSynced, setDineroSynced] = useState(false);
 
   useEffect(() => {
     if (task) {
@@ -2430,6 +2439,7 @@ function TaskDetailModal({ task, employees, checklistTemplates, onClose, onSetSt
       setCustAddress(task.address || "");
       setCustPo(task.poNumber || "");
       setCustAccess(task.accessInstructions || "");
+      setTaskSkills(task.requiredSkills || []);
     }
   }, [task?.id]);
 
@@ -2450,6 +2460,26 @@ function TaskDetailModal({ task, employees, checklistTemplates, onClose, onSetSt
     setEditingCustomer(false);
   }
 
+  function saveSkills() {
+    if (onUpdateSkills) onUpdateSkills(t.id, taskSkills);
+    setEditingSkills(false);
+  }
+
+  async function syncToDinero() {
+    setDineroSyncing(true);
+    try {
+      const parts = custAddress.split(",").map((s) => s.trim());
+      const { data, error } = await supabase.functions.invoke("dinero", {
+        body: { action: "create", contact: { name: custName, address: parts[0] || "", zipCode: parts[1] || "", city: parts[2] || "" } },
+      });
+      if (!error && (data?.Name || data?.ContactGuid)) {
+        setDineroSynced(true);
+        setTimeout(() => setDineroSynced(false), 3000);
+      }
+    } catch {}
+    setDineroSyncing(false);
+  }
+
   function addItem() {
     if (!newItemText.trim()) return;
     onAddChecklistItem(t.id, newItemText.trim());
@@ -2461,7 +2491,7 @@ function TaskDetailModal({ task, employees, checklistTemplates, onClose, onSetSt
     : null;
 
   return (
-    <Modal onClose={onClose} title={t.title}>
+    <Modal onClose={onClose} title={t.title} persistent>
       <div style={styles.detailMetaRow}>
         <TypeBadge type={t.type} />
         <span style={{ ...styles.typeChip, color: statusColor(t.status), background: "#F1EFE7" }}>{statusLabel(t.status)}</span>
@@ -2470,7 +2500,38 @@ function TaskDetailModal({ task, employees, checklistTemplates, onClose, onSetSt
         {t.onSchedule && !t.offSchedule && <span style={{ ...styles.typeChip, background: "#ECFDF5", color: "#16A34A" }}>✓ Aftalt dag</span>}
       </div>
       <div style={styles.cardMeta}>{dayLabel} · {fmtMin(t.duration)}{t.deadline ? ` · senest ${DAYS.find((d) => d.key === t.deadline)?.label}` : ""}{t.expiryDate ? ` · udløber ${t.expiryDate}` : ""}</div>
-      <div style={styles.cardMeta}>{skillLabel(t)}</div>
+
+      {/* Kompetencer — redigerbare */}
+      <div style={{ marginBottom: 12 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+          <label style={styles.label}>Kompetencer</label>
+          {!isDone && !editingSkills && (
+            <button style={{ ...styles.addSkillBtn, fontSize: 11 }} onClick={() => setEditingSkills(true)}><Pencil size={11} /> Rediger</button>
+          )}
+        </div>
+        {editingSkills ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {taskSkills.map((r, i) => (
+              <div key={i} style={styles.skillReqRow}>
+                <select style={styles.inputSm} value={r.skill} onChange={(e) => setTaskSkills((prev) => prev.map((x, idx) => idx === i ? { ...x, skill: e.target.value } : x))}>
+                  {(skills || []).map((s) => <option key={s} value={s}>{s}</option>)}
+                </select>
+                <select style={styles.inputSm} value={r.minLevel} onChange={(e) => setTaskSkills((prev) => prev.map((x, idx) => idx === i ? { ...x, minLevel: Number(e.target.value) } : x))}>
+                  {LEVELS.map((l) => <option key={l.v} value={l.v}>≥ {l.label}</option>)}
+                </select>
+                <button type="button" style={styles.iconBtnGhostInline} onClick={() => setTaskSkills((prev) => prev.filter((_, idx) => idx !== i))}><X size={13} /></button>
+              </div>
+            ))}
+            <button type="button" style={styles.addSkillBtn} onClick={() => setTaskSkills((prev) => [...prev, { skill: (skills || [])[0] || "", minLevel: 1 }])}><Plus size={13} /> Tilføj kompetence</button>
+            <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
+              <button style={styles.primaryBtn} onClick={saveSkills}>Gem</button>
+              <button style={styles.secondaryBtn} onClick={() => { setEditingSkills(false); setTaskSkills(t.requiredSkills || []); }}>Annuller</button>
+            </div>
+          </div>
+        ) : (
+          <div style={styles.cardMeta}>{skillLabel(t)}</div>
+        )}
+      </div>
 
       {/* Kunde — redigerbar indtil udført */}
       <div style={{ marginBottom: 12 }}>
@@ -2514,6 +2575,15 @@ function TaskDetailModal({ task, employees, checklistTemplates, onClose, onSetSt
                   <div style={styles.accessTitle}><Lock size={13} /> Adgang</div>
                   <div style={styles.checklistItemDescription}>{custAccess}</div>
                 </div>
+              )}
+              {/* Dinero sync knap — vises hvis kunden ikke er i Dinero endnu */}
+              {!isDone && custName && (
+                <button
+                  style={{ ...styles.addSkillBtn, marginTop: 8, fontSize: 12, color: dineroSynced ? "#16A34A" : "#4F46E5", borderColor: dineroSynced ? "#22C55E" : "#C7D2FE", background: dineroSynced ? "#ECFDF5" : "#EEF2FF" }}
+                  onClick={syncToDinero}
+                  disabled={dineroSyncing}>
+                  {dineroSynced ? "✓ Sendt til Dinero" : dineroSyncing ? "Sender…" : "🏢 Send til Dinero"}
+                </button>
               )}
             </div>
           ) : (
