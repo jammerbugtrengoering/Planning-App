@@ -538,11 +538,11 @@ function PlanningApp({ session, onSignOut }) {
   }, []);
 
   const syncInstance = useCallback(async (inst) => {
-    await supabase.from("instances").upsert({
+    const { error } = await supabase.from("instances").upsert({
       id: inst.id, template_id: inst.templateId ?? null, title: inst.title,
       type: inst.type, week: inst.week, day: inst.day ?? null,
       deadline: inst.deadline ?? null, duration: inst.duration,
-      status: inst.status, video_url: inst.videoUrl ?? "",
+      status: inst.status ?? "unscheduled", video_url: inst.videoUrl ?? "",
       customer_id: null, po_number: inst.poNumber ?? "",
       warning: inst.warning ?? null,
       assignees: inst.assignees ?? [],
@@ -554,6 +554,7 @@ function PlanningApp({ session, onSignOut }) {
       access_instructions: inst.accessInstructions ?? "",
       contract_type: inst.contractType ?? "privat",
     }, { onConflict: "id" });
+    if (error) console.error("syncInstance error:", error.message, error.details, inst.id);
   }, []);
 
   const removeInstance = useCallback(async (id) => {
@@ -627,10 +628,11 @@ function PlanningApp({ session, onSignOut }) {
         poNumber: payload.poNumber, accessInstructions: payload.accessInstructions,
         contractType: payload.contractType, expiryDate: payload.expiryDate,
       };
-      await supabase.from("service_templates").insert({
+      const { error: tplErr } = await supabase.from("service_templates").insert({
         id: tplId, title: tpl.title, duration: tpl.duration, days: tpl.days,
         video_url: tpl.videoUrl || "", po_number: tpl.poNumber || "",
       });
+      if (tplErr) console.error("service_templates insert error:", tplErr.message);
       const { data: skillsDb } = await supabase.from("skills").select("id,name");
       const skillRows = (payload.requiredSkills || []).map((r) => {
         const sk = skillsDb?.find((s) => s.name === r.skill);
