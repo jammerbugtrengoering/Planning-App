@@ -205,10 +205,19 @@ function scheduleWeek(weekInstances, employees) {
 function ensureWeekInstances(week, allInstances, templates, employees) {
   let list = [...allInstances];
   templates.forEach((tpl) => {
+    if (!tpl.days || tpl.days.length === 0) {
+      console.warn("Template has no days:", tpl.id, tpl.title);
+      return;
+    }
     // Skip if past expiry date
     if (tpl.expiryDate) {
       const expiryWeek = isoWeekNumber(new Date(tpl.expiryDate));
       if (week > expiryWeek) return;
+    }
+    // Skip if before start date
+    if (tpl.startDate) {
+      const startWeek = isoWeekNumber(new Date(tpl.startDate));
+      if (week < startWeek) return;
     }
     tpl.days.forEach((day) => {
       const exists = list.some((i) => i.templateId === tpl.id && i.week === week && i.day === day);
@@ -600,23 +609,40 @@ function PlanningApp({ session, onSignOut }) {
     ];
 
     // Helper: all ISO week numbers from now until expiryDate
-    function weeksUntilExpiry(expiryDateStr) {
-      if (!expiryDateStr) return [weekOffset];
+    function weeksUntilExpiry(expiryDateStr, startDateStr) {
+      const startWeek = startDateStr ? isoWeekNumber(new Date(startDateStr)) : weekOffset;
+      if (!expiryDateStr) return [startWeek];
       const weeks = [];
       const expiry = new Date(expiryDateStr);
-      let current = weekOffset;
-      // Build weeks: current week up to the week containing expiryDate
       const expiryWeek = isoWeekNumber(expiry);
       const expiryYear = expiry.getFullYear();
       const now = new Date();
       const currentYear = now.getFullYear();
-      // Simple approach: iterate up to 104 weeks (2 years max)
-      for (let w = weekOffset; w <= (currentYear < expiryYear ? 52 : expiryWeek) + (expiryYear - currentYear) * 52; w++) {
-        weeks.push(w);
-        if (w >= expiryWeek && currentYear >= expiryYear) break;
-        if (weeks.length > 104) break;
+      const startYear = startDateStr ? new Date(startDateStr).getFullYear() : currentYear;
+      // Convert to absolute week numbers (week + year*52) for simple iteration
+      const startAbs = startYear * 52 + startWeek;
+      const endAbs = expiryYear * 52 + expiryWeek;
+      let count = 0;
+      for (let abs = startAbs; abs <= endAbs && count < 104; abs++, count++) {
+        const yr = Math.floor(abs / 52);
+        const wk = abs % 52 || 52;
+        weeks.push(wk); // Use actual ISO week number
       }
-      return weeks;
+      // Simpler: just return ISO week numbers from startWeek to expiryWeek
+      // For same year:
+      weeks.length = 0;
+      const fromWeek = startWeek;
+      const toWeek = expiryYear > currentYear
+        ? expiryWeek + (expiryYear - currentYear) * 52
+        : expiryWeek;
+      const fromAbs2 = currentYear < startYear
+        ? fromWeek + (startYear - currentYear) * 52
+        : fromWeek;
+      for (let w = fromAbs2; w <= toWeek && weeks.length < 104; w++) {
+        // Convert back to actual ISO week (1-52/53)
+        weeks.push(w);
+      }
+      return weeks.length ? weeks : [weekOffset];
     }
 
     if (payload.type === "fixed") {
@@ -627,6 +653,7 @@ function PlanningApp({ session, onSignOut }) {
         videoUrl: payload.videoUrl, customerName: payload.customerName, address: payload.address,
         poNumber: payload.poNumber, accessInstructions: payload.accessInstructions,
         contractType: payload.contractType, expiryDate: payload.expiryDate,
+        startDate: payload.startDate || null,
       };
       const { error: tplErr } = await supabase.from("service_templates").insert({
         id: tplId, title: tpl.title, duration: tpl.duration, days: tpl.days,
@@ -643,7 +670,7 @@ function PlanningApp({ session, onSignOut }) {
       setTemplates((prevT) => {
         const nextT = [...prevT, tpl];
         setInstances((cur) => {
-          const weeks = weeksUntilExpiry(payload.expiryDate);
+          const weeks = weeksUntilExpiry(payload.expiryDate, payload.startDate);
           let next = [...cur];
           weeks.forEach((wk) => {
             const expanded = ensureWeekInstances(wk, next, nextT, employees);
@@ -660,7 +687,7 @@ function PlanningApp({ session, onSignOut }) {
 
       if (payload.type === "flexible" && payload.expiryDate) {
         // Create one flexible instance per week until expiry
-        const weeks = weeksUntilExpiry(payload.expiryDate);
+        const weeks = weeksUntilExpiry(payload.expiryDate, null);
         const newInstances = weeks.map((wk) => ({
           id: uid("i"), title: payload.title, requiredSkills: payload.requiredSkills,
           duration: payload.duration, assignees: [], status: "unscheduled", timeLog: [],
