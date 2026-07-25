@@ -428,6 +428,7 @@ function PlanningApp({ session, onSignOut }) {
         empMapped = empData.map((e) => ({
           id: e.id, name: e.name, color: e.color,
           auth_user_id: e.auth_user_id ?? null,
+          app_email: e.app_email ?? null,
           skills: Object.fromEntries(
             (empSkillsData || []).filter((s) => s.employee_id === e.id)
               .map((s) => {
@@ -1331,8 +1332,9 @@ function EmployeesView({ employees, instances, onAdd, onEdit, onDelete }) {
     // Kobl auth_user_id hvis vi fik et id tilbage
     const userId = data?.user?.id;
     if (userId) {
-      await supabase.from("employees").update({ auth_user_id: userId }).eq("id", emp.id);
+      await supabase.from("employees").update({ auth_user_id: userId, app_email: email }).eq("id", emp.id);
       emp.auth_user_id = userId;
+      emp.app_email = email;
     }
 
     setInviteStatus((prev) => ({ ...prev, [emp.id]: "sent" }));
@@ -1389,6 +1391,11 @@ function EmployeesView({ employees, instances, onAdd, onEdit, onDelete }) {
                   <span style={{ fontSize: 12, fontWeight: 600, color: hasUser ? "#16A34A" : "#94A3B8" }}>
                     {hasUser ? "✓ Har app-adgang" : "○ Ingen app-adgang"}
                   </span>
+                  {hasUser && e.app_email && (
+                    <span style={{ fontSize: 11, color: "#64748B", background: "#F1F5F9", padding: "2px 8px", borderRadius: 6 }}>
+                      {e.app_email}
+                    </span>
+                  )}
                   {hasUser && (
                     <button
                       style={{ fontSize: 11, padding: "3px 8px", borderRadius: 6, border: "1px solid #FCA5A5", background: "#FEF2F2", color: "#DC2626", cursor: "pointer" }}
