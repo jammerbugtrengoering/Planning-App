@@ -1397,6 +1397,67 @@ function EmployeesView({ employees, instances, onAdd, onEdit, onDelete, supabase
   const [showSkillsPanel, setShowSkillsPanel] = useState(false);
   const [inviteEmail, setInviteEmail] = useState({});
   const [inviteStatus, setInviteStatus] = useState({});
+  const [orderPanel, setOrderPanel] = useState(null); // emp.id
+  const [empProducts, setEmpProducts] = useState([]); // medarbejderprodukter
+  const [empOrders, setEmpOrders] = useState({}); // { empId: [transactions] }
+  const [orderQty, setOrderQty] = useState({}); // { itemId: qty }
+  const [ordering, setOrdering] = useState(false);
+
+  // Load medarbejderprodukter én gang
+  useEffect(() => {
+    async function loadProducts() {
+      const { data: cats } = await supabase.from("inventory_categories").select("id").eq("type", "medarbejder");
+      if (!cats?.length) return;
+      const { data } = await supabase
+        .from("inventory_items")
+        .select("*, inventory_categories(name, icon)")
+        .in("category_id", cats.map((c) => c.id))
+        .order("name");
+      setEmpProducts(data || []);
+    }
+    loadProducts();
+  }, []);
+
+  async function openOrderPanel(emp) {
+    setOrderPanel(emp.id);
+    setOrderQty({});
+    // Hent historik for denne medarbejder
+    const { data } = await supabase
+      .from("inventory_transactions")
+      .select("*, inventory_items(name, unit)")
+      .eq("employee_id", emp.id)
+      .eq("type", "out")
+      .order("id", { ascending: false })
+      .limit(20);
+    setEmpOrders((prev) => ({ ...prev, [emp.id]: data || [] }));
+  }
+
+  async function submitOrder(emp) {
+    const entries = Object.entries(orderQty).filter(([, q]) => Number(q) > 0);
+    if (!entries.length) return;
+    setOrdering(true);
+    for (const [itemId, qty] of entries) {
+      const amount = Number(qty);
+      const item = empProducts.find((i) => i.id === itemId);
+      if (!item) continue;
+      await supabase.from("inventory_transactions").insert({
+        item_id: itemId, quantity: -amount, type: "out",
+        reason: `Udleveret til ${emp.name}`,
+        employee_id: emp.id,
+      });
+      await supabase.from("inventory_items").update({ stock: Math.max(0, item.stock - amount) }).eq("id", itemId);
+      setEmpProducts((prev) => prev.map((p) => p.id === itemId ? { ...p, stock: Math.max(0, p.stock - amount) } : p));
+    }
+    // Opdatér historik
+    const { data } = await supabase
+      .from("inventory_transactions")
+      .select("*, inventory_items(name, unit)")
+      .eq("employee_id", emp.id).eq("type", "out")
+      .order("id", { ascending: false }).limit(20);
+    setEmpOrders((prev) => ({ ...prev, [emp.id]: data || [] }));
+    setOrderQty({});
+    setOrdering(false);
+  }
 
   async function inviteUser(emp) {
     const email = inviteEmail[emp.id]?.trim();
@@ -1526,6 +1587,33 @@ function EmployeesView({ employees, instances, onAdd, onEdit, onDelete, supabase
                 {status === "sent" && <div style={{ fontSize: 12, color: "#16A34A", marginTop: 4 }}>✓ Bekræftelses-mail sendt</div>}
                 {status === "deactivated" && <div style={{ fontSize: 12, color: "#DC2626", marginTop: 4 }}>Adgang lukket</div>}
                 {status?.startsWith("error") && <div style={{ fontSize: 12, color: "#DC2626", marginTop: 4 }}>{status}</div>}
+              </div>
+
+              {/* Medarbejderprodukter — kun historik */}
+              <div style={{ borderTop: "1px solid #F1F5F9", marginTop: 10, paddingTop: 10 }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: orderPanel === e.id ? 10 : 0 }}>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: "#475569" }}>👕 Udleveringshistorik</span>
+                  <button
+                    style={{ fontSize: 11, padding: "3px 10px", borderRadius: 6, border: "1px solid #E2E8F0", background: orderPanel === e.id ? "#FCE4EF" : "#fff", color: orderPanel === e.id ? "#D6247A" : "#475569", cursor: "pointer" }}
+                    onClick={() => orderPanel === e.id ? setOrderPanel(null) : openOrderPanel(e)}>
+                    {orderPanel === e.id ? "Luk" : "Se historik"}
+                  </button>
+                </div>
+
+                {orderPanel === e.id && (
+                  <div>
+                    {empOrders[e.id]?.length > 0 ? (
+                      empOrders[e.id].map((tx) => (
+                        <div key={tx.id} style={{ display: "flex", justifyContent: "space-between", fontSize: 12, padding: "4px 0", borderBottom: "1px solid #F8FAFC", color: "#475569" }}>
+                          <span>{tx.inventory_items?.name}</span>
+                          <span style={{ fontWeight: 600, color: "#111111" }}>{Math.abs(tx.quantity)} {tx.inventory_items?.unit}</span>
+                        </div>
+                      ))
+                    ) : (
+                      <div style={{ fontSize: 12, color: "#94A3B8", textAlign: "center", padding: "8px 0" }}>Ingen udleveringer endnu</div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           );
