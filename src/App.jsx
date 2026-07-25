@@ -358,8 +358,8 @@ function PlanningApp({ session, onSignOut }) {
   useEffect(() => { localStorage.setItem("rp_lang", lang); }, [lang]);
 
   const L = {
-    da: { schedule:"Ugeplan", employees:"Medarbejdere", checklists:"Tjeklister", time:"Tid & Eksport", signOut:"Log ud", sub:"Ugeplanlægning · kapacitet · kompetenceniveauer" },
-    en: { schedule:"Schedule", employees:"Employees", checklists:"Checklists", time:"Time & Export", signOut:"Sign out", sub:"Weekly planning · capacity · skill levels" },
+    da: { schedule:"Ugeplan", employees:"Medarbejdere", checklists:"Tjeklister", time:"Tid & Eksport", inventory:"Lager", signOut:"Log ud", sub:"Ugeplanlægning · kapacitet · kompetenceniveauer" },
+    en: { schedule:"Schedule", employees:"Employees", checklists:"Checklists", time:"Time & Export", inventory:"Inventory", signOut:"Sign out", sub:"Weekly planning · capacity · skill levels" },
   }[lang];
   // ── Dynamiske master-data fra Supabase ──
   const [skills, setSkills] = useState(SKILLS_FALLBACK);
@@ -881,7 +881,7 @@ function PlanningApp({ session, onSignOut }) {
           </div>
         </div>
         <nav style={styles.nav}>
-          {[["uge", L.schedule], ["employees", L.employees], ["checklists", L.checklists], ["time", L.time]].map(([k, l]) => (
+          {[["uge", L.schedule], ["employees", L.employees], ["checklists", L.checklists], ["time", L.time], ["inventory", L.inventory]].map(([k, l]) => (
             <button key={k} onClick={() => setView(k)} style={view === k ? styles.navBtnActive : styles.navBtn}>{l}</button>
           ))}
           <div style={{ display:"flex", gap:4, marginLeft:12, borderLeft:"1px solid #333", paddingLeft:12 }}>
@@ -928,7 +928,9 @@ function PlanningApp({ session, onSignOut }) {
           onExport={exportCSV} totalLogged={totalLogged} weekLabel={wk.label} />
       )}
 
-      {view === "mobil" && (
+      {view === "inventory" && (
+        <InventoryView supabase={supabase} employees={employees} />
+      )}
         <EmployeeAppView
           employees={employees} instances={weekInstancesList}
           onLogMinutes={logMinutes} onSetStatus={setTaskStatus} onToggleChecklistItem={toggleChecklistItem} weekLabel={wk.label}
@@ -1753,7 +1755,214 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills }) {
   );
 }
 
-// ---------- Travel time settings ----------
+// ── Inventory View ────────────────────────────────────────────────────────────
+function InventoryView({ supabase, employees }) {
+  const [categories, setCategories] = useState([]);
+  const [items, setItems] = useState([]);
+  const [transactions, setTransactions] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [showAddItem, setShowAddItem] = useState(false);
+  const [showAdjust, setShowAdjust] = useState(null); // item
+  const [adjustQty, setAdjustQty] = useState("");
+  const [adjustReason, setAdjustReason] = useState("");
+  const [adjustType, setAdjustType] = useState("in");
+  const [filterCat, setFilterCat] = useState("all");
+  const [filterType, setFilterType] = useState("all");
+
+  // New item form
+  const [newName, setNewName] = useState("");
+  const [newCat, setNewCat] = useState("");
+  const [newUnit, setNewUnit] = useState("stk");
+  const [newStock, setNewStock] = useState(0);
+  const [newMin, setNewMin] = useState(0);
+
+  useEffect(() => {
+    async function load() {
+      setLoading(true);
+      const [{ data: cats }, { data: itms }, { data: txns }] = await Promise.all([
+        supabase.from("inventory_categories").select("*").order("type"),
+        supabase.from("inventory_items").select("*, inventory_categories(name,type,icon)").order("name"),
+        supabase.from("inventory_transactions").select("*, inventory_items(name), employees(name)").order("created_at", { ascending: false }).limit(50),
+      ]);
+      setCategories(cats || []);
+      setItems(itms || []);
+      setTransactions(txns || []);
+      setLoading(false);
+      if (cats?.length) setNewCat(cats[0].id);
+    }
+    load();
+  }, []);
+
+  async function addItem() {
+    if (!newName.trim() || !newCat) return;
+    const { data } = await supabase.from("inventory_items").insert({
+      name: newName.trim(), category_id: newCat, unit: newUnit,
+      stock: Number(newStock), min_stock: Number(newMin),
+    }).select("*, inventory_categories(name,type,icon)").single();
+    if (data) { setItems((prev) => [...prev, data]); setShowAddItem(false); setNewName(""); setNewStock(0); setNewMin(0); }
+  }
+
+  async function adjust() {
+    if (!showAdjust || !adjustQty) return;
+    const qty = adjustType === "out" ? -Math.abs(Number(adjustQty)) : Math.abs(Number(adjustQty));
+    const newStock = showAdjust.stock + qty;
+    await supabase.from("inventory_transactions").insert({
+      item_id: showAdjust.id, quantity: qty, type: adjustType, reason: adjustReason,
+    });
+    await supabase.from("inventory_items").update({ stock: newStock }).eq("id", showAdjust.id);
+    setItems((prev) => prev.map((i) => i.id === showAdjust.id ? { ...i, stock: newStock } : i));
+    setShowAdjust(null); setAdjustQty(""); setAdjustReason("");
+  }
+
+  const filtered = items.filter((i) => {
+    if (filterCat !== "all" && i.category_id !== filterCat) return false;
+    if (filterType !== "all" && i.inventory_categories?.type !== filterType) return false;
+    return true;
+  });
+
+  if (loading) return <div style={{ padding: 40, textAlign: "center", color: "#9C1B5D" }}>Indlæser lager…</div>;
+
+  return (
+    <div style={styles.page}>
+      {/* Header */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16, flexWrap: "wrap", gap: 8 }}>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <select style={{ ...styles.inputSm, fontSize: 13 }} value={filterType} onChange={(e) => setFilterType(e.target.value)}>
+            <option value="all">Alle kategorier</option>
+            <option value="kunde">🧹 Kundeprodukter</option>
+            <option value="medarbejder">👕 Medarbejderprodukter</option>
+          </select>
+          <select style={{ ...styles.inputSm, fontSize: 13 }} value={filterCat} onChange={(e) => setFilterCat(e.target.value)}>
+            <option value="all">Alle underkategorier</option>
+            {categories.map((c) => <option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}
+          </select>
+        </div>
+        <button style={styles.primaryBtn} onClick={() => setShowAddItem(true)}><Plus size={14} /> Nyt produkt</button>
+      </div>
+
+      {/* Summary cards */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px,1fr))", gap: 8, marginBottom: 20 }}>
+        {[
+          { label: "Produkter i alt", value: items.length, color: "#111111" },
+          { label: "Under minimumbeholdning", value: items.filter((i) => i.stock <= i.min_stock).length, color: "#DC2626" },
+          { label: "Kundeprodukter", value: items.filter((i) => i.inventory_categories?.type === "kunde").length, color: "#9C1B5D" },
+          { label: "Medarbejderprodukter", value: items.filter((i) => i.inventory_categories?.type === "medarbejder").length, color: "#4F46E5" },
+        ].map((s) => (
+          <div key={s.label} style={{ background: "#fff", borderRadius: 10, padding: "12px 14px", boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
+            <div style={{ fontSize: 22, fontWeight: 800, color: s.color }}>{s.value}</div>
+            <div style={{ fontSize: 12, color: "#64748B", marginTop: 2 }}>{s.label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Product list */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px,1fr))", gap: 10 }}>
+        {filtered.map((item) => {
+          const low = item.stock <= item.min_stock;
+          const cat = item.inventory_categories;
+          return (
+            <div key={item.id} style={{ background: "#fff", borderRadius: 12, padding: 14, boxShadow: "0 1px 3px rgba(0,0,0,0.06)", borderLeft: `4px solid ${low ? "#DC2626" : cat?.type === "medarbejder" ? "#4F46E5" : "#D6247A"}` }}>
+              <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 8 }}>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: 14, color: "#111111" }}>{item.name}</div>
+                  <div style={{ fontSize: 12, color: "#64748B" }}>{cat?.icon} {cat?.name}</div>
+                </div>
+                <button style={{ ...styles.addSkillBtn, fontSize: 12 }} onClick={() => { setShowAdjust(item); setAdjustType("in"); }}>
+                  Justér
+                </button>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ height: 6, background: "#F1F5F9", borderRadius: 99, overflow: "hidden" }}>
+                    <div style={{ height: "100%", background: low ? "#DC2626" : "#D6247A", borderRadius: 99, width: `${Math.min(100, item.min_stock > 0 ? (item.stock / (item.min_stock * 3)) * 100 : 100)}%` }} />
+                  </div>
+                </div>
+                <div style={{ fontSize: 15, fontWeight: 800, color: low ? "#DC2626" : "#111111", minWidth: 60, textAlign: "right" }}>
+                  {item.stock} {item.unit}
+                </div>
+              </div>
+              {low && <div style={{ fontSize: 11, color: "#DC2626", marginTop: 4, fontWeight: 600 }}>⚠ Under minimumbeholdning ({item.min_stock} {item.unit})</div>}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Recent transactions */}
+      {transactions.length > 0 && (
+        <div style={{ marginTop: 24 }}>
+          <div style={{ fontWeight: 700, fontSize: 15, color: "#111111", marginBottom: 10 }}>Seneste bevægelser</div>
+          <div style={{ background: "#fff", borderRadius: 12, overflow: "hidden", boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
+            {transactions.slice(0, 15).map((tx) => (
+              <div key={tx.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", borderBottom: "1px solid #F1F5F9" }}>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: "#111111" }}>{tx.inventory_items?.name}</div>
+                  <div style={{ fontSize: 11, color: "#64748B" }}>{tx.reason || (tx.type === "in" ? "Tilgang" : "Afgang")} {tx.employees?.name ? `· ${tx.employees.name}` : ""}</div>
+                </div>
+                <div style={{ fontSize: 15, fontWeight: 700, color: tx.quantity > 0 ? "#16A34A" : "#DC2626" }}>
+                  {tx.quantity > 0 ? "+" : ""}{tx.quantity} {tx.inventory_items?.unit || "stk"}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Add item modal */}
+      {showAddItem && (
+        <Modal onClose={() => setShowAddItem(false)} title="Nyt produkt" persistent>
+          <label style={styles.label}>Navn</label>
+          <input style={styles.input} value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Fx Toiletruller" autoFocus />
+          <label style={styles.label}>Kategori</label>
+          <select style={styles.input} value={newCat} onChange={(e) => setNewCat(e.target.value)}>
+            {categories.map((c) => <option key={c.id} value={c.id}>{c.icon} {c.name} ({c.type === "kunde" ? "Kundeprodukt" : "Medarbejderprodukt"})</option>)}
+          </select>
+          <label style={styles.label}>Enhed</label>
+          <select style={styles.input} value={newUnit} onChange={(e) => setNewUnit(e.target.value)}>
+            {["stk","rulle","par","dunk","liter","kg","pose","æske","sæt"].map((u) => <option key={u} value={u}>{u}</option>)}
+          </select>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            <div>
+              <label style={styles.label}>Startbeholdning</label>
+              <input type="number" style={styles.input} value={newStock} onChange={(e) => setNewStock(e.target.value)} min={0} />
+            </div>
+            <div>
+              <label style={styles.label}>Minimumbeholdning</label>
+              <input type="number" style={styles.input} value={newMin} onChange={(e) => setNewMin(e.target.value)} min={0} />
+            </div>
+          </div>
+          <div style={styles.modalActions}>
+            <button style={styles.secondaryBtn} onClick={() => setShowAddItem(false)}>Annuller</button>
+            <button style={styles.primaryBtn} disabled={!newName.trim()} onClick={addItem}>Gem produkt</button>
+          </div>
+        </Modal>
+      )}
+
+      {/* Adjust modal */}
+      {showAdjust && (
+        <Modal onClose={() => setShowAdjust(null)} title={`Justér: ${showAdjust.name}`} persistent>
+          <div style={{ fontSize: 14, color: "#64748B", marginBottom: 12 }}>Nuværende beholdning: <strong>{showAdjust.stock} {showAdjust.unit}</strong></div>
+          <label style={styles.label}>Type</label>
+          <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+            {[["in","Tilgang ↑"],["out","Afgang ↓"],["adjust","Manuel justering"]].map(([k,l]) => (
+              <button key={k} type="button"
+                style={{ flex:1, padding:"8px 0", borderRadius:8, border: adjustType===k ? "2px solid #D6247A" : "1.5px solid #E2E8F0", background: adjustType===k ? "#FCE4EF" : "#fff", color: adjustType===k ? "#D6247A" : "#475569", fontWeight:600, fontSize:13, cursor:"pointer" }}
+                onClick={() => setAdjustType(k)}>{l}</button>
+            ))}
+          </div>
+          <label style={styles.label}>Antal ({showAdjust.unit})</label>
+          <input type="number" style={styles.input} value={adjustQty} onChange={(e) => setAdjustQty(e.target.value)} min={0} autoFocus placeholder="0" />
+          <label style={styles.label}>Årsag (valgfrit)</label>
+          <input style={styles.input} value={adjustReason} onChange={(e) => setAdjustReason(e.target.value)} placeholder="Fx modtaget fra leverandør" />
+          <div style={styles.modalActions}>
+            <button style={styles.secondaryBtn} onClick={() => setShowAdjust(null)}>Annuller</button>
+            <button style={styles.primaryBtn} disabled={!adjustQty || Number(adjustQty) <= 0} onClick={adjust}>Gem justering</button>
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
 function TravelSettingsModal({ settings, onClose, onSave }) {
   const [defaultMinutes, setDefaultMinutes] = useState(settings.defaultMinutes);
   const [dayStart, setDayStart] = useState(settings.dayStart);
