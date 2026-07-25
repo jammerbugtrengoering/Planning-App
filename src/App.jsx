@@ -367,8 +367,8 @@ function PlanningApp({ session, onSignOut }) {
   useEffect(() => { localStorage.setItem("rp_lang", lang); }, [lang]);
 
   const L = {
-    da: { schedule:"Ugeplan", employees:"Medarbejdere", checklists:"Tjeklister", time:"Tid & Eksport", inventory:"Lager", signOut:"Log ud", sub:"Ugeplanlægning · kapacitet · kompetenceniveauer" },
-    en: { schedule:"Schedule", employees:"Employees", checklists:"Checklists", time:"Time & Export", inventory:"Inventory", signOut:"Sign out", sub:"Weekly planning · capacity · skill levels" },
+    da: { schedule:"Ugeplan", employees:"Medarbejdere", checklists:"Tjeklister", time:"Tid & Eksport", inventory:"Lager", skills:"Kompetencer", signOut:"Log ud", sub:"Ugeplanlægning · kapacitet · kompetenceniveauer" },
+    en: { schedule:"Schedule", employees:"Employees", checklists:"Checklists", time:"Time & Export", inventory:"Inventory", skills:"Skills", signOut:"Sign out", sub:"Weekly planning · capacity · skill levels" },
   }[lang];
   // ── Dynamiske master-data fra Supabase ──
   const [skills, setSkills] = useState(SKILLS_FALLBACK);
@@ -904,7 +904,7 @@ function PlanningApp({ session, onSignOut }) {
           </div>
         </div>
         <nav style={styles.nav}>
-          {[["uge", L.schedule], ["employees", L.employees], ["checklists", L.checklists], ["time", L.time], ["inventory", L.inventory]].map(([k, l]) => (
+          {[["uge", L.schedule], ["employees", L.employees], ["checklists", L.checklists], ["time", L.time], ["inventory", L.inventory], ["skills", L.skills]].map(([k, l]) => (
             <button key={k} onClick={() => setView(k)} style={view === k ? styles.navBtnActive : styles.navBtn}>{l}</button>
           ))}
           <div style={{ display:"flex", gap:4, marginLeft:12, borderLeft:"1px solid #333", paddingLeft:12 }}>
@@ -953,6 +953,10 @@ function PlanningApp({ session, onSignOut }) {
 
       {view === "inventory" && (
         <InventoryView supabase={supabase} employees={employees} />
+      )}
+
+      {view === "skills" && (
+        <SkillsView supabase={supabase} skills={skills} onSkillsChange={setSkills} />
       )}
 
       {showAddTask && <TaskModal onClose={() => { setShowAddTask(false); setCopyPayload(null); }} onSave={addTask} checklistTemplates={checklistTemplates} skills={skills} copyFrom={copyPayload} />}
@@ -1970,6 +1974,130 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom }) {
         </button>
       </div>
     </Modal>
+  );
+}
+
+// ── Skills View ───────────────────────────────────────────────────────────────
+function SkillsView({ supabase, skills: skillNames, onSkillsChange }) {
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [newName, setNewName] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [editId, setEditId] = useState(null);
+  const [editName, setEditName] = useState("");
+
+  useEffect(() => {
+    async function load() {
+      setLoading(true);
+      const { data } = await supabase.from("skills").select("*").order("name");
+      setItems(data || []);
+      setLoading(false);
+    }
+    load();
+  }, []);
+
+  async function addSkill() {
+    if (!newName.trim()) return;
+    setSaving(true);
+    const id = newName.trim().toLowerCase()
+      .replace(/æ/g,"ae").replace(/ø/g,"oe").replace(/å/g,"aa")
+      .replace(/\s+/g,"_").replace(/[^a-z0-9_]/g,"");
+    const { data, error } = await supabase.from("skills")
+      .insert({ id: id + "_" + Date.now(), name: newName.trim() })
+      .select().single();
+    if (!error && data) {
+      setItems((prev) => [...prev, data].sort((a,b) => a.name.localeCompare(b.name)));
+      onSkillsChange((prev) => [...prev, data.name]);
+      setNewName("");
+    }
+    setSaving(false);
+  }
+
+  async function saveEdit(item) {
+    if (!editName.trim() || editName === item.name) { setEditId(null); return; }
+    const { error } = await supabase.from("skills").update({ name: editName.trim() }).eq("id", item.id);
+    if (!error) {
+      setItems((prev) => prev.map((s) => s.id === item.id ? { ...s, name: editName.trim() } : s));
+      onSkillsChange((prev) => prev.map((n) => n === item.name ? editName.trim() : n));
+    }
+    setEditId(null);
+  }
+
+  async function deleteSkill(item) {
+    if (!window.confirm(`Slet kompetencen "${item.name}"? Dette fjerner den fra alle medarbejdere og opgaver.`)) return;
+    await supabase.from("skills").delete().eq("id", item.id);
+    setItems((prev) => prev.filter((s) => s.id !== item.id));
+    onSkillsChange((prev) => prev.filter((n) => n !== item.name));
+  }
+
+  if (loading) return <div style={{ padding: 40, textAlign: "center", color: "#9C1B5D" }}>Indlæser kompetencer…</div>;
+
+  return (
+    <div style={styles.page}>
+      <div style={{ maxWidth: 600 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
+          <div>
+            <div style={{ fontWeight: 700, fontSize: 18, color: "#111111" }}>Kompetencer</div>
+            <div style={{ fontSize: 13, color: "#64748B", marginTop: 2 }}>Bruges til at matche medarbejdere med opgaver</div>
+          </div>
+        </div>
+
+        {/* Add new */}
+        <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
+          <input
+            style={{ ...styles.input, flex: 1 }}
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") addSkill(); }}
+            placeholder="Ny kompetence, fx Højtryksspuling…"
+            autoFocus
+          />
+          <button style={styles.primaryBtn} onClick={addSkill} disabled={saving || !newName.trim()}>
+            <Plus size={14} /> Tilføj
+          </button>
+        </div>
+
+        {/* List */}
+        <div style={{ background: "#fff", borderRadius: 12, boxShadow: "0 1px 3px rgba(0,0,0,0.06)", overflow: "hidden" }}>
+          {items.length === 0 && (
+            <div style={{ padding: 24, textAlign: "center", color: "#94A3B8", fontSize: 14 }}>
+              Ingen kompetencer endnu — tilføj den første ovenfor
+            </div>
+          )}
+          {items.map((item, idx) => (
+            <div key={item.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 16px", borderBottom: idx < items.length - 1 ? "1px solid #F1F5F9" : "none" }}>
+              <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#D6247A", flexShrink: 0 }} />
+              {editId === item.id ? (
+                <input
+                  style={{ ...styles.input, flex: 1, margin: 0 }}
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") saveEdit(item); if (e.key === "Escape") setEditId(null); }}
+                  autoFocus
+                />
+              ) : (
+                <span style={{ flex: 1, fontSize: 14, fontWeight: 500, color: "#111111" }}>{item.name}</span>
+              )}
+              {editId === item.id ? (
+                <div style={{ display: "flex", gap: 6 }}>
+                  <button style={styles.primaryBtn} onClick={() => saveEdit(item)}>Gem</button>
+                  <button style={styles.secondaryBtn} onClick={() => setEditId(null)}>Annuller</button>
+                </div>
+              ) : (
+                <div style={{ display: "flex", gap: 4 }}>
+                  <button style={styles.iconBtnGhostInline} onClick={() => { setEditId(item.id); setEditName(item.name); }} title="Rediger"><Pencil size={14} /></button>
+                  <button style={styles.iconBtnGhostInline} onClick={() => deleteSkill(item)} title="Slet"><Trash2 size={14} /></button>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+
+        <div style={{ marginTop: 12, fontSize: 12, color: "#94A3B8" }}>
+          {items.length} kompetencer · Ændringer træder i kraft straks i "Ny opgave" og "Rediger medarbejder"
+        </div>
+      </div>
+    </div>
   );
 }
 
