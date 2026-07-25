@@ -2444,6 +2444,7 @@ function InventoryView({ supabase, employees }) {
           </div>
         </Modal>
       )}
+      {showAdjust && (
         <Modal onClose={() => setShowAdjust(null)} title={`Justér: ${showAdjust.name}`} persistent>
           <div style={{ fontSize: 14, color: "#64748B", marginBottom: 12 }}>Nuværende beholdning: <strong>{showAdjust.stock} {showAdjust.unit}</strong></div>
           <label style={styles.label}>Type</label>
