@@ -901,7 +901,7 @@ function PlanningApp({ session, onSignOut }) {
           </div>
         </div>
         <nav style={styles.nav}>
-          {[["uge", L.schedule], ["employees", L.employees], ["checklists", L.checklists], ["time", L.time], ["inventory", L.inventory], ["skills", L.skills]].map(([k, l]) => (
+          {[["uge", L.schedule], ["employees", L.employees], ["checklists", L.checklists], ["time", L.time], ["inventory", L.inventory]].map(([k, l]) => (
             <button key={k} onClick={() => setView(k)} style={view === k ? styles.navBtnActive : styles.navBtn}>{l}</button>
           ))}
           <div style={{ display:"flex", gap:4, marginLeft:12, borderLeft:"1px solid #333", paddingLeft:12 }}>
@@ -938,7 +938,10 @@ function PlanningApp({ session, onSignOut }) {
         <EmployeesView employees={employees} instances={weekInstancesList}
           onAdd={() => { setEditEmp(null); setShowAddEmp(true); }}
           onEdit={(e) => { setEditEmp(e); setShowAddEmp(true); }}
-          onDelete={deleteEmployee} />
+          onDelete={deleteEmployee}
+          supabase={supabase}
+          skills={skills}
+          onSkillsChange={setSkills} />
       )}
       {view === "checklists" && (
         <ChecklistsView checklistTemplates={checklistTemplates} onSave={saveChecklistTemplate} onDelete={deleteChecklistTemplate} />
@@ -1390,7 +1393,8 @@ function TypeBadge({ type, mini }) {
 }
 
 // ---------- Employees ----------
-function EmployeesView({ employees, instances, onAdd, onEdit, onDelete }) {
+function EmployeesView({ employees, instances, onAdd, onEdit, onDelete, supabase, skills, onSkillsChange }) {
+  const [showSkillsPanel, setShowSkillsPanel] = useState(false);
   const [inviteEmail, setInviteEmail] = useState({});
   const [inviteStatus, setInviteStatus] = useState({});
 
@@ -1434,7 +1438,20 @@ function EmployeesView({ employees, instances, onAdd, onEdit, onDelete }) {
 
   return (
     <div style={styles.page}>
-      <div style={styles.toolbar}><button style={styles.primaryBtn} onClick={onAdd}><Plus size={16} /> Ny medarbejder</button></div>
+      <div style={styles.toolbar}>
+        <button style={styles.primaryBtn} onClick={onAdd}><Plus size={16} /> Ny medarbejder</button>
+        <button
+          style={{ ...styles.secondaryBtn, ...(showSkillsPanel ? { background: "#FCE4EF", color: "#D6247A", borderColor: "#D6247A" } : {}) }}
+          onClick={() => setShowSkillsPanel((v) => !v)}>
+          ⭐ Kompetencer
+        </button>
+      </div>
+
+      {showSkillsPanel && (
+        <div style={{ background: "#fff", borderRadius: 12, padding: 16, marginBottom: 16, boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
+          <SkillsView supabase={supabase} skills={skills} onSkillsChange={onSkillsChange} />
+        </div>
+      )}
       <div style={styles.empGrid}>
         {employees.map((e) => {
           const activeMin = DAYS.reduce((s, d) => s + usedMinutes(instances, e.id, d.key), 0);
