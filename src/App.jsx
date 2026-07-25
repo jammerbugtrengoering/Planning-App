@@ -610,30 +610,28 @@ function PlanningApp({ session, onSignOut }) {
 
     // Helper: all ISO week numbers from now until expiryDate
     function weeksUntilExpiry(expiryDateStr, startDateStr) {
-      // Start fra den tidligste af: weekOffset (aktuel uge) eller startDate-ugen
-      const startWeek = startDateStr
-        ? Math.min(weekOffset, isoWeekNumber(new Date(startDateStr)))
-        : weekOffset;
+      // Start fra startDate-ugen (kan være fremtidig)
+      // Hvis ingen startDate, start fra aktuel uge
+      const startDate = startDateStr ? new Date(startDateStr) : new Date();
+      const startYear = startDate.getFullYear();
+      const startWeek = isoWeekNumber(startDate);
 
       if (!expiryDateStr) return [startWeek];
 
       const expiry = new Date(expiryDateStr);
-      const expiryWeek = isoWeekNumber(expiry);
       const expiryYear = expiry.getFullYear();
-      const currentYear = new Date().getFullYear();
+      const expiryWeek = isoWeekNumber(expiry);
 
-      // Beregn total antal uger fra startWeek til expiryWeek inkl. år-skift
-      const totalWeeks = expiryYear > currentYear
-        ? (52 - startWeek) + expiryWeek + (expiryYear - currentYear - 1) * 52
-        : expiryWeek - startWeek;
+      // Brug absolutte ugenumre (år * 53 + uge) for korrekt iteration over årsskift
+      const startAbs = startYear * 53 + startWeek;
+      const endAbs = expiryYear * 53 + expiryWeek;
 
       const weeks = [];
-      for (let i = 0; i <= totalWeeks && weeks.length < 104; i++) {
-        // Konvertér offset til ISO-ugenummer (1-52)
-        const rawWeek = startWeek + i;
-        weeks.push(rawWeek > 52 ? rawWeek - 52 : rawWeek);
+      for (let abs = startAbs; abs <= endAbs && weeks.length < 104; abs++) {
+        const wk = abs % 53 || 52; // ISO uge 1-52
+        weeks.push(wk);
       }
-      return weeks.length ? weeks : [weekOffset];
+      return weeks.length ? weeks : [startWeek];
     }
 
     if (payload.type === "fixed") {
@@ -662,7 +660,6 @@ function PlanningApp({ session, onSignOut }) {
         const nextT = [...prevT, tpl];
         setInstances((cur) => {
           const weeks = weeksUntilExpiry(payload.expiryDate, payload.startDate);
-          console.log("weekOffset:", weekOffset, "weeks generated:", weeks.slice(0, 5), "total:", weeks.length);
           let next = [...cur];
           weeks.forEach((wk) => {
             const expanded = ensureWeekInstances(wk, next, nextT, employees);
