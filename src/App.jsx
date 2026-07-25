@@ -2217,7 +2217,12 @@ function InventoryView({ supabase, employees }) {
   const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showAddItem, setShowAddItem] = useState(false);
-  const [showAdjust, setShowAdjust] = useState(null); // item
+  const [showAdjust, setShowAdjust] = useState(null);
+  const [showEditItem, setShowEditItem] = useState(null);
+  const [editItemName, setEditItemName] = useState("");
+  const [editItemUnit, setEditItemUnit] = useState("");
+  const [editItemMin, setEditItemMin] = useState(0);
+  const [editItemCat, setEditItemCat] = useState("");
   const [adjustQty, setAdjustQty] = useState("");
   const [adjustReason, setAdjustReason] = useState("");
   const [adjustType, setAdjustType] = useState("in");
@@ -2257,7 +2262,27 @@ function InventoryView({ supabase, employees }) {
     if (data) { setItems((prev) => [...prev, data]); setShowAddItem(false); setNewName(""); setNewStock(0); setNewMin(0); }
   }
 
-  async function adjust() {
+  async function saveEditItem() {
+    if (!showEditItem || !editItemName.trim()) return;
+    const { error } = await supabase.from("inventory_items").update({
+      name: editItemName.trim(),
+      unit: editItemUnit,
+      min_stock: Number(editItemMin),
+      category_id: editItemCat,
+    }).eq("id", showEditItem.id);
+    if (!error) {
+      setItems((prev) => prev.map((i) => i.id === showEditItem.id
+        ? { ...i, name: editItemName.trim(), unit: editItemUnit, min_stock: Number(editItemMin), category_id: editItemCat }
+        : i));
+      setShowEditItem(null);
+    }
+  }
+
+  async function deleteItem(item) {
+    if (!window.confirm(`Slet "${item.name}"? Dette kan ikke fortrydes.`)) return;
+    await supabase.from("inventory_items").delete().eq("id", item.id);
+    setItems((prev) => prev.filter((i) => i.id !== item.id));
+  }
     if (!showAdjust || !adjustQty) return;
     const qty = adjustType === "out" ? -Math.abs(Number(adjustQty)) : Math.abs(Number(adjustQty));
     const newStock = showAdjust.stock + qty;
@@ -2322,9 +2347,13 @@ function InventoryView({ supabase, employees }) {
                   <div style={{ fontWeight: 700, fontSize: 14, color: "#111111" }}>{item.name}</div>
                   <div style={{ fontSize: 12, color: "#64748B" }}>{cat?.icon} {cat?.name}</div>
                 </div>
-                <button style={{ ...styles.addSkillBtn, fontSize: 12 }} onClick={() => { setShowAdjust(item); setAdjustType("in"); }}>
-                  Justér beholdning
-                </button>
+                <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                  <button style={{ ...styles.addSkillBtn, fontSize: 12 }} onClick={() => { setShowAdjust(item); setAdjustType("in"); }}>
+                    Justér
+                  </button>
+                  <button style={styles.iconBtnGhostInline} onClick={() => { setShowEditItem(item); setEditItemName(item.name); setEditItemUnit(item.unit); setEditItemMin(item.min_stock); setEditItemCat(item.category_id); }} title="Rediger"><Pencil size={13} /></button>
+                  <button style={{ ...styles.iconBtnGhostInline, color: "#DC2626" }} onClick={() => deleteItem(item)} title="Slet"><Trash2 size={13} /></button>
+                </div>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                 <div style={{ flex: 1 }}>
@@ -2393,7 +2422,26 @@ function InventoryView({ supabase, employees }) {
       )}
 
       {/* Adjust modal */}
-      {showAdjust && (
+      {showEditItem && (
+        <Modal onClose={() => setShowEditItem(null)} title={`Rediger: ${showEditItem.name}`} persistent>
+          <label style={styles.label}>Navn</label>
+          <input style={styles.input} value={editItemName} onChange={(e) => setEditItemName(e.target.value)} autoFocus />
+          <label style={styles.label}>Kategori</label>
+          <select style={styles.input} value={editItemCat} onChange={(e) => setEditItemCat(e.target.value)}>
+            {categories.map((c) => <option key={c.id} value={c.id}>{c.icon} {c.name} ({c.type === "kunde" ? "Kundeprodukt" : "Medarbejderprodukt"})</option>)}
+          </select>
+          <label style={styles.label}>Enhed</label>
+          <select style={styles.input} value={editItemUnit} onChange={(e) => setEditItemUnit(e.target.value)}>
+            {["stk","rulle","par","dunk","liter","kg","pose","æske","sæt"].map((u) => <option key={u} value={u}>{u}</option>)}
+          </select>
+          <label style={styles.label}>Minimumbeholdning</label>
+          <input type="number" style={styles.input} value={editItemMin} onChange={(e) => setEditItemMin(e.target.value)} min={0} />
+          <div style={styles.modalActions}>
+            <button style={styles.secondaryBtn} onClick={() => setShowEditItem(null)}>Annuller</button>
+            <button style={styles.primaryBtn} disabled={!editItemName.trim()} onClick={saveEditItem}>Gem ændringer</button>
+          </div>
+        </Modal>
+      )}
         <Modal onClose={() => setShowAdjust(null)} title={`Justér: ${showAdjust.name}`} persistent>
           <div style={{ fontSize: 14, color: "#64748B", marginBottom: 12 }}>Nuværende beholdning: <strong>{showAdjust.stock} {showAdjust.unit}</strong></div>
           <label style={styles.label}>Type</label>
