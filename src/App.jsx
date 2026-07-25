@@ -1424,12 +1424,13 @@ function EmployeesView({ employees, instances, onAdd, onEdit, onDelete, supabase
     // Hent historik for denne medarbejder
     const { data } = await supabase
       .from("inventory_transactions")
-      .select("*, inventory_items(name, unit)")
+      .select("*, inventory_items(name, unit, inventory_categories(type))")
       .eq("employee_id", emp.id)
       .eq("type", "out")
       .order("id", { ascending: false })
       .limit(20);
-    setEmpOrders((prev) => ({ ...prev, [emp.id]: data || [] }));
+    // Filtrer kun medarbejderprodukter
+    setEmpOrders((prev) => ({ ...prev, [emp.id]: (data || []).filter((tx) => tx.inventory_items?.inventory_categories?.type === "medarbejder") }));
   }
 
   async function submitOrder(emp) {
@@ -1604,9 +1605,10 @@ function EmployeesView({ employees, instances, onAdd, onEdit, onDelete, supabase
                   <div>
                     {empOrders[e.id]?.length > 0 ? (
                       empOrders[e.id].map((tx) => (
-                        <div key={tx.id} style={{ display: "flex", justifyContent: "space-between", fontSize: 12, padding: "4px 0", borderBottom: "1px solid #F8FAFC", color: "#475569" }}>
-                          <span>{tx.inventory_items?.name}</span>
+                        <div key={tx.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12, padding: "5px 0", borderBottom: "1px solid #F8FAFC", color: "#475569", gap: 8 }}>
+                          <span style={{ flex: 1 }}>{tx.inventory_items?.name}</span>
                           <span style={{ fontWeight: 600, color: "#111111" }}>{Math.abs(tx.quantity)} {tx.inventory_items?.unit}</span>
+                          {tx.created_at && <span style={{ color: "#94A3B8", fontSize: 11, flexShrink: 0 }}>{new Date(tx.created_at).toLocaleDateString("da-DK", { day: "numeric", month: "short" })}</span>}
                         </div>
                       ))
                     ) : (
@@ -2321,7 +2323,7 @@ function InventoryView({ supabase, employees }) {
                   <div style={{ fontSize: 12, color: "#64748B" }}>{cat?.icon} {cat?.name}</div>
                 </div>
                 <button style={{ ...styles.addSkillBtn, fontSize: 12 }} onClick={() => { setShowAdjust(item); setAdjustType("in"); }}>
-                  Justér
+                  Justér beholdning
                 </button>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
