@@ -1136,6 +1136,7 @@ function EmployeeAppView({ employees, instances, onLogMinutes, onSetStatus, onTo
 function WeekView({ employees, instances, unplaced, onAdd, onImport, onAuto, onPlace, onUnplace, onRemoveAssignee, onDelete, onOpenTask, dragId, setDragId, weekLabel, weekNo, weekOffset, onPrevWeek, onNextWeek, onTodayWeek, travelSettings, onOpenTravelSettings, currentIsoWeek }) {
   const [addMenuTaskId, setAddMenuTaskId] = useState(null);
   const [showWeekend, setShowWeekend] = useState(false);
+  const [capView, setCapView] = useState("bar"); // "bar" | "detail"
   const visibleDays = showWeekend ? ALL_DAYS : DAYS;
 
   return (
@@ -1150,6 +1151,12 @@ function WeekView({ employees, instances, unplaced, onAdd, onImport, onAuto, onP
           onClick={() => setShowWeekend((v) => !v)}
           title="Vis/skjul weekend">
           {showWeekend ? "Man–Søn ✓" : "Man–Fre"}
+        </button>
+        <button
+          style={{ ...styles.secondaryBtn, ...(capView === "detail" ? { background: "#EEF2FF", color: "#4F46E5", borderColor: "#4F46E5" } : {}) }}
+          onClick={() => setCapView((v) => v === "bar" ? "detail" : "bar")}
+          title="Skift kapacitetsvisning">
+          {capView === "detail" ? "📊 Belægning" : "📊 Belægning"}
         </button>
         <div style={styles.toolbarSpacer} />
         <div style={styles.weekNav}>
@@ -1237,7 +1244,18 @@ function WeekView({ employees, instances, unplaced, onAdd, onImport, onAuto, onP
                       <div style={styles.capBarTrack}>
                         <div style={{ ...styles.capBarFill, width: `${pct}%`, background: over ? "#DC2626" : pct > 80 ? "#D97706" : "#D6247A" }} />
                       </div>
-                      <div style={styles.capLabel}>{fmtMin(used)} / {fmtMin(cap)}{transportMin > 0 ? ` (inkl. ${fmtMin(transportMin)} transport)` : ""}</div>
+                      {capView === "bar" ? (
+                        <div style={styles.capLabel}>{fmtMin(used)} / {fmtMin(cap)}{transportMin > 0 ? ` (inkl. ${fmtMin(transportMin)} transport)` : ""}</div>
+                      ) : (
+                        <div style={{ fontSize: 10, margin: "3px 0 6px", display: "flex", gap: 6, flexWrap: "wrap" }}>
+                          <span style={{ color: over ? "#DC2626" : pct > 80 ? "#D97706" : "#64748B", fontWeight: 600 }}>
+                            {Math.round(pct)}% belægt
+                          </span>
+                          <span style={{ color: over ? "#DC2626" : "#16A34A", fontWeight: 600 }}>
+                            {over ? `${fmtMin(used - cap)} over` : `${fmtMin(cap - used)} ledig`}
+                          </span>
+                        </div>
+                      )}
                       {schedule.map((seg) => {
                         if (seg.type === "transport") {
                           return (
@@ -1299,6 +1317,40 @@ function WeekView({ employees, instances, unplaced, onAdd, onImport, onAuto, onP
           </div>
         </div>
       </div>
+
+      {/* Ugesammenfatning — kun i detail view */}
+      {capView === "detail" && (
+        <div style={{ marginTop: 12, background: "#F8FAFC", borderRadius: 10, padding: "10px 14px" }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: "#475569", marginBottom: 8 }}>📊 Ugebelægning — alle medarbejdere</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {employees.map((emp) => {
+              const totalUsed = visibleDays.reduce((s, d) => {
+                const dayTasks = instances.filter((t) => (t.assignees || []).includes(emp.id) && t.day === d.key);
+                return s + dayTasks.reduce((s2, t) => s2 + t.duration, 0);
+              }, 0);
+              const totalCap = visibleDays.reduce((s, d) => s + (emp.capacity[d.key] || 0), 0);
+              const pct = totalCap ? Math.round((totalUsed / totalCap) * 100) : 0;
+              const over = totalUsed > totalCap;
+              return (
+                <div key={emp.id} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <span style={{ ...styles.avatar, background: emp.color, width: 24, height: 24, fontSize: 11, flexShrink: 0 }}>{initials(emp.name)}</span>
+                  <span style={{ fontSize: 12, color: "#111111", minWidth: 120, fontWeight: 500 }}>{emp.name}</span>
+                  <div style={{ flex: 1, height: 6, background: "#E2E8F0", borderRadius: 99, overflow: "hidden" }}>
+                    <div style={{ height: "100%", borderRadius: 99, background: over ? "#DC2626" : pct > 80 ? "#D97706" : "#D6247A", width: `${Math.min(100, pct)}%`, transition: "width 0.3s" }} />
+                  </div>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: over ? "#DC2626" : "#64748B", minWidth: 38, textAlign: "right" }}>{pct}%</span>
+                  <span style={{ fontSize: 11, color: over ? "#DC2626" : "#16A34A", fontWeight: 600, minWidth: 80, textAlign: "right" }}>
+                    {over ? `+${fmtMin(totalUsed - totalCap)} over` : `${fmtMin(totalCap - totalUsed)} ledig`}
+                  </span>
+                  <span style={{ fontSize: 11, color: "#94A3B8", minWidth: 80, textAlign: "right" }}>
+                    {fmtMin(totalUsed)} / {fmtMin(totalCap)}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
