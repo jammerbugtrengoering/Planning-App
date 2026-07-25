@@ -3,7 +3,7 @@ import { supabase } from "./supabaseClient";
 import {
   Plus, Upload, Download, X, Clock, Play, Square, AlertTriangle,
   Trash2, Pencil, Repeat, Zap, CalendarClock, Wand2, Star, ChevronLeft, ChevronRight,
-  ClipboardList, Video, CheckCircle2, LogIn, ListChecks, Check, Lock, Navigation, Building2, Car,
+  ClipboardList, Video, CheckCircle2, LogIn, ListChecks, Check, Lock, Navigation, Building2, Car, Copy,
 } from "lucide-react";
 
 // ---------- Constants ----------
@@ -374,6 +374,7 @@ function PlanningApp({ session, onSignOut }) {
   const [weekOffset, setWeekOffset] = useState(() => isoWeekNumber(new Date()));
   const [view, setView] = useState("uge");
   const [showAddTask, setShowAddTask] = useState(false);
+  const [copyPayload, setCopyPayload] = useState(null);
   const [showAddEmp, setShowAddEmp] = useState(false);
   const [editEmp, setEditEmp] = useState(null);
   const [toast, setToast] = useState(null);
@@ -933,7 +934,7 @@ function PlanningApp({ session, onSignOut }) {
         <InventoryView supabase={supabase} employees={employees} />
       )}
 
-      {showAddTask && <TaskModal onClose={() => setShowAddTask(false)} onSave={addTask} checklistTemplates={checklistTemplates} skills={skills} />}
+      {showAddTask && <TaskModal onClose={() => { setShowAddTask(false); setCopyPayload(null); }} onSave={addTask} checklistTemplates={checklistTemplates} skills={skills} copyFrom={copyPayload} />}
       {showAddEmp && <EmployeeModal emp={editEmp} onClose={() => { setShowAddEmp(false); setEditEmp(null); }} onSave={saveEmployee} skills={skills} />}
       {showTravelSettings && (
         <TravelSettingsModal
@@ -966,6 +967,11 @@ function PlanningApp({ session, onSignOut }) {
           onRemoveAssignee={removeAssignee}
           onUnplace={(taskId) => { unplace(taskId); setOpenTaskId(null); }}
           onDelete={(taskId) => { deleteTask(taskId); setOpenTaskId(null); }}
+          onCopy={(task) => {
+            setShowAddTask(true);
+            setOpenTaskId(null);
+            setCopyPayload(task);
+          }}
         />
       )}
     </div>
@@ -1586,25 +1592,28 @@ function TimeView({ instances, employees, totalLogged, onExport, weekLabel }) {
 }
 
 // ---------- Modals ----------
-function TaskModal({ onClose, onSave, checklistTemplates, skills }) {
-  const [type, setType] = useState("fixed");
-  const [contractType, setContractType] = useState("privat");
-  const [title, setTitle] = useState("");
-  const [duration, setDuration] = useState(60);
-  const [requiredSkills, setRequiredSkills] = useState([{ skill: skills[0] ?? "", minLevel: 1 }]);
-  const [days, setDays] = useState(["Mon"]);
+function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom }) {
+  const [type, setType] = useState(copyFrom?.type || "fixed");
+  const [contractType, setContractType] = useState(copyFrom?.contractType || "privat");
+  const [title, setTitle] = useState(copyFrom ? `Kopi af ${copyFrom.title}` : "");
+  const [duration, setDuration] = useState(copyFrom?.duration || 60);
+  const [requiredSkills, setRequiredSkills] = useState(copyFrom?.requiredSkills || [{ skill: skills[0] ?? "", minLevel: 1 }]);
+  const [days, setDays] = useState(copyFrom?.templateDays || copyFrom?.days || ["Mon"]);
   const [day, setDay] = useState("Mon");
   const [adhocDate, setAdhocDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [deadline, setDeadline] = useState("Fri");
+  const [startDate, setStartDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [expiryDate, setExpiryDate] = useState(() => {
     const d = new Date(); d.setFullYear(d.getFullYear() + 1);
     return d.toISOString().slice(0, 10);
   });
   const [checklistTemplateIds, setChecklistTemplateIds] = useState([]);
-  const [extraItems, setExtraItems] = useState([]);
+  const [extraItems, setExtraItems] = useState(
+    copyFrom?.checklist?.map((i) => i.text || i).filter(Boolean) || []
+  );
   const [newItemText, setNewItemText] = useState("");
-  const [videoUrl, setVideoUrl] = useState("");
-  const [customerName, setCustomerName] = useState("");
+  const [videoUrl, setVideoUrl] = useState(copyFrom?.videoUrl || "");
+  const [customerName, setCustomerName] = useState(copyFrom?.customerName || "");
   const [dineroResults, setDineroResults] = useState([]);
   const [dineroSearching, setDineroSearching] = useState(false);
   const [showDineroCreate, setShowDineroCreate] = useState(false);
@@ -1642,9 +1651,9 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills }) {
     setShowDineroCreate(false);
     if (data?.Name) setCustomerName(data.Name);
   }
-  const [address, setAddress] = useState("");
-  const [poNumber, setPoNumber] = useState("");
-  const [accessInstructions, setAccessInstructions] = useState("");
+  const [address, setAddress] = useState(copyFrom?.address || "");
+  const [poNumber, setPoNumber] = useState(copyFrom?.poNumber || "");
+  const [accessInstructions, setAccessInstructions] = useState(copyFrom?.accessInstructions || "");
 
   function toggleTemplate(id) { setChecklistTemplateIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id])); }
   function addExtraItem() { if (!newItemText.trim()) return; setExtraItems((prev) => [...prev, newItemText.trim()]); setNewItemText(""); }
@@ -1666,7 +1675,7 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills }) {
   function removeSkillRow(i) { setRequiredSkills((prev) => prev.filter((_, idx) => idx !== i)); }
 
   return (
-    <Modal onClose={onClose} title="Ny opgave" persistent>
+    <Modal onClose={onClose} title={copyFrom ? `Kopiér: ${copyFrom.title}` : "Ny opgave"} persistent>
       {/* Kontrakttype */}
       <label style={styles.label}>Kontrakttype</label>
       <div style={styles.typePicker}>
@@ -1755,6 +1764,8 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills }) {
 
       {type === "fixed" && (
         <>
+          <label style={styles.label}>Startdato (første gang opgaven udføres)</label>
+          <input type="date" style={styles.input} value={startDate} onChange={(e) => setStartDate(e.target.value)} />
           <label style={styles.label}>Ugedage (gentages hver uge)</label>
           <div style={styles.skillPicker}>
             {DAYS.map((d) => <button key={d.key} type="button" onClick={() => toggleDay(d.key)} style={days.includes(d.key) ? styles.skillPickBtnActive : styles.skillPickBtn}>{d.label}</button>)}
@@ -1765,7 +1776,7 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills }) {
       )}
       {type === "adhoc" && (
         <>
-          <label style={styles.label}>Dato for udførelse</label>
+          <label style={styles.label}>Senest udført dato</label>
           <input type="date" style={styles.input} value={adhocDate} onChange={(e) => {
             setAdhocDate(e.target.value);
             const d = new Date(e.target.value);
@@ -1776,8 +1787,13 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills }) {
       )}
       {type === "flexible" && (
         <>
-          <label style={styles.label}>Skal være udført senest (denne uge)</label>
-          <select style={styles.input} value={deadline} onChange={(e) => setDeadline(e.target.value)}>{DAYS.map((d) => <option key={d.key} value={d.key}>{d.label}</option>)}</select>
+          <label style={styles.label}>Senest udført dato</label>
+          <input type="date" style={styles.input} value={adhocDate} onChange={(e) => {
+            setAdhocDate(e.target.value);
+            const d = new Date(e.target.value);
+            const dayKeys = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+            setDeadline(dayKeys[d.getDay()]);
+          }} />
           <label style={styles.label}>Udløbsdato (aftalen gælder til og med)</label>
           <input type="date" style={styles.input} value={expiryDate} onChange={(e) => setExpiryDate(e.target.value)} />
         </>
@@ -1819,7 +1835,7 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills }) {
         <button
           style={styles.primaryBtn}
           disabled={!title.trim() || (type === "fixed" && days.length === 0) || requiredSkills.length === 0}
-          onClick={() => onSave({ type, contractType, title: title.trim(), requiredSkills, duration, days, day, adhocDate, deadline, expiryDate, checklistTemplateIds, extraItems, videoUrl: videoUrl.trim(), customerName: customerName.trim(), address: address.trim(), poNumber: poNumber.trim(), accessInstructions: accessInstructions.trim() })}
+          onClick={() => onSave({ type, contractType, title: title.trim(), requiredSkills, duration, days, day, adhocDate, deadline, startDate, expiryDate, checklistTemplateIds, extraItems, videoUrl: videoUrl.trim(), customerName: customerName.trim(), address: address.trim(), poNumber: poNumber.trim(), accessInstructions: accessInstructions.trim() })}
         >
           Gem og planlæg
         </button>
@@ -2144,7 +2160,7 @@ function EmployeeModal({ emp, onClose, onSave, skills: skillList }) {
 }
 
 // ---------- Task / service order detail ----------
-function TaskDetailModal({ task, employees, checklistTemplates, onClose, onSetStatus, onToggleChecklistItem, onAddChecklistItem, onAddChecklistTemplate, onAddAssignee, onRemoveAssignee, onUnplace, onDelete, onUpdateCustomer }) {
+function TaskDetailModal({ task, employees, checklistTemplates, onClose, onSetStatus, onToggleChecklistItem, onAddChecklistItem, onAddChecklistTemplate, onAddAssignee, onRemoveAssignee, onUnplace, onDelete, onUpdateCustomer, onCopy }) {
   const [addOpen, setAddOpen] = useState(false);
   const [newItemText, setNewItemText] = useState("");
   const [showTemplates, setShowTemplates] = useState(false);
@@ -2369,6 +2385,7 @@ function TaskDetailModal({ task, employees, checklistTemplates, onClose, onSetSt
 
       <div style={styles.modalActions}>
         <button style={styles.secondaryBtn} onClick={() => onUnplace(t.id)}>Flyt til ikke tildelt</button>
+        {onCopy && <button style={{ ...styles.secondaryBtn, color: "#9C1B5D", borderColor: "#FCE4EF" }} onClick={() => onCopy(t)}><Copy size={14} /> Kopiér</button>}
         <button style={{ ...styles.secondaryBtn, color: "#B91C1C", borderColor: "#FEE2E2" }} onClick={() => onDelete(t.id)}><Trash2 size={14} /> Slet</button>
         <button style={styles.primaryBtn} onClick={onClose}>Luk</button>
       </div>
