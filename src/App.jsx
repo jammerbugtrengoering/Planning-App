@@ -931,12 +931,6 @@ function PlanningApp({ session, onSignOut }) {
       {view === "inventory" && (
         <InventoryView supabase={supabase} employees={employees} />
       )}
-        <EmployeeAppView
-          employees={employees} instances={weekInstancesList}
-          onLogMinutes={logMinutes} onSetStatus={setTaskStatus} onToggleChecklistItem={toggleChecklistItem} weekLabel={wk.label}
-          travelSettings={travelSettings}
-        />
-      )}
 
       {showAddTask && <TaskModal onClose={() => setShowAddTask(false)} onSave={addTask} checklistTemplates={checklistTemplates} skills={skills} />}
       {showAddEmp && <EmployeeModal emp={editEmp} onClose={() => { setShowAddEmp(false); setEditEmp(null); }} onSave={saveEmployee} skills={skills} />}
