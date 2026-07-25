@@ -2283,6 +2283,8 @@ function InventoryView({ supabase, employees }) {
     await supabase.from("inventory_items").delete().eq("id", item.id);
     setItems((prev) => prev.filter((i) => i.id !== item.id));
   }
+
+  async function adjust() {
     if (!showAdjust || !adjustQty) return;
     const qty = adjustType === "out" ? -Math.abs(Number(adjustQty)) : Math.abs(Number(adjustQty));
     const newStock = showAdjust.stock + qty;
