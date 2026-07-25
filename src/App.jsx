@@ -1387,43 +1387,44 @@ function EmployeesView({ employees, instances, onAdd, onEdit, onDelete }) {
 
               {/* Brugeradgang */}
               <div style={{ borderTop: "1px solid #F1F5F9", marginTop: 10, paddingTop: 10 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-                  <span style={{ fontSize: 12, fontWeight: 600, color: hasUser ? "#16A34A" : "#94A3B8" }}>
-                    {hasUser ? "✓ Har app-adgang" : "○ Ingen app-adgang"}
+                {/* Status + mail + luk-knap på én linje */}
+                <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8, flexWrap: "wrap" }}>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: hasUser ? "#16A34A" : "#94A3B8", whiteSpace: "nowrap" }}>
+                    {hasUser ? "✓ App-adgang" : "○ Ingen adgang"}
                   </span>
                   {hasUser && e.app_email && (
-                    <span style={{ fontSize: 11, color: "#64748B", background: "#F1F5F9", padding: "2px 8px", borderRadius: 6 }}>
+                    <span style={{ fontSize: 11, color: "#64748B", background: "#F1F5F9", padding: "2px 8px", borderRadius: 6, overflow: "hidden", textOverflow: "ellipsis", maxWidth: "100%", display: "block" }}>
                       {e.app_email}
                     </span>
                   )}
                   {hasUser && (
                     <button
-                      style={{ fontSize: 11, padding: "3px 8px", borderRadius: 6, border: "1px solid #FCA5A5", background: "#FEF2F2", color: "#DC2626", cursor: "pointer" }}
+                      style={{ fontSize: 11, padding: "3px 8px", borderRadius: 6, border: "1px solid #FCA5A5", background: "#FEF2F2", color: "#DC2626", cursor: "pointer", whiteSpace: "nowrap", marginLeft: "auto" }}
                       onClick={() => deactivateUser(e)}>
                       {status === "deactivating" ? "Lukker…" : "Luk adgang"}
                     </button>
                   )}
                 </div>
 
-                {/* Vis altid invite-felt — enten for at oprette eller genoplive adgang */}
+                {/* Email-felt og Opret-knap */}
                 <div style={{ display: "flex", gap: 6 }}>
                   <input
                     type="email"
                     placeholder={hasUser ? "Ny e-mail (skift bruger)" : "E-mail til medarbejder"}
-                    style={{ ...styles.inputSm, flex: 1, fontSize: 12, color: "#111111", background: "#fff" }}
+                    style={{ ...styles.inputSm, flex: 1, fontSize: 12, color: "#111111", background: "#fff", minWidth: 0 }}
                     value={inviteEmail[e.id] || ""}
                     onChange={(ev) => setInviteEmail((prev) => ({ ...prev, [e.id]: ev.target.value }))}
                     onKeyDown={(ev) => { if (ev.key === "Enter") inviteUser(e); }}
                   />
                   <button
-                    style={{ ...styles.primaryBtn, fontSize: 12, padding: "6px 10px" }}
+                    style={{ ...styles.primaryBtn, fontSize: 12, padding: "6px 10px", whiteSpace: "nowrap" }}
                     disabled={!inviteEmail[e.id]?.trim() || status === "sending"}
                     onClick={() => inviteUser(e)}>
                     {status === "sending" ? "Sender…" : "Opret"}
                   </button>
                 </div>
 
-                {status === "sent" && <div style={{ fontSize: 12, color: "#16A34A", marginTop: 4 }}>✓ Bekræftelses-mail sendt — medarbejderen skal klikke linket og sætte en adgangskode</div>}
+                {status === "sent" && <div style={{ fontSize: 12, color: "#16A34A", marginTop: 4 }}>✓ Bekræftelses-mail sendt</div>}
                 {status === "deactivated" && <div style={{ fontSize: 12, color: "#DC2626", marginTop: 4 }}>Adgang lukket</div>}
                 {status?.startsWith("error") && <div style={{ fontSize: 12, color: "#DC2626", marginTop: 4 }}>{status}</div>}
               </div>
