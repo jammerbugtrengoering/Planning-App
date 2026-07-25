@@ -1605,6 +1605,43 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills }) {
   const [newItemText, setNewItemText] = useState("");
   const [videoUrl, setVideoUrl] = useState("");
   const [customerName, setCustomerName] = useState("");
+  const [dineroResults, setDineroResults] = useState([]);
+  const [dineroSearching, setDineroSearching] = useState(false);
+  const [showDineroCreate, setShowDineroCreate] = useState(false);
+
+  async function searchDinero(q) {
+    setCustomerName(q);
+    if (q.length < 2) { setDineroResults([]); return; }
+    setDineroSearching(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("dinero", {
+        body: { action: "search", query: q },
+      });
+      if (!error && data?.Collection) {
+        setDineroResults(data.Collection);
+      } else {
+        setDineroResults([]);
+      }
+    } catch { setDineroResults([]); }
+    setDineroSearching(false);
+  }
+
+  function selectDineroCustomer(c) {
+    setCustomerName(c.Name);
+    setAddress([c.Street, c.ZipCode, c.City].filter(Boolean).join(", "));
+    setDineroResults([]);
+  }
+
+  async function createDineroCustomer() {
+    setDineroSearching(true);
+    const parts = address.split(",").map((s) => s.trim());
+    const { data } = await supabase.functions.invoke("dinero", {
+      body: { action: "create", contact: { name: customerName, address: parts[0] || "", zipCode: parts[1] || "", city: parts[2] || "" } },
+    });
+    setDineroSearching(false);
+    setShowDineroCreate(false);
+    if (data?.Name) setCustomerName(data.Name);
+  }
   const [address, setAddress] = useState("");
   const [poNumber, setPoNumber] = useState("");
   const [accessInstructions, setAccessInstructions] = useState("");
@@ -1653,8 +1690,42 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills }) {
       <label style={styles.label}>Titel</label>
       <input style={styles.input} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="F.eks. Gulvvask kontor 2. sal" />
 
-      <label style={styles.label}>Kundenavn</label>
-      <input style={styles.input} value={customerName} onChange={(e) => setCustomerName(e.target.value)} placeholder="F.eks. Nordkraft A/S" />
+      <label style={styles.label}>Kundenavn <span style={{ fontSize: 11, color: "#94A3B8" }}>— søger i Dinero</span></label>
+      <div style={{ position: "relative" }}>
+        <input
+          style={styles.input}
+          value={customerName}
+          onChange={(e) => searchDinero(e.target.value)}
+          placeholder="Skriv kundenavn for at søge i Dinero…"
+        />
+        {dineroSearching && <span style={{ position: "absolute", right: 10, top: 10, fontSize: 11, color: "#94A3B8" }}>Søger…</span>}
+        {dineroResults.length > 0 && (
+          <div style={{ position: "absolute", top: "100%", left: 0, right: 0, background: "#fff", border: "1px solid #E2E8F0", borderRadius: 10, boxShadow: "0 4px 16px rgba(0,0,0,0.10)", zIndex: 100, maxHeight: 220, overflowY: "auto" }}>
+            {dineroResults.map((c) => (
+              <div key={c.ContactGuid}
+                style={{ padding: "10px 14px", cursor: "pointer", borderBottom: "1px solid #F1F5F9", fontSize: 13 }}
+                onMouseDown={() => selectDineroCustomer(c)}>
+                <div style={{ fontWeight: 600, color: "#111111" }}>{c.Name}</div>
+                {(c.Street || c.City) && <div style={{ color: "#64748B", fontSize: 12 }}>{[c.Street, c.ZipCode, c.City].filter(Boolean).join(", ")}</div>}
+              </div>
+            ))}
+            <div
+              style={{ padding: "10px 14px", cursor: "pointer", fontSize: 13, color: "#D6247A", fontWeight: 600, background: "#FFF6FA" }}
+              onMouseDown={() => { setDineroResults([]); setShowDineroCreate(true); }}>
+              + Opret "{customerName}" som ny kunde i Dinero
+            </div>
+          </div>
+        )}
+      </div>
+      {showDineroCreate && (
+        <div style={{ background: "#FFF6FA", borderRadius: 10, padding: 10, marginTop: 6 }}>
+          <div style={{ fontSize: 12, color: "#9C1B5D", marginBottom: 6 }}>Kunden oprettes i Dinero med navn og adresse nedenfor</div>
+          <button style={{ ...styles.primaryBtn, fontSize: 12 }} onClick={createDineroCustomer} disabled={dineroSearching}>
+            {dineroSearching ? "Opretter…" : `Opret "${customerName}" i Dinero`}
+          </button>
+          <button style={{ ...styles.secondaryBtn, fontSize: 12, marginLeft: 8 }} onClick={() => setShowDineroCreate(false)}>Annuller</button>
+        </div>
+      )}
 
       <label style={styles.label}>Adresse for udførsel</label>
       <input style={styles.input} value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Vejnavn 1, 9000 Aalborg" />
