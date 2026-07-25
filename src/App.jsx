@@ -1691,9 +1691,12 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom }) {
   const [dineroSearching, setDineroSearching] = useState(false);
   const [showDineroCreate, setShowDineroCreate] = useState(false);
 
+  const [dineroAvailable, setDineroAvailable] = useState(true);
+
   async function searchDinero(q) {
     setCustomerName(q);
     if (q.length < 2) { setDineroResults([]); return; }
+    if (!dineroAvailable) return; // Dinero ikke tilgængelig — brug manuel indtastning
     setDineroSearching(true);
     try {
       const { data, error } = await supabase.functions.invoke("dinero", {
@@ -1703,8 +1706,12 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom }) {
         setDineroResults(data.Collection);
       } else {
         setDineroResults([]);
+        if (error) setDineroAvailable(false); // Slå Dinero fra ved fejl
       }
-    } catch { setDineroResults([]); }
+    } catch {
+      setDineroResults([]);
+      setDineroAvailable(false);
+    }
     setDineroSearching(false);
   }
 
@@ -1717,12 +1724,41 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom }) {
   async function createDineroCustomer() {
     setDineroSearching(true);
     const parts = address.split(",").map((s) => s.trim());
-    const { data } = await supabase.functions.invoke("dinero", {
-      body: { action: "create", contact: { name: customerName, address: parts[0] || "", zipCode: parts[1] || "", city: parts[2] || "" } },
-    });
+    let created = false;
+
+    // Forsøg Dinero først
+    if (dineroAvailable) {
+      try {
+        const { data, error } = await supabase.functions.invoke("dinero", {
+          body: { action: "create", contact: { name: customerName, address: parts[0] || "", zipCode: parts[1] || "", city: parts[2] || "" } },
+        });
+        if (!error && (data?.Name || data?.ContactGuid)) {
+          if (data?.Name) setCustomerName(data.Name);
+          created = true;
+        } else {
+          setDineroAvailable(false);
+        }
+      } catch {
+        setDineroAvailable(false);
+      }
+    }
+
+    // Fallback: gem direkte i Supabase customers-tabel
+    if (!created) {
+      const newId = uid("cust");
+      const { error: dbErr } = await supabase.from("customers").insert({
+        id: newId,
+        name: customerName,
+        address: address,
+        access_instructions: "",
+      });
+      if (!dbErr) {
+        created = true;
+      }
+    }
+
     setDineroSearching(false);
     setShowDineroCreate(false);
-    if (data?.Name) setCustomerName(data.Name);
   }
   const [address, setAddress] = useState(copyFrom?.address || "");
   const [poNumber, setPoNumber] = useState(copyFrom?.poNumber || "");
@@ -1772,13 +1808,19 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom }) {
       <label style={styles.label}>Titel</label>
       <input style={styles.input} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="F.eks. Gulvvask kontor 2. sal" />
 
-      <label style={styles.label}>Kundenavn <span style={{ fontSize: 11, color: "#94A3B8" }}>— søger i Dinero</span></label>
+      <label style={styles.label}>
+        Kundenavn
+        {dineroAvailable
+          ? <span style={{ fontSize: 11, color: "#94A3B8", marginLeft: 6 }}>— søger i Dinero</span>
+          : <span style={{ fontSize: 11, color: "#D97706", marginLeft: 6 }}>— Dinero ikke tilgængelig, indtast manuelt</span>
+        }
+      </label>
       <div style={{ position: "relative" }}>
         <input
           style={styles.input}
           value={customerName}
           onChange={(e) => searchDinero(e.target.value)}
-          placeholder="Skriv kundenavn for at søge i Dinero…"
+          placeholder={dineroAvailable ? "Skriv kundenavn for at søge i Dinero…" : "Kundenavn…"}
         />
         {dineroSearching && <span style={{ position: "absolute", right: 10, top: 10, fontSize: 11, color: "#94A3B8" }}>Søger…</span>}
         {dineroResults.length > 0 && (
@@ -1794,16 +1836,30 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom }) {
             <div
               style={{ padding: "10px 14px", cursor: "pointer", fontSize: 13, color: "#D6247A", fontWeight: 600, background: "#FFF6FA" }}
               onMouseDown={() => { setDineroResults([]); setShowDineroCreate(true); }}>
-              + Opret "{customerName}" som ny kunde i Dinero
+              + Opret "{customerName}" som ny kunde
             </div>
+          </div>
+        )}
+        {/* Vis opret-knap når ingen resultater og tekst er indtastet */}
+        {!dineroSearching && customerName.length >= 2 && dineroResults.length === 0 && !showDineroCreate && (
+          <div style={{ marginTop: 4 }}>
+            <button type="button"
+              style={{ ...styles.addSkillBtn, fontSize: 12 }}
+              onClick={() => setShowDineroCreate(true)}>
+              + Opret "{customerName}" som ny kunde {dineroAvailable ? "i Dinero" : "i systemet"}
+            </button>
           </div>
         )}
       </div>
       {showDineroCreate && (
         <div style={{ background: "#FFF6FA", borderRadius: 10, padding: 10, marginTop: 6 }}>
-          <div style={{ fontSize: 12, color: "#9C1B5D", marginBottom: 6 }}>Kunden oprettes i Dinero med navn og adresse nedenfor</div>
+          <div style={{ fontSize: 12, color: "#9C1B5D", marginBottom: 6 }}>
+            {dineroAvailable
+              ? "Kunden oprettes i Dinero og i systemet med navn og adresse nedenfor"
+              : "Dinero er ikke tilgængelig — kunden oprettes direkte i systemets kundedatabase"}
+          </div>
           <button style={{ ...styles.primaryBtn, fontSize: 12 }} onClick={createDineroCustomer} disabled={dineroSearching}>
-            {dineroSearching ? "Opretter…" : `Opret "${customerName}" i Dinero`}
+            {dineroSearching ? "Opretter…" : `Opret "${customerName}" ${dineroAvailable ? "i Dinero" : "i systemet"}`}
           </button>
           <button style={{ ...styles.secondaryBtn, fontSize: 12, marginLeft: 8 }} onClick={() => setShowDineroCreate(false)}>Annuller</button>
         </div>
