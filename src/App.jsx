@@ -610,26 +610,28 @@ function PlanningApp({ session, onSignOut }) {
 
     // Helper: all ISO week numbers from now until expiryDate
     function weeksUntilExpiry(expiryDateStr, startDateStr) {
-      // Brug absolut ugenummer: år * 53 + uge
-      function absWeek(dateStr) {
-        const d = new Date(dateStr || new Date());
-        return d.getFullYear() * 53 + isoWeekNumber(d);
-      }
-      function isoWeekOf(absW) {
-        return absW % 53 || 53;
-      }
+      // Start fra den tidligste af: weekOffset (aktuel uge) eller startDate-ugen
+      const startWeek = startDateStr
+        ? Math.min(weekOffset, isoWeekNumber(new Date(startDateStr)))
+        : weekOffset;
 
-      const startAbs = startDateStr
-        ? absWeek(startDateStr)
-        : new Date().getFullYear() * 53 + weekOffset;
+      if (!expiryDateStr) return [startWeek];
 
-      const endAbs = expiryDateStr
-        ? absWeek(expiryDateStr)
-        : startAbs;
+      const expiry = new Date(expiryDateStr);
+      const expiryWeek = isoWeekNumber(expiry);
+      const expiryYear = expiry.getFullYear();
+      const currentYear = new Date().getFullYear();
+
+      // Beregn total antal uger fra startWeek til expiryWeek inkl. år-skift
+      const totalWeeks = expiryYear > currentYear
+        ? (52 - startWeek) + expiryWeek + (expiryYear - currentYear - 1) * 52
+        : expiryWeek - startWeek;
 
       const weeks = [];
-      for (let w = startAbs; w <= endAbs && weeks.length < 104; w++) {
-        weeks.push(isoWeekOf(w));
+      for (let i = 0; i <= totalWeeks && weeks.length < 104; i++) {
+        // Konvertér offset til ISO-ugenummer (1-52)
+        const rawWeek = startWeek + i;
+        weeks.push(rawWeek > 52 ? rawWeek - 52 : rawWeek);
       }
       return weeks.length ? weeks : [weekOffset];
     }
