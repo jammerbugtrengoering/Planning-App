@@ -232,10 +232,7 @@ function scheduleWeek(weekInstances, employees, autoOnly = false, areas = [], em
 function ensureWeekInstances(week, allInstances, templates, employees) {
   let list = [...allInstances];
   templates.forEach((tpl) => {
-    if (!tpl.days || tpl.days.length === 0) {
-      console.warn("Template has no days:", tpl.id, tpl.title);
-      return;
-    }
+    if (!tpl.days || tpl.days.length === 0) return;
     // Skip if past expiry date
     if (tpl.expiryDate) {
       const expiryWeek = isoWeekNumber(new Date(tpl.expiryDate));
@@ -512,6 +509,8 @@ function PlanningApp({ session, onSignOut }) {
             address: cust?.address ?? "",
             accessInstructions: cust?.access_instructions ?? "",
             checklistItems: [],
+            startDate: t.start_date || null,
+            expiryDate: t.expiry_date || null,
             requiredSkills: (tplSkillsData || [])
               .filter((s) => s.template_id === t.id)
               .map((s) => {
@@ -530,9 +529,11 @@ function PlanningApp({ session, onSignOut }) {
             ...i,
             timeLog: i.time_log ?? [],
             requiredSkills: i.required_skills ?? [],
-            customerName: cust?.name ?? i.customer_id ?? "",
-            address: cust?.address ?? "",
-            accessInstructions: cust?.access_instructions ?? "",
+            customerName: i.customer_name || cust?.name ?? i.customer_id ?? "",
+            address: i.address_text || cust?.address ?? "",
+            accessInstructions: i.access_instructions || cust?.access_instructions ?? "",
+            startDate: i.start_date || null,
+            expiryDate: i.expiry_date || null,
           };
         });
         const allInst = ensureWeekInstances(currentWeek, existingInst, mapped, empMapped);
@@ -600,6 +601,8 @@ function PlanningApp({ session, onSignOut }) {
       access_instructions: inst.accessInstructions ?? "",
       contract_type: inst.contractType ?? "privat",
       invoice_ready: inst.invoiceReady ?? false,
+      start_date: inst.startDate || null,
+      expiry_date: inst.expiryDate || null,
     }, { onConflict: "id" });
     if (error) console.error("syncInstance error:", error.message, error.details, inst.id);
   }, []);
@@ -685,6 +688,8 @@ function PlanningApp({ session, onSignOut }) {
       const { error: tplErr } = await supabase.from("service_templates").insert({
         id: tplId, title: tpl.title, duration: tpl.duration, days: tpl.days,
         video_url: tpl.videoUrl || "", po_number: tpl.poNumber || "",
+        start_date: payload.startDate || null,
+        expiry_date: payload.expiryDate || null,
       });
       if (tplErr) console.error("service_templates insert error:", tplErr.message);
       const { data: skillsDb } = await supabase.from("skills").select("id,name");
