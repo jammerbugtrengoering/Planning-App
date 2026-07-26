@@ -1916,9 +1916,24 @@ function TimeView({ instances, employees, totalLogged, onExport, weekLabel, onUp
       <div style={styles.toolbar}>
         <div style={styles.statBlock}><Clock size={16} /><div><div style={styles.statValue}>{fmtMin(totalLogged)}</div><div style={styles.statLabel}>Registreret i alt (alle uger)</div></div></div>
         <div style={styles.statBlock}><Clock size={16} /><div><div style={styles.statValue}>{fmtMin(totalRegistered)} / {fmtMin(totalPlanned)}</div><div style={styles.statLabel}>{MONTHS[filterMonth]} {filterYear}: registreret / planlagt</div></div></div>
-        <div style={{ ...styles.statBlock, borderLeft: "3px solid #16A34A" }}>
-          <div><div style={{ ...styles.statValue, color: "#16A34A" }}>{Math.round(expectedRevenue).toLocaleString("da-DK")} kr.</div><div style={styles.statLabel}>Forventet omsætning</div></div>
-        </div>
+        {(() => {
+          const plannedRev = placed.reduce((s, t) => s + (t.duration / 60) * (localPricing[t.contractType || "privat"] || 0), 0);
+          const regRev = expectedRevenue;
+          const diff = Math.round(regRev - plannedRev);
+          return (
+            <>
+              <div style={{ ...styles.statBlock, borderLeft: "3px solid #64748B" }}>
+                <div><div style={{ ...styles.statValue, color: "#64748B" }}>{Math.round(plannedRev).toLocaleString("da-DK")} kr.</div><div style={styles.statLabel}>Planlagt omsætning</div></div>
+              </div>
+              <div style={{ ...styles.statBlock, borderLeft: "3px solid #16A34A" }}>
+                <div><div style={{ ...styles.statValue, color: "#16A34A" }}>{Math.round(regRev).toLocaleString("da-DK")} kr.</div><div style={styles.statLabel}>Registreret omsætning</div></div>
+              </div>
+              <div style={{ ...styles.statBlock, borderLeft: `3px solid ${diff >= 0 ? "#16A34A" : "#DC2626"}` }}>
+                <div><div style={{ ...styles.statValue, color: diff >= 0 ? "#16A34A" : "#DC2626" }}>{diff > 0 ? "+" : ""}{diff.toLocaleString("da-DK")} kr.</div><div style={styles.statLabel}>Difference</div></div>
+              </div>
+            </>
+          );
+        })()}
         <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
           <select style={{ ...styles.inputSm, fontSize: 13, fontWeight: 600 }} value={filterMonth} onChange={(e) => setFilterMonth(Number(e.target.value))}>
             {MONTHS.map((m, i) => <option key={i} value={i}>{m}</option>)}
