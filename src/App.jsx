@@ -1945,64 +1945,6 @@ function TimeView({ instances, employees, totalLogged, onExport, weekLabel, onUp
   );
 }
 
-  return (
-    <div style={styles.page}>
-      <div style={styles.toolbar}>
-        <div style={styles.statBlock}><Clock size={16} /><div><div style={styles.statValue}>{fmtMin(totalLogged)}</div><div style={styles.statLabel}>Registreret i alt (alle uger)</div></div></div>
-        <div style={styles.statBlock}><Clock size={16} /><div><div style={styles.statValue}>{fmtMin(totalRegistered)} / {fmtMin(totalPlanned)}</div><div style={styles.statLabel}>Denne uge: registreret / planlagt</div></div></div>
-        <div style={styles.cardMeta}>Viser: {weekLabel}</div>
-        <div style={styles.toolbarSpacer} />
-        <button style={styles.primaryBtn} onClick={onExport}><Download size={16} /> Eksporter CSV</button>
-      </div>
-
-      {/* Tabel-header */}
-      <div style={{ display: "grid", gridTemplateColumns: "180px 1fr 160px 100px 100px 100px", gap: 0, background: "#F8FAFC", borderRadius: "10px 10px 0 0", padding: "8px 14px", fontSize: 11, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.05em", marginTop: 8 }}>
-        <span>Medarbejder</span>
-        <span>Opgave</span>
-        <span>Kunde</span>
-        <span>Dag</span>
-        <span style={{ textAlign: "right" }}>Planlagt</span>
-        <span style={{ textAlign: "right" }}>Registreret</span>
-      </div>
-
-      <div style={{ background: "#fff", borderRadius: "0 0 10px 10px", boxShadow: "0 1px 3px rgba(0,0,0,0.06)", overflow: "hidden" }}>
-        {placed.map((t, idx) => {
-          const emps = t.assignees.map((id) => employees.find((e) => e.id === id)).filter(Boolean);
-          const logged = (t.timeLog || t.time_log || []).reduce((s, l) => s + (l.minutes || 0), 0);
-          const dayLabel = DAYS.find((d) => d.key === t.day)?.label || t.day || "—";
-          const isLow = logged < t.duration * 0.5;
-          return (
-            <div key={t.id} style={{ display: "grid", gridTemplateColumns: "180px 1fr 160px 100px 100px 100px", gap: 0, padding: "10px 14px", borderBottom: idx < placed.length - 1 ? "1px solid #F1F5F9" : "none", alignItems: "center" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                {emps.slice(0, 2).map((emp) => <span key={emp.id} style={{ ...styles.avatar, background: emp.color, width: 22, height: 22, fontSize: 10 }} title={emp.name}>{initials(emp.name)}</span>)}
-                <span style={{ fontSize: 12, color: "#475569", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{emps.map((e) => e.name).join(", ")}</span>
-              </div>
-              <div style={{ fontSize: 13, fontWeight: 600, color: "#111111", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={t.title}>{t.title}</div>
-              <div style={{ fontSize: 12, color: "#64748B", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={t.customerName}>{t.customerName || "—"}</div>
-              <div style={{ fontSize: 12, color: "#64748B" }}>{dayLabel}</div>
-              <div style={{ fontSize: 13, fontWeight: 500, color: "#111111", textAlign: "right" }}>{fmtMin(t.duration)}</div>
-              <div style={{ fontSize: 13, fontWeight: 700, color: logged === 0 ? "#94A3B8" : isLow ? "#D97706" : "#16A34A", textAlign: "right" }}>{fmtMin(logged)}</div>
-            </div>
-          );
-        })}
-        {placed.length === 0 && <div style={{ ...styles.emptyCol, padding: 40 }}>Ingen planlagte opgaver denne uge</div>}
-      </div>
-
-      {/* Totaler */}
-      {placed.length > 0 && (
-        <div style={{ display: "grid", gridTemplateColumns: "180px 1fr 160px 100px 100px 100px", gap: 0, padding: "10px 14px", background: "#FCE4EF", borderRadius: 10, marginTop: 8, fontWeight: 700, fontSize: 13 }}>
-          <span style={{ color: "#9C1B5D" }}>I alt</span>
-          <span />
-          <span />
-          <span />
-          <span style={{ textAlign: "right", color: "#111111" }}>{fmtMin(totalPlanned)}</span>
-          <span style={{ textAlign: "right", color: "#D6247A" }}>{fmtMin(totalRegistered)}</span>
-        </div>
-      )}
-    </div>
-  );
-}
-
 // ---------- Modals ----------
 function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom }) {
   const [type, setType] = useState(copyFrom?.type || "fixed");
