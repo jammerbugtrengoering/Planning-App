@@ -392,15 +392,16 @@ function PlanningApp({ session, onSignOut }) {
   useEffect(() => { localStorage.setItem("rp_lang", lang); }, [lang]);
 
   const L = {
-    da: { schedule:"Ugeplan", employees:"Medarbejdere", checklists:"Tjeklister", time:"Tid & Eksport", inventory:"Lager", areas:"Områder", signOut:"Log ud", sub:"Ugeplanlægning · kapacitet · kompetenceniveauer" },
-    en: { schedule:"Schedule", employees:"Employees", checklists:"Checklists", time:"Time & Export", inventory:"Inventory", areas:"Areas", signOut:"Sign out", sub:"Weekly planning · capacity · skill levels" },
+    da: { schedule:"Ugeplan", employees:"Medarbejdere", checklists:"Tjeklister", time:"Tid & Eksport", inventory:"Lager", contracts:"Aftaler", signOut:"Log ud", sub:"Ugeplanlægning · kapacitet · kompetenceniveauer" },
+    en: { schedule:"Schedule", employees:"Employees", checklists:"Checklists", time:"Time & Export", inventory:"Inventory", contracts:"Contracts", signOut:"Sign out", sub:"Weekly planning · capacity · skill levels" },
   }[lang];
   // ── Dynamiske master-data fra Supabase ──
   const [skills, setSkills] = useState(SKILLS_FALLBACK);
   const [customers, setCustomers] = useState([]);
   const [employees, setEmployees] = useState([]);
   const [areas, setAreas] = useState([]);
-  const [employeeAreas, setEmployeeAreas] = useState([]); // [{employee_id, area_id}]
+  const [employeeAreas, setEmployeeAreas] = useState([]);
+  const [pricing, setPricing] = useState({ privat: 450, nexus: 380, aeldrelov: 410 }); // [{employee_id, area_id}]
   const [templates, setTemplates] = useState([]);
   const [checklistTemplates, setChecklistTemplates] = useState([]);
   const [instances, setInstances] = useState([]);
@@ -453,12 +454,18 @@ function PlanningApp({ session, onSignOut }) {
         supabase.from("travel_overrides").select("*"),
       ]);
       // Load areas
-      const [{ data: areasData }, { data: empAreasData }] = await Promise.all([
+      const [{ data: areasData }, { data: empAreasData }, { data: pricingData }] = await Promise.all([
         supabase.from("areas").select("*").order("name"),
         supabase.from("employee_areas").select("*"),
+        supabase.from("pricing").select("*"),
       ]);
       if (areasData) setAreas(areasData);
       if (empAreasData) setEmployeeAreas(empAreasData);
+      if (pricingData?.length) {
+        const p = {};
+        pricingData.forEach((r) => { p[r.contract_type] = r.hourly_rate; });
+        setPricing((prev) => ({ ...prev, ...p }));
+      }
 
       // Skills
       if (skillsData?.length) setSkills(skillsData.map((s) => s.name));
@@ -951,7 +958,7 @@ function PlanningApp({ session, onSignOut }) {
           </div>
         </div>
         <nav style={styles.nav}>
-          {[["uge", L.schedule], ["employees", L.employees], ["checklists", L.checklists], ["time", L.time], ["inventory", L.inventory]].map(([k, l]) => (
+          {[["uge", L.schedule], ["employees", L.employees], ["checklists", L.checklists], ["time", L.time], ["inventory", L.inventory], ["contracts", L.contracts]].map(([k, l]) => (
             <button key={k} onClick={() => setView(k)} style={view === k ? styles.navBtnActive : styles.navBtn}>{l}</button>
           ))}
           <div style={{ display:"flex", gap:4, marginLeft:12, borderLeft:"1px solid #333", paddingLeft:12 }}>
@@ -1007,7 +1014,17 @@ function PlanningApp({ session, onSignOut }) {
       {view === "time" && (
         <TimeView instances={instances} employees={employees}
           onExport={exportCSV} totalLogged={totalLogged} weekLabel={wk.label}
+          pricing={pricing} onPricingChange={async (newPricing) => {
+            setPricing(newPricing);
+            for (const [type, rate] of Object.entries(newPricing)) {
+              await supabase.from("pricing").upsert({ id: `price_${type}`, contract_type: type, hourly_rate: rate }, { onConflict: "id" });
+            }
+          }}
           onUpdateInstance={(taskId, fields) => updateInstance(taskId, (t) => ({ ...t, ...fields }))} />
+
+      {view === "contracts" && (
+        <ContractsView templates={templates} instances={instances} />
+      )}
       )}
 
       {view === "inventory" && (
@@ -1835,12 +1852,16 @@ function ChecklistModal({ checklist, onClose, onSave }) {
 }
 
 // ---------- Time & Export ----------
-function TimeView({ instances, employees, totalLogged, onExport, weekLabel, onUpdateInstance }) {
+function TimeView({ instances, employees, totalLogged, onExport, weekLabel, onUpdateInstance, pricing: pricingProp, onPricingChange }) {
   const now = new Date();
-  const [filterMonth, setFilterMonth] = useState(now.getMonth()); // 0-11
+  const [filterMonth, setFilterMonth] = useState(now.getMonth());
   const [filterYear, setFilterYear] = useState(now.getFullYear());
   const [invoiceOnly, setInvoiceOnly] = useState(false);
   const [editMinutes, setEditMinutes] = useState({});
+  const [showPricing, setShowPricing] = useState(false);
+  const [localPricing, setLocalPricing] = useState(pricingProp || { privat: 450, nexus: 380, aeldrelov: 410 });
+
+  useEffect(() => { if (pricingProp) setLocalPricing(pricingProp); }, [JSON.stringify(pricingProp)]);
 
   // Beregn hvilke ISO-uger der falder inden for den valgte måned/år
   function weeksInMonth(year, month) {
@@ -1872,6 +1893,13 @@ function TimeView({ instances, employees, totalLogged, onExport, weekLabel, onUp
   const totalPlanned = placed.reduce((s, t) => s + t.duration, 0);
   const totalRegistered = placed.reduce((s, t) => s + (t.timeLog || t.time_log || []).reduce((s2, l) => s2 + (l.minutes || 0), 0), 0);
 
+  // Forventet omsætning baseret på registreret tid og timepriser
+  const expectedRevenue = placed.reduce((s, t) => {
+    const logged = (t.timeLog || t.time_log || []).reduce((s2, l) => s2 + (l.minutes || 0), 0);
+    const rate = localPricing[t.contractType || "privat"] || 0;
+    return s + (logged / 60) * rate;
+  }, 0);
+
   const MONTHS = ["Januar","Februar","Marts","April","Maj","Juni","Juli","August","September","Oktober","November","December"];
   const years = [now.getFullYear() - 1, now.getFullYear(), now.getFullYear() + 1];
 
@@ -1888,6 +1916,9 @@ function TimeView({ instances, employees, totalLogged, onExport, weekLabel, onUp
       <div style={styles.toolbar}>
         <div style={styles.statBlock}><Clock size={16} /><div><div style={styles.statValue}>{fmtMin(totalLogged)}</div><div style={styles.statLabel}>Registreret i alt (alle uger)</div></div></div>
         <div style={styles.statBlock}><Clock size={16} /><div><div style={styles.statValue}>{fmtMin(totalRegistered)} / {fmtMin(totalPlanned)}</div><div style={styles.statLabel}>{MONTHS[filterMonth]} {filterYear}: registreret / planlagt</div></div></div>
+        <div style={{ ...styles.statBlock, borderLeft: "3px solid #16A34A" }}>
+          <div><div style={{ ...styles.statValue, color: "#16A34A" }}>{Math.round(expectedRevenue).toLocaleString("da-DK")} kr.</div><div style={styles.statLabel}>Forventet omsætning</div></div>
+        </div>
         <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
           <select style={{ ...styles.inputSm, fontSize: 13, fontWeight: 600 }} value={filterMonth} onChange={(e) => setFilterMonth(Number(e.target.value))}>
             {MONTHS.map((m, i) => <option key={i} value={i}>{m}</option>)}
@@ -1904,17 +1935,45 @@ function TimeView({ instances, employees, totalLogged, onExport, weekLabel, onUp
           </span>
           Kun fakturagrundlag
         </label>
+        <button
+          style={{ ...styles.secondaryBtn, ...(showPricing ? { background: "#ECFDF5", color: "#16A34A", borderColor: "#22C55E" } : {}) }}
+          onClick={() => setShowPricing((v) => !v)}>
+          💰 Timepriser
+        </button>
         <button style={styles.primaryBtn} onClick={() => onExport(placed, `${MONTHS[filterMonth]}-${filterYear}`)}><Download size={16} /> Eksporter CSV</button>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "50px 160px 1fr 140px 80px 90px 120px 28px", gap: 0, background: "#F8FAFC", borderRadius: "10px 10px 0 0", padding: "8px 14px", fontSize: 11, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.05em", marginTop: 8 }}>
-        <span>Uge</span>
-        <span>Medarbejder</span>
-        <span>Opgave</span>
-        <span>Kunde</span>
-        <span>Dag</span>
+      {/* Timepris-panel */}
+      {showPricing && (
+        <div style={{ background: "#fff", borderRadius: 12, padding: 16, marginBottom: 12, boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
+          <div style={{ fontWeight: 700, fontSize: 14, color: "#111111", marginBottom: 12 }}>💰 Timepriser pr. kontrakttype</div>
+          <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 12 }}>
+            {[["privat", "🏠 Privat"], ["nexus", "🏢 Nexus"], ["aeldrelov", "👴 Ældrelov"]].map(([type, label]) => (
+              <div key={type} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                <label style={styles.label}>{label}</label>
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <input
+                    type="number" min={0} step={10}
+                    style={{ ...styles.inputSm, width: 90, textAlign: "right" }}
+                    value={localPricing[type] || 0}
+                    onChange={(e) => setLocalPricing((prev) => ({ ...prev, [type]: Number(e.target.value) }))}
+                  />
+                  <span style={{ fontSize: 13, color: "#64748B" }}>kr/t</span>
+                </div>
+              </div>
+            ))}
+          </div>
+          <button style={styles.primaryBtn} onClick={async () => { if (onPricingChange) { await onPricingChange(localPricing); setShowPricing(false); } }}>
+            Gem timepriser
+          </button>
+        </div>
+      )}
+
+      <div style={{ display: "grid", gridTemplateColumns: "50px 160px 1fr 140px 80px 90px 120px 100px 28px", gap: 0, background: "#F8FAFC", borderRadius: "10px 10px 0 0", padding: "8px 14px", fontSize: 11, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.05em", marginTop: 8 }}>
+        <span>Uge</span><span>Medarbejder</span><span>Opgave</span><span>Kunde</span><span>Dag</span>
         <span style={{ textAlign: "right" }}>Planlagt</span>
         <span style={{ textAlign: "right" }}>Registreret</span>
+        <span style={{ textAlign: "right" }}>Beløb</span>
         <span style={{ textAlign: "center" }}>📄</span>
       </div>
 
@@ -1927,7 +1986,7 @@ function TimeView({ instances, employees, totalLogged, onExport, weekLabel, onUp
           const isEditing = editMinutes[t.id] !== undefined;
 
           return (
-            <div key={t.id} style={{ display: "grid", gridTemplateColumns: "50px 160px 1fr 140px 80px 90px 120px 28px", gap: 0, padding: "10px 14px", borderBottom: idx < placed.length - 1 ? "1px solid #F1F5F9" : "none", alignItems: "center", background: t.invoiceReady ? "#F0FDF4" : "transparent" }}>
+            <div key={t.id} style={{ display: "grid", gridTemplateColumns: "50px 160px 1fr 140px 80px 90px 120px 100px 28px", gap: 0, padding: "10px 14px", borderBottom: idx < placed.length - 1 ? "1px solid #F1F5F9" : "none", alignItems: "center", background: t.invoiceReady ? "#F0FDF4" : "transparent" }}>
               <div style={{ fontSize: 12, color: "#94A3B8", fontWeight: 600 }}>{t.week}</div>
               <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
                 {emps.slice(0, 2).map((emp) => <span key={emp.id} style={{ ...styles.avatar, background: emp.color, width: 22, height: 22, fontSize: 10 }}>{initials(emp.name)}</span>)}
@@ -1959,6 +2018,10 @@ function TimeView({ instances, employees, totalLogged, onExport, weekLabel, onUp
                   </span>
                 )}
               </div>
+              {/* Beløb */}
+              <div style={{ textAlign: "right", fontSize: 13, fontWeight: 600, color: "#16A34A" }}>
+                {logged > 0 ? `${Math.round((logged / 60) * (localPricing[t.contractType || "privat"] || 0)).toLocaleString("da-DK")} kr` : "—"}
+              </div>
               {/* Fakturagrundlag toggle */}
               <div style={{ display: "flex", justifyContent: "center" }}>
                 <span
@@ -1975,11 +2038,12 @@ function TimeView({ instances, employees, totalLogged, onExport, weekLabel, onUp
       </div>
 
       {placed.length > 0 && (
-        <div style={{ display: "grid", gridTemplateColumns: "50px 160px 1fr 140px 80px 90px 120px 28px", gap: 0, padding: "10px 14px", background: "#FCE4EF", borderRadius: 10, marginTop: 8, fontWeight: 700, fontSize: 13 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "50px 160px 1fr 140px 80px 90px 120px 100px 28px", gap: 0, padding: "10px 14px", background: "#FCE4EF", borderRadius: 10, marginTop: 8, fontWeight: 700, fontSize: 13 }}>
           <span /><span style={{ color: "#9C1B5D" }}>I alt</span>
           <span /><span /><span />
           <span style={{ textAlign: "right", color: "#111111" }}>{fmtMin(totalPlanned)}</span>
           <span style={{ textAlign: "right", color: "#D6247A" }}>{fmtMin(totalRegistered)}</span>
+          <span style={{ textAlign: "right", color: "#16A34A", fontWeight: 800 }}>{Math.round(expectedRevenue).toLocaleString("da-DK")} kr</span>
           <span />
         </div>
       )}
@@ -2300,6 +2364,93 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom }) {
 }
 
 // ── Skills View ───────────────────────────────────────────────────────────────
+// ── Contracts View ────────────────────────────────────────────────────────────
+function ContractsView({ templates, instances }) {
+  // Hent alle faste kontrakter med udløbsdato — sortér efter nærmest udløbende
+  const contracts = templates
+    .filter((t) => t.expiryDate)
+    .map((t) => {
+      const expiry = new Date(t.expiryDate);
+      const start = t.startDate ? new Date(t.startDate) : null;
+      const daysLeft = Math.ceil((expiry - new Date()) / (1000 * 60 * 60 * 24));
+      return { ...t, expiry, start, daysLeft };
+    })
+    .sort((a, b) => a.expiry - b.expiry);
+
+  const noExpiry = templates.filter((t) => !t.expiryDate);
+
+  function urgencyColor(days) {
+    if (days < 0) return "#DC2626";   // Udløbet
+    if (days <= 30) return "#D97706"; // Udløber snart
+    if (days <= 90) return "#D6247A"; // Opmærksomhed
+    return "#16A34A";                 // OK
+  }
+
+  function urgencyLabel(days) {
+    if (days < 0) return `Udløbet for ${Math.abs(days)} dage siden`;
+    if (days === 0) return "Udløber i dag";
+    if (days === 1) return "Udløber i morgen";
+    return `${days} dage tilbage`;
+  }
+
+  return (
+    <div style={styles.page}>
+      <div style={{ fontWeight: 700, fontSize: 18, color: "#111111", marginBottom: 4 }}>Aftaler</div>
+      <div style={{ fontSize: 13, color: "#64748B", marginBottom: 20 }}>Faste opgaver sorteret efter udløbsdato — nærmest udløbende øverst</div>
+
+      {contracts.length === 0 && noExpiry.length === 0 && (
+        <div style={{ textAlign: "center", padding: 60, color: "#94A3B8" }}>
+          <div style={{ fontSize: 36, marginBottom: 12 }}>📋</div>
+          <div style={{ fontWeight: 600 }}>Ingen faste aftaler endnu</div>
+        </div>
+      )}
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {contracts.map((t) => {
+          const color = urgencyColor(t.daysLeft);
+          return (
+            <div key={t.id} style={{ background: "#fff", borderRadius: 12, padding: "14px 16px", boxShadow: "0 1px 3px rgba(0,0,0,0.06)", borderLeft: `4px solid ${color}`, display: "flex", alignItems: "center", gap: 16 }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 700, fontSize: 15, color: "#111111", marginBottom: 3 }}>{t.title}</div>
+                <div style={{ fontSize: 12, color: "#64748B", display: "flex", gap: 12, flexWrap: "wrap" }}>
+                  {t.customerName && <span>👤 {t.customerName}</span>}
+                  {t.days?.length > 0 && <span>📅 {t.days.map((d) => DAYS.find((x) => x.key === d)?.label.slice(0,3) || d).join(", ")}</span>}
+                  {t.start && <span>Fra {t.start.toLocaleDateString("da-DK", { day: "numeric", month: "short", year: "numeric" })}</span>}
+                  <span>Til {t.expiry.toLocaleDateString("da-DK", { day: "numeric", month: "short", year: "numeric" })}</span>
+                  <span style={{ fontWeight: 600, color: "#9C1B5D" }}>{t.contractType === "nexus" ? "🏢 Nexus" : t.contractType === "aeldrelov" ? "👴 Ældrelov" : "🏠 Privat"}</span>
+                </div>
+              </div>
+              <div style={{ textAlign: "right", flexShrink: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color }}>{urgencyLabel(t.daysLeft)}</div>
+                <div style={{ fontSize: 11, color: "#94A3B8", marginTop: 2 }}>{fmtMin(t.duration)} pr. besøg</div>
+              </div>
+            </div>
+          );
+        })}
+
+        {noExpiry.length > 0 && (
+          <>
+            <div style={{ fontSize: 12, fontWeight: 700, color: "#94A3B8", textTransform: "uppercase", letterSpacing: "0.05em", marginTop: 12, marginBottom: 4 }}>Uden udløbsdato</div>
+            {noExpiry.map((t) => (
+              <div key={t.id} style={{ background: "#fff", borderRadius: 12, padding: "14px 16px", boxShadow: "0 1px 3px rgba(0,0,0,0.06)", borderLeft: "4px solid #CBD5E1", display: "flex", alignItems: "center", gap: 16 }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: 700, fontSize: 15, color: "#111111", marginBottom: 3 }}>{t.title}</div>
+                  <div style={{ fontSize: 12, color: "#64748B", display: "flex", gap: 12, flexWrap: "wrap" }}>
+                    {t.customerName && <span>👤 {t.customerName}</span>}
+                    {t.days?.length > 0 && <span>📅 {t.days.map((d) => DAYS.find((x) => x.key === d)?.label.slice(0,3) || d).join(", ")}</span>}
+                    <span style={{ fontWeight: 600, color: "#9C1B5D" }}>{t.contractType === "nexus" ? "🏢 Nexus" : t.contractType === "aeldrelov" ? "👴 Ældrelov" : "🏠 Privat"}</span>
+                  </div>
+                </div>
+                <div style={{ fontSize: 12, color: "#94A3B8" }}>Løbende</div>
+              </div>
+            ))}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Areas View ────────────────────────────────────────────────────────────────
 function AreasView({ supabase, areas, employees, employeeAreas, onAreasChange, onEmployeeAreasChange }) {
   const [showAdd, setShowAdd] = useState(false);
