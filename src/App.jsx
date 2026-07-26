@@ -933,7 +933,7 @@ function PlanningApp({ session, onSignOut }) {
           </div>
         </div>
         <nav style={styles.nav}>
-          {[["uge", L.schedule], ["employees", L.employees], ["checklists", L.checklists], ["time", L.time], ["inventory", L.inventory], ["areas", L.areas]].map(([k, l]) => (
+          {[["uge", L.schedule], ["employees", L.employees], ["checklists", L.checklists], ["time", L.time], ["inventory", L.inventory]].map(([k, l]) => (
             <button key={k} onClick={() => setView(k)} style={view === k ? styles.navBtnActive : styles.navBtn}>{l}</button>
           ))}
           <div style={{ display:"flex", gap:4, marginLeft:12, borderLeft:"1px solid #333", paddingLeft:12 }}>
@@ -974,7 +974,11 @@ function PlanningApp({ session, onSignOut }) {
           onDelete={deleteEmployee}
           supabase={supabase}
           skills={skills}
-          onSkillsChange={setSkills} />
+          onSkillsChange={setSkills}
+          areas={areas}
+          employeeAreas={employeeAreas}
+          onAreasChange={setAreas}
+          onEmployeeAreasChange={setEmployeeAreas} />
       )}
       {view === "checklists" && (
         <ChecklistsView checklistTemplates={checklistTemplates} onSave={saveChecklistTemplate} onDelete={deleteChecklistTemplate} />
@@ -986,11 +990,6 @@ function PlanningApp({ session, onSignOut }) {
 
       {view === "inventory" && (
         <InventoryView supabase={supabase} employees={employees} />
-      )}
-
-      {view === "areas" && (
-        <AreasView supabase={supabase} areas={areas} employees={employees} employeeAreas={employeeAreas}
-          onAreasChange={setAreas} onEmployeeAreasChange={setEmployeeAreas} />
       )}
 
       {view === "skills" && (
@@ -1441,8 +1440,9 @@ function TypeBadge({ type, mini }) {
 }
 
 // ---------- Employees ----------
-function EmployeesView({ employees, instances, onAdd, onEdit, onDelete, supabase, skills, onSkillsChange }) {
+function EmployeesView({ employees, instances, onAdd, onEdit, onDelete, supabase, skills, onSkillsChange, areas, employeeAreas, onAreasChange, onEmployeeAreasChange }) {
   const [showSkillsPanel, setShowSkillsPanel] = useState(false);
+  const [showAreasPanel, setShowAreasPanel] = useState(false);
   const [inviteEmail, setInviteEmail] = useState({});
   const [inviteStatus, setInviteStatus] = useState({});
   const [orderPanel, setOrderPanel] = useState(null); // emp.id
@@ -1552,8 +1552,13 @@ function EmployeesView({ employees, instances, onAdd, onEdit, onDelete, supabase
         <button style={styles.primaryBtn} onClick={onAdd}><Plus size={16} /> Ny medarbejder</button>
         <button
           style={{ ...styles.secondaryBtn, ...(showSkillsPanel ? { background: "#FCE4EF", color: "#D6247A", borderColor: "#D6247A" } : {}) }}
-          onClick={() => setShowSkillsPanel((v) => !v)}>
+          onClick={() => { setShowSkillsPanel((v) => !v); setShowAreasPanel(false); }}>
           ⭐ Kompetencer
+        </button>
+        <button
+          style={{ ...styles.secondaryBtn, ...(showAreasPanel ? { background: "#EEF2FF", color: "#4F46E5", borderColor: "#4F46E5" } : {}) }}
+          onClick={() => { setShowAreasPanel((v) => !v); setShowSkillsPanel(false); }}>
+          📍 Områder
         </button>
       </div>
 
@@ -1561,6 +1566,11 @@ function EmployeesView({ employees, instances, onAdd, onEdit, onDelete, supabase
         <div style={{ background: "#fff", borderRadius: 12, padding: 16, marginBottom: 16, boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
           <SkillsView supabase={supabase} skills={skills} onSkillsChange={onSkillsChange} />
         </div>
+      )}
+
+      {showAreasPanel && (
+        <AreasView supabase={supabase} areas={areas} employees={employees} employeeAreas={employeeAreas}
+          onAreasChange={onAreasChange} onEmployeeAreasChange={onEmployeeAreasChange} />
       )}
       <div style={styles.empGrid}>
         {employees.map((e) => {
