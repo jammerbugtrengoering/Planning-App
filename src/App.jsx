@@ -819,7 +819,16 @@ function PlanningApp({ session, onSignOut }) {
     });
   }
   function unplace(taskId) {
-    updateInstance(taskId, (t) => ({ ...t, day: t.type === "flexible" ? null : t.day, assignees: [], status: "unscheduled" }));
+    updateInstance(taskId, (t) => ({
+      ...t,
+      day: t.type === "flexible" ? null : t.day,
+      assignees: [],
+      status: "unscheduled",
+      offSchedule: false,
+      onSchedule: false,
+      outsideArea: false,
+      warning: null,
+    }));
   }
   function deleteTask(taskId) {
     setInstances((prev) => prev.filter((t) => t.id !== taskId));
