@@ -599,6 +599,7 @@ function PlanningApp({ session, onSignOut }) {
       address_text: inst.address ?? "",
       access_instructions: inst.accessInstructions ?? "",
       contract_type: inst.contractType ?? "privat",
+      invoice_ready: inst.invoiceReady ?? false,
     }, { onConflict: "id" });
     if (error) console.error("syncInstance error:", error.message, error.details, inst.id);
   }, []);
@@ -885,30 +886,32 @@ function PlanningApp({ session, onSignOut }) {
   }
 
   function exportCSV() {
-    const rows = [["Uge", "Opgave", "Kunde", "Adresse", "PO-nummer", "Type", "Dag", "Krævede kompetencer", "Medarbejdere", "Status", "Varighed (min)", "Registreret (min)"]];
-    instances.forEach((t) => {
+    const rows = [["Uge", "Dag", "Opgave", "Kunde", "Adresse", "PO-nummer", "Type", "Kontrakttype", "Medarbejdere", "Status", "Planlagt (min)", "Planlagt (timer)", "Registreret (min)", "Registreret (timer)"]];
+    instances.filter((t) => t.assignees && t.assignees.length && t.invoiceReady).forEach((t) => {
       const names = (t.assignees || []).map((id) => employees.find((e) => e.id === id)?.name).filter(Boolean);
       const tl = t.timeLog || t.time_log || [];
       const logged = tl.reduce((s, l) => s + (l.minutes || 0), 0);
       rows.push([
         `Uge ${t.week}`,
+        DAYS.find((d) => d.key === t.day)?.label || "—",
         t.title,
         t.customerName || "",
         t.address || "",
         t.poNumber || "",
         TYPE_META[t.type]?.label || t.type,
-        DAYS.find((d) => d.key === t.day)?.label || "-",
-        skillLabel(t),
+        t.contractType === "nexus" ? "Nexus" : t.contractType === "aeldrelov" ? "Ældrelov" : "Privat",
         names.length ? names.join(" + ") : "Ikke tildelt",
         statusLabel(t.status),
         t.duration,
+        (t.duration / 60).toFixed(2),
         logged.toFixed(0),
+        (logged / 60).toFixed(2),
       ]);
     });
     const csv = rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
     const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement("a"); a.href = url; a.download = "ugeplan-eksport.csv"; a.click();
+    const a = document.createElement("a"); a.href = url; a.download = `ugeplan-uge${weekOffset}-eksport.csv`; a.click();
     URL.revokeObjectURL(url);
     notify("Eksport downloadet");
   }
@@ -997,7 +1000,8 @@ function PlanningApp({ session, onSignOut }) {
       )}
       {view === "time" && (
         <TimeView instances={weekInstancesList} employees={employees}
-          onExport={exportCSV} totalLogged={totalLogged} weekLabel={wk.label} />
+          onExport={exportCSV} totalLogged={totalLogged} weekLabel={wk.label}
+          onUpdateInstance={(taskId, fields) => updateInstance(taskId, (t) => ({ ...t, ...fields }))} />
       )}
 
       {view === "inventory" && (
@@ -1825,36 +1829,176 @@ function ChecklistModal({ checklist, onClose, onSave }) {
 }
 
 // ---------- Time & Export ----------
-function TimeView({ instances, employees, totalLogged, onExport, weekLabel }) {
-  const placed = instances.filter((t) => t.assignees && t.assignees.length).sort((a, b) => DAYS.findIndex((d) => d.key === a.day) - DAYS.findIndex((d) => d.key === b.day));
+function TimeView({ instances, employees, totalLogged, onExport, weekLabel, onUpdateInstance }) {
+  const [invoiceOnly, setInvoiceOnly] = useState(false);
+  const [editMinutes, setEditMinutes] = useState({}); // { taskId: string }
+
+  const placed = instances
+    .filter((t) => t.assignees && t.assignees.length)
+    .filter((t) => !invoiceOnly || t.invoiceReady)
+    .sort((a, b) => DAYS.findIndex((d) => d.key === a.day) - DAYS.findIndex((d) => d.key === b.day));
+
+  const totalPlanned = placed.reduce((s, t) => s + t.duration, 0);
+  const totalRegistered = placed.reduce((s, t) => s + (t.timeLog || t.time_log || []).reduce((s2, l) => s2 + (l.minutes || 0), 0), 0);
+
+  function saveMinutes(t, newMin) {
+    const m = Number(newMin);
+    if (isNaN(m) || m < 0) return;
+    const newLog = [{ minutes: m, empId: "planner", ts: Date.now(), note: "Justeret af planlægger" }];
+    onUpdateInstance(t.id, { timeLog: newLog, time_log: newLog });
+    setEditMinutes((prev) => { const n = { ...prev }; delete n[t.id]; return n; });
+  }
+
   return (
     <div style={styles.page}>
       <div style={styles.toolbar}>
         <div style={styles.statBlock}><Clock size={16} /><div><div style={styles.statValue}>{fmtMin(totalLogged)}</div><div style={styles.statLabel}>Registreret i alt (alle uger)</div></div></div>
+        <div style={styles.statBlock}><Clock size={16} /><div><div style={styles.statValue}>{fmtMin(totalRegistered)} / {fmtMin(totalPlanned)}</div><div style={styles.statLabel}>Denne uge: registreret / planlagt</div></div></div>
         <div style={styles.cardMeta}>Viser: {weekLabel}</div>
         <div style={styles.toolbarSpacer} />
-        <button style={styles.primaryBtn} onClick={onExport}><Download size={16} /> Eksporter til løn/faktura (CSV)</button>
+        <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: invoiceOnly ? 700 : 400, color: invoiceOnly ? "#16A34A" : "#475569", cursor: "pointer" }}
+          onClick={() => setInvoiceOnly((v) => !v)}>
+          <span style={{ width: 18, height: 18, borderRadius: 5, border: invoiceOnly ? "2px solid #16A34A" : "2px solid #CBD5E1", background: invoiceOnly ? "#16A34A" : "#fff", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            {invoiceOnly && <Check size={11} color="#fff" strokeWidth={3} />}
+          </span>
+          Kun fakturagrundlag
+        </label>
+        <button style={styles.primaryBtn} onClick={onExport}><Download size={16} /> Eksporter CSV</button>
       </div>
-      <div style={styles.hint}>Medarbejdere registrerer selv tid på deres opgaver i Medarbejder-appen. Her ser du et samlet overblik.</div>
-      <div style={styles.timeList}>
-        {placed.map((t) => {
+
+      {/* Tabel-header */}
+      <div style={{ display: "grid", gridTemplateColumns: "160px 1fr 140px 80px 90px 120px 28px", gap: 0, background: "#F8FAFC", borderRadius: "10px 10px 0 0", padding: "8px 14px", fontSize: 11, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.05em", marginTop: 8 }}>
+        <span>Medarbejder</span>
+        <span>Opgave</span>
+        <span>Kunde</span>
+        <span>Dag</span>
+        <span style={{ textAlign: "right" }}>Planlagt</span>
+        <span style={{ textAlign: "right" }}>Registreret</span>
+        <span style={{ textAlign: "center" }}>📄</span>
+      </div>
+
+      <div style={{ background: "#fff", borderRadius: "0 0 10px 10px", boxShadow: "0 1px 3px rgba(0,0,0,0.06)", overflow: "hidden" }}>
+        {placed.map((t, idx) => {
           const emps = t.assignees.map((id) => employees.find((e) => e.id === id)).filter(Boolean);
           const logged = (t.timeLog || t.time_log || []).reduce((s, l) => s + (l.minutes || 0), 0);
+          const dayLabel = DAYS.find((d) => d.key === t.day)?.label || t.day || "—";
+          const isLow = logged > 0 && logged < t.duration * 0.5;
+          const isEditing = editMinutes[t.id] !== undefined;
+
           return (
-            <div key={t.id} style={styles.timeRow}>
-              <div style={styles.timeRowAvatars}>
-                {emps.map((emp) => <span key={emp.id} style={{ ...styles.avatar, background: emp.color }} title={emp.name}>{initials(emp.name)}</span>)}
+            <div key={t.id} style={{ display: "grid", gridTemplateColumns: "160px 1fr 140px 80px 90px 120px 28px", gap: 0, padding: "10px 14px", borderBottom: idx < placed.length - 1 ? "1px solid #F1F5F9" : "none", alignItems: "center", background: t.invoiceReady ? "#F0FDF4" : "transparent" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                {emps.slice(0, 2).map((emp) => <span key={emp.id} style={{ ...styles.avatar, background: emp.color, width: 22, height: 22, fontSize: 10 }}>{initials(emp.name)}</span>)}
+                <span style={{ fontSize: 11, color: "#475569", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{emps.map((e) => e.name).join(", ")}</span>
               </div>
-              <div style={{ flex: 1 }}>
-                <div style={styles.timeRowTitle}>{t.title}</div>
-                <div style={styles.cardMeta}>{emps.map((e) => e.name).join(" + ")} · {DAYS.find((d) => d.key === t.day)?.label} · {statusLabel(t.status)}</div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: "#111111", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.title}</div>
+              <div style={{ fontSize: 12, color: "#64748B", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.customerName || "—"}</div>
+              <div style={{ fontSize: 12, color: "#64748B" }}>{dayLabel}</div>
+              <div style={{ fontSize: 13, fontWeight: 500, color: "#111111", textAlign: "right" }}>{fmtMin(t.duration)}</div>
+              <div style={{ textAlign: "right" }}>
+                {isEditing ? (
+                  <div style={{ display: "flex", alignItems: "center", gap: 4, justifyContent: "flex-end" }}>
+                    <input
+                      type="number" min={0} step={5}
+                      style={{ width: 60, padding: "3px 6px", borderRadius: 6, border: "1.5px solid #D6247A", fontSize: 13, textAlign: "right", color: "#111111" }}
+                      value={editMinutes[t.id]}
+                      onChange={(e) => setEditMinutes((prev) => ({ ...prev, [t.id]: e.target.value }))}
+                      onKeyDown={(e) => { if (e.key === "Enter") saveMinutes(t, editMinutes[t.id]); if (e.key === "Escape") setEditMinutes((prev) => { const n = {...prev}; delete n[t.id]; return n; }); }}
+                      autoFocus
+                    />
+                    <button style={{ ...styles.primaryBtn, fontSize: 11, padding: "3px 8px" }} onClick={() => saveMinutes(t, editMinutes[t.id])}>✓</button>
+                  </div>
+                ) : (
+                  <span
+                    style={{ fontSize: 13, fontWeight: 700, color: logged === 0 ? "#94A3B8" : isLow ? "#D97706" : "#16A34A", cursor: "pointer", borderBottom: "1px dashed currentColor" }}
+                    title="Klik for at justere timer"
+                    onClick={() => setEditMinutes((prev) => ({ ...prev, [t.id]: String(logged) }))}>
+                    {fmtMin(logged)}
+                  </span>
+                )}
               </div>
-              <div style={styles.timeRowMinutes}>{fmtMin(logged)} / {fmtMin(t.duration)}</div>
+              {/* Fakturagrundlag toggle */}
+              <div style={{ display: "flex", justifyContent: "center" }}>
+                <span
+                  style={{ width: 18, height: 18, borderRadius: 5, border: t.invoiceReady ? "2px solid #16A34A" : "2px solid #CBD5E1", background: t.invoiceReady ? "#16A34A" : "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
+                  title={t.invoiceReady ? "Fjern fra fakturagrundlag" : "Marker som fakturagrundlag"}
+                  onClick={() => onUpdateInstance(t.id, { invoiceReady: !t.invoiceReady })}>
+                  {t.invoiceReady && <Check size={11} color="#fff" strokeWidth={3} />}
+                </span>
+              </div>
             </div>
           );
         })}
-        {placed.length === 0 && <div style={styles.emptyCol}>Ingen planlagte opgaver denne uge</div>}
+        {placed.length === 0 && <div style={{ ...styles.emptyCol, padding: 40 }}>Ingen planlagte opgaver denne uge</div>}
       </div>
+
+      {placed.length > 0 && (
+        <div style={{ display: "grid", gridTemplateColumns: "160px 1fr 140px 80px 90px 120px 28px", gap: 0, padding: "10px 14px", background: "#FCE4EF", borderRadius: 10, marginTop: 8, fontWeight: 700, fontSize: 13 }}>
+          <span style={{ color: "#9C1B5D" }}>I alt</span>
+          <span /><span /><span />
+          <span style={{ textAlign: "right", color: "#111111" }}>{fmtMin(totalPlanned)}</span>
+          <span style={{ textAlign: "right", color: "#D6247A" }}>{fmtMin(totalRegistered)}</span>
+          <span />
+        </div>
+      )}
+    </div>
+  );
+}
+
+  return (
+    <div style={styles.page}>
+      <div style={styles.toolbar}>
+        <div style={styles.statBlock}><Clock size={16} /><div><div style={styles.statValue}>{fmtMin(totalLogged)}</div><div style={styles.statLabel}>Registreret i alt (alle uger)</div></div></div>
+        <div style={styles.statBlock}><Clock size={16} /><div><div style={styles.statValue}>{fmtMin(totalRegistered)} / {fmtMin(totalPlanned)}</div><div style={styles.statLabel}>Denne uge: registreret / planlagt</div></div></div>
+        <div style={styles.cardMeta}>Viser: {weekLabel}</div>
+        <div style={styles.toolbarSpacer} />
+        <button style={styles.primaryBtn} onClick={onExport}><Download size={16} /> Eksporter CSV</button>
+      </div>
+
+      {/* Tabel-header */}
+      <div style={{ display: "grid", gridTemplateColumns: "180px 1fr 160px 100px 100px 100px", gap: 0, background: "#F8FAFC", borderRadius: "10px 10px 0 0", padding: "8px 14px", fontSize: 11, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.05em", marginTop: 8 }}>
+        <span>Medarbejder</span>
+        <span>Opgave</span>
+        <span>Kunde</span>
+        <span>Dag</span>
+        <span style={{ textAlign: "right" }}>Planlagt</span>
+        <span style={{ textAlign: "right" }}>Registreret</span>
+      </div>
+
+      <div style={{ background: "#fff", borderRadius: "0 0 10px 10px", boxShadow: "0 1px 3px rgba(0,0,0,0.06)", overflow: "hidden" }}>
+        {placed.map((t, idx) => {
+          const emps = t.assignees.map((id) => employees.find((e) => e.id === id)).filter(Boolean);
+          const logged = (t.timeLog || t.time_log || []).reduce((s, l) => s + (l.minutes || 0), 0);
+          const dayLabel = DAYS.find((d) => d.key === t.day)?.label || t.day || "—";
+          const isLow = logged < t.duration * 0.5;
+          return (
+            <div key={t.id} style={{ display: "grid", gridTemplateColumns: "180px 1fr 160px 100px 100px 100px", gap: 0, padding: "10px 14px", borderBottom: idx < placed.length - 1 ? "1px solid #F1F5F9" : "none", alignItems: "center" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                {emps.slice(0, 2).map((emp) => <span key={emp.id} style={{ ...styles.avatar, background: emp.color, width: 22, height: 22, fontSize: 10 }} title={emp.name}>{initials(emp.name)}</span>)}
+                <span style={{ fontSize: 12, color: "#475569", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{emps.map((e) => e.name).join(", ")}</span>
+              </div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: "#111111", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={t.title}>{t.title}</div>
+              <div style={{ fontSize: 12, color: "#64748B", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={t.customerName}>{t.customerName || "—"}</div>
+              <div style={{ fontSize: 12, color: "#64748B" }}>{dayLabel}</div>
+              <div style={{ fontSize: 13, fontWeight: 500, color: "#111111", textAlign: "right" }}>{fmtMin(t.duration)}</div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: logged === 0 ? "#94A3B8" : isLow ? "#D97706" : "#16A34A", textAlign: "right" }}>{fmtMin(logged)}</div>
+            </div>
+          );
+        })}
+        {placed.length === 0 && <div style={{ ...styles.emptyCol, padding: 40 }}>Ingen planlagte opgaver denne uge</div>}
+      </div>
+
+      {/* Totaler */}
+      {placed.length > 0 && (
+        <div style={{ display: "grid", gridTemplateColumns: "180px 1fr 160px 100px 100px 100px", gap: 0, padding: "10px 14px", background: "#FCE4EF", borderRadius: 10, marginTop: 8, fontWeight: 700, fontSize: 13 }}>
+          <span style={{ color: "#9C1B5D" }}>I alt</span>
+          <span />
+          <span />
+          <span />
+          <span style={{ textAlign: "right", color: "#111111" }}>{fmtMin(totalPlanned)}</span>
+          <span style={{ textAlign: "right", color: "#D6247A" }}>{fmtMin(totalRegistered)}</span>
+        </div>
+      )}
     </div>
   );
 }
@@ -3069,6 +3213,13 @@ function TaskDetailModal({ task, employees, checklistTemplates, skills, onClose,
         <button style={styles.secondaryBtn} onClick={() => onUnplace(t.id)}>Flyt til ikke tildelt</button>
         {onCopy && <button style={{ ...styles.secondaryBtn, color: "#9C1B5D", borderColor: "#FCE4EF" }} onClick={() => onCopy(t)}><Copy size={14} /> Kopiér</button>}
         <button style={{ ...styles.secondaryBtn, color: "#B91C1C", borderColor: "#FEE2E2" }} onClick={() => onDelete(t.id)}><Trash2 size={14} /> Slet</button>
+        <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: t.invoiceReady ? 700 : 400, color: t.invoiceReady ? "#16A34A" : "#475569", cursor: "pointer", marginLeft: "auto" }}
+          onClick={() => onUpdateCustomer(t.id, { invoiceReady: !t.invoiceReady })}>
+          <span style={{ width: 18, height: 18, borderRadius: 5, border: t.invoiceReady ? "2px solid #16A34A" : "2px solid #CBD5E1", background: t.invoiceReady ? "#16A34A" : "#fff", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            {t.invoiceReady && <Check size={11} color="#fff" strokeWidth={3} />}
+          </span>
+          Fakturagrundlag
+        </label>
         <button style={styles.primaryBtn} onClick={onClose}>Luk</button>
       </div>
     </Modal>
