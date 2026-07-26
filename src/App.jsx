@@ -968,6 +968,9 @@ function PlanningApp({ session, onSignOut }) {
           onAdd={() => setShowAddTask(true)} onImport={importExcel} onAuto={runAuto}
           onPlace={manualPlace} onUnplace={unplace} onRemoveAssignee={removeAssignee} onDelete={deleteTask}
           onToggleInclude={(taskId) => updateInstance(taskId, (t) => ({ ...t, includeInAuto: !t.includeInAuto }))}
+          onEditEmp={(emp) => { setEditEmp(emp); setShowAddEmp(true); }}
+          areas={areas}
+          employeeAreas={employeeAreas}
           onOpenTask={setOpenTaskId}
           dragId={dragId} setDragId={setDragId}
           weekLabel={wk.label} weekNo={wk.weekNo} weekOffset={weekOffset}
@@ -1206,11 +1209,17 @@ function EmployeeAppView({ employees, instances, onLogMinutes, onSetStatus, onTo
 }
 
 // ---------- Week view ----------
-function WeekView({ employees, instances, unplaced, onAdd, onImport, onAuto, onPlace, onUnplace, onRemoveAssignee, onDelete, onOpenTask, onToggleInclude, dragId, setDragId, weekLabel, weekNo, weekOffset, onPrevWeek, onNextWeek, onTodayWeek, travelSettings, onOpenTravelSettings, currentIsoWeek }) {
+function WeekView({ employees, instances, unplaced, onAdd, onImport, onAuto, onPlace, onUnplace, onRemoveAssignee, onDelete, onOpenTask, onToggleInclude, onEditEmp, dragId, setDragId, weekLabel, weekNo, weekOffset, onPrevWeek, onNextWeek, onTodayWeek, travelSettings, onOpenTravelSettings, currentIsoWeek, areas, employeeAreas }) {
   const [addMenuTaskId, setAddMenuTaskId] = useState(null);
   const [showWeekend, setShowWeekend] = useState(false);
-  const [capView, setCapView] = useState("bar"); // "bar" | "detail"
+  const [capView, setCapView] = useState("bar");
+  const [selectedAreaId, setSelectedAreaId] = useState("all"); // "all" eller area.id
   const visibleDays = showWeekend ? ALL_DAYS : DAYS;
+
+  // Filtrer medarbejdere baseret på valgt område
+  const visibleEmployees = selectedAreaId === "all"
+    ? employees
+    : employees.filter((e) => employeeAreas.some((ea) => ea.employee_id === e.id && ea.area_id === selectedAreaId));
 
   return (
     <div style={styles.page}>
@@ -1231,6 +1240,15 @@ function WeekView({ employees, instances, unplaced, onAdd, onImport, onAuto, onP
           title="Skift kapacitetsvisning">
           {capView === "detail" ? "📊 Belægning" : "📊 Belægning"}
         </button>
+        {areas && areas.length > 0 && (
+          <select
+            style={{ ...styles.inputSm, fontSize: 13, color: selectedAreaId !== "all" ? "#4F46E5" : "#111111", borderColor: selectedAreaId !== "all" ? "#4F46E5" : "#E2E8F0", background: selectedAreaId !== "all" ? "#EEF2FF" : "#fff", fontWeight: selectedAreaId !== "all" ? 700 : 400 }}
+            value={selectedAreaId}
+            onChange={(e) => setSelectedAreaId(e.target.value)}>
+            <option value="all">📍 Alle medarbejdere</option>
+            {areas.map((a) => <option key={a.id} value={a.id}>📍 {a.name}</option>)}
+          </select>
+        )}
         <div style={styles.toolbarSpacer} />
         <div style={styles.weekNav}>
           <button style={styles.weekNavBtn} onClick={onPrevWeek}><ChevronLeft size={16} /></button>
@@ -1289,11 +1307,11 @@ function WeekView({ employees, instances, unplaced, onAdd, onImport, onAuto, onP
               <div key={d.key} style={{ ...styles.gridHeaderCell, borderRight: i < visibleDays.length - 1 ? "1px solid #CBD5E1" : "none", ...(["Sat","Sun"].includes(d.key) ? { background: "#F8FAFC", color: "#94A3B8" } : {}) }}>{d.label}</div>
             ))}
 
-            {employees.map((emp) => (
+            {visibleEmployees.map((emp) => (
               <React.Fragment key={emp.id}>
-                <div style={styles.gridRowLabel}>
+                <div style={{ ...styles.gridRowLabel, cursor: "pointer" }} onClick={() => onEditEmp && onEditEmp(emp)} title={`Rediger ${emp.name}`}>
                   <span style={{ ...styles.avatar, background: emp.color }}>{initials(emp.name)}</span>
-                  {emp.name}
+                  <span style={{ textDecoration: "underline dotted", textUnderlineOffset: 3 }}>{emp.name}</span>
                 </div>
                 {visibleDays.map((d, i) => {
                   const dayTasks = instances.filter((t) => (t.assignees || []).includes(emp.id) && t.day === d.key);
@@ -1404,9 +1422,9 @@ function WeekView({ employees, instances, unplaced, onAdd, onImport, onAuto, onP
       {/* Ugesammenfatning — kun i detail view */}
       {capView === "detail" && (
         <div style={{ marginTop: 12, background: "#F8FAFC", borderRadius: 10, padding: "10px 14px" }}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: "#475569", marginBottom: 8 }}>📊 Ugebelægning — alle medarbejdere</div>
+          <div style={{ fontSize: 12, fontWeight: 700, color: "#475569", marginBottom: 8 }}>📊 Ugebelægning{selectedAreaId !== "all" && areas ? ` — ${areas.find((a) => a.id === selectedAreaId)?.name}` : " — alle medarbejdere"}</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            {employees.map((emp) => {
+            {visibleEmployees.map((emp) => {
               const totalUsed = visibleDays.reduce((s, d) => {
                 const dayTasks = instances.filter((t) => (t.assignees || []).includes(emp.id) && t.day === d.key);
                 return s + dayTasks.reduce((s2, t) => s2 + t.duration, 0);
