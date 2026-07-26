@@ -885,9 +885,10 @@ function PlanningApp({ session, onSignOut }) {
     updateInstance(taskId, (t) => ({ ...t, timeLog: [...(t.timeLog || []), { minutes, empId }] }));
   }
 
-  function exportCSV() {
+  function exportCSV(filteredInstances, label) {
+    const toExport = (filteredInstances || instances.filter((t) => t.assignees && t.assignees.length)).filter((t) => t.invoiceReady);
     const rows = [["Uge", "Dag", "Opgave", "Kunde", "Adresse", "PO-nummer", "Type", "Kontrakttype", "Medarbejdere", "Status", "Planlagt (min)", "Planlagt (timer)", "Registreret (min)", "Registreret (timer)"]];
-    instances.filter((t) => t.assignees && t.assignees.length && t.invoiceReady).forEach((t) => {
+    toExport.forEach((t) => {
       const names = (t.assignees || []).map((id) => employees.find((e) => e.id === id)?.name).filter(Boolean);
       const tl = t.timeLog || t.time_log || [];
       const logged = tl.reduce((s, l) => s + (l.minutes || 0), 0);
@@ -911,7 +912,7 @@ function PlanningApp({ session, onSignOut }) {
     const csv = rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
     const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement("a"); a.href = url; a.download = `ugeplan-uge${weekOffset}-eksport.csv`; a.click();
+    const a = document.createElement("a"); a.href = url; a.download = `ugeplan-${label || weekOffset}-eksport.csv`; a.click();
     URL.revokeObjectURL(url);
     notify("Eksport downloadet");
   }
@@ -999,7 +1000,7 @@ function PlanningApp({ session, onSignOut }) {
         <ChecklistsView checklistTemplates={checklistTemplates} onSave={saveChecklistTemplate} onDelete={deleteChecklistTemplate} />
       )}
       {view === "time" && (
-        <TimeView instances={weekInstancesList} employees={employees}
+        <TimeView instances={instances} employees={employees}
           onExport={exportCSV} totalLogged={totalLogged} weekLabel={wk.label}
           onUpdateInstance={(taskId, fields) => updateInstance(taskId, (t) => ({ ...t, ...fields }))} />
       )}
@@ -1830,16 +1831,44 @@ function ChecklistModal({ checklist, onClose, onSave }) {
 
 // ---------- Time & Export ----------
 function TimeView({ instances, employees, totalLogged, onExport, weekLabel, onUpdateInstance }) {
+  const now = new Date();
+  const [filterMonth, setFilterMonth] = useState(now.getMonth()); // 0-11
+  const [filterYear, setFilterYear] = useState(now.getFullYear());
   const [invoiceOnly, setInvoiceOnly] = useState(false);
-  const [editMinutes, setEditMinutes] = useState({}); // { taskId: string }
+  const [editMinutes, setEditMinutes] = useState({});
+
+  // Beregn hvilke ISO-uger der falder inden for den valgte måned/år
+  function weeksInMonth(year, month) {
+    const weeks = new Set();
+    const d = new Date(year, month, 1);
+    while (d.getMonth() === month) {
+      // ISO week
+      const tmp = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+      const dayNum = (tmp.getDay() + 6) % 7;
+      tmp.setDate(tmp.getDate() - dayNum + 3);
+      const yearStart = new Date(tmp.getFullYear(), 0, 1);
+      const wk = Math.ceil(((tmp - yearStart) / 86400000 + 1) / 7);
+      weeks.add(wk);
+      d.setDate(d.getDate() + 1);
+    }
+    return weeks;
+  }
+
+  const validWeeks = weeksInMonth(filterYear, filterMonth);
 
   const placed = instances
-    .filter((t) => t.assignees && t.assignees.length)
+    .filter((t) => t.assignees && t.assignees.length && validWeeks.has(t.week))
     .filter((t) => !invoiceOnly || t.invoiceReady)
-    .sort((a, b) => DAYS.findIndex((d) => d.key === a.day) - DAYS.findIndex((d) => d.key === b.day));
+    .sort((a, b) => {
+      if (a.week !== b.week) return a.week - b.week;
+      return DAYS.findIndex((d) => d.key === a.day) - DAYS.findIndex((d) => d.key === b.day);
+    });
 
   const totalPlanned = placed.reduce((s, t) => s + t.duration, 0);
   const totalRegistered = placed.reduce((s, t) => s + (t.timeLog || t.time_log || []).reduce((s2, l) => s2 + (l.minutes || 0), 0), 0);
+
+  const MONTHS = ["Januar","Februar","Marts","April","Maj","Juni","Juli","August","September","Oktober","November","December"];
+  const years = [now.getFullYear() - 1, now.getFullYear(), now.getFullYear() + 1];
 
   function saveMinutes(t, newMin) {
     const m = Number(newMin);
@@ -1853,8 +1882,15 @@ function TimeView({ instances, employees, totalLogged, onExport, weekLabel, onUp
     <div style={styles.page}>
       <div style={styles.toolbar}>
         <div style={styles.statBlock}><Clock size={16} /><div><div style={styles.statValue}>{fmtMin(totalLogged)}</div><div style={styles.statLabel}>Registreret i alt (alle uger)</div></div></div>
-        <div style={styles.statBlock}><Clock size={16} /><div><div style={styles.statValue}>{fmtMin(totalRegistered)} / {fmtMin(totalPlanned)}</div><div style={styles.statLabel}>Denne uge: registreret / planlagt</div></div></div>
-        <div style={styles.cardMeta}>Viser: {weekLabel}</div>
+        <div style={styles.statBlock}><Clock size={16} /><div><div style={styles.statValue}>{fmtMin(totalRegistered)} / {fmtMin(totalPlanned)}</div><div style={styles.statLabel}>{MONTHS[filterMonth]} {filterYear}: registreret / planlagt</div></div></div>
+        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+          <select style={{ ...styles.inputSm, fontSize: 13, fontWeight: 600 }} value={filterMonth} onChange={(e) => setFilterMonth(Number(e.target.value))}>
+            {MONTHS.map((m, i) => <option key={i} value={i}>{m}</option>)}
+          </select>
+          <select style={{ ...styles.inputSm, fontSize: 13, fontWeight: 600 }} value={filterYear} onChange={(e) => setFilterYear(Number(e.target.value))}>
+            {years.map((y) => <option key={y} value={y}>{y}</option>)}
+          </select>
+        </div>
         <div style={styles.toolbarSpacer} />
         <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: invoiceOnly ? 700 : 400, color: invoiceOnly ? "#16A34A" : "#475569", cursor: "pointer" }}
           onClick={() => setInvoiceOnly((v) => !v)}>
@@ -1863,11 +1899,11 @@ function TimeView({ instances, employees, totalLogged, onExport, weekLabel, onUp
           </span>
           Kun fakturagrundlag
         </label>
-        <button style={styles.primaryBtn} onClick={onExport}><Download size={16} /> Eksporter CSV</button>
+        <button style={styles.primaryBtn} onClick={() => onExport(placed, `${MONTHS[filterMonth]}-${filterYear}`)}><Download size={16} /> Eksporter CSV</button>
       </div>
 
-      {/* Tabel-header */}
-      <div style={{ display: "grid", gridTemplateColumns: "160px 1fr 140px 80px 90px 120px 28px", gap: 0, background: "#F8FAFC", borderRadius: "10px 10px 0 0", padding: "8px 14px", fontSize: 11, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.05em", marginTop: 8 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "50px 160px 1fr 140px 80px 90px 120px 28px", gap: 0, background: "#F8FAFC", borderRadius: "10px 10px 0 0", padding: "8px 14px", fontSize: 11, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.05em", marginTop: 8 }}>
+        <span>Uge</span>
         <span>Medarbejder</span>
         <span>Opgave</span>
         <span>Kunde</span>
@@ -1886,7 +1922,8 @@ function TimeView({ instances, employees, totalLogged, onExport, weekLabel, onUp
           const isEditing = editMinutes[t.id] !== undefined;
 
           return (
-            <div key={t.id} style={{ display: "grid", gridTemplateColumns: "160px 1fr 140px 80px 90px 120px 28px", gap: 0, padding: "10px 14px", borderBottom: idx < placed.length - 1 ? "1px solid #F1F5F9" : "none", alignItems: "center", background: t.invoiceReady ? "#F0FDF4" : "transparent" }}>
+            <div key={t.id} style={{ display: "grid", gridTemplateColumns: "50px 160px 1fr 140px 80px 90px 120px 28px", gap: 0, padding: "10px 14px", borderBottom: idx < placed.length - 1 ? "1px solid #F1F5F9" : "none", alignItems: "center", background: t.invoiceReady ? "#F0FDF4" : "transparent" }}>
+              <div style={{ fontSize: 12, color: "#94A3B8", fontWeight: 600 }}>{t.week}</div>
               <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
                 {emps.slice(0, 2).map((emp) => <span key={emp.id} style={{ ...styles.avatar, background: emp.color, width: 22, height: 22, fontSize: 10 }}>{initials(emp.name)}</span>)}
                 <span style={{ fontSize: 11, color: "#475569", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{emps.map((e) => e.name).join(", ")}</span>
@@ -1933,8 +1970,8 @@ function TimeView({ instances, employees, totalLogged, onExport, weekLabel, onUp
       </div>
 
       {placed.length > 0 && (
-        <div style={{ display: "grid", gridTemplateColumns: "160px 1fr 140px 80px 90px 120px 28px", gap: 0, padding: "10px 14px", background: "#FCE4EF", borderRadius: 10, marginTop: 8, fontWeight: 700, fontSize: 13 }}>
-          <span style={{ color: "#9C1B5D" }}>I alt</span>
+        <div style={{ display: "grid", gridTemplateColumns: "50px 160px 1fr 140px 80px 90px 120px 28px", gap: 0, padding: "10px 14px", background: "#FCE4EF", borderRadius: 10, marginTop: 8, fontWeight: 700, fontSize: 13 }}>
+          <span /><span style={{ color: "#9C1B5D" }}>I alt</span>
           <span /><span /><span />
           <span style={{ textAlign: "right", color: "#111111" }}>{fmtMin(totalPlanned)}</span>
           <span style={{ textAlign: "right", color: "#D6247A" }}>{fmtMin(totalRegistered)}</span>
