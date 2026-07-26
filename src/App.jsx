@@ -1021,10 +1021,10 @@ function PlanningApp({ session, onSignOut }) {
             }
           }}
           onUpdateInstance={(taskId, fields) => updateInstance(taskId, (t) => ({ ...t, ...fields }))} />
+      )}
 
       {view === "contracts" && (
         <ContractsView templates={templates} instances={instances} />
-      )}
       )}
 
       {view === "inventory" && (
