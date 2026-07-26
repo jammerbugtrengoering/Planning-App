@@ -2978,9 +2978,31 @@ function TaskDetailModal({ task, employees, checklistTemplates, skills, onClose,
   return (
     <Modal onClose={onClose} title={t.title} persistent>
       <div style={styles.detailMetaRow}>
-        <TypeBadge type={t.type} />
+        {isDone ? (
+          <TypeBadge type={t.type} />
+        ) : (
+          <select
+            style={{ fontSize: 12, fontWeight: 600, padding: "3px 8px", borderRadius: 99, border: "1.5px solid #E2E8F0", cursor: "pointer", background: TYPE_META[t.type]?.bg || "#F1F5F9", color: TYPE_META[t.type]?.color || "#475569" }}
+            value={t.type}
+            onChange={(e) => onUpdateCustomer(t.id, { type: e.target.value })}>
+            <option value="fixed">↻ Fast interval</option>
+            <option value="adhoc">⚡ Ad hoc</option>
+            <option value="flexible">📅 Fleksibel</option>
+          </select>
+        )}
         <span style={{ ...styles.typeChip, color: statusColor(t.status), background: "#F1EFE7" }}>{statusLabel(t.status)}</span>
-        {t.contractType && <span style={{ ...styles.typeChip, background: t.contractType === "nexus" ? "#EEF2FF" : t.contractType === "aeldrelov" ? "#FFF7ED" : "#FFF6FA", color: t.contractType === "nexus" ? "#4F46E5" : t.contractType === "aeldrelov" ? "#C2410C" : "#9C1B5D" }}>{t.contractType === "nexus" ? "🏢 Nexus" : t.contractType === "aeldrelov" ? "👴 Ældrelov" : "🏠 Privat"}</span>}
+        {isDone ? (
+          t.contractType && <span style={{ ...styles.typeChip, background: t.contractType === "nexus" ? "#EEF2FF" : t.contractType === "aeldrelov" ? "#FFF7ED" : "#FFF6FA", color: t.contractType === "nexus" ? "#4F46E5" : t.contractType === "aeldrelov" ? "#C2410C" : "#9C1B5D" }}>{t.contractType === "nexus" ? "🏢 Nexus" : t.contractType === "aeldrelov" ? "👴 Ældrelov" : "🏠 Privat"}</span>
+        ) : (
+          <select
+            style={{ fontSize: 12, fontWeight: 600, padding: "3px 8px", borderRadius: 99, border: "1.5px solid #E2E8F0", background: t.contractType === "nexus" ? "#EEF2FF" : t.contractType === "aeldrelov" ? "#FFF7ED" : "#FFF6FA", color: t.contractType === "nexus" ? "#4F46E5" : t.contractType === "aeldrelov" ? "#C2410C" : "#9C1B5D", cursor: "pointer" }}
+            value={t.contractType || "privat"}
+            onChange={(e) => onUpdateCustomer(t.id, { contractType: e.target.value })}>
+            <option value="privat">🏠 Privat</option>
+            <option value="nexus">🏢 Nexus</option>
+            <option value="aeldrelov">👴 Ældrelov</option>
+          </select>
+        )}
         {t.offSchedule && <span style={{ ...styles.typeChip, background: "#FEF9C3", color: "#B45309" }}>⚠️ Uden for aftale</span>}
         {t.onSchedule && !t.offSchedule && <span style={{ ...styles.typeChip, background: "#ECFDF5", color: "#16A34A" }}>✓ Aftalt dag</span>}
         {t.outsideArea && <span style={{ ...styles.typeChip, background: "#F5F3FF", color: "#7C3AED" }}>📍 Uden for område</span>}
@@ -3082,10 +3104,13 @@ function TaskDetailModal({ task, employees, checklistTemplates, skills, onClose,
 
       <label style={styles.label}>Status</label>
       <div style={styles.typePicker}>
-        {["planlagt", "i_gang", "udført"].map((s) => (
-          <button key={s} type="button" onClick={() => onSetStatus(t.id, s)}
-            style={t.status === s ? { ...styles.typePickBtn, borderColor: statusColor(s), color: statusColor(s), background: "#F8FAFC" } : styles.typePickBtn}>
-            {statusLabel(s)}
+        {["unscheduled", "planlagt", "udført"].map((s) => (
+          <button key={s} type="button" onClick={() => {
+            if (s === "unscheduled") { onUnplace(t.id); onClose(); }
+            else onSetStatus(t.id, s);
+          }}
+            style={t.status === s || (s === "unscheduled" && t.status === "unscheduled") ? { ...styles.typePickBtn, borderColor: statusColor(s), color: statusColor(s), background: "#F8FAFC" } : styles.typePickBtn}>
+            {s === "unscheduled" ? "Ikke planlagt" : statusLabel(s)}
           </button>
         ))}
       </div>
@@ -3194,7 +3219,6 @@ function TaskDetailModal({ task, employees, checklistTemplates, skills, onClose,
       <div style={styles.cardMeta}>{fmtMin(totalLogged)} registreret i alt af {fmtMin(t.duration)} planlagt</div>
 
       <div style={styles.modalActions}>
-        <button style={styles.secondaryBtn} onClick={() => onUnplace(t.id)}>Flyt til ikke tildelt</button>
         {onCopy && <button style={{ ...styles.secondaryBtn, color: "#9C1B5D", borderColor: "#FCE4EF" }} onClick={() => onCopy(t)}><Copy size={14} /> Kopiér</button>}
         <button style={{ ...styles.secondaryBtn, color: "#B91C1C", borderColor: "#FEE2E2" }} onClick={() => onDelete(t.id)}><Trash2 size={14} /> Slet</button>
         <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: t.invoiceReady ? 700 : 400, color: t.invoiceReady ? "#16A34A" : "#475569", cursor: "pointer", marginLeft: "auto" }}
