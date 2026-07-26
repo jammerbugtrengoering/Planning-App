@@ -75,7 +75,27 @@ function weekMeta(weekNo) {
 
 // ---------- Skill matching ----------
 function meetsRequirement(emp, req) { return (emp.skills[req.skill] || 0) >= req.minLevel; }
-function candidatesFor(t, employees) { return employees.filter((e) => t.requiredSkills.every((r) => meetsRequirement(e, r))); }
+function candidatesFor(t, employees, areas = [], employeeAreas = []) {
+  const zipCode = (t.address || "").match(/\b(\d{4})\b/)?.[1];
+  let areaEmployeeIds = null;
+  let hasArea = false;
+  if (zipCode && areas.length > 0) {
+    const matchingArea = areas.find((a) => (a.zip_codes || []).includes(zipCode));
+    if (matchingArea) {
+      const areaEmpIds = employeeAreas.filter((ea) => ea.area_id === matchingArea.id).map((ea) => ea.employee_id);
+      if (areaEmpIds.length > 0) { areaEmployeeIds = new Set(areaEmpIds); hasArea = true; }
+    }
+  }
+  const inArea = employees.filter((e) => {
+    if (areaEmployeeIds && !areaEmployeeIds.has(e.id)) return false;
+    return t.requiredSkills.every((r) => meetsRequirement(e, r));
+  });
+  // Fallback: alle med rette kompetencer hvis ingen i område
+  const fallback = inArea.length === 0
+    ? employees.filter((e) => t.requiredSkills.every((r) => meetsRequirement(e, r)))
+    : inArea;
+  return { candidates: fallback, outsideArea: hasArea && inArea.length === 0 };
+}
 function skillScore(e, t) { return t.requiredSkills.reduce((s, r) => s + (e.skills[r.skill] || 0), 0); }
 function skillLabel(t) { return t.requiredSkills.map((r) => `${r.skill}${r.minLevel > 1 ? ` (≥${LEVEL_LABEL[r.minLevel]})` : ""}`).join(" + "); }
 
@@ -164,13 +184,13 @@ function remaining(employees, list, empId, day) {
   const emp = employees.find((e) => e.id === empId);
   return (emp?.capacity?.[day] ?? 0) - usedMinutes(list, empId, day);
 }
-function scheduleWeek(weekInstances, employees, autoOnly = false) {
+function scheduleWeek(weekInstances, employees, autoOnly = false, areas = [], employeeAreas = []) {
   let list = weekInstances.map((t) => ({ ...t }));
 
   list.forEach((t) => {
     if ((t.assignees && t.assignees.length) || !t.day || t.type === "flexible") return;
-    if (autoOnly && !t.includeInAuto) return; // Spring over hvis ikke markeret
-    const candidates = candidatesFor(t, employees);
+    if (autoOnly && !t.includeInAuto) return;
+    const { candidates, outsideArea } = candidatesFor(t, employees, areas, employeeAreas);
     if (candidates.length === 0) { t.warning = "no_skill"; return; }
     const ranked = [...candidates].sort((a, b) => {
       const diff = skillScore(b, t) - skillScore(a, t);
@@ -179,15 +199,18 @@ function scheduleWeek(weekInstances, employees, autoOnly = false) {
     });
     const withRoom = ranked.find((c) => remaining(employees, list, c.id, t.day) >= t.duration);
     const pick = withRoom || ranked[0];
-    t.assignees = [pick.id]; t.status = "planlagt"; t.warning = withRoom ? null : "overloaded";
+    t.assignees = [pick.id];
+    t.status = "planlagt";
+    t.warning = withRoom ? null : "overloaded";
+    if (outsideArea) t.outsideArea = true; // Markér som planlagt uden for område
   });
 
   list.forEach((t) => {
     if ((t.assignees && t.assignees.length) || t.type !== "flexible") return;
-    if (autoOnly && !t.includeInAuto) return; // Spring over hvis ikke markeret
+    if (autoOnly && !t.includeInAuto) return;
     const deadlineIdx = DAYS.findIndex((d) => d.key === (t.deadline || "Fri"));
     const window = DAYS.slice(0, deadlineIdx + 1);
-    const candidates = candidatesFor(t, employees);
+    const { candidates, outsideArea } = candidatesFor(t, employees, areas, employeeAreas);
     if (candidates.length === 0) { t.warning = "no_skill"; return; }
     let best = null;
     window.forEach((d) => {
@@ -198,7 +221,9 @@ function scheduleWeek(weekInstances, employees, autoOnly = false) {
         if (!best || score > best.score) best = { day: d.key, empId: e.id, rem, score };
       });
     });
-    t.day = best.day; t.assignees = [best.empId]; t.status = "planlagt"; t.warning = best.rem < t.duration ? "overloaded" : null;
+    t.day = best.day; t.assignees = [best.empId]; t.status = "planlagt";
+    t.warning = best.rem < t.duration ? "overloaded" : null;
+    if (outsideArea) t.outsideArea = true;
   });
 
   return list;
@@ -239,7 +264,8 @@ function ensureWeekInstances(week, allInstances, templates, employees) {
   });
   const thisWeek = list.filter((i) => i.week === week);
   const others = list.filter((i) => i.week !== week);
-  return [...others, ...scheduleWeek(thisWeek, employees)];
+  // Auto-planlæg kun nyoprettede instanser (dem der ikke allerede har assignees)
+  return [...others, ...scheduleWeek(thisWeek, employees, false)];
 }
 
 function statusLabel(s) { return { unscheduled: "Ubemandet", planlagt: "Planlagt", i_gang: "I gang", udført: "Udført" }[s] || s; }
@@ -369,13 +395,14 @@ function PlanningApp({ session, onSignOut }) {
   useEffect(() => { localStorage.setItem("rp_lang", lang); }, [lang]);
 
   const L = {
-    da: { schedule:"Ugeplan", employees:"Medarbejdere", checklists:"Tjeklister", time:"Tid & Eksport", inventory:"Lager", skills:"Kompetencer", signOut:"Log ud", sub:"Ugeplanlægning · kapacitet · kompetenceniveauer" },
-    en: { schedule:"Schedule", employees:"Employees", checklists:"Checklists", time:"Time & Export", inventory:"Inventory", skills:"Skills", signOut:"Sign out", sub:"Weekly planning · capacity · skill levels" },
+    da: { schedule:"Ugeplan", employees:"Medarbejdere", checklists:"Tjeklister", time:"Tid & Eksport", inventory:"Lager", areas:"Områder", signOut:"Log ud", sub:"Ugeplanlægning · kapacitet · kompetenceniveauer" },
+    en: { schedule:"Schedule", employees:"Employees", checklists:"Checklists", time:"Time & Export", inventory:"Inventory", areas:"Areas", signOut:"Sign out", sub:"Weekly planning · capacity · skill levels" },
   }[lang];
   // ── Dynamiske master-data fra Supabase ──
   const [skills, setSkills] = useState(SKILLS_FALLBACK);
   const [customers, setCustomers] = useState([]);
-  const [employees, setEmployees] = useState([]);
+  const [areas, setAreas] = useState([]);
+  const [employeeAreas, setEmployeeAreas] = useState([]); // [{employee_id, area_id}]
   const [templates, setTemplates] = useState([]);
   const [checklistTemplates, setChecklistTemplates] = useState([]);
   const [instances, setInstances] = useState([]);
@@ -427,6 +454,13 @@ function PlanningApp({ session, onSignOut }) {
         supabase.from("travel_settings").select("*").eq("id","default").single(),
         supabase.from("travel_overrides").select("*"),
       ]);
+      // Load areas
+      const [{ data: areasData }, { data: empAreasData }] = await Promise.all([
+        supabase.from("areas").select("*").order("name"),
+        supabase.from("employee_areas").select("*"),
+      ]);
+      if (areasData) setAreas(areasData);
+      if (empAreasData) setEmployeeAreas(empAreasData);
 
       // Skills
       if (skillsData?.length) setSkills(skillsData.map((s) => s.name));
@@ -597,7 +631,7 @@ function PlanningApp({ session, onSignOut }) {
       const thisWeek = prev.filter((t) => t.week === weekOffset);
       const others = prev.filter((t) => t.week !== weekOffset);
       const before = thisWeek.filter((t) => !(t.assignees && t.assignees.length)).length;
-      const after = scheduleWeek(thisWeek, employees, true); // kun markerede
+      const after = scheduleWeek(thisWeek, employees, true, areas, employeeAreas); // kun markerede
       const still = after.filter((t) => !(t.assignees && t.assignees.length)).length;
       notify(before - still > 0 ? `${before - still} opgave(r) planlagt automatisk` : "Ingen markerede opgaver til planlægning");
       return [...others, ...after];
@@ -693,7 +727,7 @@ function PlanningApp({ session, onSignOut }) {
           newInstances.forEach((inst) => {
             const thisWeek = [...next.filter((t) => t.week === inst.week), inst];
             const others = next.filter((t) => t.week !== inst.week);
-            const scheduled = scheduleWeek(thisWeek, employees);
+            const scheduled = scheduleWeek(thisWeek, employees, false, areas, employeeAreas);
             scheduled.forEach(syncInstance);
             next = [...others, ...scheduled];
           });
@@ -714,7 +748,7 @@ function PlanningApp({ session, onSignOut }) {
         setInstances((prev) => {
           const thisWeek = [...prev.filter((t) => t.week === adhocWeek), newInstance];
           const others = prev.filter((t) => t.week !== adhocWeek);
-          const scheduled = scheduleWeek(thisWeek, employees);
+          const scheduled = scheduleWeek(thisWeek, employees, false, areas, employeeAreas);
           scheduled.forEach(syncInstance);
           return [...others, ...scheduled];
         });
@@ -732,9 +766,10 @@ function PlanningApp({ session, onSignOut }) {
     setInstances((prev) => {
       const thisWeek = [...prev.filter((t) => t.week === weekOffset), ...imported];
       const others = prev.filter((t) => t.week !== weekOffset);
-      return [...others, ...scheduleWeek(thisWeek, employees)];
+      imported.forEach(syncInstance);
+      return [...others, ...thisWeek];
     });
-    notify(`${imported.length} opgaver importeret fra Excel og forsøgt planlagt for denne uge`);
+    notify(`${imported.length} opgaver importeret fra Excel og lagt i "Ikke tildelt"`);
   }
 
   function updateInstance(taskId, updater) {
@@ -816,13 +851,7 @@ function PlanningApp({ session, onSignOut }) {
     setEmployees((prev) => {
       const exists = prev.some((e) => e.id === emp.id);
       const next = exists ? prev.map((e) => (e.id === emp.id ? emp : e)) : [...prev, emp];
-      setInstances((cur) => {
-        const thisWeek = cur.filter((t) => t.week === weekOffset);
-        const others = cur.filter((t) => t.week !== weekOffset);
-        const rescheduled = scheduleWeek(thisWeek, next);
-        rescheduled.forEach(syncInstance);
-        return [...others, ...rescheduled];
-      });
+      // Ingen automatisk omfordeling ved ændring af medarbejder
       return next;
     });
     syncEmployee(emp);
@@ -903,7 +932,7 @@ function PlanningApp({ session, onSignOut }) {
           </div>
         </div>
         <nav style={styles.nav}>
-          {[["uge", L.schedule], ["employees", L.employees], ["checklists", L.checklists], ["time", L.time], ["inventory", L.inventory]].map(([k, l]) => (
+          {[["uge", L.schedule], ["employees", L.employees], ["checklists", L.checklists], ["time", L.time], ["inventory", L.inventory], ["areas", L.areas]].map(([k, l]) => (
             <button key={k} onClick={() => setView(k)} style={view === k ? styles.navBtnActive : styles.navBtn}>{l}</button>
           ))}
           <div style={{ display:"flex", gap:4, marginLeft:12, borderLeft:"1px solid #333", paddingLeft:12 }}>
@@ -956,6 +985,11 @@ function PlanningApp({ session, onSignOut }) {
 
       {view === "inventory" && (
         <InventoryView supabase={supabase} employees={employees} />
+      )}
+
+      {view === "areas" && (
+        <AreasView supabase={supabase} areas={areas} employees={employees} employeeAreas={employeeAreas}
+          onAreasChange={setAreas} onEmployeeAreasChange={setEmployeeAreas} />
       )}
 
       {view === "skills" && (
@@ -1310,13 +1344,14 @@ function WeekView({ employees, instances, unplaced, onAdd, onImport, onAuto, onP
                         const addable = employees.filter((e) => !(t.assignees || []).includes(e.id));
                         return (
                           <div key={t.id} draggable onDragStart={() => setDragId(t.id)}
-                            style={{ ...styles.taskChip, ...(t.offSchedule ? { borderLeft: "3px solid #F59E0B" } : t.onSchedule ? { borderLeft: "3px solid #22C55E" } : {}) }}
+                            style={{ ...styles.taskChip, ...(t.offSchedule ? { borderLeft: "3px solid #F59E0B" } : t.onSchedule ? { borderLeft: "3px solid #22C55E" } : {}), ...(t.outsideArea ? { borderTop: "2px solid #7C3AED" } : {}) }}
                             onClick={() => onOpenTask(t.id)} title="Klik for at åbne serviceordren">
                             <div style={styles.chipTopRow}>
                               <TypeBadge type={t.type} mini />
                               <span style={styles.taskChipTitle}>{seg.start != null ? `${fmtClock(seg.start)} · ` : ""}{t.title}</span>
                               {t.offSchedule && <span title="Planlagt uden for aftale" style={{ fontSize: 12, marginLeft: 2 }}>⚠️</span>}
                               {t.onSchedule && !t.offSchedule && <span title="Planlagt på aftalt dag" style={{ fontSize: 12, marginLeft: 2 }}>✓</span>}
+                              {t.outsideArea && <span title="Planlagt uden for medarbejderens område" style={{ fontSize: 12, marginLeft: 2 }}>📍⚠️</span>}
                               <span style={{ ...styles.statusDot, background: statusColor(t.status) }} />
                               <button style={styles.chipXBtn} title="Fjern fra board" onClick={(e) => { e.stopPropagation(); onUnplace(t.id); }}><X size={11} /></button>
                             </div>
@@ -2099,6 +2134,120 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom }) {
 }
 
 // ── Skills View ───────────────────────────────────────────────────────────────
+// ── Areas View ────────────────────────────────────────────────────────────────
+function AreasView({ supabase, areas, employees, employeeAreas, onAreasChange, onEmployeeAreasChange }) {
+  const [showAdd, setShowAdd] = useState(false);
+  const [editArea, setEditArea] = useState(null);
+  const [areaName, setAreaName] = useState("");
+  const [areaZips, setAreaZips] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  async function saveArea() {
+    setSaving(true);
+    const zips = areaZips.split(/[\s,]+/).map((z) => z.trim()).filter((z) => /^\d{4}$/.test(z));
+    if (editArea) {
+      await supabase.from("areas").update({ name: areaName.trim(), zip_codes: zips }).eq("id", editArea.id);
+      onAreasChange((prev) => prev.map((a) => a.id === editArea.id ? { ...a, name: areaName.trim(), zip_codes: zips } : a));
+    } else {
+      const { data } = await supabase.from("areas").insert({ name: areaName.trim(), zip_codes: zips }).select().single();
+      if (data) onAreasChange((prev) => [...prev, data]);
+    }
+    setSaving(false); setShowAdd(false); setEditArea(null); setAreaName(""); setAreaZips("");
+  }
+
+  async function deleteArea(area) {
+    if (!window.confirm(`Slet området "${area.name}"?`)) return;
+    await supabase.from("areas").delete().eq("id", area.id);
+    onAreasChange((prev) => prev.filter((a) => a.id !== area.id));
+    onEmployeeAreasChange((prev) => prev.filter((ea) => ea.area_id !== area.id));
+  }
+
+  async function toggleEmpArea(empId, areaId) {
+    const exists = employeeAreas.some((ea) => ea.employee_id === empId && ea.area_id === areaId);
+    if (exists) {
+      await supabase.from("employee_areas").delete().match({ employee_id: empId, area_id: areaId });
+      onEmployeeAreasChange((prev) => prev.filter((ea) => !(ea.employee_id === empId && ea.area_id === areaId)));
+    } else {
+      await supabase.from("employee_areas").insert({ employee_id: empId, area_id: areaId });
+      onEmployeeAreasChange((prev) => [...prev, { employee_id: empId, area_id: areaId }]);
+    }
+  }
+
+  return (
+    <div style={styles.page}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
+        <div>
+          <div style={{ fontWeight: 700, fontSize: 18, color: "#111111" }}>Områder</div>
+          <div style={{ fontSize: 13, color: "#64748B", marginTop: 2 }}>Tilknyt medarbejdere til postnummerområder — bruges ved automatisk planlægning</div>
+        </div>
+        <button style={styles.primaryBtn} onClick={() => { setShowAdd(true); setEditArea(null); setAreaName(""); setAreaZips(""); }}>
+          <Plus size={14} /> Nyt område
+        </button>
+      </div>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        {areas.map((area) => (
+          <div key={area.id} style={{ background: "#fff", borderRadius: 12, padding: 16, boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
+            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 12 }}>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 16, color: "#111111" }}>{area.name}</div>
+                <div style={{ fontSize: 12, color: "#64748B", marginTop: 2 }}>
+                  📍 {(area.zip_codes || []).slice(0, 8).join(", ")}{(area.zip_codes || []).length > 8 ? ` +${(area.zip_codes || []).length - 8} mere` : ""}
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: 6 }}>
+                <button style={styles.iconBtnGhostInline} onClick={() => { setEditArea(area); setAreaName(area.name); setAreaZips((area.zip_codes || []).join(", ")); setShowAdd(true); }}><Pencil size={14} /></button>
+                <button style={{ ...styles.iconBtnGhostInline, color: "#DC2626" }} onClick={() => deleteArea(area)}><Trash2 size={14} /></button>
+              </div>
+            </div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: "#475569", marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.05em" }}>Medarbejdere</div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+              {employees.map((emp) => {
+                const assigned = employeeAreas.some((ea) => ea.employee_id === emp.id && ea.area_id === area.id);
+                return (
+                  <button key={emp.id}
+                    style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 12px", borderRadius: 99, border: assigned ? "2px solid #D6247A" : "1.5px solid #E2E8F0", background: assigned ? "#FCE4EF" : "#fff", color: assigned ? "#D6247A" : "#64748B", fontWeight: assigned ? 700 : 500, fontSize: 13, cursor: "pointer" }}
+                    onClick={() => toggleEmpArea(emp.id, area.id)}>
+                    <span style={{ ...styles.avatar, background: emp.color, width: 20, height: 20, fontSize: 9 }}>{initials(emp.name)}</span>
+                    {emp.name}{assigned && <Check size={12} />}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+        {areas.length === 0 && (
+          <div style={{ textAlign: "center", padding: 60, color: "#94A3B8" }}>
+            <div style={{ fontSize: 36, marginBottom: 12 }}>📍</div>
+            <div style={{ fontWeight: 600 }}>Ingen områder endnu</div>
+            <div style={{ fontSize: 13, marginTop: 4 }}>Opret et område og tilknyt medarbejdere og postnumre</div>
+          </div>
+        )}
+      </div>
+
+      {showAdd && (
+        <Modal onClose={() => { setShowAdd(false); setEditArea(null); }} title={editArea ? `Rediger: ${editArea.name}` : "Nyt område"} persistent>
+          <label style={styles.label}>Områdenavn</label>
+          <input style={styles.input} value={areaName} onChange={(e) => setAreaName(e.target.value)} placeholder="Fx Nordjylland, Blokhus-området…" autoFocus />
+          <label style={styles.label}>Postnumre (komma- eller mellemrumsadskilt)</label>
+          <textarea style={{ ...styles.input, minHeight: 80, fontFamily: "monospace" }}
+            value={areaZips} onChange={(e) => setAreaZips(e.target.value)}
+            placeholder="9000, 9200, 9210, 9300, 9440…" />
+          <div style={{ fontSize: 12, color: "#64748B", marginTop: -8, marginBottom: 12 }}>
+            {areaZips.split(/[\s,]+/).filter((z) => /^\d{4}$/.test(z.trim())).length} gyldige postnumre
+          </div>
+          <div style={styles.modalActions}>
+            <button style={styles.secondaryBtn} onClick={() => { setShowAdd(false); setEditArea(null); }}>Annuller</button>
+            <button style={styles.primaryBtn} disabled={saving || !areaName.trim()} onClick={saveArea}>
+              {saving ? "Gemmer…" : editArea ? "Gem ændringer" : "Opret område"}
+            </button>
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
 function SkillsView({ supabase, skills: skillNames, onSkillsChange }) {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -2668,6 +2817,7 @@ function TaskDetailModal({ task, employees, checklistTemplates, skills, onClose,
         {t.contractType && <span style={{ ...styles.typeChip, background: t.contractType === "nexus" ? "#EEF2FF" : t.contractType === "aeldrelov" ? "#FFF7ED" : "#FFF6FA", color: t.contractType === "nexus" ? "#4F46E5" : t.contractType === "aeldrelov" ? "#C2410C" : "#9C1B5D" }}>{t.contractType === "nexus" ? "🏢 Nexus" : t.contractType === "aeldrelov" ? "👴 Ældrelov" : "🏠 Privat"}</span>}
         {t.offSchedule && <span style={{ ...styles.typeChip, background: "#FEF9C3", color: "#B45309" }}>⚠️ Uden for aftale</span>}
         {t.onSchedule && !t.offSchedule && <span style={{ ...styles.typeChip, background: "#ECFDF5", color: "#16A34A" }}>✓ Aftalt dag</span>}
+        {t.outsideArea && <span style={{ ...styles.typeChip, background: "#F5F3FF", color: "#7C3AED" }}>📍 Uden for område</span>}
       </div>
       <div style={styles.cardMeta}>{dayLabel} · {fmtMin(t.duration)}{t.deadline ? ` · senest ${DAYS.find((d) => d.key === t.deadline)?.label}` : ""}{t.expiryDate ? ` · udløber ${t.expiryDate}` : ""}</div>
 
