@@ -529,9 +529,9 @@ function PlanningApp({ session, onSignOut }) {
             ...i,
             timeLog: i.time_log ?? [],
             requiredSkills: i.required_skills ?? [],
-            customerName: i.customer_name || cust?.name ?? i.customer_id ?? "",
-            address: i.address_text || cust?.address ?? "",
-            accessInstructions: i.access_instructions || cust?.access_instructions ?? "",
+            customerName: (i.customer_name || cust?.name || i.customer_id) ?? "",
+            address: (i.address_text || cust?.address) ?? "",
+            accessInstructions: (i.access_instructions || cust?.access_instructions) ?? "",
             startDate: i.start_date || null,
             expiryDate: i.expiry_date || null,
           };
