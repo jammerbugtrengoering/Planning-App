@@ -1969,11 +1969,13 @@ function TimeView({ instances, employees, totalLogged, onExport, weekLabel, onUp
         </div>
       )}
 
-      <div style={{ display: "grid", gridTemplateColumns: "50px 160px 1fr 140px 80px 90px 120px 100px 28px", gap: 0, background: "#F8FAFC", borderRadius: "10px 10px 0 0", padding: "8px 14px", fontSize: 11, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.05em", marginTop: 8 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "50px 140px 1fr 120px 70px 80px 100px 100px 100px 90px 28px", gap: 0, background: "#F8FAFC", borderRadius: "10px 10px 0 0", padding: "8px 14px", fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.04em", marginTop: 8 }}>
         <span>Uge</span><span>Medarbejder</span><span>Opgave</span><span>Kunde</span><span>Dag</span>
         <span style={{ textAlign: "right" }}>Planlagt</span>
         <span style={{ textAlign: "right" }}>Registreret</span>
-        <span style={{ textAlign: "right" }}>Beløb</span>
+        <span style={{ textAlign: "right" }}>Planlagt kr.</span>
+        <span style={{ textAlign: "right" }}>Registreret kr.</span>
+        <span style={{ textAlign: "right" }}>Difference</span>
         <span style={{ textAlign: "center" }}>📄</span>
       </div>
 
@@ -1984,9 +1986,13 @@ function TimeView({ instances, employees, totalLogged, onExport, weekLabel, onUp
           const dayLabel = DAYS.find((d) => d.key === t.day)?.label || t.day || "—";
           const isLow = logged > 0 && logged < t.duration * 0.5;
           const isEditing = editMinutes[t.id] !== undefined;
+          const rate = localPricing[t.contractType || "privat"] || 0;
+          const plannedKr = Math.round((t.duration / 60) * rate);
+          const registeredKr = Math.round((logged / 60) * rate);
+          const diffKr = registeredKr - plannedKr;
 
           return (
-            <div key={t.id} style={{ display: "grid", gridTemplateColumns: "50px 160px 1fr 140px 80px 90px 120px 100px 28px", gap: 0, padding: "10px 14px", borderBottom: idx < placed.length - 1 ? "1px solid #F1F5F9" : "none", alignItems: "center", background: t.invoiceReady ? "#F0FDF4" : "transparent" }}>
+            <div key={t.id} style={{ display: "grid", gridTemplateColumns: "50px 140px 1fr 120px 70px 80px 100px 100px 100px 90px 28px", gap: 0, padding: "10px 14px", borderBottom: idx < placed.length - 1 ? "1px solid #F1F5F9" : "none", alignItems: "center", background: t.invoiceReady ? "#F0FDF4" : "transparent" }}>
               <div style={{ fontSize: 12, color: "#94A3B8", fontWeight: 600 }}>{t.week}</div>
               <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
                 {emps.slice(0, 2).map((emp) => <span key={emp.id} style={{ ...styles.avatar, background: emp.color, width: 22, height: 22, fontSize: 10 }}>{initials(emp.name)}</span>)}
@@ -2018,9 +2024,17 @@ function TimeView({ instances, employees, totalLogged, onExport, weekLabel, onUp
                   </span>
                 )}
               </div>
-              {/* Beløb */}
-              <div style={{ textAlign: "right", fontSize: 13, fontWeight: 600, color: "#16A34A" }}>
-                {logged > 0 ? `${Math.round((logged / 60) * (localPricing[t.contractType || "privat"] || 0)).toLocaleString("da-DK")} kr` : "—"}
+              {/* Beløb planlagt */}
+              <div style={{ fontSize: 13, fontWeight: 500, color: "#64748B", textAlign: "right" }}>
+                {rate > 0 ? `${plannedKr.toLocaleString("da-DK")} kr` : "—"}
+              </div>
+              {/* Beløb registreret */}
+              <div style={{ fontSize: 13, fontWeight: 600, color: logged > 0 ? "#16A34A" : "#94A3B8", textAlign: "right" }}>
+                {rate > 0 && logged > 0 ? `${registeredKr.toLocaleString("da-DK")} kr` : "—"}
+              </div>
+              {/* Difference */}
+              <div style={{ fontSize: 13, fontWeight: 700, color: diffKr > 0 ? "#16A34A" : diffKr < 0 ? "#DC2626" : "#94A3B8", textAlign: "right" }}>
+                {rate > 0 && logged > 0 ? `${diffKr > 0 ? "+" : ""}${diffKr.toLocaleString("da-DK")} kr` : "—"}
               </div>
               {/* Fakturagrundlag toggle */}
               <div style={{ display: "flex", justifyContent: "center" }}>
@@ -2037,16 +2051,26 @@ function TimeView({ instances, employees, totalLogged, onExport, weekLabel, onUp
         {placed.length === 0 && <div style={{ ...styles.emptyCol, padding: 40 }}>Ingen planlagte opgaver denne uge</div>}
       </div>
 
-      {placed.length > 0 && (
-        <div style={{ display: "grid", gridTemplateColumns: "50px 160px 1fr 140px 80px 90px 120px 100px 28px", gap: 0, padding: "10px 14px", background: "#FCE4EF", borderRadius: 10, marginTop: 8, fontWeight: 700, fontSize: 13 }}>
-          <span /><span style={{ color: "#9C1B5D" }}>I alt</span>
-          <span /><span /><span />
-          <span style={{ textAlign: "right", color: "#111111" }}>{fmtMin(totalPlanned)}</span>
-          <span style={{ textAlign: "right", color: "#D6247A" }}>{fmtMin(totalRegistered)}</span>
-          <span style={{ textAlign: "right", color: "#16A34A", fontWeight: 800 }}>{Math.round(expectedRevenue).toLocaleString("da-DK")} kr</span>
-          <span />
-        </div>
-      )}
+      {placed.length > 0 && (() => {
+        const totalPlannedKr = placed.reduce((s, t) => {
+          const rate = localPricing[t.contractType || "privat"] || 0;
+          return s + Math.round((t.duration / 60) * rate);
+        }, 0);
+        const totalRegisteredKr = Math.round(expectedRevenue);
+        const totalDiff = totalRegisteredKr - totalPlannedKr;
+        return (
+          <div style={{ display: "grid", gridTemplateColumns: "50px 140px 1fr 120px 70px 80px 100px 100px 100px 90px 28px", gap: 0, padding: "10px 14px", background: "#FCE4EF", borderRadius: 10, marginTop: 8, fontWeight: 700, fontSize: 13 }}>
+            <span /><span style={{ color: "#9C1B5D" }}>I alt</span>
+            <span /><span /><span />
+            <span style={{ textAlign: "right", color: "#111111" }}>{fmtMin(totalPlanned)}</span>
+            <span style={{ textAlign: "right", color: "#D6247A" }}>{fmtMin(totalRegistered)}</span>
+            <span style={{ textAlign: "right", color: "#64748B" }}>{totalPlannedKr.toLocaleString("da-DK")} kr</span>
+            <span style={{ textAlign: "right", color: "#16A34A" }}>{totalRegisteredKr.toLocaleString("da-DK")} kr</span>
+            <span style={{ textAlign: "right", color: totalDiff >= 0 ? "#16A34A" : "#DC2626" }}>{totalDiff > 0 ? "+" : ""}{totalDiff.toLocaleString("da-DK")} kr</span>
+            <span />
+          </div>
+        );
+      })()}
     </div>
   );
 }
