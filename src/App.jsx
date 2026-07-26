@@ -401,6 +401,7 @@ function PlanningApp({ session, onSignOut }) {
   // ── Dynamiske master-data fra Supabase ──
   const [skills, setSkills] = useState(SKILLS_FALLBACK);
   const [customers, setCustomers] = useState([]);
+  const [employees, setEmployees] = useState([]);
   const [areas, setAreas] = useState([]);
   const [employeeAreas, setEmployeeAreas] = useState([]); // [{employee_id, area_id}]
   const [templates, setTemplates] = useState([]);
