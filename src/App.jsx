@@ -823,6 +823,29 @@ function PlanningApp({ session, onSignOut }) {
     }));
   }
 
+  // Opdaterer kundeoplysninger for hele aftalen (alle forekomster af samme skabelon),
+  // så en rettelse af fx kundenavn slår igennem på alle relaterede opgaver — ikke kun
+  // den enkelte opgave man sidder og redigerer. Matcher primært via templateId, men
+  // falder tilbage til titel-match for ældre data hvor koblingen mangler (samme
+  // strategi som updateContractType ovenfor).
+  function updateCustomerInfo(taskId, fields) {
+    const task = instances.find((t) => t.id === taskId);
+    if (!task) return;
+    const tplId = task.templateId || null;
+    const matchTitle = task.title;
+
+    setInstances((prev) => prev.map((t) => {
+      const sameTemplate = tplId && t.templateId === tplId;
+      const sameTitleFixed = !tplId && t.type === "fixed" && t.title === matchTitle;
+      if (t.id === taskId || sameTemplate || sameTitleFixed) {
+        const updated = { ...t, ...fields };
+        syncInstance(updated);
+        return updated;
+      }
+      return t;
+    }));
+  }
+
   function manualPlace(taskId, day, empId) {
     const task = instances.find((t) => t.id === taskId);
     if (!task) return;
@@ -1198,6 +1221,7 @@ function PlanningApp({ session, onSignOut }) {
             return { ...t, checklist: [...(t.checklist || []), ...newItems] };
           })}
           onUpdateCustomer={(taskId, fields) => updateInstance(taskId, (t) => ({ ...t, ...fields }))}
+          onUpdateCustomerInfo={updateCustomerInfo}
           onUpdateContractType={updateContractType}
           onUpdateSkills={(taskId, newSkills) => updateInstance(taskId, (t) => ({ ...t, requiredSkills: newSkills }))}
           onAddAssignee={(taskId, empId) => { const t = instances.find((x) => x.id === taskId); if (t?.day) manualPlace(taskId, t.day, empId); }}
@@ -3299,7 +3323,7 @@ function EmployeeModal({ emp, onClose, onSave, skills: skillList }) {
 }
 
 // ---------- Task / service order detail ----------
-function TaskDetailModal({ task, employees, checklistTemplates, skills, onClose, onSetStatus, onToggleChecklistItem, onAddChecklistItem, onAddChecklistTemplate, onAddAssignee, onRemoveAssignee, onUnplace, onDelete, onUpdateCustomer, onUpdateContractType, onCopy, onUpdateSkills }) {
+function TaskDetailModal({ task, employees, checklistTemplates, skills, onClose, onSetStatus, onToggleChecklistItem, onAddChecklistItem, onAddChecklistTemplate, onAddAssignee, onRemoveAssignee, onUnplace, onDelete, onUpdateCustomer, onUpdateCustomerInfo, onUpdateContractType, onCopy, onUpdateSkills }) {
   const [addOpen, setAddOpen] = useState(false);
   const [newItemText, setNewItemText] = useState("");
   const [showTemplates, setShowTemplates] = useState(false);
@@ -3404,7 +3428,7 @@ function TaskDetailModal({ task, employees, checklistTemplates, skills, onClose,
   const existingTexts = new Set((t.checklist || []).map((i) => i.text));
 
   function saveCustomer() {
-    onUpdateCustomer(t.id, { customerName: custName, address: custAddress, poNumber: custPo, accessInstructions: custAccess });
+    onUpdateCustomerInfo(t.id, { customerName: custName, address: custAddress, poNumber: custPo, accessInstructions: custAccess });
     setEditingCustomer(false);
     setDineroResults([]);
     setShowDineroCreate(false);
