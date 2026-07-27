@@ -2324,14 +2324,17 @@ function weeksInMonthReport(year, monthIndex) {
   return weeks;
 }
 
+const REPORT_AREA_COLORS = { privat: "#D6247A", nexus: "#4F46E5", aeldrelov: "#C2410C" };
+
 function ReportsView({ instances, pricing, budgets, onSaveBudget, isAdminUser }) {
   const now = new Date();
   const [selectedArea, setSelectedArea] = useState("privat");
   const [selectedYear, setSelectedYear] = useState(now.getFullYear());
   const [draftAmounts, setDraftAmounts] = useState({});
+  const [editingBudgets, setEditingBudgets] = useState(false);
   const years = [now.getFullYear() - 1, now.getFullYear(), now.getFullYear() + 1];
 
-  useEffect(() => { setDraftAmounts({}); }, [selectedArea, selectedYear]);
+  useEffect(() => { setDraftAmounts({}); setEditingBudgets(false); }, [selectedArea, selectedYear]);
 
   function budgetFor(month) {
     if (draftAmounts[month] !== undefined) return draftAmounts[month];
@@ -2361,7 +2364,10 @@ function ReportsView({ instances, pricing, budgets, onSaveBudget, isAdminUser })
       const budgetKr = Number(budgetRaw) || 0;
       const diffKr = registeredKr - budgetKr;
       const pct = budgetKr > 0 ? Math.round((registeredKr / budgetKr) * 100) : null;
-      return { month, label, budgetRaw, budgetKr, plannedKr, registeredKr, diffKr, pct };
+      const isPast = selectedYear < now.getFullYear() || (selectedYear === now.getFullYear() && month < now.getMonth() + 1);
+      const actualOrForecastKr = isPast ? registeredKr : plannedKr;
+      const actualOrForecastLabel = isPast ? "Realiseret" : "Forecast";
+      return { month, label, budgetRaw, budgetKr, plannedKr, registeredKr, diffKr, pct, isPast, actualOrForecastKr, actualOrForecastLabel };
     });
   }, [instances, pricing, selectedArea, selectedYear, budgets, draftAmounts]);
 
@@ -2374,6 +2380,9 @@ function ReportsView({ instances, pricing, budgets, onSaveBudget, isAdminUser })
     { budget: 0, planned: 0, registered: 0 }
   );
   const yearDiff = yearTotals.registered - yearTotals.budget;
+  const areaColor = REPORT_AREA_COLORS[selectedArea] || "#D6247A";
+  const chartMax = Math.max(1, ...monthRows.map((r) => Math.max(r.budgetKr, r.actualOrForecastKr)));
+  const CHART_H = 160;
 
   return (
     <div style={styles.page}>
@@ -2396,7 +2405,7 @@ function ReportsView({ instances, pricing, budgets, onSaveBudget, isAdminUser })
         </select>
       </div>
 
-      <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+      <div style={{ display: "flex", gap: 8, marginBottom: 14, alignItems: "center" }}>
         {REPORT_AREAS.map(([key, label]) => (
           <button
             key={key}
@@ -2408,6 +2417,15 @@ function ReportsView({ instances, pricing, budgets, onSaveBudget, isAdminUser })
             {label}
           </button>
         ))}
+        <div style={{ flex: 1 }} />
+        {isAdminUser && (
+          <button
+            style={editingBudgets ? { ...styles.primaryBtn } : styles.secondaryBtn}
+            onClick={() => setEditingBudgets((v) => !v)}
+          >
+            {editingBudgets ? "✅ Færdig med redigering" : "✏️ Rediger budget"}
+          </button>
+        )}
       </div>
 
       {!isAdminUser && (
@@ -2415,6 +2433,46 @@ function ReportsView({ instances, pricing, budgets, onSaveBudget, isAdminUser })
           Kun administrator kan oprette og redigere budgettal. Du kan se rapporten.
         </div>
       )}
+
+      {/* Søjlediagram: budget vs. realiseret/forecast pr. måned */}
+      <div style={{ background: "#fff", borderRadius: 12, padding: "18px 16px 12px", marginBottom: 16, boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 14 }}>
+          <div style={{ fontWeight: 700, fontSize: 14, color: "#111111" }}>Budget vs. omsætning — {REPORT_AREAS.find(([k]) => k === selectedArea)?.[1]}</div>
+          <div style={{ flex: 1 }} />
+          <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11.5, color: "#64748B" }}>
+            <span style={{ width: 12, height: 12, borderRadius: 3, background: "#CBD5E1", display: "inline-block" }} /> Budget
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11.5, color: "#64748B" }}>
+            <span style={{ width: 12, height: 12, borderRadius: 3, background: areaColor, display: "inline-block" }} /> Realiseret
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11.5, color: "#64748B" }}>
+            <span style={{ width: 12, height: 12, borderRadius: 3, background: areaColor, opacity: 0.4, border: `1px dashed ${areaColor}`, display: "inline-block" }} /> Forecast
+          </div>
+        </div>
+        <div style={{ display: "flex", alignItems: "flex-end", gap: 10, height: CHART_H + 10, overflowX: "auto", paddingBottom: 4 }}>
+          {monthRows.map((r) => {
+            const budgetPx = Math.round((r.budgetKr / chartMax) * CHART_H);
+            const actualPx = Math.round((r.actualOrForecastKr / chartMax) * CHART_H);
+            return (
+              <div key={r.month} style={{ display: "flex", flexDirection: "column", alignItems: "center", flex: "1 0 46px", minWidth: 46 }}>
+                <div style={{ display: "flex", alignItems: "flex-end", gap: 3, height: CHART_H }}>
+                  <div title={`Budget: ${Math.round(r.budgetKr).toLocaleString("da-DK")} kr`} style={{ width: 14, height: Math.max(2, budgetPx), background: "#CBD5E1", borderRadius: "3px 3px 0 0" }} />
+                  <div
+                    title={`${r.actualOrForecastLabel}: ${Math.round(r.actualOrForecastKr).toLocaleString("da-DK")} kr`}
+                    style={{
+                      width: 14, height: Math.max(2, actualPx),
+                      background: r.isPast ? areaColor : `${areaColor}66`,
+                      border: r.isPast ? "none" : `1px dashed ${areaColor}`,
+                      borderRadius: "3px 3px 0 0",
+                    }}
+                  />
+                </div>
+                <div style={{ fontSize: 10.5, fontWeight: 600, marginTop: 6, color: "#475569" }}>{r.label.slice(0, 3)}</div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 130px 130px 130px 130px 90px", gap: 0, background: "#F8FAFC", borderRadius: "10px 10px 0 0", padding: "8px 14px", fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.04em" }}>
         <span>Måned</span>
@@ -2429,15 +2487,21 @@ function ReportsView({ instances, pricing, budgets, onSaveBudget, isAdminUser })
           <div key={r.month} style={{ display: "grid", gridTemplateColumns: "1fr 130px 130px 130px 130px 90px", gap: 0, padding: "9px 14px", borderBottom: idx < monthRows.length - 1 ? "1px solid #F1F5F9" : "none", alignItems: "center" }}>
             <div style={{ fontSize: 13, fontWeight: 600, color: "#111111" }}>{r.label}</div>
             <div style={{ textAlign: "right" }}>
-              <input
-                type="number" min={0} step={1000}
-                disabled={!isAdminUser}
-                style={{ ...styles.inputSm, width: 100, textAlign: "right", marginLeft: "auto", cursor: isAdminUser ? "text" : "not-allowed", background: isAdminUser ? "#fff" : "#F8FAFC" }}
-                value={r.budgetRaw}
-                placeholder="0"
-                onChange={(e) => setDraftAmounts((prev) => ({ ...prev, [r.month]: e.target.value }))}
-                onBlur={(e) => commitBudget(r.month, e.target.value)}
-              />
+              {editingBudgets && isAdminUser ? (
+                <input
+                  type="number" min={0} step={1000}
+                  style={{ ...styles.inputSm, width: 100, textAlign: "right", marginLeft: "auto" }}
+                  value={r.budgetRaw}
+                  placeholder="0"
+                  autoFocus={idx === 0}
+                  onChange={(e) => setDraftAmounts((prev) => ({ ...prev, [r.month]: e.target.value }))}
+                  onBlur={(e) => commitBudget(r.month, e.target.value)}
+                />
+              ) : (
+                <span style={{ fontSize: 13, fontWeight: 600, color: r.budgetKr > 0 ? "#334155" : "#94A3B8" }}>
+                  {r.budgetKr > 0 ? `${Math.round(r.budgetKr).toLocaleString("da-DK")} kr` : "—"}
+                </span>
+              )}
             </div>
             <div style={{ fontSize: 13, color: "#64748B", textAlign: "right" }}>{Math.round(r.plannedKr).toLocaleString("da-DK")} kr</div>
             <div style={{ fontSize: 13, fontWeight: 600, color: r.registeredKr > 0 ? "#16A34A" : "#94A3B8", textAlign: "right" }}>{r.registeredKr > 0 ? `${Math.round(r.registeredKr).toLocaleString("da-DK")} kr` : "—"}</div>
