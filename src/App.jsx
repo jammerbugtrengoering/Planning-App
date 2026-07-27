@@ -3395,14 +3395,7 @@ function TaskDetailModal({ task, employees, checklistTemplates, skills, onClose,
       <div style={styles.modalActions}>
         {onCopy && <button style={{ ...styles.secondaryBtn, color: "#9C1B5D", borderColor: "#FCE4EF" }} onClick={() => onCopy(t)}><Copy size={14} /> Kopiér</button>}
         <button style={{ ...styles.secondaryBtn, color: "#B91C1C", borderColor: "#FEE2E2" }} onClick={() => onDelete(t.id)}><Trash2 size={14} /> Slet</button>
-        <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: t.invoiceReady ? 700 : 400, color: t.invoiceReady ? "#16A34A" : "#475569", cursor: "pointer", marginLeft: "auto" }}
-          onClick={() => onUpdateCustomer(t.id, { invoiceReady: !t.invoiceReady })}>
-          <span style={{ width: 18, height: 18, borderRadius: 5, border: t.invoiceReady ? "2px solid #16A34A" : "2px solid #CBD5E1", background: t.invoiceReady ? "#16A34A" : "#fff", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-            {t.invoiceReady && <Check size={11} color="#fff" strokeWidth={3} />}
-          </span>
-          Fakturagrundlag
-        </label>
-        <button style={styles.primaryBtn} onClick={onClose}>Luk</button>
+        <button style={{ ...styles.primaryBtn, marginLeft: "auto" }} onClick={onClose}>Luk</button>
       </div>
     </Modal>
   );
