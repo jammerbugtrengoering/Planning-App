@@ -4,6 +4,7 @@ import {
   Plus, Download, X, Clock, Play, Square, AlertTriangle,
   Trash2, Pencil, Repeat, Zap, CalendarClock, Wand2, Star, ChevronLeft, ChevronRight,
   ClipboardList, Video, CheckCircle2, LogIn, ListChecks, Check, Lock, Navigation, Building2, Car, Copy,
+  Thermometer, Palmtree,
 } from "lucide-react";
 
 // ---------- Constants ----------
@@ -32,7 +33,13 @@ const TYPE_META = {
   fixed: { label: "Fast interval", icon: Repeat, color: "#9C1B5D", bg: "#FCE4EF" },
   adhoc: { label: "Ad hoc", icon: Zap, color: "#B45309", bg: "#FEF3C7" },
   flexible: { label: "Fleksibel", icon: CalendarClock, color: "#111111", bg: "#EDEDED" },
+  sygdom: { label: "Sygdom", icon: Thermometer, color: "#B91C1C", bg: "#FEE2E2" },
+  ferie: { label: "Ferie", icon: Palmtree, color: "#0E7490", bg: "#CFFAFE" },
 };
+// Bruges til at afgøre om en instans er en blokering (sygdom/ferie) i stedet for
+// en rigtig rengøringsopgave — blokeringer skal ikke tælle med i fakturagrundlag,
+// rapportering osv., og skal forhindre auto-planlægning af den pågældende medarbejder.
+const BLOCK_TYPES = ["sygdom", "ferie"];
 
 function uid(p) { return p + Math.random().toString(36).slice(2, 9); }
 function initials(name) { return name.split(" ").map((p) => p[0]).join("").slice(0, 2).toUpperCase(); }
@@ -203,6 +210,12 @@ function remaining(employees, list, empId, day) {
 function scheduleWeek(weekInstances, employees, autoOnly = false, areas = [], employeeAreas = [], restrictToIds = null) {
   let list = weekInstances.map((t) => ({ ...t }));
 
+  // En medarbejder må aldrig auto-planlægges på en dag hvor de har en
+  // sygdom/ferie-blokering liggende — uanset om de i øvrigt har ledig kapacitet.
+  function isBlocked(empId, day) {
+    return list.some((t2) => BLOCK_TYPES.includes(t2.type) && (t2.assignees || []).includes(empId) && t2.day === day);
+  }
+
   list.forEach((t) => {
     if ((t.assignees && t.assignees.length) || !t.day || t.type === "flexible") return;
     if (autoOnly && !t.includeInAuto) return;
@@ -210,7 +223,8 @@ function scheduleWeek(weekInstances, employees, autoOnly = false, areas = [], em
     // det forhindrer at eksisterende opgaver, som planlæggeren bevidst har sat til
     // "ikke tildelt", bliver auto-tildelt igen ved næste visning af ugen.
     if (restrictToIds && !restrictToIds.has(t.id)) return;
-    const { candidates, outsideArea } = candidatesFor(t, employees, areas, employeeAreas);
+    const { candidates: allCandidates, outsideArea } = candidatesFor(t, employees, areas, employeeAreas);
+    const candidates = allCandidates.filter((e) => !isBlocked(e.id, t.day));
     if (candidates.length === 0) { t.warning = "no_skill"; return; }
     const ranked = [...candidates].sort((a, b) => {
       const diff = skillScore(b, t) - skillScore(a, t);
@@ -236,12 +250,14 @@ function scheduleWeek(weekInstances, employees, autoOnly = false, areas = [], em
     let best = null;
     window.forEach((d) => {
       candidates.forEach((e) => {
+        if (isBlocked(e.id, d.key)) return;
         const rem = remaining(employees, list, e.id, d.key);
         const fits = rem >= t.duration ? 1 : 0;
         const score = fits * 1_000_000 + skillScore(e, t) * 1000 + rem;
         if (!best || score > best.score) best = { day: d.key, empId: e.id, rem, score };
       });
     });
+    if (!best) { t.warning = "no_skill"; return; }
     t.day = best.day; t.assignees = [best.empId]; t.status = "planlagt";
     t.warning = best.rem < t.duration ? "overloaded" : null;
     if (outsideArea) t.outsideArea = true;
@@ -450,6 +466,7 @@ function PlanningApp({ session, onSignOut }) {
   const { week: weekOffset, year: weekYear } = isoWeekInfo(weekAnchor);
   const [view, setView] = useState("uge");
   const [showAddTask, setShowAddTask] = useState(false);
+  const [showAddBlock, setShowAddBlock] = useState(false);
   const [copyPayload, setCopyPayload] = useState(null);
   const [showAddEmp, setShowAddEmp] = useState(false);
   const [editEmp, setEditEmp] = useState(null);
@@ -587,6 +604,7 @@ function PlanningApp({ session, onSignOut }) {
             dineroExported: i.dinero_exported ?? false,
             startDate: i.start_date || null,
             expiryDate: i.expiry_date || null,
+            blockGroupId: i.block_group_id || null,
           };
         });
         const allInst = ensureWeekInstances(currentWeek, currentYear, existingInst, mapped, empMapped);
@@ -600,6 +618,7 @@ function PlanningApp({ session, onSignOut }) {
           dineroExported: i.dinero_exported ?? false,
           startDate: i.start_date || null,
           expiryDate: i.expiry_date || null,
+          blockGroupId: i.block_group_id || null,
         })));
       }
 
@@ -663,6 +682,7 @@ function PlanningApp({ session, onSignOut }) {
       dinero_exported: inst.dineroExported ?? false,
       start_date: inst.startDate || null,
       expiry_date: inst.expiryDate || null,
+      block_group_id: inst.blockGroupId || null,
     }, { onConflict: "id" });
     if (error) console.error("syncInstance error:", error.message, error.details, inst.id);
   }, []);
@@ -889,6 +909,22 @@ function PlanningApp({ session, onSignOut }) {
     const task = instances.find((t) => t.id === taskId);
     if (!task) return;
 
+    // Sygdom/ferie-blokeringer må ikke trækkes rundt eller "tildeles" en anden
+    // medarbejder — de fjernes/afsluttes i stedet via serviceordre-dialogen.
+    if (BLOCK_TYPES.includes(task.type)) return;
+
+    // Forhindr placering af en medarbejder på en dag hvor de har en aktiv
+    // sygdom/ferie-blokering — uanset hvilken uge/år opgaven i øvrigt ligger i,
+    // blokeringen gælder den uge/år man aktivt placerer opgaven i.
+    const targetWeek = (task.assignees && task.assignees.length) ? task.week : weekOffset;
+    const targetYear = (task.assignees && task.assignees.length) ? task.year : weekYear;
+    const blockHit = instances.find((t) => BLOCK_TYPES.includes(t.type) && t.week === targetWeek && t.year === targetYear && t.day === day && (t.assignees || []).includes(empId));
+    if (blockHit) {
+      const emp = employees.find((e) => e.id === empId);
+      window.alert(`${emp?.name || "Medarbejderen"} har ${TYPE_META[blockHit.type]?.label.toLowerCase() || "en blokering"} denne dag og kan ikke planlægges.`);
+      return;
+    }
+
     // Check if day is an agreed day for fixed tasks
     const agreedDays = task.templateDays || task.days || [];
     const isOffSchedule = task.type === "fixed" && agreedDays.length > 0 && !agreedDays.includes(day);
@@ -944,6 +980,83 @@ function PlanningApp({ session, onSignOut }) {
   function deleteTask(taskId) {
     setInstances((prev) => prev.filter((t) => t.id !== taskId));
     removeInstance(taskId);
+  }
+
+  // Opretter en sygdom/ferie-blokering på en medarbejder for hver hverdag i den
+  // valgte periode. Blokeringen oprettes som en almindelig opgave-instans (samme
+  // maskineri som fast interval/ad hoc/fleksibel), så den automatisk indgår i
+  // belægning/kapacitetsberegning — men fjernes eksplicit fra fakturagrundlag og
+  // rapportering via BLOCK_TYPES-tjek de relevante steder. Alle dage i samme
+  // oprettelse deler et blockGroupId, så perioden kan afsluttes tidligt samlet.
+  const DAY_KEYS_BY_DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  function addBlock(employeeId, blockType, startDateStr, endDateStr) {
+    const start = new Date(startDateStr);
+    const end = new Date(endDateStr);
+    if (!(start instanceof Date) || isNaN(start) || isNaN(end) || end < start) {
+      notify("Ugyldig periode – tjek start- og slutdato");
+      return;
+    }
+    const blockGroupId = uid("blkgrp");
+    const emp = employees.find((e) => e.id === employeeId);
+
+    setInstances((prev) => {
+      let list = [...prev];
+      const toSync = [];
+      const cursor = new Date(start);
+      while (cursor <= end) {
+        const dow = cursor.getDay();
+        if (dow !== 0 && dow !== 6) {
+          const { week, year } = isoWeekInfo(cursor);
+          const dayKey = DAY_KEYS_BY_DOW[dow];
+          // Sørg for at ugen er materialiseret (faste opgaver oprettet), så vi kan
+          // fjerne medarbejderen fra evt. opgaver den allerede har den dag.
+          list = ensureWeekInstances(week, year, list, templates, employees);
+          list = list.map((t) => {
+            if (BLOCK_TYPES.includes(t.type)) return t;
+            if (t.week !== week || t.year !== year || t.day !== dayKey) return t;
+            if (!(t.assignees || []).includes(employeeId)) return t;
+            const nextAssignees = t.assignees.filter((id) => id !== employeeId);
+            const updated = nextAssignees.length === 0
+              ? { ...t, assignees: [], day: t.type === "flexible" ? null : t.day, status: "unscheduled" }
+              : { ...t, assignees: nextAssignees };
+            toSync.push(updated);
+            return updated;
+          });
+          const blockInst = {
+            id: uid("blk"), type: blockType, title: TYPE_META[blockType]?.label || blockType,
+            day: dayKey, week, year, assignees: [employeeId], status: "planlagt",
+            duration: emp?.capacity?.[dayKey] ?? 480, requiredSkills: [], checklist: [], timeLog: [],
+            blockGroupId, warning: null, address: "", customerName: "", accessInstructions: "",
+            poNumber: "", contractType: "privat", invoiceReady: false, dineroExported: false,
+          };
+          list.push(blockInst);
+          toSync.push(blockInst);
+        }
+        cursor.setDate(cursor.getDate() + 1);
+      }
+      toSync.forEach(syncInstance);
+      return list;
+    });
+    notify(`${TYPE_META[blockType]?.label || blockType} registreret for ${emp?.name || "medarbejderen"}`);
+  }
+
+  function dateOfBlockInstance(t) {
+    const monday = mondayOfWeek(t.week, t.year);
+    const dayIdx = DAYS.findIndex((d) => d.key === t.day);
+    const d = new Date(monday);
+    d.setDate(d.getDate() + (dayIdx >= 0 ? dayIdx : 0));
+    return d;
+  }
+  // Afslutter en igangværende/fremtidig blokering fra og med i dag (rask melding,
+  // eller ferie der forkortes) — sletter kun de dage i serien der ligger fremad,
+  // allerede passerede dage i blokeringen rører vi ikke ved.
+  function endBlockEarly(blockGroupId) {
+    const cutoff = new Date(); cutoff.setHours(0, 0, 0, 0);
+    const toRemove = instances.filter((t) => t.blockGroupId === blockGroupId && dateOfBlockInstance(t) >= cutoff).map((t) => t.id);
+    if (toRemove.length === 0) { notify("Ingen kommende dage at afslutte i denne blokering"); return; }
+    setInstances((prev) => prev.filter((t) => !toRemove.includes(t.id)));
+    toRemove.forEach(removeInstance);
+    notify(`Blokering afsluttet – ${toRemove.length} dag(e) frigivet`);
   }
   // Opretter/opdaterer et budget-tal for et område (kontrakttype) i en given måned/år.
   // Kun administrator må kalde dette fra UI'et (håndhæves i ReportsView).
@@ -1209,6 +1322,7 @@ function PlanningApp({ session, onSignOut }) {
           onPrevWeek={() => changeWeek(-1)} onNextWeek={() => changeWeek(1)} onTodayWeek={() => setWeekAnchor(mondayOf(new Date()))}
           currentIsoWeek={currentIsoWeek}
           travelSettings={travelSettings} onOpenTravelSettings={() => setShowTravelSettings(true)}
+          onOpenAddBlock={() => setShowAddBlock(true)}
         />
       )}
       {view === "employees" && (
@@ -1258,6 +1372,7 @@ function PlanningApp({ session, onSignOut }) {
 
       {showAddTask && <TaskModal onClose={() => { setShowAddTask(false); setCopyPayload(null); }} onSave={addTask} checklistTemplates={checklistTemplates} skills={skills} copyFrom={copyPayload} />}
       {showAddEmp && <EmployeeModal emp={editEmp} onClose={() => { setShowAddEmp(false); setEditEmp(null); }} onSave={saveEmployee} skills={skills} />}
+      {showAddBlock && <BlockModal employees={employees} onClose={() => setShowAddBlock(false)} onSave={addBlock} />}
       {showTravelSettings && (
         <TravelSettingsModal
           settings={travelSettings}
@@ -1293,6 +1408,7 @@ function PlanningApp({ session, onSignOut }) {
           onRemoveAssignee={removeAssignee}
           onUnplace={(taskId) => { unplace(taskId); setOpenTaskId(null); }}
           onDelete={(taskId) => { deleteTask(taskId); setOpenTaskId(null); }}
+          onEndBlockEarly={endBlockEarly}
           onCopy={(task) => {
             setShowAddTask(true);
             setOpenTaskId(null);
@@ -1459,7 +1575,7 @@ function EmployeeAppView({ employees, instances, onLogMinutes, onSetStatus, onTo
 }
 
 // ---------- Week view ----------
-function WeekView({ employees, instances, unplaced, onAdd, onAuto, onPlace, onUnplace, onRemoveAssignee, onDelete, onOpenTask, onToggleInclude, onEditEmp, dragId, setDragId, weekLabel, weekNo, weekOffset, weekYear, onPrevWeek, onNextWeek, onTodayWeek, travelSettings, onOpenTravelSettings, currentIsoWeek, areas, employeeAreas }) {
+function WeekView({ employees, instances, unplaced, onAdd, onAuto, onPlace, onUnplace, onRemoveAssignee, onDelete, onOpenTask, onToggleInclude, onEditEmp, dragId, setDragId, weekLabel, weekNo, weekOffset, weekYear, onPrevWeek, onNextWeek, onTodayWeek, travelSettings, onOpenTravelSettings, currentIsoWeek, areas, employeeAreas, onOpenAddBlock }) {
   const [addMenuTaskId, setAddMenuTaskId] = useState(null);
   const [showWeekend, setShowWeekend] = useState(false);
   const [capView, setCapView] = useState("bar");
@@ -1477,6 +1593,7 @@ function WeekView({ employees, instances, unplaced, onAdd, onAuto, onPlace, onUn
         <button style={styles.primaryBtn} onClick={onAdd}><Plus size={16} /> Ny opgave</button>
         <button style={styles.secondaryBtn} onClick={onAuto}><Wand2 size={16} /> Planlæg ugen automatisk</button>
         <button style={styles.secondaryBtn} onClick={onOpenTravelSettings}><Car size={16} /> Transporttid</button>
+        <button style={{ ...styles.secondaryBtn, color: "#B91C1C", borderColor: "#FECACA" }} onClick={onOpenAddBlock}><Thermometer size={16} /> Sygdom/Ferie</button>
         <button
           style={{ ...styles.secondaryBtn, ...(showWeekend ? { background: "#FCE4EF", color: "#D6247A", borderColor: "#D6247A" } : {}) }}
           onClick={() => setShowWeekend((v) => !v)}
@@ -2113,6 +2230,7 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
   const validWeeks = weeksInMonth(filterYear, filterMonth);
 
   const placed = instances
+    .filter((t) => !BLOCK_TYPES.includes(t.type))
     .filter((t) => t.assignees && t.assignees.length && validWeeks.has(t.week) && (t.year ?? filterYear) === filterYear)
     .filter((t) => statusFilter === "all" || t.status === statusFilter)
     .filter((t) => !invoiceOnly || t.invoiceReady)
@@ -2425,7 +2543,7 @@ function ReportsView({ instances, pricing, budgets, onSaveBudget, isAdminUser })
       areasToSum.forEach((area) => {
         const rate = pricing[area] || 0;
         const tasksInMonth = instances.filter(
-          (t) => t.assignees && t.assignees.length && validWeeks.has(t.week) && (t.year ?? selectedYear) === selectedYear && (t.contractType || "privat") === area
+          (t) => !BLOCK_TYPES.includes(t.type) && t.assignees && t.assignees.length && validWeeks.has(t.week) && (t.year ?? selectedYear) === selectedYear && (t.contractType || "privat") === area
         );
         plannedKr += tasksInMonth.reduce((s, t) => s + (t.duration / 60) * rate, 0);
         registeredKr += tasksInMonth.reduce((s, t) => {
@@ -3538,6 +3656,64 @@ function InventoryView({ supabase, employees }) {
   );
 }
 
+function BlockModal({ employees, onClose, onSave }) {
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const [employeeId, setEmployeeId] = useState(employees[0]?.id || "");
+  const [blockType, setBlockType] = useState("sygdom");
+  const [startDate, setStartDate] = useState(todayStr);
+  const [endDate, setEndDate] = useState(todayStr);
+
+  function submit() {
+    if (!employeeId) return;
+    if (!startDate || !endDate || endDate < startDate) return;
+    onSave(employeeId, blockType, startDate, endDate);
+    onClose();
+  }
+
+  return (
+    <Modal onClose={onClose} title="Registrér sygdom/ferie">
+      <div style={styles.hint}>
+        Opretter en blokering for medarbejderen i perioden. Eksisterende opgaver i perioden flyttes automatisk til
+        "Ikke tildelt", og medarbejderen kan ikke auto- eller manuelt planlægges disse dage.
+      </div>
+
+      <label style={styles.label}>Medarbejder</label>
+      <select style={styles.input} value={employeeId} onChange={(e) => setEmployeeId(e.target.value)}>
+        {employees.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
+      </select>
+
+      <label style={styles.label}>Type</label>
+      <div style={{ display: "flex", gap: 8 }}>
+        {BLOCK_TYPES.map((bt) => (
+          <button
+            key={bt}
+            type="button"
+            style={{
+              ...styles.secondaryBtn,
+              flex: 1,
+              ...(blockType === bt ? { background: TYPE_META[bt].bg, color: TYPE_META[bt].color, borderColor: TYPE_META[bt].color } : {}),
+            }}
+            onClick={() => setBlockType(bt)}
+          >
+            {TYPE_META[bt].label}
+          </button>
+        ))}
+      </div>
+
+      <label style={styles.label}>Startdato</label>
+      <input type="date" style={styles.input} value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+
+      <label style={styles.label}>Slutdato</label>
+      <input type="date" style={styles.input} value={endDate} min={startDate} onChange={(e) => setEndDate(e.target.value)} />
+
+      <div style={styles.modalActions}>
+        <button style={styles.secondaryBtn} onClick={onClose}>Annuller</button>
+        <button style={styles.primaryBtn} onClick={submit} disabled={!employeeId}>Registrér</button>
+      </div>
+    </Modal>
+  );
+}
+
 function TravelSettingsModal({ settings, onClose, onSave }) {
   const [defaultMinutes, setDefaultMinutes] = useState(settings.defaultMinutes);
   const [dayStart, setDayStart] = useState(settings.dayStart);
@@ -3654,7 +3830,7 @@ function EmployeeModal({ emp, onClose, onSave, skills: skillList }) {
 }
 
 // ---------- Task / service order detail ----------
-function TaskDetailModal({ task, employees, checklistTemplates, skills, onClose, onSetStatus, onToggleChecklistItem, onAddChecklistItem, onAddChecklistTemplate, onAddAssignee, onRemoveAssignee, onUnplace, onDelete, onUpdateCustomer, onUpdateCustomerInfo, onUpdateContractType, onCopy, onUpdateSkills }) {
+function TaskDetailModal({ task, employees, checklistTemplates, skills, onClose, onSetStatus, onToggleChecklistItem, onAddChecklistItem, onAddChecklistTemplate, onAddAssignee, onRemoveAssignee, onUnplace, onDelete, onUpdateCustomer, onUpdateCustomerInfo, onUpdateContractType, onCopy, onUpdateSkills, onEndBlockEarly }) {
   const [addOpen, setAddOpen] = useState(false);
   const [newItemText, setNewItemText] = useState("");
   const [showTemplates, setShowTemplates] = useState(false);
@@ -3747,6 +3923,35 @@ function TaskDetailModal({ task, employees, checklistTemplates, skills, onClose,
   }
 
   if (!task) return null;
+
+  // Sygdom/ferie er en blokering, ikke en rigtig rengøringsopgave — vis en
+  // forenklet dialog i stedet for hele det almindelige opgave-UI (kunde,
+  // tjekliste, kompetencer osv. giver ikke mening for en blokering).
+  if (BLOCK_TYPES.includes(task.type)) {
+    const emp = employees.find((e) => (task.assignees || []).includes(e.id));
+    const dayLabel = DAYS.find((d) => d.key === task.day)?.label || task.day;
+    const meta = TYPE_META[task.type];
+    return (
+      <Modal title={meta?.label || task.type} onClose={onClose}>
+        <div style={{ padding: "4px 0 16px" }}>
+          <p style={{ margin: "0 0 16px", color: "#475569" }}>
+            <strong>{emp?.name || "Ukendt medarbejder"}</strong> · {dayLabel} · Uge {task.week} · {task.year}
+          </p>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button style={styles.secondaryBtn} onClick={() => onDelete(task.id)}>
+              <Trash2 size={14} /> Slet kun denne dag
+            </button>
+            {task.blockGroupId && (
+              <button style={{ ...styles.secondaryBtn, color: "#B91C1C", borderColor: "#B91C1C" }} onClick={() => { onEndBlockEarly(task.blockGroupId); onClose(); }}>
+                Afslut blokering fra i dag
+              </button>
+            )}
+          </div>
+        </div>
+      </Modal>
+    );
+  }
+
   const t = task;
   const isDone = t.status === "udført";
   const assignedEmps = (t.assignees || []).map((id) => employees.find((e) => e.id === id)).filter(Boolean);
