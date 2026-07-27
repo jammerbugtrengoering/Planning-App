@@ -2074,8 +2074,6 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
   return (
     <div style={styles.page}>
       <div style={styles.toolbar}>
-        <div style={styles.statBlock}><Clock size={16} /><div><div style={styles.statValue}>{fmtMin(totalLogged)}</div><div style={styles.statLabel}>Registreret i alt (alle uger)</div></div></div>
-        <div style={styles.statBlock}><Clock size={16} /><div><div style={styles.statValue}>{fmtMin(totalRegistered)} / {fmtMin(totalPlanned)}</div><div style={styles.statLabel}>{MONTHS[filterMonth]} {filterYear}: registreret / planlagt</div></div></div>
         {(() => {
           const plannedRev = placed.reduce((s, t) => s + (t.duration / 60) * (localPricing[t.contractType || "privat"] || 0), 0);
           const regRev = expectedRevenue;
