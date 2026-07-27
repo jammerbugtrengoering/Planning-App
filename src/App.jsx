@@ -480,6 +480,7 @@ function PlanningApp({ session, onSignOut }) {
           id: e.id, name: e.name, color: e.color,
           auth_user_id: e.auth_user_id ?? null,
           app_email: e.app_email ?? null,
+          isAdmin: e.is_admin ?? false,
           skills: Object.fromEntries(
             (empSkillsData || []).filter((s) => s.employee_id === e.id)
               .map((s) => {
@@ -542,6 +543,7 @@ function PlanningApp({ session, onSignOut }) {
             accessInstructions: (i.access_instructions || cust?.access_instructions) ?? "",
             contractType: i.contract_type || "privat",
             invoiceReady: i.invoice_ready ?? false,
+            dineroExported: i.dinero_exported ?? false,
             startDate: i.start_date || null,
             expiryDate: i.expiry_date || null,
           };
@@ -554,6 +556,7 @@ function PlanningApp({ session, onSignOut }) {
           templateId: i.template_id ?? null,
           contractType: i.contract_type || "privat",
           invoiceReady: i.invoice_ready ?? false,
+          dineroExported: i.dinero_exported ?? false,
           startDate: i.start_date || null,
           expiryDate: i.expiry_date || null,
         })));
@@ -575,7 +578,7 @@ function PlanningApp({ session, onSignOut }) {
   // ── Supabase: sync-helpers ──
   const syncEmployee = useCallback(async (emp) => {
     const { data: skillRows_db } = await supabase.from("skills").select("id, name");
-    await supabase.from("employees").upsert({ id: emp.id, name: emp.name, color: emp.color }, { onConflict: "id" });
+    await supabase.from("employees").upsert({ id: emp.id, name: emp.name, color: emp.color, is_admin: emp.isAdmin ?? false }, { onConflict: "id" });
     await supabase.from("employee_skills").delete().eq("employee_id", emp.id);
     const skillRows = Object.entries(emp.skills || {})
       .map(([name, level]) => {
@@ -616,6 +619,7 @@ function PlanningApp({ session, onSignOut }) {
       access_instructions: inst.accessInstructions ?? "",
       contract_type: inst.contractType ?? "privat",
       invoice_ready: inst.invoiceReady ?? false,
+      dinero_exported: inst.dineroExported ?? false,
       start_date: inst.startDate || null,
       expiry_date: inst.expiryDate || null,
     }, { onConflict: "id" });
@@ -954,9 +958,13 @@ function PlanningApp({ session, onSignOut }) {
   }
 
   async function exportToDinero(filteredInstances, label) {
-    const toExport = (filteredInstances || instances.filter((t) => t.assignees && t.assignees.length)).filter((t) => t.invoiceReady);
+    // Ekskluderer altid opgaver der allerede er markeret som sendt til Dinero –
+    // uanset visningsfiltre i UI'et – så samme linje aldrig kan overføres to gange.
+    const toExport = (filteredInstances || instances.filter((t) => t.assignees && t.assignees.length))
+      .filter((t) => t.invoiceReady)
+      .filter((t) => !t.dineroExported);
     if (toExport.length === 0) {
-      notify("Ingen opgaver markeret som fakturagrundlag");
+      notify("Ingen nye opgaver klar til Dinero (allerede sendt eller intet fakturagrundlag)");
       return;
     }
 
@@ -1025,6 +1033,8 @@ function PlanningApp({ session, onSignOut }) {
           results.error.push({ customerName, message: data.error });
         } else if (data?.Guid) {
           results.success.push({ customerName, guid: data.Guid });
+          // Markér alle opgaver i denne gruppe som sendt til Dinero, så de ikke kan eksporteres igen.
+          tasks.forEach((t) => updateInstance(t.id, (old) => ({ ...old, dineroExported: true })));
         } else {
           results.error.push({ customerName, message: "Uventet svar fra Dinero" });
         }
@@ -1042,6 +1052,14 @@ function PlanningApp({ session, onSignOut }) {
     notify(results.success.length ? "Fakturakladder oprettet i Dinero" : "Eksport til Dinero afsluttet med fejl");
     if (parts.length) window.alert(parts.join("\n\n"));
   }
+
+  // Er den aktuelt loggede planlægger/bruger administrator? Matcher login-email mod
+  // medarbejderens app_email. Hvis loginnet ikke er koblet til en medarbejder (fx ejerens
+  // egen konto), betragtes det som administrator.
+  const currentEmployeeForAuth = employees.find(
+    (e) => e.app_email && session?.user?.email && e.app_email.toLowerCase() === session.user.email.toLowerCase()
+  );
+  const isAdminUser = !currentEmployeeForAuth || !!currentEmployeeForAuth.isAdmin;
 
   const currentIsoWeek = isoWeekNumber(new Date());
   const weekInstancesList = instances.filter((t) => t.week === weekOffset);
@@ -1128,6 +1146,7 @@ function PlanningApp({ session, onSignOut }) {
       {view === "time" && (
         <TimeView instances={instances} employees={employees}
           onExportToDinero={exportToDinero} totalLogged={totalLogged} weekLabel={wk.label}
+          isAdminUser={isAdminUser}
           pricing={pricing} onPricingChange={async (newPricing) => {
             setPricing(newPricing);
             for (const [type, rate] of Object.entries(newPricing)) {
@@ -1966,11 +1985,12 @@ function ChecklistModal({ checklist, onClose, onSave }) {
 }
 
 // ---------- Time & Export ----------
-function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLabel, onUpdateInstance, pricing: pricingProp, onPricingChange }) {
+function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLabel, onUpdateInstance, pricing: pricingProp, onPricingChange, isAdminUser }) {
   const now = new Date();
   const [filterMonth, setFilterMonth] = useState(now.getMonth());
   const [filterYear, setFilterYear] = useState(now.getFullYear());
   const [invoiceOnly, setInvoiceOnly] = useState(false);
+  const [showDineroExported, setShowDineroExported] = useState(false);
   const [editMinutes, setEditMinutes] = useState({});
   const [showPricing, setShowPricing] = useState(false);
   const [exportingToDinero, setExportingToDinero] = useState(false);
@@ -2000,6 +2020,7 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
   const placed = instances
     .filter((t) => t.assignees && t.assignees.length && validWeeks.has(t.week))
     .filter((t) => !invoiceOnly || t.invoiceReady)
+    .filter((t) => !invoiceOnly || showDineroExported || !t.dineroExported)
     .sort((a, b) => {
       if (a.week !== b.week) return a.week - b.week;
       return DAYS.findIndex((d) => d.key === a.day) - DAYS.findIndex((d) => d.key === b.day);
@@ -2065,6 +2086,15 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
           </span>
           Kun fakturagrundlag
         </label>
+        {invoiceOnly && (
+          <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: showDineroExported ? 700 : 400, color: showDineroExported ? "#4F46E5" : "#475569", cursor: "pointer" }}
+            onClick={() => setShowDineroExported((v) => !v)}>
+            <span style={{ width: 18, height: 18, borderRadius: 5, border: showDineroExported ? "2px solid #4F46E5" : "2px solid #CBD5E1", background: showDineroExported ? "#4F46E5" : "#fff", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              {showDineroExported && <Check size={11} color="#fff" strokeWidth={3} />}
+            </span>
+            Vis sendt til Dinero
+          </label>
+        )}
         <button
           style={{ ...styles.secondaryBtn, ...(showPricing ? { background: "#ECFDF5", color: "#16A34A", borderColor: "#22C55E" } : {}) }}
           onClick={() => setShowPricing((v) => !v)}>
@@ -2102,13 +2132,14 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
         </div>
       )}
 
-      <div style={{ display: "grid", gridTemplateColumns: "50px 140px 1fr 120px 70px 80px 100px 100px 100px 90px 28px", gap: 0, background: "#F8FAFC", borderRadius: "10px 10px 0 0", padding: "8px 14px", fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.04em", marginTop: 8 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "50px 140px 1fr 120px 70px 80px 100px 100px 100px 90px 70px 28px", gap: 0, background: "#F8FAFC", borderRadius: "10px 10px 0 0", padding: "8px 14px", fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.04em", marginTop: 8 }}>
         <span>Uge</span><span>Medarbejder</span><span>Opgave</span><span>Kunde</span><span>Dag</span>
         <span style={{ textAlign: "right" }}>Planlagt</span>
         <span style={{ textAlign: "right" }}>Registreret</span>
         <span style={{ textAlign: "right" }}>Planlagt kr.</span>
         <span style={{ textAlign: "right" }}>Registreret kr.</span>
         <span style={{ textAlign: "right" }}>Difference</span>
+        <span style={{ textAlign: "center" }}>Dinero</span>
         <span style={{ textAlign: "center" }}>📄</span>
       </div>
 
@@ -2125,7 +2156,7 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
           const diffKr = registeredKr - plannedKr;
 
           return (
-            <div key={t.id} style={{ display: "grid", gridTemplateColumns: "50px 140px 1fr 120px 70px 80px 100px 100px 100px 90px 28px", gap: 0, padding: "10px 14px", borderBottom: idx < placed.length - 1 ? "1px solid #F1F5F9" : "none", alignItems: "center", background: t.invoiceReady ? "#F0FDF4" : "transparent" }}>
+            <div key={t.id} style={{ display: "grid", gridTemplateColumns: "50px 140px 1fr 120px 70px 80px 100px 100px 100px 90px 70px 28px", gap: 0, padding: "10px 14px", borderBottom: idx < placed.length - 1 ? "1px solid #F1F5F9" : "none", alignItems: "center", background: t.dineroExported ? "#EEF2FF" : t.invoiceReady ? "#F0FDF4" : "transparent" }}>
               <div style={{ fontSize: 12, color: "#94A3B8", fontWeight: 600 }}>{t.week}</div>
               <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
                 {emps.slice(0, 2).map((emp) => <span key={emp.id} style={{ ...styles.avatar, background: emp.color, width: 22, height: 22, fontSize: 10 }}>{initials(emp.name)}</span>)}
@@ -2169,6 +2200,26 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
               <div style={{ fontSize: 13, fontWeight: 700, color: diffKr > 0 ? "#16A34A" : diffKr < 0 ? "#DC2626" : "#94A3B8", textAlign: "right" }}>
                 {rate > 0 && logged > 0 ? `${diffKr > 0 ? "+" : ""}${diffKr.toLocaleString("da-DK")} kr` : "—"}
               </div>
+              {/* Dinero-status – kun administrator må ændre denne, for at undgå dobbelt-eksport */}
+              <div style={{ display: "flex", justifyContent: "center" }}>
+                <span
+                  style={{
+                    width: 18, height: 18, borderRadius: 5,
+                    border: t.dineroExported ? "2px solid #4F46E5" : "2px solid #CBD5E1",
+                    background: t.dineroExported ? "#4F46E5" : "#fff",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    cursor: isAdminUser ? "pointer" : "not-allowed",
+                    opacity: isAdminUser ? 1 : 0.5,
+                  }}
+                  title={
+                    isAdminUser
+                      ? (t.dineroExported ? "Fjern markering som sendt til Dinero" : "Markér som sendt til Dinero")
+                      : "Kun administrator kan ændre denne markering"
+                  }
+                  onClick={() => { if (isAdminUser) onUpdateInstance(t.id, { dineroExported: !t.dineroExported }); }}>
+                  {t.dineroExported && <Check size={11} color="#fff" strokeWidth={3} />}
+                </span>
+              </div>
               {/* Fakturagrundlag toggle */}
               <div style={{ display: "flex", justifyContent: "center" }}>
                 <span
@@ -2192,7 +2243,7 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
         const totalRegisteredKr = Math.round(expectedRevenue);
         const totalDiff = totalRegisteredKr - totalPlannedKr;
         return (
-          <div style={{ display: "grid", gridTemplateColumns: "50px 140px 1fr 120px 70px 80px 100px 100px 100px 90px 28px", gap: 0, padding: "10px 14px", background: "#FCE4EF", borderRadius: 10, marginTop: 8, fontWeight: 700, fontSize: 13 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "50px 140px 1fr 120px 70px 80px 100px 100px 100px 90px 70px 28px", gap: 0, padding: "10px 14px", background: "#FCE4EF", borderRadius: 10, marginTop: 8, fontWeight: 700, fontSize: 13 }}>
             <span /><span style={{ color: "#9C1B5D" }}>I alt</span>
             <span /><span /><span />
             <span style={{ textAlign: "right", color: "#111111" }}>{fmtMin(totalPlanned)}</span>
@@ -2200,6 +2251,7 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
             <span style={{ textAlign: "right", color: "#64748B" }}>{totalPlannedKr.toLocaleString("da-DK")} kr</span>
             <span style={{ textAlign: "right", color: "#16A34A" }}>{totalRegisteredKr.toLocaleString("da-DK")} kr</span>
             <span style={{ textAlign: "right", color: totalDiff >= 0 ? "#16A34A" : "#DC2626" }}>{totalDiff > 0 ? "+" : ""}{totalDiff.toLocaleString("da-DK")} kr</span>
+            <span />
             <span />
           </div>
         );
@@ -3189,6 +3241,7 @@ function EmployeeModal({ emp, onClose, onSave, skills: skillList }) {
   const [name, setName] = useState(emp?.name || "");
   const [empSkills, setEmpSkills] = useState(emp?.skills || {});
   const [capacity, setCapacity] = useState(emp?.capacity || defaultCapacity());
+  const [isAdmin, setIsAdmin] = useState(emp?.isAdmin || false);
   const colorPool = ["#D6247A", "#111111", "#9C1B5D", "#5B5B60", "#C2487A", "#3A3A3E"];
   const [color] = useState(emp?.color || colorPool[Math.floor(Math.random() * colorPool.length)]);
 
@@ -3230,9 +3283,16 @@ function EmployeeModal({ emp, onClose, onSave, skills: skillList }) {
         ))}
       </div>
 
+      <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", marginTop: 12 }} onClick={() => setIsAdmin((v) => !v)}>
+        <span style={{ width: 18, height: 18, borderRadius: 5, border: isAdmin ? "2px solid #16A34A" : "2px solid #CBD5E1", background: isAdmin ? "#16A34A" : "#fff", display: "flex", alignItems: "center", justifyContent: "center" }}>
+          {isAdmin && <Check size={11} color="#fff" strokeWidth={3} />}
+        </span>
+        <span style={{ fontSize: 13, fontWeight: 600, color: "#111111" }}>🛡️ Administrator (kan markere opgaver som sendt til Dinero)</span>
+      </label>
+
       <div style={styles.modalActions}>
         <button style={styles.secondaryBtn} onClick={onClose}>Annuller</button>
-        <button style={styles.primaryBtn} disabled={!name.trim()} onClick={() => onSave({ id: emp?.id || uid("e"), name: name.trim(), skills: empSkills, color: emp?.color || color, capacity })}>Gem medarbejder</button>
+        <button style={styles.primaryBtn} disabled={!name.trim()} onClick={() => onSave({ id: emp?.id || uid("e"), name: name.trim(), skills: empSkills, color: emp?.color || color, capacity, isAdmin })}>Gem medarbejder</button>
       </div>
     </Modal>
   );
