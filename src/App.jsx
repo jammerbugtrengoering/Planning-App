@@ -2059,6 +2059,9 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
   const [filterYear, setFilterYear] = useState(now.getFullYear());
   const [invoiceOnly, setInvoiceOnly] = useState(false);
   const [showDineroExported, setShowDineroExported] = useState(false);
+  // Status-filter: gør det muligt at skelne mellem opgaver der er udført (og dermed
+  // reelt klar til fakturering) og dem der blot er planlagt/i gang.
+  const [statusFilter, setStatusFilter] = useState("all");
   const [editMinutes, setEditMinutes] = useState({});
   const [showPricing, setShowPricing] = useState(false);
   const [exportingToDinero, setExportingToDinero] = useState(false);
@@ -2087,6 +2090,7 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
 
   const placed = instances
     .filter((t) => t.assignees && t.assignees.length && validWeeks.has(t.week))
+    .filter((t) => statusFilter === "all" || t.status === statusFilter)
     .filter((t) => !invoiceOnly || t.invoiceReady)
     .filter((t) => !invoiceOnly || showDineroExported || !t.dineroExported)
     .sort((a, b) => {
@@ -2142,6 +2146,16 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
           </select>
           <select style={{ ...styles.inputSm, fontSize: 13, fontWeight: 600 }} value={filterYear} onChange={(e) => setFilterYear(Number(e.target.value))}>
             {years.map((y) => <option key={y} value={y}>{y}</option>)}
+          </select>
+          <select
+            style={{ ...styles.inputSm, fontSize: 13, fontWeight: 600, color: statusFilter !== "all" ? "#9C1B5D" : "#111111", borderColor: statusFilter !== "all" ? "#D6247A" : "#E2E8F0", background: statusFilter !== "all" ? "#FCE4EF" : "#fff" }}
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            title="Vis kun opgaver med denne status — brug 'Udført' for at se det reelle fakturagrundlag">
+            <option value="all">📋 Alle statusser</option>
+            <option value="planlagt">🗓️ Planlagt</option>
+            <option value="i_gang">⏳ I gang</option>
+            <option value="udført">✅ Udført</option>
           </select>
         </div>
         <div style={styles.toolbarSpacer} />
