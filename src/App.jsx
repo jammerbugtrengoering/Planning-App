@@ -953,6 +953,96 @@ function PlanningApp({ session, onSignOut }) {
     notify("Eksport downloadet");
   }
 
+  async function exportToDinero(filteredInstances, label) {
+    const toExport = (filteredInstances || instances.filter((t) => t.assignees && t.assignees.length)).filter((t) => t.invoiceReady);
+    if (toExport.length === 0) {
+      notify("Ingen opgaver markeret som fakturagrundlag");
+      return;
+    }
+
+    const missingCustomer = toExport.filter((t) => !t.customerName || !t.customerName.trim());
+    const withCustomer = toExport.filter((t) => t.customerName && t.customerName.trim());
+
+    const groups = {};
+    withCustomer.forEach((t) => {
+      const key = t.customerName.trim();
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(t);
+    });
+
+    const customerNames = Object.keys(groups);
+    if (customerNames.length === 0) {
+      notify("Ingen opgaver med kundenavn at fakturere");
+      return;
+    }
+
+    const confirmMsg =
+      `Opret ${customerNames.length} fakturakladde(r) i Dinero for ${label}?\n\n` +
+      `Kunder: ${customerNames.join(", ")}` +
+      (missingCustomer.length ? `\n\n⚠️ ${missingCustomer.length} opgave(r) uden kundenavn springes over (fx "${missingCustomer[0].title}").` : "");
+
+    if (!window.confirm(confirmMsg)) return;
+
+    const dayLabelOf = (t) => DAYS.find((d) => d.key === t.day)?.label || t.day || "—";
+    const today = new Date().toISOString().slice(0, 10);
+
+    const results = { success: [], notFound: [], ambiguous: [], error: [] };
+
+    for (const customerName of customerNames) {
+      const tasks = groups[customerName];
+      const lines = tasks.map((t) => {
+        const logged = (t.timeLog || t.time_log || []).reduce((s, l) => s + (l.minutes || 0), 0);
+        const minutes = logged > 0 ? logged : t.duration;
+        const hours = Math.round((minutes / 60) * 100) / 100;
+        const rate = pricing[t.contractType || "privat"] || 0;
+        return {
+          description: `${t.title} (Uge ${t.week}, ${dayLabelOf(t)})`,
+          quantity: hours,
+          unitPrice: rate,
+          unit: "hours",
+        };
+      });
+
+      try {
+        const { data, error } = await supabase.functions.invoke("dinero", {
+          body: {
+            action: "createInvoiceDraft",
+            customerName,
+            date: today,
+            invoiceDescription: `Fakturagrundlag ${label}`,
+            lines,
+          },
+        });
+        if (error) {
+          results.error.push({ customerName, message: error.message || String(error) });
+          continue;
+        }
+        if (data?.error === "not_found") {
+          results.notFound.push({ customerName });
+        } else if (data?.error === "ambiguous") {
+          results.ambiguous.push({ customerName, matches: data.matches || [] });
+        } else if (data?.error) {
+          results.error.push({ customerName, message: data.error });
+        } else if (data?.Guid) {
+          results.success.push({ customerName, guid: data.Guid });
+        } else {
+          results.error.push({ customerName, message: "Uventet svar fra Dinero" });
+        }
+      } catch (err) {
+        results.error.push({ customerName, message: err.message || String(err) });
+      }
+    }
+
+    const parts = [];
+    if (results.success.length) parts.push(`✅ ${results.success.length} fakturakladde(r) oprettet: ${results.success.map((r) => r.customerName).join(", ")}`);
+    if (results.notFound.length) parts.push(`❌ Kunde ikke fundet i Dinero: ${results.notFound.map((r) => r.customerName).join(", ")}`);
+    if (results.ambiguous.length) parts.push(`⚠️ Flere match i Dinero (ret kundenavn): ${results.ambiguous.map((r) => `${r.customerName} (${r.matches.join(" / ")})`).join(", ")}`);
+    if (results.error.length) parts.push(`⚠️ Fejl: ${results.error.map((r) => `${r.customerName}: ${r.message}`).join("; ")}`);
+
+    notify(results.success.length ? "Fakturakladder oprettet i Dinero" : "Eksport til Dinero afsluttet med fejl");
+    if (parts.length) window.alert(parts.join("\n\n"));
+  }
+
   const currentIsoWeek = isoWeekNumber(new Date());
   const weekInstancesList = instances.filter((t) => t.week === weekOffset);
   const unplaced = weekInstancesList.filter((t) => !(t.assignees && t.assignees.length));
@@ -1037,7 +1127,7 @@ function PlanningApp({ session, onSignOut }) {
       )}
       {view === "time" && (
         <TimeView instances={instances} employees={employees}
-          onExport={exportCSV} totalLogged={totalLogged} weekLabel={wk.label}
+          onExportToDinero={exportToDinero} totalLogged={totalLogged} weekLabel={wk.label}
           pricing={pricing} onPricingChange={async (newPricing) => {
             setPricing(newPricing);
             for (const [type, rate] of Object.entries(newPricing)) {
@@ -1876,13 +1966,14 @@ function ChecklistModal({ checklist, onClose, onSave }) {
 }
 
 // ---------- Time & Export ----------
-function TimeView({ instances, employees, totalLogged, onExport, weekLabel, onUpdateInstance, pricing: pricingProp, onPricingChange }) {
+function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLabel, onUpdateInstance, pricing: pricingProp, onPricingChange }) {
   const now = new Date();
   const [filterMonth, setFilterMonth] = useState(now.getMonth());
   const [filterYear, setFilterYear] = useState(now.getFullYear());
   const [invoiceOnly, setInvoiceOnly] = useState(false);
   const [editMinutes, setEditMinutes] = useState({});
   const [showPricing, setShowPricing] = useState(false);
+  const [exportingToDinero, setExportingToDinero] = useState(false);
   const [localPricing, setLocalPricing] = useState(pricingProp || { privat: 450, nexus: 380, aeldrelov: 410 });
 
   useEffect(() => { if (pricingProp) setLocalPricing(pricingProp); }, [JSON.stringify(pricingProp)]);
@@ -1979,7 +2070,10 @@ function TimeView({ instances, employees, totalLogged, onExport, weekLabel, onUp
           onClick={() => setShowPricing((v) => !v)}>
           💰 Timepriser
         </button>
-        <button style={styles.primaryBtn} onClick={() => onExport(placed, `${MONTHS[filterMonth]}-${filterYear}`)}><Download size={16} /> Eksporter CSV</button>
+        <button style={styles.primaryBtn} disabled={exportingToDinero} onClick={async () => {
+          setExportingToDinero(true);
+          try { await onExportToDinero(placed, `${MONTHS[filterMonth]}-${filterYear}`); } finally { setExportingToDinero(false); }
+        }}><Download size={16} /> {exportingToDinero ? "Eksporterer…" : "Eksporter til Dinero"}</button>
       </div>
 
       {/* Timepris-panel */}
