@@ -1004,7 +1004,7 @@ function PlanningApp({ session, onSignOut }) {
         const hours = Math.round((minutes / 60) * 100) / 100;
         const rate = pricing[t.contractType || "privat"] || 0;
         return {
-          description: `${t.title} (Uge ${t.week}, ${dayLabelOf(t)})`,
+          description: `${t.title} (Uge ${t.week}, ${dayLabelOf(t)})${t.poNumber ? ` — PO: ${t.poNumber}` : ""}`,
           quantity: hours,
           unitPrice: rate,
           unit: "hours",
@@ -1017,7 +1017,7 @@ function PlanningApp({ session, onSignOut }) {
             action: "createInvoiceDraft",
             customerName,
             date: today,
-            invoiceDescription: `Fakturagrundlag ${label}`,
+            invoiceDescription: `Faktura ${label}`,
             lines,
           },
         });
