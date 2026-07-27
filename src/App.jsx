@@ -2363,11 +2363,12 @@ function ReportsView({ instances, pricing, budgets, onSaveBudget, isAdminUser })
       const budgetRaw = budgetFor(month);
       const budgetKr = Number(budgetRaw) || 0;
       const diffKr = registeredKr - budgetKr;
+      const diffPlannedKr = plannedKr - budgetKr;
       const pct = budgetKr > 0 ? Math.round((registeredKr / budgetKr) * 100) : null;
       const isPast = selectedYear < now.getFullYear() || (selectedYear === now.getFullYear() && month < now.getMonth() + 1);
       const actualOrForecastKr = isPast ? registeredKr : plannedKr;
       const actualOrForecastLabel = isPast ? "Realiseret" : "Forecast";
-      return { month, label, budgetRaw, budgetKr, plannedKr, registeredKr, diffKr, pct, isPast, actualOrForecastKr, actualOrForecastLabel };
+      return { month, label, budgetRaw, budgetKr, plannedKr, registeredKr, diffKr, diffPlannedKr, pct, isPast, actualOrForecastKr, actualOrForecastLabel };
     });
   }, [instances, pricing, selectedArea, selectedYear, budgets, draftAmounts]);
 
@@ -2474,17 +2475,18 @@ function ReportsView({ instances, pricing, budgets, onSaveBudget, isAdminUser })
         </div>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 130px 130px 130px 130px 90px", gap: 0, background: "#F8FAFC", borderRadius: "10px 10px 0 0", padding: "8px 14px", fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 110px 110px 110px 110px 110px 80px", gap: 0, background: "#F8FAFC", borderRadius: "10px 10px 0 0", padding: "8px 14px", fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.04em" }}>
         <span>Måned</span>
         <span style={{ textAlign: "right" }}>Budget</span>
         <span style={{ textAlign: "right" }}>Planlagt</span>
+        <span style={{ textAlign: "right" }}>Diff. budget/planlagt</span>
         <span style={{ textAlign: "right" }}>Registreret</span>
         <span style={{ textAlign: "right" }}>Diff. vs. budget</span>
         <span style={{ textAlign: "right" }}>% opnået</span>
       </div>
       <div style={{ background: "#fff", borderRadius: "0 0 10px 10px", boxShadow: "0 1px 3px rgba(0,0,0,0.06)", overflow: "hidden" }}>
         {monthRows.map((r, idx) => (
-          <div key={r.month} style={{ display: "grid", gridTemplateColumns: "1fr 130px 130px 130px 130px 90px", gap: 0, padding: "9px 14px", borderBottom: idx < monthRows.length - 1 ? "1px solid #F1F5F9" : "none", alignItems: "center" }}>
+          <div key={r.month} style={{ display: "grid", gridTemplateColumns: "1fr 110px 110px 110px 110px 110px 80px", gap: 0, padding: "9px 14px", borderBottom: idx < monthRows.length - 1 ? "1px solid #F1F5F9" : "none", alignItems: "center" }}>
             <div style={{ fontSize: 13, fontWeight: 600, color: "#111111" }}>{r.label}</div>
             <div style={{ textAlign: "right" }}>
               {editingBudgets && isAdminUser ? (
@@ -2504,6 +2506,9 @@ function ReportsView({ instances, pricing, budgets, onSaveBudget, isAdminUser })
               )}
             </div>
             <div style={{ fontSize: 13, color: "#64748B", textAlign: "right" }}>{Math.round(r.plannedKr).toLocaleString("da-DK")} kr</div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: r.budgetKr === 0 ? "#94A3B8" : r.diffPlannedKr >= 0 ? "#16A34A" : "#DC2626", textAlign: "right" }}>
+              {r.budgetKr === 0 ? "—" : `${r.diffPlannedKr > 0 ? "+" : ""}${Math.round(r.diffPlannedKr).toLocaleString("da-DK")} kr`}
+            </div>
             <div style={{ fontSize: 13, fontWeight: 600, color: r.registeredKr > 0 ? "#16A34A" : "#94A3B8", textAlign: "right" }}>{r.registeredKr > 0 ? `${Math.round(r.registeredKr).toLocaleString("da-DK")} kr` : "—"}</div>
             <div style={{ fontSize: 13, fontWeight: 700, color: r.budgetKr === 0 ? "#94A3B8" : r.diffKr >= 0 ? "#16A34A" : "#DC2626", textAlign: "right" }}>
               {r.budgetKr === 0 ? "—" : `${r.diffKr > 0 ? "+" : ""}${Math.round(r.diffKr).toLocaleString("da-DK")} kr`}
@@ -2515,10 +2520,11 @@ function ReportsView({ instances, pricing, budgets, onSaveBudget, isAdminUser })
         ))}
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 130px 130px 130px 130px 90px", gap: 0, padding: "10px 14px", background: "#FCE4EF", borderRadius: 10, marginTop: 8, fontWeight: 700, fontSize: 13 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 110px 110px 110px 110px 110px 80px", gap: 0, padding: "10px 14px", background: "#FCE4EF", borderRadius: 10, marginTop: 8, fontWeight: 700, fontSize: 13 }}>
         <span style={{ color: "#9C1B5D" }}>I alt {selectedYear}</span>
         <span style={{ textAlign: "right", color: "#111111" }}>{Math.round(yearTotals.budget).toLocaleString("da-DK")} kr</span>
         <span style={{ textAlign: "right", color: "#64748B" }}>{Math.round(yearTotals.planned).toLocaleString("da-DK")} kr</span>
+        <span style={{ textAlign: "right", color: (yearTotals.planned - yearTotals.budget) >= 0 ? "#16A34A" : "#DC2626" }}>{(yearTotals.planned - yearTotals.budget) > 0 ? "+" : ""}{Math.round(yearTotals.planned - yearTotals.budget).toLocaleString("da-DK")} kr</span>
         <span style={{ textAlign: "right", color: "#16A34A" }}>{Math.round(yearTotals.registered).toLocaleString("da-DK")} kr</span>
         <span style={{ textAlign: "right", color: yearDiff >= 0 ? "#16A34A" : "#DC2626" }}>{yearDiff > 0 ? "+" : ""}{Math.round(yearDiff).toLocaleString("da-DK")} kr</span>
         <span />
