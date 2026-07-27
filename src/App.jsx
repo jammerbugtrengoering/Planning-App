@@ -2324,7 +2324,8 @@ function weeksInMonthReport(year, monthIndex) {
   return weeks;
 }
 
-const REPORT_AREA_COLORS = { privat: "#D6247A", nexus: "#4F46E5", aeldrelov: "#C2410C" };
+const REPORT_AREA_COLORS = { privat: "#D6247A", nexus: "#4F46E5", aeldrelov: "#C2410C", alle: "#334155" };
+const REPORT_TABS = [...REPORT_AREAS, ["alle", "🌐 Alle"]];
 
 function ReportsView({ instances, pricing, budgets, onSaveBudget, isAdminUser }) {
   const now = new Date();
@@ -2347,21 +2348,33 @@ function ReportsView({ instances, pricing, budgets, onSaveBudget, isAdminUser })
     if (isAdminUser) onSaveBudget(selectedArea, selectedYear, month, value);
   }
 
+  const isAllAreas = selectedArea === "alle";
+
   const monthRows = useMemo(() => {
+    const areasToSum = isAllAreas ? REPORT_AREAS.map(([k]) => k) : [selectedArea];
     return REPORT_MONTHS.map((label, idx) => {
       const month = idx + 1;
       const validWeeks = weeksInMonthReport(selectedYear, idx);
-      const tasksInMonth = instances.filter(
-        (t) => t.assignees && t.assignees.length && validWeeks.has(t.week) && (t.contractType || "privat") === selectedArea
-      );
-      const rate = pricing[selectedArea] || 0;
-      const plannedKr = tasksInMonth.reduce((s, t) => s + (t.duration / 60) * rate, 0);
-      const registeredKr = tasksInMonth.reduce((s, t) => {
-        const logged = (t.timeLog || t.time_log || []).reduce((s2, l) => s2 + (l.minutes || 0), 0);
-        return s + (logged / 60) * rate;
-      }, 0);
-      const budgetRaw = budgetFor(month);
-      const budgetKr = Number(budgetRaw) || 0;
+      let plannedKr = 0;
+      let registeredKr = 0;
+      let budgetKr = 0;
+      areasToSum.forEach((area) => {
+        const rate = pricing[area] || 0;
+        const tasksInMonth = instances.filter(
+          (t) => t.assignees && t.assignees.length && validWeeks.has(t.week) && (t.contractType || "privat") === area
+        );
+        plannedKr += tasksInMonth.reduce((s, t) => s + (t.duration / 60) * rate, 0);
+        registeredKr += tasksInMonth.reduce((s, t) => {
+          const logged = (t.timeLog || t.time_log || []).reduce((s2, l) => s2 + (l.minutes || 0), 0);
+          return s + (logged / 60) * rate;
+        }, 0);
+        if (isAllAreas) {
+          const row = budgets.find((b) => b.contract_type === area && Number(b.year) === selectedYear && Number(b.month) === month);
+          budgetKr += row ? Number(row.amount) || 0 : 0;
+        }
+      });
+      const budgetRaw = isAllAreas ? budgetKr : budgetFor(month);
+      if (!isAllAreas) budgetKr = Number(budgetRaw) || 0;
       const diffKr = registeredKr - budgetKr;
       const diffPlannedKr = plannedKr - budgetKr;
       const pct = budgetKr > 0 ? Math.round((registeredKr / budgetKr) * 100) : null;
@@ -2370,7 +2383,7 @@ function ReportsView({ instances, pricing, budgets, onSaveBudget, isAdminUser })
       const actualOrForecastLabel = isPast ? "Realiseret" : "Forecast";
       return { month, label, budgetRaw, budgetKr, plannedKr, registeredKr, diffKr, diffPlannedKr, pct, isPast, actualOrForecastKr, actualOrForecastLabel };
     });
-  }, [instances, pricing, selectedArea, selectedYear, budgets, draftAmounts]);
+  }, [instances, pricing, selectedArea, selectedYear, budgets, draftAmounts, isAllAreas]);
 
   const yearTotals = monthRows.reduce(
     (acc, r) => ({
@@ -2407,7 +2420,7 @@ function ReportsView({ instances, pricing, budgets, onSaveBudget, isAdminUser })
       </div>
 
       <div style={{ display: "flex", gap: 8, marginBottom: 14, alignItems: "center" }}>
-        {REPORT_AREAS.map(([key, label]) => (
+        {REPORT_TABS.map(([key, label]) => (
           <button
             key={key}
             onClick={() => setSelectedArea(key)}
@@ -2419,7 +2432,7 @@ function ReportsView({ instances, pricing, budgets, onSaveBudget, isAdminUser })
           </button>
         ))}
         <div style={{ flex: 1 }} />
-        {isAdminUser && (
+        {isAdminUser && !isAllAreas && (
           <button
             style={editingBudgets ? { ...styles.primaryBtn } : styles.secondaryBtn}
             onClick={() => setEditingBudgets((v) => !v)}
@@ -2429,7 +2442,12 @@ function ReportsView({ instances, pricing, budgets, onSaveBudget, isAdminUser })
         )}
       </div>
 
-      {!isAdminUser && (
+      {isAllAreas && (
+        <div style={{ fontSize: 12.5, color: "#94A3B8", marginBottom: 10 }}>
+          Samlet oversigt for alle områder. Budget redigeres under det enkelte område (Privat, Nexus, Ældrelov).
+        </div>
+      )}
+      {!isAllAreas && !isAdminUser && (
         <div style={{ fontSize: 12.5, color: "#94A3B8", marginBottom: 10 }}>
           Kun administrator kan oprette og redigere budgettal. Du kan se rapporten.
         </div>
@@ -2438,7 +2456,7 @@ function ReportsView({ instances, pricing, budgets, onSaveBudget, isAdminUser })
       {/* Søjlediagram: budget vs. realiseret/forecast pr. måned */}
       <div style={{ background: "#fff", borderRadius: 12, padding: "18px 16px 12px", marginBottom: 16, boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 14 }}>
-          <div style={{ fontWeight: 700, fontSize: 14, color: "#111111" }}>Budget vs. omsætning — {REPORT_AREAS.find(([k]) => k === selectedArea)?.[1]}</div>
+          <div style={{ fontWeight: 700, fontSize: 14, color: "#111111" }}>Budget vs. omsætning — {REPORT_TABS.find(([k]) => k === selectedArea)?.[1]}</div>
           <div style={{ flex: 1 }} />
           <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11.5, color: "#64748B" }}>
             <span style={{ width: 12, height: 12, borderRadius: 3, background: "#CBD5E1", display: "inline-block" }} /> Budget
@@ -2489,7 +2507,7 @@ function ReportsView({ instances, pricing, budgets, onSaveBudget, isAdminUser })
           <div key={r.month} style={{ display: "grid", gridTemplateColumns: "1fr 110px 110px 110px 110px 110px 80px", gap: 0, padding: "9px 14px", borderBottom: idx < monthRows.length - 1 ? "1px solid #F1F5F9" : "none", alignItems: "center" }}>
             <div style={{ fontSize: 13, fontWeight: 600, color: "#111111" }}>{r.label}</div>
             <div style={{ textAlign: "right" }}>
-              {editingBudgets && isAdminUser ? (
+              {editingBudgets && isAdminUser && !isAllAreas ? (
                 <input
                   type="number" min={0} step={1000}
                   style={{ ...styles.inputSm, width: 100, textAlign: "right", marginLeft: "auto" }}
