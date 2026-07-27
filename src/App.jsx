@@ -534,11 +534,14 @@ function PlanningApp({ session, onSignOut }) {
           const cust = customersData?.find((c) => c.id === i.customer_id);
           return {
             ...i,
+            templateId: i.template_id ?? null,
             timeLog: i.time_log ?? [],
             requiredSkills: i.required_skills ?? [],
             customerName: (i.customer_name || cust?.name || i.customer_id) ?? "",
             address: (i.address_text || cust?.address) ?? "",
             accessInstructions: (i.access_instructions || cust?.access_instructions) ?? "",
+            contractType: i.contract_type || "privat",
+            invoiceReady: i.invoice_ready ?? false,
             startDate: i.start_date || null,
             expiryDate: i.expiry_date || null,
           };
@@ -548,6 +551,11 @@ function PlanningApp({ session, onSignOut }) {
       } else if (instData?.length) {
         setInstances(instData.map((i) => ({
           ...i, timeLog: i.time_log ?? [], requiredSkills: i.required_skills ?? [],
+          templateId: i.template_id ?? null,
+          contractType: i.contract_type || "privat",
+          invoiceReady: i.invoice_ready ?? false,
+          startDate: i.start_date || null,
+          expiryDate: i.expiry_date || null,
         })));
       }
 
@@ -778,6 +786,24 @@ function PlanningApp({ session, onSignOut }) {
       syncInstance(updated);
       return updated;
     }));
+  }
+
+  // Opdaterer kontrakttype for hele aftalen (alle forekomster af samme skabelon),
+  // ikke kun den enkelte opgave — så det afspejles korrekt i Aftaler-oversigten.
+  function updateContractType(taskId, newType) {
+    setInstances((prev) => {
+      const task = prev.find((t) => t.id === taskId);
+      if (!task) return prev;
+      const tplId = task.templateId;
+      return prev.map((t) => {
+        if (t.id === taskId || (tplId && t.templateId === tplId)) {
+          const updated = { ...t, contractType: newType };
+          syncInstance(updated);
+          return updated;
+        }
+        return t;
+      });
+    });
   }
 
   function manualPlace(taskId, day, empId) {
@@ -1050,6 +1076,7 @@ function PlanningApp({ session, onSignOut }) {
             return { ...t, checklist: [...(t.checklist || []), ...newItems] };
           })}
           onUpdateCustomer={(taskId, fields) => updateInstance(taskId, (t) => ({ ...t, ...fields }))}
+          onUpdateContractType={updateContractType}
           onUpdateSkills={(taskId, newSkills) => updateInstance(taskId, (t) => ({ ...t, requiredSkills: newSkills }))}
           onAddAssignee={(taskId, empId) => { const t = instances.find((x) => x.id === taskId); if (t?.day) manualPlace(taskId, t.day, empId); }}
           onRemoveAssignee={removeAssignee}
@@ -2388,7 +2415,32 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom }) {
 
 // ── Skills View ───────────────────────────────────────────────────────────────
 // ── Contracts View ────────────────────────────────────────────────────────────
+const DAY_ABBR = { Mon: "Man", Tue: "Tirs", Wed: "Ons", Thu: "Tors", Fri: "Fre", Sat: "Lør", Sun: "Søn" };
+
+function DayPills({ days }) {
+  if (!days?.length) return null;
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+      📅
+      {days.map((d) => (
+        <span key={d} style={{ background: "#D6247A", color: "#fff", fontWeight: 700, fontSize: 11, borderRadius: 5, padding: "1px 6px" }}>
+          {DAY_ABBR[d] || d}
+        </span>
+      ))}
+    </span>
+  );
+}
+
 function ContractsView({ templates, instances }) {
+  // Find den reelle, aktuelle kontrakttype for en skabelon: den seneste værdi sat på
+  // en tilknyttet opgave slår den statiske skabelonværdi, så redigering i ugeplanen
+  // altid afspejles korrekt her.
+  function effectiveContractType(tpl) {
+    const linked = instances.filter((i) => i.templateId === tpl.id && i.contractType);
+    if (linked.length) return linked[linked.length - 1].contractType;
+    return tpl.contractType || "privat";
+  }
+
   // Hent alle faste kontrakter med udløbsdato — sortér efter nærmest udløbende
   const contracts = templates
     .filter((t) => t.expiryDate)
@@ -2396,11 +2448,13 @@ function ContractsView({ templates, instances }) {
       const expiry = new Date(t.expiryDate);
       const start = t.startDate ? new Date(t.startDate) : null;
       const daysLeft = Math.ceil((expiry - new Date()) / (1000 * 60 * 60 * 24));
-      return { ...t, expiry, start, daysLeft };
+      return { ...t, contractType: effectiveContractType(t), expiry, start, daysLeft };
     })
     .sort((a, b) => a.expiry - b.expiry);
 
-  const noExpiry = templates.filter((t) => !t.expiryDate);
+  const noExpiry = templates
+    .filter((t) => !t.expiryDate)
+    .map((t) => ({ ...t, contractType: effectiveContractType(t) }));
 
   function urgencyColor(days) {
     if (days < 0) return "#DC2626";   // Udløbet
@@ -2437,7 +2491,7 @@ function ContractsView({ templates, instances }) {
                 <div style={{ fontWeight: 700, fontSize: 15, color: "#111111", marginBottom: 3 }}>{t.title}</div>
                 <div style={{ fontSize: 12, color: "#64748B", display: "flex", gap: 12, flexWrap: "wrap" }}>
                   {t.customerName && <span>👤 {t.customerName}</span>}
-                  {t.days?.length > 0 && <span>📅 {t.days.map((d) => DAYS.find((x) => x.key === d)?.label.slice(0,3) || d).join(", ")}</span>}
+                  <DayPills days={t.days} />
                   {t.start && <span>Fra {t.start.toLocaleDateString("da-DK", { day: "numeric", month: "short", year: "numeric" })}</span>}
                   <span>Til {t.expiry.toLocaleDateString("da-DK", { day: "numeric", month: "short", year: "numeric" })}</span>
                   <span style={{ fontWeight: 600, color: "#9C1B5D" }}>{t.contractType === "nexus" ? "🏢 Nexus" : t.contractType === "aeldrelov" ? "👴 Ældrelov" : "🏠 Privat"}</span>
@@ -2460,7 +2514,7 @@ function ContractsView({ templates, instances }) {
                   <div style={{ fontWeight: 700, fontSize: 15, color: "#111111", marginBottom: 3 }}>{t.title}</div>
                   <div style={{ fontSize: 12, color: "#64748B", display: "flex", gap: 12, flexWrap: "wrap" }}>
                     {t.customerName && <span>👤 {t.customerName}</span>}
-                    {t.days?.length > 0 && <span>📅 {t.days.map((d) => DAYS.find((x) => x.key === d)?.label.slice(0,3) || d).join(", ")}</span>}
+                    <DayPills days={t.days} />
                     <span style={{ fontWeight: 600, color: "#9C1B5D" }}>{t.contractType === "nexus" ? "🏢 Nexus" : t.contractType === "aeldrelov" ? "👴 Ældrelov" : "🏠 Privat"}</span>
                   </div>
                 </div>
@@ -3078,7 +3132,7 @@ function EmployeeModal({ emp, onClose, onSave, skills: skillList }) {
 }
 
 // ---------- Task / service order detail ----------
-function TaskDetailModal({ task, employees, checklistTemplates, skills, onClose, onSetStatus, onToggleChecklistItem, onAddChecklistItem, onAddChecklistTemplate, onAddAssignee, onRemoveAssignee, onUnplace, onDelete, onUpdateCustomer, onCopy, onUpdateSkills }) {
+function TaskDetailModal({ task, employees, checklistTemplates, skills, onClose, onSetStatus, onToggleChecklistItem, onAddChecklistItem, onAddChecklistTemplate, onAddAssignee, onRemoveAssignee, onUnplace, onDelete, onUpdateCustomer, onUpdateContractType, onCopy, onUpdateSkills }) {
   const [addOpen, setAddOpen] = useState(false);
   const [newItemText, setNewItemText] = useState("");
   const [showTemplates, setShowTemplates] = useState(false);
@@ -3171,7 +3225,7 @@ function TaskDetailModal({ task, employees, checklistTemplates, skills, onClose,
           <select
             style={{ fontSize: 12, fontWeight: 600, padding: "3px 8px", borderRadius: 99, border: "1.5px solid #E2E8F0", background: t.contractType === "nexus" ? "#EEF2FF" : t.contractType === "aeldrelov" ? "#FFF7ED" : "#FFF6FA", color: t.contractType === "nexus" ? "#4F46E5" : t.contractType === "aeldrelov" ? "#C2410C" : "#9C1B5D", cursor: "pointer" }}
             value={t.contractType || "privat"}
-            onChange={(e) => onUpdateCustomer(t.id, { contractType: e.target.value })}>
+            onChange={(e) => onUpdateContractType(t.id, e.target.value)}>
             <option value="privat">🏠 Privat</option>
             <option value="nexus">🏢 Nexus</option>
             <option value="aeldrelov">👴 Ældrelov</option>
