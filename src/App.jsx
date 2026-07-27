@@ -3511,7 +3511,7 @@ function TaskDetailModal({ task, employees, checklistTemplates, skills, onClose,
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
           <label style={styles.label}>Kundeoplysninger</label>
           {!isDone && !editingCustomer && (
-            <button style={{ ...styles.addSkillBtn, fontSize: 11 }} onClick={() => setEditingCustomer(true)}><Pencil size={11} /> Rediger</button>
+            <button style={{ ...styles.addSkillBtn, fontSize: 11 }} onClick={() => { setEditingCustomer(true); if (custName) searchDineroForCustomer(custName); }}><Pencil size={11} /> Rediger</button>
           )}
           {isDone && <span style={{ fontSize: 11, color: "#94A3B8" }}>🔒 Låst (opgave udført)</span>}
         </div>
