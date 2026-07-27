@@ -392,8 +392,8 @@ function PlanningApp({ session, onSignOut }) {
   useEffect(() => { localStorage.setItem("rp_lang", lang); }, [lang]);
 
   const L = {
-    da: { schedule:"Ugeplan", employees:"Medarbejdere", checklists:"Tjeklister", time:"Tid & Eksport", inventory:"Lager", contracts:"Aftaler", signOut:"Log ud", sub:"Ugeplanlægning · kapacitet · kompetenceniveauer" },
-    en: { schedule:"Schedule", employees:"Employees", checklists:"Checklists", time:"Time & Export", inventory:"Inventory", contracts:"Contracts", signOut:"Sign out", sub:"Weekly planning · capacity · skill levels" },
+    da: { schedule:"Ugeplan", employees:"Medarbejdere", checklists:"Tjeklister", time:"Tid & Eksport", inventory:"Lager", contracts:"Aftaler", reports:"Rapportering", signOut:"Log ud", sub:"Ugeplanlægning · kapacitet · kompetenceniveauer" },
+    en: { schedule:"Schedule", employees:"Employees", checklists:"Checklists", time:"Time & Export", inventory:"Inventory", contracts:"Contracts", reports:"Reporting", signOut:"Sign out", sub:"Weekly planning · capacity · skill levels" },
   }[lang];
   // ── Dynamiske master-data fra Supabase ──
   const [skills, setSkills] = useState(SKILLS_FALLBACK);
@@ -402,6 +402,7 @@ function PlanningApp({ session, onSignOut }) {
   const [areas, setAreas] = useState([]);
   const [employeeAreas, setEmployeeAreas] = useState([]);
   const [pricing, setPricing] = useState({ privat: 450, nexus: 380, aeldrelov: 410 }); // [{employee_id, area_id}]
+  const [budgets, setBudgets] = useState([]); // [{id, contract_type, year, month, amount}]
   const [templates, setTemplates] = useState([]);
   const [checklistTemplates, setChecklistTemplates] = useState([]);
   const [instances, setInstances] = useState([]);
@@ -454,10 +455,11 @@ function PlanningApp({ session, onSignOut }) {
         supabase.from("travel_overrides").select("*"),
       ]);
       // Load areas
-      const [{ data: areasData }, { data: empAreasData }, { data: pricingData }] = await Promise.all([
+      const [{ data: areasData }, { data: empAreasData }, { data: pricingData }, { data: budgetsData }] = await Promise.all([
         supabase.from("areas").select("*").order("name"),
         supabase.from("employee_areas").select("*"),
         supabase.from("pricing").select("*"),
+        supabase.from("budgets").select("*"),
       ]);
       if (areasData) setAreas(areasData);
       if (empAreasData) setEmployeeAreas(empAreasData);
@@ -466,6 +468,7 @@ function PlanningApp({ session, onSignOut }) {
         pricingData.forEach((r) => { p[r.contract_type] = r.hourly_rate; });
         setPricing((prev) => ({ ...prev, ...p }));
       }
+      if (budgetsData) setBudgets(budgetsData);
 
       // Skills
       if (skillsData?.length) setSkills(skillsData.map((s) => s.name));
@@ -898,6 +901,17 @@ function PlanningApp({ session, onSignOut }) {
     setInstances((prev) => prev.filter((t) => t.id !== taskId));
     removeInstance(taskId);
   }
+  // Opretter/opdaterer et budget-tal for et område (kontrakttype) i en given måned/år.
+  // Kun administrator må kalde dette fra UI'et (håndhæves i ReportsView).
+  async function saveBudget(contractType, year, month, amount) {
+    const id = `${contractType}_${year}_${month}`;
+    const row = { id, contract_type: contractType, year, month, amount: Number(amount) || 0 };
+    setBudgets((prev) => {
+      const exists = prev.some((b) => b.id === id);
+      return exists ? prev.map((b) => (b.id === id ? row : b)) : [...prev, row];
+    });
+    await supabase.from("budgets").upsert(row, { onConflict: "id" });
+  }
   function bumpStatus(taskId) {
     updateInstance(taskId, (t) => ({ ...t, status: cycleStatus(t.status) }));
   }
@@ -1113,7 +1127,7 @@ function PlanningApp({ session, onSignOut }) {
           </div>
         </div>
         <nav style={styles.nav}>
-          {[["uge", L.schedule], ["employees", L.employees], ["checklists", L.checklists], ["time", L.time], ["inventory", L.inventory], ["contracts", L.contracts]].map(([k, l]) => (
+          {[["uge", L.schedule], ["employees", L.employees], ["checklists", L.checklists], ["time", L.time], ["inventory", L.inventory], ["contracts", L.contracts], ["reports", L.reports]].map(([k, l]) => (
             <button key={k} onClick={() => setView(k)} style={view === k ? styles.navBtnActive : styles.navBtn}>{l}</button>
           ))}
           <div style={{ display:"flex", gap:4, marginLeft:12, borderLeft:"1px solid #333", paddingLeft:12 }}>
@@ -1181,6 +1195,10 @@ function PlanningApp({ session, onSignOut }) {
 
       {view === "contracts" && (
         <ContractsView templates={templates} instances={instances} />
+      )}
+
+      {view === "reports" && (
+        <ReportsView instances={instances} pricing={pricing} budgets={budgets} onSaveBudget={saveBudget} isAdminUser={isAdminUser} />
       )}
 
       {view === "inventory" && (
@@ -2278,6 +2296,169 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
           </div>
         );
       })()}
+    </div>
+  );
+}
+
+// ── Reports View (Rapportering: budget vs. omsætning pr. område) ──────────────
+const REPORT_AREAS = [
+  ["privat", "🏠 Privat"],
+  ["nexus", "🏢 Nexus"],
+  ["aeldrelov", "👴 Ældrelov"],
+];
+const REPORT_MONTHS = ["Januar","Februar","Marts","April","Maj","Juni","Juli","August","September","Oktober","November","December"];
+
+function weeksInMonthReport(year, monthIndex) {
+  // monthIndex er 0-baseret (0 = januar), ligesom Date.getMonth()
+  const weeks = new Set();
+  const d = new Date(year, monthIndex, 1);
+  while (d.getMonth() === monthIndex) {
+    const tmp = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    const dayNum = (tmp.getDay() + 6) % 7;
+    tmp.setDate(tmp.getDate() - dayNum + 3);
+    const yearStart = new Date(tmp.getFullYear(), 0, 1);
+    const wk = Math.ceil(((tmp - yearStart) / 86400000 + 1) / 7);
+    weeks.add(wk);
+    d.setDate(d.getDate() + 1);
+  }
+  return weeks;
+}
+
+function ReportsView({ instances, pricing, budgets, onSaveBudget, isAdminUser }) {
+  const now = new Date();
+  const [selectedArea, setSelectedArea] = useState("privat");
+  const [selectedYear, setSelectedYear] = useState(now.getFullYear());
+  const [draftAmounts, setDraftAmounts] = useState({});
+  const years = [now.getFullYear() - 1, now.getFullYear(), now.getFullYear() + 1];
+
+  useEffect(() => { setDraftAmounts({}); }, [selectedArea, selectedYear]);
+
+  function budgetFor(month) {
+    if (draftAmounts[month] !== undefined) return draftAmounts[month];
+    const row = budgets.find((b) => b.contract_type === selectedArea && Number(b.year) === selectedYear && Number(b.month) === month);
+    return row ? row.amount : "";
+  }
+
+  function commitBudget(month, value) {
+    setDraftAmounts((prev) => ({ ...prev, [month]: value }));
+    if (isAdminUser) onSaveBudget(selectedArea, selectedYear, month, value);
+  }
+
+  const monthRows = useMemo(() => {
+    return REPORT_MONTHS.map((label, idx) => {
+      const month = idx + 1;
+      const validWeeks = weeksInMonthReport(selectedYear, idx);
+      const tasksInMonth = instances.filter(
+        (t) => t.assignees && t.assignees.length && validWeeks.has(t.week) && (t.contractType || "privat") === selectedArea
+      );
+      const rate = pricing[selectedArea] || 0;
+      const plannedKr = tasksInMonth.reduce((s, t) => s + (t.duration / 60) * rate, 0);
+      const registeredKr = tasksInMonth.reduce((s, t) => {
+        const logged = (t.timeLog || t.time_log || []).reduce((s2, l) => s2 + (l.minutes || 0), 0);
+        return s + (logged / 60) * rate;
+      }, 0);
+      const budgetRaw = budgetFor(month);
+      const budgetKr = Number(budgetRaw) || 0;
+      const diffKr = registeredKr - budgetKr;
+      const pct = budgetKr > 0 ? Math.round((registeredKr / budgetKr) * 100) : null;
+      return { month, label, budgetRaw, budgetKr, plannedKr, registeredKr, diffKr, pct };
+    });
+  }, [instances, pricing, selectedArea, selectedYear, budgets, draftAmounts]);
+
+  const yearTotals = monthRows.reduce(
+    (acc, r) => ({
+      budget: acc.budget + r.budgetKr,
+      planned: acc.planned + r.plannedKr,
+      registered: acc.registered + r.registeredKr,
+    }),
+    { budget: 0, planned: 0, registered: 0 }
+  );
+  const yearDiff = yearTotals.registered - yearTotals.budget;
+
+  return (
+    <div style={styles.page}>
+      <div style={styles.toolbar}>
+        <div style={styles.statBlock}>
+          <div><div style={{ ...styles.statValue, color: "#64748B" }}>{Math.round(yearTotals.budget).toLocaleString("da-DK")} kr.</div><div style={styles.statLabel}>Budget {selectedYear}</div></div>
+        </div>
+        <div style={styles.statBlock}>
+          <div><div style={{ ...styles.statValue, color: "#64748B" }}>{Math.round(yearTotals.planned).toLocaleString("da-DK")} kr.</div><div style={styles.statLabel}>Planlagt omsætning</div></div>
+        </div>
+        <div style={styles.statBlock}>
+          <div><div style={{ ...styles.statValue, color: "#16A34A" }}>{Math.round(yearTotals.registered).toLocaleString("da-DK")} kr.</div><div style={styles.statLabel}>Registreret omsætning</div></div>
+        </div>
+        <div style={{ ...styles.statBlock, borderLeft: `3px solid ${yearDiff >= 0 ? "#16A34A" : "#DC2626"}` }}>
+          <div><div style={{ ...styles.statValue, color: yearDiff >= 0 ? "#16A34A" : "#DC2626" }}>{yearDiff > 0 ? "+" : ""}{Math.round(yearDiff).toLocaleString("da-DK")} kr.</div><div style={styles.statLabel}>Difference vs. budget</div></div>
+        </div>
+        <div style={styles.toolbarSpacer} />
+        <select style={{ ...styles.inputSm, fontSize: 13, fontWeight: 600, flex: "none", width: 100 }} value={selectedYear} onChange={(e) => setSelectedYear(Number(e.target.value))}>
+          {years.map((y) => <option key={y} value={y}>{y}</option>)}
+        </select>
+      </div>
+
+      <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+        {REPORT_AREAS.map(([key, label]) => (
+          <button
+            key={key}
+            onClick={() => setSelectedArea(key)}
+            style={selectedArea === key
+              ? { ...styles.secondaryBtn, background: "#FCE4EF", color: "#9C1B5D", borderColor: "#D6247A", fontWeight: 700 }
+              : styles.secondaryBtn}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {!isAdminUser && (
+        <div style={{ fontSize: 12.5, color: "#94A3B8", marginBottom: 10 }}>
+          Kun administrator kan oprette og redigere budgettal. Du kan se rapporten.
+        </div>
+      )}
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 130px 130px 130px 130px 90px", gap: 0, background: "#F8FAFC", borderRadius: "10px 10px 0 0", padding: "8px 14px", fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+        <span>Måned</span>
+        <span style={{ textAlign: "right" }}>Budget</span>
+        <span style={{ textAlign: "right" }}>Planlagt</span>
+        <span style={{ textAlign: "right" }}>Registreret</span>
+        <span style={{ textAlign: "right" }}>Diff. vs. budget</span>
+        <span style={{ textAlign: "right" }}>% opnået</span>
+      </div>
+      <div style={{ background: "#fff", borderRadius: "0 0 10px 10px", boxShadow: "0 1px 3px rgba(0,0,0,0.06)", overflow: "hidden" }}>
+        {monthRows.map((r, idx) => (
+          <div key={r.month} style={{ display: "grid", gridTemplateColumns: "1fr 130px 130px 130px 130px 90px", gap: 0, padding: "9px 14px", borderBottom: idx < monthRows.length - 1 ? "1px solid #F1F5F9" : "none", alignItems: "center" }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: "#111111" }}>{r.label}</div>
+            <div style={{ textAlign: "right" }}>
+              <input
+                type="number" min={0} step={1000}
+                disabled={!isAdminUser}
+                style={{ ...styles.inputSm, width: 100, textAlign: "right", marginLeft: "auto", cursor: isAdminUser ? "text" : "not-allowed", background: isAdminUser ? "#fff" : "#F8FAFC" }}
+                value={r.budgetRaw}
+                placeholder="0"
+                onChange={(e) => setDraftAmounts((prev) => ({ ...prev, [r.month]: e.target.value }))}
+                onBlur={(e) => commitBudget(r.month, e.target.value)}
+              />
+            </div>
+            <div style={{ fontSize: 13, color: "#64748B", textAlign: "right" }}>{Math.round(r.plannedKr).toLocaleString("da-DK")} kr</div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: r.registeredKr > 0 ? "#16A34A" : "#94A3B8", textAlign: "right" }}>{r.registeredKr > 0 ? `${Math.round(r.registeredKr).toLocaleString("da-DK")} kr` : "—"}</div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: r.budgetKr === 0 ? "#94A3B8" : r.diffKr >= 0 ? "#16A34A" : "#DC2626", textAlign: "right" }}>
+              {r.budgetKr === 0 ? "—" : `${r.diffKr > 0 ? "+" : ""}${Math.round(r.diffKr).toLocaleString("da-DK")} kr`}
+            </div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: r.pct === null ? "#94A3B8" : r.pct >= 100 ? "#16A34A" : r.pct >= 70 ? "#D97706" : "#DC2626", textAlign: "right" }}>
+              {r.pct === null ? "—" : `${r.pct}%`}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 130px 130px 130px 130px 90px", gap: 0, padding: "10px 14px", background: "#FCE4EF", borderRadius: 10, marginTop: 8, fontWeight: 700, fontSize: 13 }}>
+        <span style={{ color: "#9C1B5D" }}>I alt {selectedYear}</span>
+        <span style={{ textAlign: "right", color: "#111111" }}>{Math.round(yearTotals.budget).toLocaleString("da-DK")} kr</span>
+        <span style={{ textAlign: "right", color: "#64748B" }}>{Math.round(yearTotals.planned).toLocaleString("da-DK")} kr</span>
+        <span style={{ textAlign: "right", color: "#16A34A" }}>{Math.round(yearTotals.registered).toLocaleString("da-DK")} kr</span>
+        <span style={{ textAlign: "right", color: yearDiff >= 0 ? "#16A34A" : "#DC2626" }}>{yearDiff > 0 ? "+" : ""}{Math.round(yearDiff).toLocaleString("da-DK")} kr</span>
+        <span />
+      </div>
     </div>
   );
 }
