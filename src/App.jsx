@@ -3312,6 +3312,10 @@ function TaskDetailModal({ task, employees, checklistTemplates, skills, onClose,
   const [taskSkills, setTaskSkills] = useState([]);
   const [dineroSyncing, setDineroSyncing] = useState(false);
   const [dineroSynced, setDineroSynced] = useState(false);
+  const [dineroResults, setDineroResults] = useState([]);
+  const [dineroSearching, setDineroSearching] = useState(false);
+  const [showDineroCreate, setShowDineroCreate] = useState(false);
+  const [dineroAvailable, setDineroAvailable] = useState(true);
 
   useEffect(() => {
     if (task) {
@@ -3320,8 +3324,72 @@ function TaskDetailModal({ task, employees, checklistTemplates, skills, onClose,
       setCustPo(task.poNumber || "");
       setCustAccess(task.accessInstructions || "");
       setTaskSkills(task.requiredSkills || []);
+      setDineroResults([]);
+      setShowDineroCreate(false);
     }
   }, [task?.id]);
+
+  async function searchDineroForCustomer(q) {
+    setCustName(q);
+    if (q.length < 2) { setDineroResults([]); return; }
+    if (!dineroAvailable) return; // Dinero ikke tilgængelig — brug manuel indtastning
+    setDineroSearching(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("dinero", {
+        body: { action: "search", query: q },
+      });
+      if (!error && data?.Collection) {
+        setDineroResults(data.Collection);
+      } else {
+        setDineroResults([]);
+        if (error) setDineroAvailable(false);
+      }
+    } catch {
+      setDineroResults([]);
+      setDineroAvailable(false);
+    }
+    setDineroSearching(false);
+  }
+
+  function selectDineroCustomerForEdit(c) {
+    setCustName(c.Name);
+    setCustAddress([c.Street, c.ZipCode, c.City].filter(Boolean).join(", "));
+    setDineroResults([]);
+    setShowDineroCreate(false);
+  }
+
+  async function createDineroCustomerForEdit() {
+    setDineroSearching(true);
+    const parts = custAddress.split(",").map((s) => s.trim());
+    let created = false;
+
+    if (dineroAvailable) {
+      try {
+        const { data, error } = await supabase.functions.invoke("dinero", {
+          body: { action: "create", contact: { name: custName, address: parts[0] || "", zipCode: parts[1] || "", city: parts[2] || "" } },
+        });
+        if (!error && (data?.Name || data?.ContactGuid)) {
+          if (data?.Name) setCustName(data.Name);
+          created = true;
+        } else {
+          setDineroAvailable(false);
+        }
+      } catch {
+        setDineroAvailable(false);
+      }
+    }
+
+    if (!created) {
+      const newId = uid("cust");
+      const { error: dbErr } = await supabase.from("customers").insert({
+        id: newId, name: custName, address: custAddress, access_instructions: "",
+      });
+      if (!dbErr) created = true;
+    }
+
+    setDineroSearching(false);
+    setShowDineroCreate(false);
+  }
 
   if (!task) return null;
   const t = task;
@@ -3338,6 +3406,8 @@ function TaskDetailModal({ task, employees, checklistTemplates, skills, onClose,
   function saveCustomer() {
     onUpdateCustomer(t.id, { customerName: custName, address: custAddress, poNumber: custPo, accessInstructions: custAccess });
     setEditingCustomer(false);
+    setDineroResults([]);
+    setShowDineroCreate(false);
   }
 
   function saveSkills() {
@@ -3448,13 +3518,65 @@ function TaskDetailModal({ task, employees, checklistTemplates, skills, onClose,
 
         {editingCustomer ? (
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            <input style={styles.input} value={custName} onChange={(e) => setCustName(e.target.value)} placeholder="Kundenavn" />
+            <div>
+              <div style={{ fontSize: 11, color: dineroAvailable ? "#94A3B8" : "#D97706", marginBottom: 4 }}>
+                {dineroAvailable ? "Søger i Dinero mens du skriver" : "Dinero ikke tilgængelig — indtast manuelt"}
+              </div>
+              <div style={{ position: "relative" }}>
+                <input
+                  style={styles.input}
+                  value={custName}
+                  onChange={(e) => { searchDineroForCustomer(e.target.value); setShowDineroCreate(false); }}
+                  placeholder={dineroAvailable ? "Skriv kundenavn for at søge i Dinero…" : "Kundenavn"}
+                />
+                {dineroSearching && <span style={{ position: "absolute", right: 10, top: 10, fontSize: 11, color: "#94A3B8" }}>Søger…</span>}
+                {dineroResults.length > 0 && (
+                  <div style={{ position: "absolute", top: "100%", left: 0, right: 0, background: "#fff", border: "1px solid #E2E8F0", borderRadius: 10, boxShadow: "0 4px 16px rgba(0,0,0,0.10)", zIndex: 100, maxHeight: 220, overflowY: "auto" }}>
+                    {dineroResults.map((c) => (
+                      <div key={c.ContactGuid}
+                        style={{ padding: "10px 14px", cursor: "pointer", borderBottom: "1px solid #F1F5F9", fontSize: 13 }}
+                        onMouseDown={() => selectDineroCustomerForEdit(c)}>
+                        <div style={{ fontWeight: 600, color: "#111111" }}>{c.Name}</div>
+                        {(c.Street || c.City) && <div style={{ color: "#64748B", fontSize: 12 }}>{[c.Street, c.ZipCode, c.City].filter(Boolean).join(", ")}</div>}
+                      </div>
+                    ))}
+                    <div
+                      style={{ padding: "10px 14px", cursor: "pointer", fontSize: 13, color: "#D6247A", fontWeight: 600, background: "#FFF6FA" }}
+                      onMouseDown={() => { setDineroResults([]); setShowDineroCreate(true); }}>
+                      + Opret "{custName}" som ny kunde
+                    </div>
+                  </div>
+                )}
+                {!dineroSearching && custName.length >= 2 && dineroResults.length === 0 && !showDineroCreate && (
+                  <div style={{ marginTop: 4 }}>
+                    <button type="button"
+                      style={{ ...styles.addSkillBtn, fontSize: 12 }}
+                      onClick={() => setShowDineroCreate(true)}>
+                      + Opret "{custName}" som ny kunde {dineroAvailable ? "i Dinero" : "i systemet"}
+                    </button>
+                  </div>
+                )}
+              </div>
+              {showDineroCreate && (
+                <div style={{ background: "#FFF6FA", borderRadius: 10, padding: 10, marginTop: 6 }}>
+                  <div style={{ fontSize: 12, color: "#9C1B5D", marginBottom: 6 }}>
+                    {dineroAvailable
+                      ? "Kunden oprettes i Dinero og i systemet med navn og adresse nedenfor"
+                      : "Dinero er ikke tilgængelig — kunden oprettes direkte i systemets kundedatabase"}
+                  </div>
+                  <button style={{ ...styles.primaryBtn, fontSize: 12 }} onClick={createDineroCustomerForEdit} disabled={dineroSearching}>
+                    {dineroSearching ? "Opretter…" : `Opret "${custName}" ${dineroAvailable ? "i Dinero" : "i systemet"}`}
+                  </button>
+                  <button style={{ ...styles.secondaryBtn, fontSize: 12, marginLeft: 8 }} onClick={() => setShowDineroCreate(false)}>Annuller</button>
+                </div>
+              )}
+            </div>
             <input style={styles.input} value={custAddress} onChange={(e) => setCustAddress(e.target.value)} placeholder="Adresse" />
             <input style={styles.input} value={custPo} onChange={(e) => setCustPo(e.target.value)} placeholder="PO-nummer" />
             <textarea style={{ ...styles.input, minHeight: 60 }} value={custAccess} onChange={(e) => setCustAccess(e.target.value)} placeholder="Adgangsinstruktioner" />
             <div style={{ display: "flex", gap: 8 }}>
               <button style={styles.primaryBtn} onClick={saveCustomer}>Gem</button>
-              <button style={styles.secondaryBtn} onClick={() => setEditingCustomer(false)}>Annuller</button>
+              <button style={styles.secondaryBtn} onClick={() => { setEditingCustomer(false); setDineroResults([]); setShowDineroCreate(false); }}>Annuller</button>
             </div>
           </div>
         ) : (
