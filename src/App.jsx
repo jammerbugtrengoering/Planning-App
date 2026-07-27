@@ -879,14 +879,17 @@ function PlanningApp({ session, onSignOut }) {
       if (!confirmed) return;
     }
 
+    const wasUnassigned = !(task.assignees && task.assignees.length);
     updateInstance(taskId, (t) => {
       const nextAssignees = (t.assignees || []).includes(empId) ? t.assignees : [...(t.assignees || []), empId];
       return {
         ...t, day, assignees: nextAssignees,
-        // Flyt opgaven til den uge man kigger på lige nu — vigtigt for opgaver der
-        // er taget ud af "Ikke tildelt" og nu trækkes ind i en anden uge end den de
-        // oprindeligt hørte til.
-        week: weekOffset,
+        // Flyt kun opgaven til den uge man kigger på lige nu, hvis den var
+        // ikke-tildelt før dette kald — dvs. man aktivt placerer en opgave fra
+        // "Ikke tildelt" (evt. fra en anden uge) ind i den viste uge. Har opgaven
+        // allerede én eller flere medarbejdere, og man blot tilføjer endnu en,
+        // skal den IKKE flyttes til en anden uge end den allerede ligger i.
+        week: wasUnassigned ? weekOffset : t.week,
         status: t.status === "unscheduled" ? "planlagt" : t.status,
         warning: null,
         offSchedule: isOffSchedule ? true : (t.offSchedule || false),
