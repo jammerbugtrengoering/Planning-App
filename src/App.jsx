@@ -59,18 +59,34 @@ function isoWeekNumber(date) {
   const yearStart = new Date(d.getFullYear(), 0, 1);
   return Math.ceil(((d - yearStart) / 86400000 + 1) / 7);
 }
-function weekMeta(weekNo) {
-  const now = new Date();
-  // Find mandag i uge 1 dette år
-  const jan4 = new Date(now.getFullYear(), 0, 4);
+// Beregner både ISO-ugenummer OG det år ugen hører til (kan afvige fra
+// kalenderåret omkring årsskiftet, fx 30. dec. kan høre til uge 1 i det nye år).
+// Bruges i stedet for isoWeekNumber alene, hver gang begge dele skal matches
+// konsistent (fx ved navigation og instans-generering på tværs af årsskifter).
+function isoWeekInfo(date) {
+  const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const dayNum = (d.getDay() + 6) % 7;
+  d.setDate(d.getDate() - dayNum + 3); // Nærmeste torsdag afgør ISO-uge-året
+  const isoYear = d.getFullYear();
+  const yearStart = new Date(isoYear, 0, 1);
+  const week = Math.ceil(((d - yearStart) / 86400000 + 1) / 7);
+  return { week, year: isoYear };
+}
+// Finder mandagen i en given (uge, år)-kombination. Modstykket til isoWeekInfo.
+function mondayOfWeek(week, year) {
+  const jan4 = new Date(year, 0, 4);
   const jan4Day = (jan4.getDay() + 6) % 7;
   const weekOneMonday = new Date(jan4);
   weekOneMonday.setDate(jan4.getDate() - jan4Day);
   const monday = new Date(weekOneMonday);
-  monday.setDate(weekOneMonday.getDate() + (weekNo - 1) * 7);
+  monday.setDate(weekOneMonday.getDate() + (week - 1) * 7);
+  return monday;
+}
+function weekMeta(weekNo, year) {
+  const monday = mondayOfWeek(weekNo, year);
   const friday = new Date(monday); friday.setDate(monday.getDate() + 4);
   const fmt = (d) => d.toLocaleDateString("da-DK", { day: "numeric", month: "short" });
-  return { label: `${fmt(monday)} – ${fmt(friday)}`, weekNo, monday };
+  return { label: `${fmt(monday)} – ${fmt(friday)}`, weekNo, year, monday };
 }
 
 // ---------- Skill matching ----------
@@ -234,8 +250,12 @@ function scheduleWeek(weekInstances, employees, autoOnly = false, areas = [], em
   return list;
 }
 
-function ensureWeekInstances(week, allInstances, templates, employees) {
+function ensureWeekInstances(week, year, allInstances, templates, employees) {
   let list = [...allInstances];
+  // Mandagen i den uge vi arbejder med — bruges til korrekte dato-sammenligninger
+  // med kontraktens start-/udløbsdato, i stedet for at sammenligne rå ugenumre
+  // (som giver forkerte svar når start/udløb ligger i et andet år).
+  const weekMonday = mondayOfWeek(week, year);
   // Holder styr på hvilke instanser der bliver oprettet i netop dette kald, så
   // auto-planlægning bagefter KUN rører disse — og aldrig instanser der allerede
   // fandtes (uanset om de er tildelt eller bevidst sat til "ikke tildelt" af
@@ -246,20 +266,20 @@ function ensureWeekInstances(week, allInstances, templates, employees) {
     if (!tpl.days || tpl.days.length === 0) return;
     // Skip if past expiry date
     if (tpl.expiryDate) {
-      const expiryWeek = isoWeekNumber(new Date(tpl.expiryDate));
-      if (week > expiryWeek) return;
+      const expiryMonday = mondayOf(new Date(tpl.expiryDate));
+      if (weekMonday > expiryMonday) return;
     }
     // Skip if before start date
     if (tpl.startDate) {
-      const startWeek = isoWeekNumber(new Date(tpl.startDate));
-      if (week < startWeek) return;
+      const startMonday = mondayOf(new Date(tpl.startDate));
+      if (weekMonday < startMonday) return;
     }
     tpl.days.forEach((day) => {
-      const exists = list.some((i) => i.templateId === tpl.id && i.week === week && i.day === day);
+      const exists = list.some((i) => i.templateId === tpl.id && i.week === week && i.year === year && i.day === day);
       if (!exists) {
         const newInst = {
           id: uid("i"), templateId: tpl.id, title: tpl.title, requiredSkills: tpl.requiredSkills,
-          duration: tpl.duration, type: "fixed", day, week, assignees: [], status: "unscheduled", timeLog: [],
+          duration: tpl.duration, type: "fixed", day, week, year, assignees: [], status: "unscheduled", timeLog: [],
           checklist: instantiateChecklist(tpl.checklistItems || []), videoUrl: tpl.videoUrl || "",
           customerName: tpl.customerName || "", address: tpl.address || "", poNumber: tpl.poNumber || "",
           accessInstructions: tpl.accessInstructions || "",
@@ -272,8 +292,8 @@ function ensureWeekInstances(week, allInstances, templates, employees) {
       }
     });
   });
-  const thisWeek = list.filter((i) => i.week === week);
-  const others = list.filter((i) => i.week !== week);
+  const thisWeek = list.filter((i) => i.week === week && i.year === year);
+  const others = list.filter((i) => !(i.week === week && i.year === year));
   // Auto-planlæg kun instanser der er helt nyoprettede i dette kald.
   return [...others, ...scheduleWeek(thisWeek, employees, false, [], [], newlyCreatedIds)];
 }
@@ -422,7 +442,12 @@ function PlanningApp({ session, onSignOut }) {
   const [travelSettings, setTravelSettings] = useState({ defaultMinutes: 20, dayStart: "07:00", overrides: {} });
   const [loading, setLoading] = useState(true);
 
-  const [weekOffset, setWeekOffset] = useState(() => isoWeekNumber(new Date()));
+  // I stedet for et råt, ubegrænset uge-heltal (som tidligere kunne løbe løbsk til
+  // fx "uge 67" ved gentagne klik på "næste uge" uden at rulle om ved årsskiftet),
+  // holder vi styr på ugen via en rigtig dato (mandagen i den viste uge). Uge- og
+  // årstal udledes altid herfra, så navigation aldrig kan give et ugyldigt resultat.
+  const [weekAnchor, setWeekAnchor] = useState(() => mondayOf(new Date()));
+  const { week: weekOffset, year: weekYear } = isoWeekInfo(weekAnchor);
   const [view, setView] = useState("uge");
   const [showAddTask, setShowAddTask] = useState(false);
   const [copyPayload, setCopyPayload] = useState(null);
@@ -546,7 +571,7 @@ function PlanningApp({ session, onSignOut }) {
         setTemplates(mapped);
 
         // Opbyg instanser fra skabeloner + eksisterende instanser
-        const currentWeek = isoWeekNumber(new Date());
+        const { week: currentWeek, year: currentYear } = isoWeekInfo(new Date());
         const existingInst = (instData || []).map((i) => {
           const cust = customersData?.find((c) => c.id === i.customer_id);
           return {
@@ -564,7 +589,7 @@ function PlanningApp({ session, onSignOut }) {
             expiryDate: i.expiry_date || null,
           };
         });
-        const allInst = ensureWeekInstances(currentWeek, existingInst, mapped, empMapped);
+        const allInst = ensureWeekInstances(currentWeek, currentYear, existingInst, mapped, empMapped);
         setInstances(allInst);
       } else if (instData?.length) {
         setInstances(instData.map((i) => ({
@@ -621,7 +646,7 @@ function PlanningApp({ session, onSignOut }) {
   const syncInstance = useCallback(async (inst) => {
     const { error } = await supabase.from("instances").upsert({
       id: inst.id, template_id: inst.templateId ?? null, title: inst.title,
-      type: inst.type, week: inst.week, day: inst.day ?? null,
+      type: inst.type, week: inst.week, year: inst.year ?? null, day: inst.day ?? null,
       deadline: inst.deadline ?? null, duration: inst.duration,
       status: inst.status ?? "unscheduled", video_url: inst.videoUrl ?? "",
       customer_id: null, po_number: inst.poNumber ?? "",
@@ -661,15 +686,20 @@ function PlanningApp({ session, onSignOut }) {
   }, []);
 
   function changeWeek(delta) {
-    const next = weekOffset + delta;
-    setInstances((cur) => ensureWeekInstances(next, cur, templates, employees));
-    setWeekOffset(next);
+    // Flyt ankerdatoen 7 rigtige kalenderdage ad gangen — det ruller helt naturligt
+    // om ved årsskifte (uge 52/53 -> uge 1 i næste år) uden nogensinde at kunne
+    // give et ugyldigt ugenummer som "uge 67".
+    const nextAnchor = new Date(weekAnchor);
+    nextAnchor.setDate(nextAnchor.getDate() + delta * 7);
+    const { week: nextWeek, year: nextYear } = isoWeekInfo(nextAnchor);
+    setInstances((cur) => ensureWeekInstances(nextWeek, nextYear, cur, templates, employees));
+    setWeekAnchor(nextAnchor);
   }
 
   function runAuto() {
     setInstances((prev) => {
-      const thisWeek = prev.filter((t) => t.week === weekOffset);
-      const others = prev.filter((t) => t.week !== weekOffset);
+      const thisWeek = prev.filter((t) => t.week === weekOffset && t.year === weekYear);
+      const others = prev.filter((t) => !(t.week === weekOffset && t.year === weekYear));
       const before = thisWeek.filter((t) => !(t.assignees && t.assignees.length)).length;
       const after = scheduleWeek(thisWeek, employees, true, areas, employeeAreas); // kun markerede
       const still = after.filter((t) => !(t.assignees && t.assignees.length)).length;
@@ -684,30 +714,21 @@ function PlanningApp({ session, onSignOut }) {
       ...payload.extraItems,
     ];
 
-    // Helper: all ISO week numbers from now until expiryDate
+    // Alle {week, year}-par fra startDate til expiryDate — itererer i rigtige
+    // 7-dages spring over kalenderen, så årsskifter håndteres korrekt (i stedet for
+    // den tidligere "år*53+uge"-regnestykke, der kunne give ugyldige ugenumre).
     function weeksUntilExpiry(expiryDateStr, startDateStr) {
-      // Start fra startDate-ugen (kan være fremtidig)
-      // Hvis ingen startDate, start fra aktuel uge
-      const startDate = startDateStr ? new Date(startDateStr) : new Date();
-      const startYear = startDate.getFullYear();
-      const startWeek = isoWeekNumber(startDate);
+      const startMonday = mondayOf(startDateStr ? new Date(startDateStr) : new Date());
+      if (!expiryDateStr) return [isoWeekInfo(startMonday)];
 
-      if (!expiryDateStr) return [startWeek];
-
-      const expiry = new Date(expiryDateStr);
-      const expiryYear = expiry.getFullYear();
-      const expiryWeek = isoWeekNumber(expiry);
-
-      // Brug absolutte ugenumre (år * 53 + uge) for korrekt iteration over årsskift
-      const startAbs = startYear * 53 + startWeek;
-      const endAbs = expiryYear * 53 + expiryWeek;
-
+      const expiryMonday = mondayOf(new Date(expiryDateStr));
       const weeks = [];
-      for (let abs = startAbs; abs <= endAbs && weeks.length < 104; abs++) {
-        const wk = abs % 53 || 52; // ISO uge 1-52
-        weeks.push(wk);
+      let cursor = new Date(startMonday);
+      while (cursor <= expiryMonday && weeks.length < 104) {
+        weeks.push(isoWeekInfo(cursor));
+        cursor.setDate(cursor.getDate() + 7);
       }
-      return weeks.length ? weeks : [startWeek];
+      return weeks.length ? weeks : [isoWeekInfo(startMonday)];
     }
 
     if (payload.type === "fixed") {
@@ -739,8 +760,8 @@ function PlanningApp({ session, onSignOut }) {
         setInstances((cur) => {
           const weeks = weeksUntilExpiry(payload.expiryDate, payload.startDate);
           let next = [...cur];
-          weeks.forEach((wk) => {
-            const expanded = ensureWeekInstances(wk, next, nextT, employees);
+          weeks.forEach(({ week: wk, year: wy }) => {
+            const expanded = ensureWeekInstances(wk, wy, next, nextT, employees);
             const newOnes = expanded.filter((i) => !next.find((c) => c.id === i.id));
             newOnes.forEach((inst) => syncInstance({ ...inst, contractType: payload.contractType, expiryDate: payload.expiryDate }));
             next = expanded;
@@ -750,15 +771,17 @@ function PlanningApp({ session, onSignOut }) {
         return nextT;
       });
     } else {
-      const adhocWeek = payload.adhocDate ? isoWeekNumber(new Date(payload.adhocDate)) : weekOffset;
+      const adhocWeekInfo = payload.adhocDate ? isoWeekInfo(new Date(payload.adhocDate)) : { week: weekOffset, year: weekYear };
+      const adhocWeek = adhocWeekInfo.week;
+      const adhocYear = adhocWeekInfo.year;
 
       if (payload.type === "flexible" && payload.expiryDate) {
         // Create one flexible instance per week until expiry
         const weeks = weeksUntilExpiry(payload.expiryDate, null);
-        const newInstances = weeks.map((wk) => ({
+        const newInstances = weeks.map(({ week: wk, year: wy }) => ({
           id: uid("i"), title: payload.title, requiredSkills: payload.requiredSkills,
           duration: payload.duration, assignees: [], status: "unscheduled", timeLog: [],
-          week: wk, checklist: instantiateChecklist(checklistItemsCombined),
+          week: wk, year: wy, checklist: instantiateChecklist(checklistItemsCombined),
           videoUrl: payload.videoUrl, customerName: payload.customerName,
           address: payload.address, poNumber: payload.poNumber, accessInstructions: payload.accessInstructions,
           type: "flexible", day: null, deadline: payload.deadline,
@@ -767,8 +790,8 @@ function PlanningApp({ session, onSignOut }) {
         setInstances((prev) => {
           let next = [...prev];
           newInstances.forEach((inst) => {
-            const thisWeek = [...next.filter((t) => t.week === inst.week), inst];
-            const others = next.filter((t) => t.week !== inst.week);
+            const thisWeek = [...next.filter((t) => t.week === inst.week && t.year === inst.year), inst];
+            const others = next.filter((t) => !(t.week === inst.week && t.year === inst.year));
             const scheduled = scheduleWeek(thisWeek, employees, false, areas, employeeAreas);
             scheduled.forEach(syncInstance);
             next = [...others, ...scheduled];
@@ -779,7 +802,7 @@ function PlanningApp({ session, onSignOut }) {
         const base = {
           id: uid("i"), title: payload.title, requiredSkills: payload.requiredSkills,
           duration: payload.duration, assignees: [], status: "unscheduled", timeLog: [],
-          week: adhocWeek, checklist: instantiateChecklist(checklistItemsCombined),
+          week: adhocWeek, year: adhocYear, checklist: instantiateChecklist(checklistItemsCombined),
           videoUrl: payload.videoUrl, customerName: payload.customerName,
           address: payload.address, poNumber: payload.poNumber, accessInstructions: payload.accessInstructions,
           contractType: payload.contractType,
@@ -788,8 +811,8 @@ function PlanningApp({ session, onSignOut }) {
           ? { ...base, type: "adhoc", day: payload.day }
           : { ...base, type: "flexible", day: null, deadline: payload.deadline };
         setInstances((prev) => {
-          const thisWeek = [...prev.filter((t) => t.week === adhocWeek), newInstance];
-          const others = prev.filter((t) => t.week !== adhocWeek);
+          const thisWeek = [...prev.filter((t) => t.week === adhocWeek && t.year === adhocYear), newInstance];
+          const others = prev.filter((t) => !(t.week === adhocWeek && t.year === adhocYear));
           const scheduled = scheduleWeek(thisWeek, employees, false, areas, employeeAreas);
           scheduled.forEach(syncInstance);
           return [...others, ...scheduled];
@@ -890,6 +913,7 @@ function PlanningApp({ session, onSignOut }) {
         // allerede én eller flere medarbejdere, og man blot tilføjer endnu en,
         // skal den IKKE flyttes til en anden uge end den allerede ligger i.
         week: wasUnassigned ? weekOffset : t.week,
+        year: wasUnassigned ? weekYear : t.year,
         status: t.status === "unscheduled" ? "planlagt" : t.status,
         warning: null,
         offSchedule: isOffSchedule ? true : (t.offSchedule || false),
@@ -1118,8 +1142,8 @@ function PlanningApp({ session, onSignOut }) {
   );
   const isAdminUser = !currentEmployeeForAuth || !!currentEmployeeForAuth.isAdmin;
 
-  const currentIsoWeek = isoWeekNumber(new Date());
-  const weekInstancesList = instances.filter((t) => t.week === weekOffset);
+  const currentIsoWeek = isoWeekInfo(new Date());
+  const weekInstancesList = instances.filter((t) => t.week === weekOffset && t.year === weekYear);
   // Ikke-tildelte opgaver skal være tilgængelige uanset hvilken uge man kigger på —
   // ikke kun i den uge de oprindeligt hørte til. Så en opgave man har taget ud kan
   // ses og placeres i en hvilken som helst uge, fx hvis den skal rykkes til næste uge.
@@ -1128,7 +1152,7 @@ function PlanningApp({ session, onSignOut }) {
     const tl = t.timeLog || t.time_log || [];
     return s + tl.reduce((s2, l) => s2 + (l.minutes || 0), 0);
   }, 0), [instances]);
-  const wk = weekMeta(weekOffset);
+  const wk = weekMeta(weekOffset, weekYear);
 
   if (loading) {
     return (
@@ -1181,8 +1205,8 @@ function PlanningApp({ session, onSignOut }) {
           employeeAreas={employeeAreas}
           onOpenTask={setOpenTaskId}
           dragId={dragId} setDragId={setDragId}
-          weekLabel={wk.label} weekNo={wk.weekNo} weekOffset={weekOffset}
-          onPrevWeek={() => changeWeek(-1)} onNextWeek={() => changeWeek(1)} onTodayWeek={() => setWeekOffset(currentIsoWeek)}
+          weekLabel={wk.label} weekNo={wk.weekNo} weekOffset={weekOffset} weekYear={weekYear}
+          onPrevWeek={() => changeWeek(-1)} onNextWeek={() => changeWeek(1)} onTodayWeek={() => setWeekAnchor(mondayOf(new Date()))}
           currentIsoWeek={currentIsoWeek}
           travelSettings={travelSettings} onOpenTravelSettings={() => setShowTravelSettings(true)}
         />
@@ -1435,7 +1459,7 @@ function EmployeeAppView({ employees, instances, onLogMinutes, onSetStatus, onTo
 }
 
 // ---------- Week view ----------
-function WeekView({ employees, instances, unplaced, onAdd, onAuto, onPlace, onUnplace, onRemoveAssignee, onDelete, onOpenTask, onToggleInclude, onEditEmp, dragId, setDragId, weekLabel, weekNo, weekOffset, onPrevWeek, onNextWeek, onTodayWeek, travelSettings, onOpenTravelSettings, currentIsoWeek, areas, employeeAreas }) {
+function WeekView({ employees, instances, unplaced, onAdd, onAuto, onPlace, onUnplace, onRemoveAssignee, onDelete, onOpenTask, onToggleInclude, onEditEmp, dragId, setDragId, weekLabel, weekNo, weekOffset, weekYear, onPrevWeek, onNextWeek, onTodayWeek, travelSettings, onOpenTravelSettings, currentIsoWeek, areas, employeeAreas }) {
   const [addMenuTaskId, setAddMenuTaskId] = useState(null);
   const [showWeekend, setShowWeekend] = useState(false);
   const [capView, setCapView] = useState("bar");
@@ -1478,11 +1502,11 @@ function WeekView({ employees, instances, unplaced, onAdd, onAuto, onPlace, onUn
         <div style={styles.weekNav}>
           <button style={styles.weekNavBtn} onClick={onPrevWeek}><ChevronLeft size={16} /></button>
           <div style={styles.weekNavLabel}>
-            <span style={styles.weekNavStrong}>Uge {weekNo}</span> · {weekLabel}
-            {weekOffset === currentIsoWeek && <span style={styles.weekNowTag}>Denne uge</span>}
+            <span style={styles.weekNavStrong}>Uge {weekNo} · {weekYear}</span> · {weekLabel}
+            {weekOffset === currentIsoWeek.week && weekYear === currentIsoWeek.year && <span style={styles.weekNowTag}>Denne uge</span>}
           </div>
           <button style={styles.weekNavBtn} onClick={onNextWeek}><ChevronRight size={16} /></button>
-          {weekOffset !== currentIsoWeek && <button style={styles.secondaryBtn} onClick={onTodayWeek}>I dag</button>}
+          {!(weekOffset === currentIsoWeek.week && weekYear === currentIsoWeek.year) && <button style={styles.secondaryBtn} onClick={onTodayWeek}>I dag</button>}
         </div>
       </div>
 
@@ -2089,7 +2113,7 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
   const validWeeks = weeksInMonth(filterYear, filterMonth);
 
   const placed = instances
-    .filter((t) => t.assignees && t.assignees.length && validWeeks.has(t.week))
+    .filter((t) => t.assignees && t.assignees.length && validWeeks.has(t.week) && (t.year ?? filterYear) === filterYear)
     .filter((t) => statusFilter === "all" || t.status === statusFilter)
     .filter((t) => !invoiceOnly || t.invoiceReady)
     .filter((t) => !invoiceOnly || showDineroExported || !t.dineroExported)
@@ -2401,7 +2425,7 @@ function ReportsView({ instances, pricing, budgets, onSaveBudget, isAdminUser })
       areasToSum.forEach((area) => {
         const rate = pricing[area] || 0;
         const tasksInMonth = instances.filter(
-          (t) => t.assignees && t.assignees.length && validWeeks.has(t.week) && (t.contractType || "privat") === area
+          (t) => t.assignees && t.assignees.length && validWeeks.has(t.week) && (t.year ?? selectedYear) === selectedYear && (t.contractType || "privat") === area
         );
         plannedKr += tasksInMonth.reduce((s, t) => s + (t.duration / 60) * rate, 0);
         registeredKr += tasksInMonth.reduce((s, t) => {
