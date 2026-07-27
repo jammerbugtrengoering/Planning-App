@@ -184,12 +184,16 @@ function remaining(employees, list, empId, day) {
   const emp = employees.find((e) => e.id === empId);
   return (emp?.capacity?.[day] ?? 0) - usedMinutes(list, empId, day);
 }
-function scheduleWeek(weekInstances, employees, autoOnly = false, areas = [], employeeAreas = []) {
+function scheduleWeek(weekInstances, employees, autoOnly = false, areas = [], employeeAreas = [], restrictToIds = null) {
   let list = weekInstances.map((t) => ({ ...t }));
 
   list.forEach((t) => {
     if ((t.assignees && t.assignees.length) || !t.day || t.type === "flexible") return;
     if (autoOnly && !t.includeInAuto) return;
+    // Rør aldrig ved en instans der ikke er i den udtrykkelige "skal planlægges"-liste —
+    // det forhindrer at eksisterende opgaver, som planlæggeren bevidst har sat til
+    // "ikke tildelt", bliver auto-tildelt igen ved næste visning af ugen.
+    if (restrictToIds && !restrictToIds.has(t.id)) return;
     const { candidates, outsideArea } = candidatesFor(t, employees, areas, employeeAreas);
     if (candidates.length === 0) { t.warning = "no_skill"; return; }
     const ranked = [...candidates].sort((a, b) => {
@@ -208,6 +212,7 @@ function scheduleWeek(weekInstances, employees, autoOnly = false, areas = [], em
   list.forEach((t) => {
     if ((t.assignees && t.assignees.length) || t.type !== "flexible") return;
     if (autoOnly && !t.includeInAuto) return;
+    if (restrictToIds && !restrictToIds.has(t.id)) return;
     const deadlineIdx = DAYS.findIndex((d) => d.key === (t.deadline || "Fri"));
     const window = DAYS.slice(0, deadlineIdx + 1);
     const { candidates, outsideArea } = candidatesFor(t, employees, areas, employeeAreas);
@@ -231,6 +236,12 @@ function scheduleWeek(weekInstances, employees, autoOnly = false, areas = [], em
 
 function ensureWeekInstances(week, allInstances, templates, employees) {
   let list = [...allInstances];
+  // Holder styr på hvilke instanser der bliver oprettet i netop dette kald, så
+  // auto-planlægning bagefter KUN rører disse — og aldrig instanser der allerede
+  // fandtes (uanset om de er tildelt eller bevidst sat til "ikke tildelt" af
+  // planlæggeren). Uden dette ville en opgave, man har fjernet medarbejdere fra,
+  // blive auto-tildelt igen næste gang ugen genindlæses/besøges.
+  const newlyCreatedIds = new Set();
   templates.forEach((tpl) => {
     if (!tpl.days || tpl.days.length === 0) return;
     // Skip if past expiry date
@@ -246,7 +257,7 @@ function ensureWeekInstances(week, allInstances, templates, employees) {
     tpl.days.forEach((day) => {
       const exists = list.some((i) => i.templateId === tpl.id && i.week === week && i.day === day);
       if (!exists) {
-        list.push({
+        const newInst = {
           id: uid("i"), templateId: tpl.id, title: tpl.title, requiredSkills: tpl.requiredSkills,
           duration: tpl.duration, type: "fixed", day, week, assignees: [], status: "unscheduled", timeLog: [],
           checklist: instantiateChecklist(tpl.checklistItems || []), videoUrl: tpl.videoUrl || "",
@@ -255,14 +266,16 @@ function ensureWeekInstances(week, allInstances, templates, employees) {
           templateDays: tpl.days, // for off-schedule detection
           contractType: tpl.contractType || "privat",
           expiryDate: tpl.expiryDate || null,
-        });
+        };
+        list.push(newInst);
+        newlyCreatedIds.add(newInst.id);
       }
     });
   });
   const thisWeek = list.filter((i) => i.week === week);
   const others = list.filter((i) => i.week !== week);
-  // Auto-planlæg kun nyoprettede instanser (dem der ikke allerede har assignees)
-  return [...others, ...scheduleWeek(thisWeek, employees, false)];
+  // Auto-planlæg kun instanser der er helt nyoprettede i dette kald.
+  return [...others, ...scheduleWeek(thisWeek, employees, false, [], [], newlyCreatedIds)];
 }
 
 function statusLabel(s) { return { unscheduled: "Ubemandet", planlagt: "Planlagt", i_gang: "I gang", udført: "Udført" }[s] || s; }
