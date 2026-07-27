@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect, useCallback } from "react";
 import { supabase } from "./supabaseClient";
 import {
-  Plus, Upload, Download, X, Clock, Play, Square, AlertTriangle,
+  Plus, Download, X, Clock, Play, Square, AlertTriangle,
   Trash2, Pencil, Repeat, Zap, CalendarClock, Wand2, Star, ChevronLeft, ChevronRight,
   ClipboardList, Video, CheckCircle2, LogIn, ListChecks, Check, Lock, Navigation, Building2, Car, Copy,
 } from "lucide-react";
@@ -771,21 +771,6 @@ function PlanningApp({ session, onSignOut }) {
     setShowAddTask(false);
   }
 
-  function importExcel() {
-    const imported = [
-      { title: "Reception – gulvvask", requiredSkills: [rs("Gulvvask")], duration: 60, type: "adhoc", day: "Tue" },
-      { title: "Møderum vinduer", requiredSkills: [rs("Vinduespolering", 2)], duration: 90, type: "flexible", day: null, deadline: "Fri" },
-      { title: "Personale-toiletter", requiredSkills: [rs("Sanitær")], duration: 45, type: "adhoc", day: "Thu" },
-    ].map((t) => ({ ...t, id: uid("i"), week: weekOffset, assignees: [], status: "unscheduled", timeLog: [] }));
-    setInstances((prev) => {
-      const thisWeek = [...prev.filter((t) => t.week === weekOffset), ...imported];
-      const others = prev.filter((t) => t.week !== weekOffset);
-      imported.forEach(syncInstance);
-      return [...others, ...thisWeek];
-    });
-    notify(`${imported.length} opgaver importeret fra Excel og lagt i "Ikke tildelt"`);
-  }
-
   function updateInstance(taskId, updater) {
     setInstances((prev) => prev.map((t) => {
       if (t.id !== taskId) return t;
@@ -981,7 +966,7 @@ function PlanningApp({ session, onSignOut }) {
       {view === "uge" && (
         <WeekView
           employees={employees} instances={weekInstancesList} unplaced={unplaced}
-          onAdd={() => setShowAddTask(true)} onImport={importExcel} onAuto={runAuto}
+          onAdd={() => setShowAddTask(true)} onAuto={runAuto}
           onPlace={manualPlace} onUnplace={unplace} onRemoveAssignee={removeAssignee} onDelete={deleteTask}
           onToggleInclude={(taskId) => updateInstance(taskId, (t) => ({ ...t, includeInAuto: !t.includeInAuto }))}
           onEditEmp={(emp) => { setEditEmp(emp); setShowAddEmp(true); }}
@@ -1236,7 +1221,7 @@ function EmployeeAppView({ employees, instances, onLogMinutes, onSetStatus, onTo
 }
 
 // ---------- Week view ----------
-function WeekView({ employees, instances, unplaced, onAdd, onImport, onAuto, onPlace, onUnplace, onRemoveAssignee, onDelete, onOpenTask, onToggleInclude, onEditEmp, dragId, setDragId, weekLabel, weekNo, weekOffset, onPrevWeek, onNextWeek, onTodayWeek, travelSettings, onOpenTravelSettings, currentIsoWeek, areas, employeeAreas }) {
+function WeekView({ employees, instances, unplaced, onAdd, onAuto, onPlace, onUnplace, onRemoveAssignee, onDelete, onOpenTask, onToggleInclude, onEditEmp, dragId, setDragId, weekLabel, weekNo, weekOffset, onPrevWeek, onNextWeek, onTodayWeek, travelSettings, onOpenTravelSettings, currentIsoWeek, areas, employeeAreas }) {
   const [addMenuTaskId, setAddMenuTaskId] = useState(null);
   const [showWeekend, setShowWeekend] = useState(false);
   const [capView, setCapView] = useState("bar");
@@ -1252,7 +1237,6 @@ function WeekView({ employees, instances, unplaced, onAdd, onImport, onAuto, onP
     <div style={styles.page}>
       <div style={styles.toolbar}>
         <button style={styles.primaryBtn} onClick={onAdd}><Plus size={16} /> Ny opgave</button>
-        <button style={styles.secondaryBtn} onClick={onImport}><Upload size={16} /> Importer fra Excel</button>
         <button style={styles.secondaryBtn} onClick={onAuto}><Wand2 size={16} /> Planlæg ugen automatisk</button>
         <button style={styles.secondaryBtn} onClick={onOpenTravelSettings}><Car size={16} /> Transporttid</button>
         <button
