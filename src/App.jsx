@@ -883,6 +883,10 @@ function PlanningApp({ session, onSignOut }) {
       const nextAssignees = (t.assignees || []).includes(empId) ? t.assignees : [...(t.assignees || []), empId];
       return {
         ...t, day, assignees: nextAssignees,
+        // Flyt opgaven til den uge man kigger på lige nu — vigtigt for opgaver der
+        // er taget ud af "Ikke tildelt" og nu trækkes ind i en anden uge end den de
+        // oprindeligt hørte til.
+        week: weekOffset,
         status: t.status === "unscheduled" ? "planlagt" : t.status,
         warning: null,
         offSchedule: isOffSchedule ? true : (t.offSchedule || false),
@@ -1113,7 +1117,10 @@ function PlanningApp({ session, onSignOut }) {
 
   const currentIsoWeek = isoWeekNumber(new Date());
   const weekInstancesList = instances.filter((t) => t.week === weekOffset);
-  const unplaced = weekInstancesList.filter((t) => !(t.assignees && t.assignees.length));
+  // Ikke-tildelte opgaver skal være tilgængelige uanset hvilken uge man kigger på —
+  // ikke kun i den uge de oprindeligt hørte til. Så en opgave man har taget ud kan
+  // ses og placeres i en hvilken som helst uge, fx hvis den skal rykkes til næste uge.
+  const unplaced = instances.filter((t) => !(t.assignees && t.assignees.length));
   const totalLogged = useMemo(() => instances.reduce((s, t) => {
     const tl = t.timeLog || t.time_log || [];
     return s + tl.reduce((s2, l) => s2 + (l.minutes || 0), 0);
@@ -1497,7 +1504,7 @@ function WeekView({ employees, instances, unplaced, onAdd, onAuto, onPlace, onUn
                 <TypeBadge type={t.type} />
                 <div style={styles.cardTitle}>{t.title}</div>
                 {t.customerName && <div style={styles.taskChipCustomer}>{t.customerName}</div>}
-                <div style={styles.cardMeta}>{skillLabel(t)} · {fmtMin(t.duration)}{t.deadline ? ` · senest ${DAYS.find((d) => d.key === t.deadline)?.label}` : ""}</div>
+                <div style={styles.cardMeta}>Uge {t.week} · {skillLabel(t)} · {fmtMin(t.duration)}{t.deadline ? ` · senest ${DAYS.find((d) => d.key === t.deadline)?.label}` : ""}</div>
                 {t.warning === "no_skill" && <span style={styles.errorChip}><AlertTriangle size={12} /> Ingen har alle krævede kompetencer</span>}
                 {t.warning === "overloaded" && <span style={styles.warnChip}><AlertTriangle size={12} /> Ingen ledig kapacitet</span>}
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 6 }} onClick={(e) => e.stopPropagation()}>
@@ -1541,7 +1548,10 @@ function WeekView({ employees, instances, unplaced, onAdd, onAuto, onPlace, onUn
                       onDragOver={(e) => e.preventDefault()}
                       onDrop={() => {
                         if (dragId) {
-                          const dragged = instances.find((t) => t.id === dragId);
+                          // Den trukne opgave kan stamme fra en anden uge (nu hvor "Ikke
+                          // tildelt" viser opgaver på tværs af uger), så slå også op i
+                          // unplaced-listen hvis den ikke findes i denne uges instanser.
+                          const dragged = instances.find((t) => t.id === dragId) || unplaced.find((t) => t.id === dragId);
                           if (dragged) {
                             const agreedDays = dragged.templateDays || dragged.days || [];
                             const isOff = dragged.type === "fixed" && agreedDays.length > 0 && !agreedDays.includes(d.key);
