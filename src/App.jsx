@@ -790,20 +790,33 @@ function PlanningApp({ session, onSignOut }) {
 
   // Opdaterer kontrakttype for hele aftalen (alle forekomster af samme skabelon),
   // ikke kun den enkelte opgave — så det afspejles korrekt i Aftaler-oversigten.
+  // Matcher primært via templateId, men falder tilbage til titel-match for ældre
+  // data hvor koblingen mellem opgave og skabelon mangler.
   function updateContractType(taskId, newType) {
-    setInstances((prev) => {
-      const task = prev.find((t) => t.id === taskId);
-      if (!task) return prev;
-      const tplId = task.templateId;
-      return prev.map((t) => {
-        if (t.id === taskId || (tplId && t.templateId === tplId)) {
-          const updated = { ...t, contractType: newType };
-          syncInstance(updated);
-          return updated;
-        }
-        return t;
-      });
-    });
+    const task = instances.find((t) => t.id === taskId);
+    if (!task) return;
+    const tplId = task.templateId || null;
+    const matchTitle = task.title;
+
+    setInstances((prev) => prev.map((t) => {
+      const sameTemplate = tplId && t.templateId === tplId;
+      const sameTitleFixed = !tplId && t.type === "fixed" && t.title === matchTitle;
+      if (t.id === taskId || sameTemplate || sameTitleFixed) {
+        const updated = { ...t, contractType: newType };
+        syncInstance(updated);
+        return updated;
+      }
+      return t;
+    }));
+
+    // Opdater også skabelonen lokalt, så Aftaler-oversigten straks afspejler
+    // ændringen, selv hvis kobling til skabelon mangler i ældre data.
+    setTemplates((prev) => prev.map((tpl) => {
+      if (tpl.id === tplId || tpl.title === matchTitle) {
+        return { ...tpl, contractType: newType };
+      }
+      return tpl;
+    }));
   }
 
   function manualPlace(taskId, day, empId) {
