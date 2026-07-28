@@ -985,11 +985,14 @@ function PlanningApp({ session, onSignOut }) {
       });
     } else {
       // "adhoc" (vist som "Fleksibel" i UI'et) — den eneste anden opgavetype
-      // man kan oprette. Datoen sættes altid til dags dato (der er ikke
-      // længere nogen dato-vælger for denne type), og opgaven indsættes
-      // direkte uden at blive kørt gennem den automatiske planlægning — den
-      // skal ligge i "Ikke tildelt", klar til manuel eller markeret
-      // auto-planlægning, i stedet for at blive placeret med det samme.
+      // man kan oprette. Oprettelsesugen sættes altid til dags dato-ugen (der
+      // er ikke nogen separat "startdato"-vælger for denne type), og opgaven
+      // indsættes direkte uden at blive kørt gennem den automatiske
+      // planlægning med det samme — den skal ligge i "Ikke tildelt", klar til
+      // manuel eller markeret auto-planlægning. "Senest udført dato" bruges
+      // udelukkende som deadline (dag-i-ugen) til selve planlægningen, dvs.
+      // hvor sent i ugen scheduleWeek's dag-vindue-søgning må lede efter en
+      // ledig plads.
       const { week: adhocWeek, year: adhocYear } = isoWeekInfo(new Date());
       const newInstance = {
         id: uid("i"), title: payload.title, requiredSkills: payload.requiredSkills,
@@ -998,7 +1001,7 @@ function PlanningApp({ session, onSignOut }) {
         videoUrl: payload.videoUrl, customerName: payload.customerName,
         address: payload.address, poNumber: payload.poNumber, accessInstructions: payload.accessInstructions,
         contractType: payload.contractType, dineroSynced: payload.dineroSynced || false,
-        type: "adhoc", day: null,
+        type: "adhoc", day: null, deadline: payload.deadline || "Fri",
       };
       setInstances((prev) => [...prev, newInstance]);
       syncInstance(newInstance);
@@ -3247,6 +3250,21 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom }) {
           </div>
           <label style={styles.label}>Udløbsdato (aftalen gælder til og med)</label>
           <input type="date" style={styles.input} value={expiryDate} onChange={(e) => setExpiryDate(e.target.value)} />
+        </>
+      )}
+
+      {type === "adhoc" && (
+        <>
+          <label style={styles.label}>Senest udført dato</label>
+          <input type="date" style={styles.input} value={adhocDate} onChange={(e) => {
+            setAdhocDate(e.target.value);
+            const d = new Date(e.target.value);
+            setDeadline(weekdayKeyFor(d));
+          }} />
+          {(() => { const dow = new Date(adhocDate).getDay(); return (dow === 0 || dow === 6) ? (
+            <div style={styles.hint}>Valgt dato er i weekenden — der planlægges ikke i weekenden, så fristen sættes til fredag i stedet.</div>
+          ) : null; })()}
+          <div style={styles.hint}>Bruges af den automatiske planlægning til at finde en ledig plads senest denne dag — opgaven oprettes stadig med dags dato og lander i "Ikke tildelt".</div>
         </>
       )}
 
