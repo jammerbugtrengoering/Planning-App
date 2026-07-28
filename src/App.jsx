@@ -568,12 +568,17 @@ function PlanningApp({ session, onSignOut }) {
       if (tplData?.length) {
         const mapped = tplData.map((t) => {
           const cust = customersData?.find((c) => c.id === t.customer_id);
+          // Kundeoplysninger og kontrakttype gemmes som almindelig tekst direkte på
+          // skabelonen (customer_name/address_text/...) — ligesom på instanserne —
+          // fremfor via customer_id-relationen, som reelt aldrig bliver udfyldt af
+          // UI'et. Falder tilbage til customer_id-opslaget for evt. ældre data.
           return {
             id: t.id, title: t.title, duration: t.duration, days: t.days,
             videoUrl: t.video_url, poNumber: t.po_number,
-            customerName: cust?.name ?? "",
-            address: cust?.address ?? "",
-            accessInstructions: cust?.access_instructions ?? "",
+            customerName: t.customer_name || cust?.name || "",
+            address: t.address_text || cust?.address || "",
+            accessInstructions: t.access_instructions || cust?.access_instructions || "",
+            contractType: t.contract_type || "privat",
             checklistItems: [],
             startDate: t.start_date || null,
             expiryDate: t.expiry_date || null,
@@ -691,6 +696,21 @@ function PlanningApp({ session, onSignOut }) {
     await supabase.from("instances").delete().eq("id", id);
   }, []);
 
+  // Persisterer kunde-/kontraktfelter direkte på en "Fast interval"-skabelon, så
+  // ændringer også slår igennem på de instanser der først materialiseres i fremtiden
+  // (uden dette ville nye ugers opgaver blive genskabt med tomme kundefelter igen).
+  const syncTemplateFields = useCallback(async (tplId, fields) => {
+    if (!tplId) return;
+    const payload = {};
+    if ("customerName" in fields) payload.customer_name = fields.customerName ?? "";
+    if ("address" in fields) payload.address_text = fields.address ?? "";
+    if ("accessInstructions" in fields) payload.access_instructions = fields.accessInstructions ?? "";
+    if ("contractType" in fields) payload.contract_type = fields.contractType ?? "privat";
+    if (Object.keys(payload).length === 0) return;
+    const { error } = await supabase.from("service_templates").update(payload).eq("id", tplId);
+    if (error) console.error("syncTemplateFields error:", error.message);
+  }, []);
+
   const syncChecklistTemplate = useCallback(async (cl) => {
     await supabase.from("checklist_templates").upsert({ id: cl.id, name: cl.name }, { onConflict: "id" });
     await supabase.from("checklist_template_items").delete().eq("checklist_template_id", cl.id);
@@ -764,6 +784,8 @@ function PlanningApp({ session, onSignOut }) {
       const { error: tplErr } = await supabase.from("service_templates").insert({
         id: tplId, title: tpl.title, duration: tpl.duration, days: tpl.days,
         video_url: tpl.videoUrl || "", po_number: tpl.poNumber || "",
+        customer_name: tpl.customerName || "", address_text: tpl.address || "",
+        access_instructions: tpl.accessInstructions || "", contract_type: tpl.contractType || "privat",
         start_date: payload.startDate || null,
         expiry_date: payload.expiryDate || null,
       });
@@ -872,10 +894,13 @@ function PlanningApp({ session, onSignOut }) {
       return t;
     }));
 
-    // Opdater også skabelonen lokalt, så Aftaler-oversigten straks afspejler
-    // ændringen, selv hvis kobling til skabelon mangler i ældre data.
+    // Opdater også skabelonen — både lokalt (så Aftaler-oversigten straks
+    // afspejler ændringen) og i databasen, så fremtidige uger der materialiseres
+    // fra skabelonen arver den nye kontrakttype i stedet for at falde tilbage til
+    // "privat".
     setTemplates((prev) => prev.map((tpl) => {
       if (tpl.id === tplId || tpl.title === matchTitle) {
+        if (tpl.id) syncTemplateFields(tpl.id, { contractType: newType });
         return { ...tpl, contractType: newType };
       }
       return tpl;
@@ -903,6 +928,22 @@ function PlanningApp({ session, onSignOut }) {
       }
       return t;
     }));
+
+    // Persistér også på selve "Fast interval"-skabelonen, så fremtidige uger,
+    // der endnu ikke er materialiseret, arver de opdaterede kundeoplysninger i
+    // stedet for at blive genskabt med tomme felter (den oprindelige årsag til at
+    // kundenavn kunne forsvinde på nyoprettede uger).
+    if (task.type === "fixed") {
+      if (tplId) {
+        syncTemplateFields(tplId, fields);
+      } else {
+        const tplByTitle = templates.find((tpl) => tpl.title === matchTitle);
+        if (tplByTitle) syncTemplateFields(tplByTitle.id, fields);
+      }
+      setTemplates((prev) => prev.map((tpl) => (
+        tpl.id === tplId || tpl.title === matchTitle ? { ...tpl, ...fields } : tpl
+      )));
+    }
   }
 
   function manualPlace(taskId, day, empId) {
