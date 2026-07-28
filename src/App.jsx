@@ -791,6 +791,32 @@ function PlanningApp({ session, onSignOut }) {
     });
   }
 
+  // Samme automatiske planlægning som runAuto, men kørt for ALLE uger på tværs af
+  // hele systemet i stedet for kun den uge man aktuelt kigger på — nyttigt når en
+  // medarbejders kompetencer/område lige er blevet opdateret, og der ligger
+  // "ikke tildelt"-opgaver markeret til auto-planlægning i andre uger end den viste.
+  function runAutoAllWeeks() {
+    setInstances((prev) => {
+      const weekKeys = new Set(prev.map((t) => `${t.week}|${t.year}`));
+      let result = [...prev];
+      let totalBefore = 0;
+      let totalStill = 0;
+      weekKeys.forEach((key) => {
+        const [wk, wy] = key.split("|").map(Number);
+        const thisWeek = result.filter((t) => t.week === wk && t.year === wy);
+        const others = result.filter((t) => !(t.week === wk && t.year === wy));
+        const before = thisWeek.filter((t) => !(t.assignees && t.assignees.length)).length;
+        const after = scheduleWeek(thisWeek, employees, true, areas, employeeAreas);
+        const still = after.filter((t) => !(t.assignees && t.assignees.length)).length;
+        totalBefore += before;
+        totalStill += still;
+        result = [...others, ...after];
+      });
+      notify(totalBefore - totalStill > 0 ? `${totalBefore - totalStill} opgave(r) planlagt automatisk på tværs af alle uger` : "Ingen markerede opgaver til planlægning");
+      return result;
+    });
+  }
+
   async function addTask(payload) {
     const checklistItemsCombined = [
       ...payload.checklistTemplateIds.flatMap((id) => checklistTemplates.find((c) => c.id === id)?.items || []),
@@ -1416,7 +1442,7 @@ function PlanningApp({ session, onSignOut }) {
       {view === "uge" && (
         <WeekView
           employees={employees} instances={weekInstancesList} unplaced={unplaced}
-          onAdd={() => setShowAddTask(true)} onAuto={runAuto}
+          onAdd={() => setShowAddTask(true)} onAuto={runAuto} onAutoAllWeeks={runAutoAllWeeks}
           onPlace={manualPlace} onUnplace={unplace} onRemoveAssignee={removeAssignee} onDelete={deleteTask}
           onToggleInclude={(taskId) => updateInstance(taskId, (t) => ({ ...t, includeInAuto: !t.includeInAuto }))}
           onEditEmp={(emp) => { setEditEmp(emp); setShowAddEmp(true); }}
@@ -1494,6 +1520,8 @@ function PlanningApp({ session, onSignOut }) {
           checklistTemplates={checklistTemplates}
           skills={skills}
           isAdminUser={isAdminUser}
+          areas={areas}
+          employeeAreas={employeeAreas}
           onClose={() => setOpenTaskId(null)}
           onSetStatus={setTaskStatus}
           onToggleChecklistItem={toggleChecklistItem}
@@ -1683,7 +1711,7 @@ function EmployeeAppView({ employees, instances, onLogMinutes, onSetStatus, onTo
 }
 
 // ---------- Week view ----------
-function WeekView({ employees, instances, unplaced, onAdd, onAuto, onPlace, onUnplace, onRemoveAssignee, onDelete, onOpenTask, onToggleInclude, onEditEmp, dragId, setDragId, weekLabel, weekNo, weekOffset, weekYear, onPrevWeek, onNextWeek, onTodayWeek, travelSettings, onOpenTravelSettings, currentIsoWeek, areas, employeeAreas, onOpenAddBlock }) {
+function WeekView({ employees, instances, unplaced, onAdd, onAuto, onAutoAllWeeks, onPlace, onUnplace, onRemoveAssignee, onDelete, onOpenTask, onToggleInclude, onEditEmp, dragId, setDragId, weekLabel, weekNo, weekOffset, weekYear, onPrevWeek, onNextWeek, onTodayWeek, travelSettings, onOpenTravelSettings, currentIsoWeek, areas, employeeAreas, onOpenAddBlock }) {
   const [addMenuTaskId, setAddMenuTaskId] = useState(null);
   const [showWeekend, setShowWeekend] = useState(false);
   const [capView, setCapView] = useState("bar");
@@ -1700,6 +1728,7 @@ function WeekView({ employees, instances, unplaced, onAdd, onAuto, onPlace, onUn
       <div style={styles.toolbar}>
         <button style={styles.primaryBtn} onClick={onAdd}><Plus size={16} /> Ny opgave</button>
         <button style={styles.secondaryBtn} onClick={onAuto}><Wand2 size={16} /> Planlæg ugen automatisk</button>
+        <button style={styles.secondaryBtn} onClick={onAutoAllWeeks} title="Kør automatisk planlægning for alle uger, ikke kun den du kigger på lige nu"><Wand2 size={16} /> Planlæg alle uger</button>
         <button style={styles.secondaryBtn} onClick={onOpenTravelSettings}><Car size={16} /> Transporttid</button>
         <button style={{ ...styles.secondaryBtn, color: "#B91C1C", borderColor: "#FECACA" }} onClick={onOpenAddBlock}><Thermometer size={16} /> Sygdom/Ferie</button>
         <button
@@ -1751,15 +1780,21 @@ function WeekView({ employees, instances, unplaced, onAdd, onAuto, onPlace, onUn
           <div style={styles.backlogTitle}>Ikke tildelt ({unplaced.length})</div>
           {unplaced.length === 0 && <div style={styles.emptyCol}>Alt er planlagt 🎉</div>}
           <div style={styles.backlogList}>
-            {unplaced.map((t) => (
+            {unplaced.map((t) => {
+              // Kompetence-/områdetjekket genberegnes live her (i stedet for kun at
+              // stole på det gemte t.warning-felt), så advarslen straks forsvinder
+              // hvis man lige har rettet en medarbejders kompetence eller område —
+              // uden at skulle vente på næste automatiske planlægningskørsel.
+              const liveNoSkill = candidatesFor(t, employees, areas, employeeAreas).candidates.length === 0;
+              return (
               <div key={t.id} draggable onDragStart={() => setDragId(t.id)} style={styles.backlogCard} onClick={() => onOpenTask(t.id)} title="Klik for at åbne serviceordren">
                 <TypeBadge type={t.type} />
                 <div style={styles.cardTitle}>{t.title}</div>
                 {t.customerName && <div style={styles.taskChipCustomer}>{t.customerName}</div>}
                 {t.address && <div style={styles.taskChipAddress}>📍 {t.address}</div>}
                 <div style={styles.cardMeta}>Uge {t.week} · {skillLabel(t)} · {fmtMin(t.duration)}{t.deadline ? ` · senest ${DAYS.find((d) => d.key === t.deadline)?.label}` : ""}</div>
-                {t.warning === "no_skill" && <span style={styles.errorChip}><AlertTriangle size={12} /> Ingen har alle krævede kompetencer</span>}
-                {t.warning === "overloaded" && <span style={styles.warnChip}><AlertTriangle size={12} /> Ingen ledig kapacitet</span>}
+                {liveNoSkill && <span style={styles.errorChip}><AlertTriangle size={12} /> Ingen har alle krævede kompetencer</span>}
+                {!liveNoSkill && t.warning === "overloaded" && <span style={styles.warnChip}><AlertTriangle size={12} /> Ingen ledig kapacitet</span>}
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 6 }} onClick={(e) => e.stopPropagation()}>
                   <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: t.includeInAuto ? "#D6247A" : "#94A3B8", cursor: "pointer", fontWeight: t.includeInAuto ? 700 : 400 }}
                     onClick={(e) => { e.stopPropagation(); onToggleInclude(t.id); }}>
@@ -1771,7 +1806,8 @@ function WeekView({ employees, instances, unplaced, onAdd, onAuto, onPlace, onUn
                   <button style={styles.iconBtnGhost} onClick={(e) => { e.stopPropagation(); onDelete(t.id); }}><Trash2 size={13} /></button>
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         </div>
 
@@ -3980,7 +4016,7 @@ function EmployeeModal({ emp, onClose, onSave, skills: skillList }) {
 }
 
 // ---------- Task / service order detail ----------
-function TaskDetailModal({ task, employees, checklistTemplates, skills, isAdminUser, onClose, onSetStatus, onToggleChecklistItem, onAddChecklistItem, onAddChecklistTemplate, onAddAssignee, onRemoveAssignee, onUnplace, onDelete, onUpdateCustomer, onUpdateCustomerInfo, onUpdateContractType, onCopy, onUpdateSkills, onEndBlockEarly }) {
+function TaskDetailModal({ task, employees, checklistTemplates, skills, isAdminUser, areas, employeeAreas, onClose, onSetStatus, onToggleChecklistItem, onAddChecklistItem, onAddChecklistTemplate, onAddAssignee, onRemoveAssignee, onUnplace, onDelete, onUpdateCustomer, onUpdateCustomerInfo, onUpdateContractType, onCopy, onUpdateSkills, onEndBlockEarly }) {
   const [addOpen, setAddOpen] = useState(false);
   const [newItemText, setNewItemText] = useState("");
   const [showTemplates, setShowTemplates] = useState(false);
@@ -4362,8 +4398,8 @@ function TaskDetailModal({ task, employees, checklistTemplates, skills, isAdminU
           )
         )}
       </div>
-      {t.warning === "no_skill" && <span style={styles.errorChip}><AlertTriangle size={12} /> Ingen har alle krævede kompetencer</span>}
-      {t.warning === "overloaded" && <span style={styles.warnChip}><AlertTriangle size={12} /> Ingen ledig kapacitet den dag</span>}
+      {candidatesFor(t, employees, areas, employeeAreas).candidates.length === 0 && <span style={styles.errorChip}><AlertTriangle size={12} /> Ingen har alle krævede kompetencer</span>}
+      {candidatesFor(t, employees, areas, employeeAreas).candidates.length > 0 && t.warning === "overloaded" && <span style={styles.warnChip}><AlertTriangle size={12} /> Ingen ledig kapacitet den dag</span>}
 
       <label style={styles.label}>Status</label>
       <div style={styles.typePicker}>
