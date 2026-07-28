@@ -1439,7 +1439,8 @@ function PlanningApp({ session, onSignOut }) {
               await supabase.from("pricing").upsert({ id: `price_${type}`, contract_type: type, hourly_rate: rate }, { onConflict: "id" });
             }
           }}
-          onUpdateInstance={(taskId, fields) => updateInstance(taskId, (t) => ({ ...t, ...fields }))} />
+          onUpdateInstance={(taskId, fields) => updateInstance(taskId, (t) => ({ ...t, ...fields }))}
+          onOpenTask={setOpenTaskId} />
       )}
 
       {view === "contracts" && (
@@ -1474,6 +1475,7 @@ function PlanningApp({ session, onSignOut }) {
           employees={employees}
           checklistTemplates={checklistTemplates}
           skills={skills}
+          isAdminUser={isAdminUser}
           onClose={() => setOpenTaskId(null)}
           onSetStatus={setTaskStatus}
           onToggleChecklistItem={toggleChecklistItem}
@@ -2284,7 +2286,7 @@ function ChecklistModal({ checklist, onClose, onSave }) {
 }
 
 // ---------- Time & Export ----------
-function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLabel, onUpdateInstance, pricing: pricingProp, onPricingChange, isAdminUser }) {
+function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLabel, onUpdateInstance, pricing: pricingProp, onPricingChange, isAdminUser, onOpenTask }) {
   const now = new Date();
   const [filterMonth, setFilterMonth] = useState(now.getMonth());
   const [filterYear, setFilterYear] = useState(now.getFullYear());
@@ -2474,7 +2476,17 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
                 {emps.slice(0, 2).map((emp) => <span key={emp.id} style={{ ...styles.avatar, background: emp.color, width: 22, height: 22, fontSize: 10 }}>{initials(emp.name)}</span>)}
                 <span style={{ fontSize: 11, color: "#475569", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{emps.map((e) => e.name).join(", ")}</span>
               </div>
-              <div style={{ fontSize: 13, fontWeight: 600, color: "#111111", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.title}</div>
+              <div
+                style={{
+                  fontSize: 13, fontWeight: 600, color: isAdminUser ? "#9C1B5D" : "#111111",
+                  overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                  cursor: isAdminUser ? "pointer" : "default",
+                  textDecoration: isAdminUser ? "underline" : "none", textDecorationStyle: "dotted",
+                }}
+                title={isAdminUser ? "Klik for at åbne og redigere opgaven" : t.title}
+                onClick={() => { if (isAdminUser && onOpenTask) onOpenTask(t.id); }}>
+                {t.title}
+              </div>
               <div style={{ fontSize: 12, color: "#64748B", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.customerName || "—"}</div>
               <div style={{ fontSize: 12, color: "#64748B" }}>{dayLabel}</div>
               <div style={{ fontSize: 13, fontWeight: 500, color: "#111111", textAlign: "right" }}>{fmtMin(t.duration)}</div>
@@ -3934,7 +3946,7 @@ function EmployeeModal({ emp, onClose, onSave, skills: skillList }) {
 }
 
 // ---------- Task / service order detail ----------
-function TaskDetailModal({ task, employees, checklistTemplates, skills, onClose, onSetStatus, onToggleChecklistItem, onAddChecklistItem, onAddChecklistTemplate, onAddAssignee, onRemoveAssignee, onUnplace, onDelete, onUpdateCustomer, onUpdateCustomerInfo, onUpdateContractType, onCopy, onUpdateSkills, onEndBlockEarly }) {
+function TaskDetailModal({ task, employees, checklistTemplates, skills, isAdminUser, onClose, onSetStatus, onToggleChecklistItem, onAddChecklistItem, onAddChecklistTemplate, onAddAssignee, onRemoveAssignee, onUnplace, onDelete, onUpdateCustomer, onUpdateCustomerInfo, onUpdateContractType, onCopy, onUpdateSkills, onEndBlockEarly }) {
   const [addOpen, setAddOpen] = useState(false);
   const [newItemText, setNewItemText] = useState("");
   const [showTemplates, setShowTemplates] = useState(false);
@@ -4075,6 +4087,10 @@ function TaskDetailModal({ task, employees, checklistTemplates, skills, onClose,
 
   const t = task;
   const isDone = t.status === "udført";
+  // Administratorer må åbne og redigere en opgave, selvom den er markeret som
+  // udført (fx for at rette en fejl efterfølgende) — alle andre har kun
+  // læseadgang til kompetencer/kundeoplysninger/type, når opgaven er udført.
+  const locked = isDone && !isAdminUser;
   const assignedEmps = (t.assignees || []).map((id) => employees.find((e) => e.id === id)).filter(Boolean);
   const addable = employees.filter((e) => !(t.assignees || []).includes(e.id));
   const prog = checklistProgress(t);
@@ -4128,7 +4144,7 @@ function TaskDetailModal({ task, employees, checklistTemplates, skills, onClose,
   return (
     <Modal onClose={onClose} title={t.title} persistent>
       <div style={styles.detailMetaRow}>
-        {isDone ? (
+        {locked ? (
           <TypeBadge type={t.type} />
         ) : (
           <select
@@ -4141,7 +4157,7 @@ function TaskDetailModal({ task, employees, checklistTemplates, skills, onClose,
           </select>
         )}
         <span style={{ ...styles.typeChip, color: statusColor(t.status), background: "#F1EFE7" }}>{statusLabel(t.status)}</span>
-        {isDone ? (
+        {locked ? (
           t.contractType && <span style={{ ...styles.typeChip, background: t.contractType === "nexus" ? "#EEF2FF" : t.contractType === "aeldrelov" ? "#FFF7ED" : "#FFF6FA", color: t.contractType === "nexus" ? "#4F46E5" : t.contractType === "aeldrelov" ? "#C2410C" : "#9C1B5D" }}>{t.contractType === "nexus" ? "🏢 Nexus" : t.contractType === "aeldrelov" ? "👴 Ældrelov" : "🏠 Privat"}</span>
         ) : (
           <select
@@ -4163,7 +4179,7 @@ function TaskDetailModal({ task, employees, checklistTemplates, skills, onClose,
       <div style={{ marginBottom: 12 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
           <label style={styles.label}>Kompetencer</label>
-          {!isDone && !editingSkills && (
+          {!locked && !editingSkills && (
             <button style={{ ...styles.addSkillBtn, fontSize: 11 }} onClick={() => setEditingSkills(true)}><Pencil size={11} /> Rediger</button>
           )}
         </div>
@@ -4195,10 +4211,13 @@ function TaskDetailModal({ task, employees, checklistTemplates, skills, onClose,
       <div style={{ marginBottom: 12 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
           <label style={styles.label}>Kundeoplysninger</label>
-          {!isDone && !editingCustomer && (
+          {!locked && !editingCustomer && (
             <button style={{ ...styles.addSkillBtn, fontSize: 11 }} onClick={() => { setEditingCustomer(true); if (custName) searchDineroForCustomer(custName); }}><Pencil size={11} /> Rediger</button>
           )}
-          {isDone && <span style={{ fontSize: 11, color: "#94A3B8" }}>🔒 Låst (opgave udført)</span>}
+          {locked && <span style={{ fontSize: 11, color: "#94A3B8" }}>🔒 Låst (opgave udført)</span>}
+          {isDone && isAdminUser && (
+            <span style={{ fontSize: 11, color: "#9C1B5D", fontWeight: 600 }}>🔓 Admin-adgang (opgave udført)</span>
+          )}
         </div>
 
         {editingCustomer ? (
