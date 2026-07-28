@@ -302,6 +302,7 @@ function ensureWeekInstances(week, year, allInstances, templates, employees) {
           templateDays: tpl.days, // for off-schedule detection
           contractType: tpl.contractType || "privat",
           expiryDate: tpl.expiryDate || null,
+          dineroSynced: tpl.dineroSynced ?? false,
         };
         list.push(newInst);
         newlyCreatedIds.add(newInst.id);
@@ -579,6 +580,7 @@ function PlanningApp({ session, onSignOut }) {
             address: t.address_text || cust?.address || "",
             accessInstructions: t.access_instructions || cust?.access_instructions || "",
             contractType: t.contract_type || "privat",
+            dineroSynced: t.dinero_synced ?? false,
             checklistItems: [],
             startDate: t.start_date || null,
             expiryDate: t.expiry_date || null,
@@ -610,6 +612,7 @@ function PlanningApp({ session, onSignOut }) {
             startDate: i.start_date || null,
             expiryDate: i.expiry_date || null,
             blockGroupId: i.block_group_id || null,
+            dineroSynced: i.dinero_synced ?? false,
           };
         });
         const allInst = ensureWeekInstances(currentWeek, currentYear, existingInst, mapped, empMapped);
@@ -624,6 +627,7 @@ function PlanningApp({ session, onSignOut }) {
           startDate: i.start_date || null,
           expiryDate: i.expiry_date || null,
           blockGroupId: i.block_group_id || null,
+          dineroSynced: i.dinero_synced ?? false,
         })));
       }
 
@@ -688,6 +692,7 @@ function PlanningApp({ session, onSignOut }) {
       start_date: inst.startDate || null,
       expiry_date: inst.expiryDate || null,
       block_group_id: inst.blockGroupId || null,
+      dinero_synced: inst.dineroSynced ?? false,
     }, { onConflict: "id" });
     if (error) console.error("syncInstance error:", error.message, error.details, inst.id);
   }, []);
@@ -706,6 +711,7 @@ function PlanningApp({ session, onSignOut }) {
     if ("address" in fields) payload.address_text = fields.address ?? "";
     if ("accessInstructions" in fields) payload.access_instructions = fields.accessInstructions ?? "";
     if ("contractType" in fields) payload.contract_type = fields.contractType ?? "privat";
+    if ("dineroSynced" in fields) payload.dinero_synced = !!fields.dineroSynced;
     if (Object.keys(payload).length === 0) return;
     const { error } = await supabase.from("service_templates").update(payload).eq("id", tplId);
     if (error) console.error("syncTemplateFields error:", error.message);
@@ -779,13 +785,14 @@ function PlanningApp({ session, onSignOut }) {
         videoUrl: payload.videoUrl, customerName: payload.customerName, address: payload.address,
         poNumber: payload.poNumber, accessInstructions: payload.accessInstructions,
         contractType: payload.contractType, expiryDate: payload.expiryDate,
-        startDate: payload.startDate || null,
+        startDate: payload.startDate || null, dineroSynced: payload.dineroSynced || false,
       };
       const { error: tplErr } = await supabase.from("service_templates").insert({
         id: tplId, title: tpl.title, duration: tpl.duration, days: tpl.days,
         video_url: tpl.videoUrl || "", po_number: tpl.poNumber || "",
         customer_name: tpl.customerName || "", address_text: tpl.address || "",
         access_instructions: tpl.accessInstructions || "", contract_type: tpl.contractType || "privat",
+        dinero_synced: tpl.dineroSynced,
         start_date: payload.startDate || null,
         expiry_date: payload.expiryDate || null,
       });
@@ -828,6 +835,7 @@ function PlanningApp({ session, onSignOut }) {
           address: payload.address, poNumber: payload.poNumber, accessInstructions: payload.accessInstructions,
           type: "flexible", day: null, deadline: payload.deadline,
           contractType: payload.contractType, expiryDate: payload.expiryDate,
+          dineroSynced: payload.dineroSynced || false,
         }));
         setInstances((prev) => {
           let next = [...prev];
@@ -847,7 +855,7 @@ function PlanningApp({ session, onSignOut }) {
           week: adhocWeek, year: adhocYear, checklist: instantiateChecklist(checklistItemsCombined),
           videoUrl: payload.videoUrl, customerName: payload.customerName,
           address: payload.address, poNumber: payload.poNumber, accessInstructions: payload.accessInstructions,
-          contractType: payload.contractType,
+          contractType: payload.contractType, dineroSynced: payload.dineroSynced || false,
         };
         const newInstance = payload.type === "adhoc"
           ? { ...base, type: "adhoc", day: payload.day }
@@ -1689,6 +1697,7 @@ function WeekView({ employees, instances, unplaced, onAdd, onAuto, onPlace, onUn
                 <TypeBadge type={t.type} />
                 <div style={styles.cardTitle}>{t.title}</div>
                 {t.customerName && <div style={styles.taskChipCustomer}>{t.customerName}</div>}
+                {t.address && <div style={styles.taskChipAddress}>📍 {t.address}</div>}
                 <div style={styles.cardMeta}>Uge {t.week} · {skillLabel(t)} · {fmtMin(t.duration)}{t.deadline ? ` · senest ${DAYS.find((d) => d.key === t.deadline)?.label}` : ""}</div>
                 {t.warning === "no_skill" && <span style={styles.errorChip}><AlertTriangle size={12} /> Ingen har alle krævede kompetencer</span>}
                 {t.warning === "overloaded" && <span style={styles.warnChip}><AlertTriangle size={12} /> Ingen ledig kapacitet</span>}
@@ -1797,6 +1806,7 @@ function WeekView({ employees, instances, unplaced, onAdd, onAuto, onPlace, onUn
                               {prog.total > 0 && <span style={styles.taskChipDur}>{prog.done}/{prog.total}</span>}
                               <span style={styles.taskChipDur}>{fmtMin(t.duration)}</span>
                             </div>
+                            {t.address && <div style={styles.taskChipAddress}>📍 {t.address}</div>}
                             <div style={styles.chipAssigneeRow} onClick={(e) => e.stopPropagation()}>
                               {assignedEmps.map((a) => (
                                 <button key={a.id} type="button" style={{ ...styles.chipAvatar, background: a.color }} title={`Fjern ${a.name}`}
@@ -2804,6 +2814,10 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom }) {
   // eksisterende opgave) — forhindrer at "Opret i Dinero"-knappen dukker op lige
   // efter man har valgt en eksisterende kunde fra søgeresultaterne.
   const [customerSelected, setCustomerSelected] = useState(!!copyFrom?.customerName);
+  // Sand når kunden vides at være en rigtig Dinero-kontakt (valgt fra søgeresultater
+  // eller netop oprettet der) — bruges til at undlade at foreslå "Send til Dinero"
+  // for en kunde der allerede findes derinde.
+  const [customerDineroSynced, setCustomerDineroSynced] = useState(!!copyFrom?.dineroSynced);
 
   const [dineroAvailable, setDineroAvailable] = useState(true);
 
@@ -2834,6 +2848,7 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom }) {
     // Adressen her er Dineros fakturaadresse for virksomheden — IKKE adressen hvor
     // rengøringen skal udføres, så den skal ikke overskrive "Adresse for udførsel".
     setCustomerSelected(true);
+    setCustomerDineroSynced(true);
     setDineroResults([]);
   }
 
@@ -2851,6 +2866,7 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom }) {
         if (!error && (data?.Name || data?.ContactGuid)) {
           if (data?.Name) setCustomerName(data.Name);
           created = true;
+          setCustomerDineroSynced(true);
         } else {
           setDineroAvailable(false);
         }
@@ -2859,7 +2875,9 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom }) {
       }
     }
 
-    // Fallback: gem direkte i Supabase customers-tabel
+    // Fallback: gem direkte i Supabase customers-tabel (dette er IKKE en Dinero-
+    // kontakt, så customerDineroSynced skal forblive false, ellers vil "Send til
+    // Dinero" fejlagtigt aldrig blive tilbudt for denne kunde senere).
     if (!created) {
       const newId = uid("cust");
       const { error: dbErr } = await supabase.from("customers").insert({
@@ -2938,7 +2956,7 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom }) {
         <input
           style={styles.input}
           value={customerName}
-          onChange={(e) => { setCustomerSelected(false); searchDinero(e.target.value); }}
+          onChange={(e) => { setCustomerSelected(false); setCustomerDineroSynced(false); searchDinero(e.target.value); }}
           placeholder={dineroAvailable ? "Skriv kundenavn for at søge i Dinero…" : "Kundenavn…"}
         />
         {dineroSearching && <span style={{ position: "absolute", right: 10, top: 10, fontSize: 11, color: "#94A3B8" }}>Søger…</span>}
@@ -3083,7 +3101,7 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom }) {
         <button
           style={styles.primaryBtn}
           disabled={!title.trim() || (type === "fixed" && days.length === 0) || requiredSkills.length === 0}
-          onClick={() => onSave({ type, contractType, title: title.trim(), requiredSkills, duration, days, day, adhocDate, deadline, startDate, expiryDate, checklistTemplateIds, extraItems, videoUrl: videoUrl.trim(), customerName: customerName.trim(), address: address.trim(), poNumber: poNumber.trim(), accessInstructions: accessInstructions.trim() })}
+          onClick={() => onSave({ type, contractType, title: title.trim(), requiredSkills, duration, days, day, adhocDate, deadline, startDate, expiryDate, checklistTemplateIds, extraItems, videoUrl: videoUrl.trim(), customerName: customerName.trim(), address: address.trim(), poNumber: poNumber.trim(), accessInstructions: accessInstructions.trim(), dineroSynced: customerDineroSynced })}
         >
           Gem og planlæg
         </button>
@@ -3889,7 +3907,10 @@ function TaskDetailModal({ task, employees, checklistTemplates, skills, onClose,
   const [custAccess, setCustAccess] = useState("");
   const [taskSkills, setTaskSkills] = useState([]);
   const [dineroSyncing, setDineroSyncing] = useState(false);
-  const [dineroSynced, setDineroSynced] = useState(false);
+  // Kort visuel "✓ Sendt"-bekræftelse lige efter klik — IKKE det samme som om
+  // kunden varigt er kendt i Dinero (det styres af den gemte customerDineroSynced
+  // nedenfor, som afgør om knappen overhovedet skal vises).
+  const [justSyncedFlash, setJustSyncedFlash] = useState(false);
   const [dineroResults, setDineroResults] = useState([]);
   const [dineroSearching, setDineroSearching] = useState(false);
   const [showDineroCreate, setShowDineroCreate] = useState(false);
@@ -3898,6 +3919,9 @@ function TaskDetailModal({ task, employees, checklistTemplates, skills, onClose,
   // Forhindrer at "Opret i Dinero" foreslås for en kunde der allerede er tilknyttet
   // opgaven, eller lige er valgt fra Dinero-søgeresultaterne.
   const [customerSelected, setCustomerSelected] = useState(false);
+  // Sand når kunden vides at være en rigtig Dinero-kontakt (gemt persistent på
+  // opgaven/skabelonen) — styrer om "Send til Dinero"-knappen vises i det hele taget.
+  const [customerDineroSynced, setCustomerDineroSynced] = useState(false);
 
   useEffect(() => {
     if (task) {
@@ -3909,6 +3933,7 @@ function TaskDetailModal({ task, employees, checklistTemplates, skills, onClose,
       setDineroResults([]);
       setShowDineroCreate(false);
       setCustomerSelected(!!task.customerName);
+      setCustomerDineroSynced(!!task.dineroSynced);
     }
   }, [task?.id]);
 
@@ -3939,6 +3964,7 @@ function TaskDetailModal({ task, employees, checklistTemplates, skills, onClose,
     // Adressen her er Dineros fakturaadresse for virksomheden — IKKE adressen hvor
     // rengøringen skal udføres, så den skal ikke overskrive "Adresse for udførsel".
     setCustomerSelected(true);
+    setCustomerDineroSynced(true);
     setDineroResults([]);
     setShowDineroCreate(false);
   }
@@ -3956,6 +3982,7 @@ function TaskDetailModal({ task, employees, checklistTemplates, skills, onClose,
         if (!error && (data?.Name || data?.ContactGuid)) {
           if (data?.Name) setCustName(data.Name);
           created = true;
+          setCustomerDineroSynced(true);
         } else {
           setDineroAvailable(false);
         }
@@ -3964,6 +3991,7 @@ function TaskDetailModal({ task, employees, checklistTemplates, skills, onClose,
       }
     }
 
+    // Fallback direkte i Supabase customers-tabel er IKKE en Dinero-kontakt.
     if (!created) {
       const newId = uid("cust");
       const { error: dbErr } = await supabase.from("customers").insert({
@@ -4018,7 +4046,7 @@ function TaskDetailModal({ task, employees, checklistTemplates, skills, onClose,
   const existingTexts = new Set((t.checklist || []).map((i) => i.text));
 
   function saveCustomer() {
-    onUpdateCustomerInfo(t.id, { customerName: custName, address: custAddress, poNumber: custPo, accessInstructions: custAccess });
+    onUpdateCustomerInfo(t.id, { customerName: custName, address: custAddress, poNumber: custPo, accessInstructions: custAccess, dineroSynced: customerDineroSynced });
     setEditingCustomer(false);
     setDineroResults([]);
     setShowDineroCreate(false);
@@ -4037,8 +4065,12 @@ function TaskDetailModal({ task, employees, checklistTemplates, skills, onClose,
         body: { action: "create", contact: { name: custName, address: parts[0] || "", zipCode: parts[1] || "", city: parts[2] || "" } },
       });
       if (!error && (data?.Name || data?.ContactGuid)) {
-        setDineroSynced(true);
-        setTimeout(() => setDineroSynced(false), 3000);
+        setJustSyncedFlash(true);
+        setTimeout(() => setJustSyncedFlash(false), 3000);
+        // Gem varigt at kunden nu findes i Dinero, så knappen ikke dukker op igen
+        // — hverken på denne opgave eller fremtidige uger af samme faste aftale.
+        setCustomerDineroSynced(true);
+        onUpdateCustomerInfo(t.id, { dineroSynced: true });
       }
     } catch {}
     setDineroSyncing(false);
@@ -4140,7 +4172,7 @@ function TaskDetailModal({ task, employees, checklistTemplates, skills, onClose,
                 <input
                   style={styles.input}
                   value={custName}
-                  onChange={(e) => { setCustomerSelected(false); searchDineroForCustomer(e.target.value); setShowDineroCreate(false); }}
+                  onChange={(e) => { setCustomerSelected(false); setCustomerDineroSynced(false); searchDineroForCustomer(e.target.value); setShowDineroCreate(false); }}
                   placeholder={dineroAvailable ? "Skriv kundenavn for at søge i Dinero…" : "Kundenavn"}
                 />
                 {dineroSearching && <span style={{ position: "absolute", right: 10, top: 10, fontSize: 11, color: "#94A3B8" }}>Søger…</span>}
@@ -4215,14 +4247,22 @@ function TaskDetailModal({ task, employees, checklistTemplates, skills, onClose,
                   <div style={styles.checklistItemDescription}>{custAccess}</div>
                 </div>
               )}
-              {/* Dinero sync knap — vises hvis kunden ikke er i Dinero endnu */}
+              {/* Dinero sync-knap — vises kun hvis kunden IKKE allerede vides at
+                  findes i Dinero (valgt fra søgning, eller tidligere oprettet der).
+                  Er kunden allerede kendt, vises i stedet en simpel bekræftelse. */}
               {!isDone && custName && (
-                <button
-                  style={{ ...styles.addSkillBtn, marginTop: 8, fontSize: 12, color: dineroSynced ? "#16A34A" : "#4F46E5", borderColor: dineroSynced ? "#22C55E" : "#C7D2FE", background: dineroSynced ? "#ECFDF5" : "#EEF2FF" }}
-                  onClick={syncToDinero}
-                  disabled={dineroSyncing}>
-                  {dineroSynced ? "✓ Sendt til Dinero" : dineroSyncing ? "Sender…" : "🏢 Send til Dinero"}
-                </button>
+                customerDineroSynced ? (
+                  <div style={{ ...styles.addSkillBtn, marginTop: 8, fontSize: 12, color: "#16A34A", borderColor: "#22C55E", background: "#ECFDF5", cursor: "default" }}>
+                    ✓ Kunde findes i Dinero
+                  </div>
+                ) : (
+                  <button
+                    style={{ ...styles.addSkillBtn, marginTop: 8, fontSize: 12, color: justSyncedFlash ? "#16A34A" : "#4F46E5", borderColor: justSyncedFlash ? "#22C55E" : "#C7D2FE", background: justSyncedFlash ? "#ECFDF5" : "#EEF2FF" }}
+                    onClick={syncToDinero}
+                    disabled={dineroSyncing}>
+                    {justSyncedFlash ? "✓ Sendt til Dinero" : dineroSyncing ? "Sender…" : "🏢 Send til Dinero"}
+                  </button>
+                )
               )}
             </div>
           ) : (
@@ -4428,6 +4468,7 @@ const styles = {
   chipSubRow: { display: "flex", alignItems: "center", gap: 6, minWidth: 0 },
   taskChipTitle: { fontSize: 11, fontWeight: 600, flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" },
   taskChipCustomer: { fontSize: 10, color: "#9C1B5D", fontWeight: 600, flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" },
+  taskChipAddress: { fontSize: 10, color: "#64748B", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", marginTop: 1 },
   taskChipDur: { fontSize: 10, color: "#64748B", flexShrink: 0 },
   statusDot: { width: 6, height: 6, borderRadius: 3, flexShrink: 0 },
   chipXBtn: { border: "none", background: "transparent", color: "#94A3B8", cursor: "pointer", padding: 0, display: "flex" },
