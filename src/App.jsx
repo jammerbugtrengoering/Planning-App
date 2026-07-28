@@ -2585,7 +2585,7 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
         return (
           <div style={{ display: "grid", gridTemplateColumns: "50px 140px 120px 160px 1fr 70px 80px 100px 100px 100px 90px 70px 28px", gap: 0, padding: "10px 14px", background: "#FCE4EF", borderRadius: 10, marginTop: 8, fontWeight: 700, fontSize: 13 }}>
             <span /><span style={{ color: "#9C1B5D" }}>I alt</span>
-            <span /><span /><span />
+            <span /><span /><span /><span />
             <span style={{ textAlign: "right", color: "#111111" }}>{fmtMin(totalPlanned)}</span>
             <span style={{ textAlign: "right", color: "#D6247A" }}>{fmtMin(totalRegistered)}</span>
             <span style={{ textAlign: "right", color: "#64748B" }}>{totalPlannedKr.toLocaleString("da-DK")} kr</span>
