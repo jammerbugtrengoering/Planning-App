@@ -932,7 +932,11 @@ function PlanningApp({ session, onSignOut }) {
 
     setInstances((prev) => prev.map((t) => {
       const sameTemplate = tplId && t.templateId === tplId;
-      const sameTitleFixed = !tplId && t.type === "fixed" && t.title === matchTitle;
+      // Fanger også "løsrevne" instanser af samme titel, der mangler deres egen
+      // template_id (fx en opgave der aldrig blev korrekt linket til skabelonen) —
+      // uanset om den redigerede opgave selv har en templateId. Uden dette blev
+      // sådanne løsrevne instanser aldrig opdateret sammen med resten af aftalen.
+      const sameTitleFixed = t.type === "fixed" && t.title === matchTitle && !t.templateId;
       if (t.id === taskId || sameTemplate || sameTitleFixed) {
         const updated = { ...t, contractType: newType };
         syncInstance(updated);
@@ -967,7 +971,11 @@ function PlanningApp({ session, onSignOut }) {
 
     setInstances((prev) => prev.map((t) => {
       const sameTemplate = tplId && t.templateId === tplId;
-      const sameTitleFixed = !tplId && t.type === "fixed" && t.title === matchTitle;
+      // Fanger også "løsrevne" instanser af samme titel, der mangler deres egen
+      // template_id (fx en opgave der aldrig blev korrekt linket til skabelonen) —
+      // uanset om den redigerede opgave selv har en templateId. Uden dette blev
+      // sådanne løsrevne instanser aldrig opdateret sammen med resten af aftalen.
+      const sameTitleFixed = t.type === "fixed" && t.title === matchTitle && !t.templateId;
       if (t.id === taskId || sameTemplate || sameTitleFixed) {
         const updated = { ...t, ...fields };
         syncInstance(updated);
