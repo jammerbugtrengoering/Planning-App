@@ -658,6 +658,8 @@ function PlanningApp({ session, onSignOut }) {
             blockGroupId: i.block_group_id || null,
             dineroSynced: i.dinero_synced ?? false,
             includeInAuto: i.include_in_auto ?? false,
+            offSchedule: i.off_schedule ?? false,
+            onSchedule: i.on_schedule ?? false,
           };
         });
         const allInst = ensureWeekInstances(currentWeek, currentYear, existingInst, mapped, empMapped);
@@ -675,6 +677,8 @@ function PlanningApp({ session, onSignOut }) {
           blockGroupId: i.block_group_id || null,
           dineroSynced: i.dinero_synced ?? false,
           includeInAuto: i.include_in_auto ?? false,
+          offSchedule: i.off_schedule ?? false,
+          onSchedule: i.on_schedule ?? false,
         })));
       }
 
@@ -741,6 +745,8 @@ function PlanningApp({ session, onSignOut }) {
       block_group_id: inst.blockGroupId || null,
       dinero_synced: inst.dineroSynced ?? false,
       include_in_auto: inst.includeInAuto ?? false,
+      off_schedule: inst.offSchedule ?? false,
+      on_schedule: inst.onSchedule ?? false,
     }, { onConflict: "id" });
     if (error) console.error("syncInstance error:", error.message, error.details, inst.id);
   }, []);
