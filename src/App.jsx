@@ -112,6 +112,24 @@ function mondayOfWeek(week, year) {
   monday.setDate(weekOneMonday.getDate() + (week - 1) * 7);
   return monday;
 }
+// Beregner den faktiske kalendermåned/år en opgave-instans hører til, ud fra
+// dens rigtige dato (mandag i ugen + evt. den konkrete ugedag), i stedet for
+// at gætte ud fra ISO-ugenummeret alene. Bruges i Tid & Eksport og Rapportering
+// så en uge der strækker sig over et månedsskift (fx uge 31: 27. jul - 2. aug)
+// altid lander i præcis én måned - den måned den pågældende dag faktisk falder i.
+// Har opgaven ingen fast ugedag endnu (uplaceret adhoc/Fleksibel-opgave), bruges
+// ugens mandag som bedste bud på dato.
+function instanceMonthYear(t, fallbackYear) {
+  const year = t.year ?? fallbackYear;
+  const monday = mondayOfWeek(t.week, year);
+  const date = new Date(monday);
+  if (t.day) {
+    const dayIdx = DAYS.findIndex((d) => d.key === t.day);
+    if (dayIdx >= 0) date.setDate(monday.getDate() + dayIdx);
+  }
+  return { month: date.getMonth(), year: date.getFullYear() };
+}
+
 function weekMeta(weekNo, year) {
   const monday = mondayOfWeek(weekNo, year);
   const friday = new Date(monday); friday.setDate(monday.getDate() + 4);
@@ -2437,36 +2455,15 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
 
   useEffect(() => { if (pricingProp) setLocalPricing(pricingProp); }, [JSON.stringify(pricingProp)]);
 
-  // Beregn hvilke ISO-uger der falder inden for den valgte måned/år
-  function weeksInMonth(year, month) {
-    // Nogle uger strækker sig hen over en månedsskift (fx uge 31 kan ramme både
-    // sidste dag i juli og første dag i august). Vi tæller kun hverdage (man-fre,
-    // dem der reelt bruges til planlægning) og lader ugen tilhøre den måned hvor
-    // FLEST af dens hverdage ligger, så en uge aldrig optræder i to måneder på én gang.
-    const weekdayCounts = new Map();
-    const d = new Date(year, month, 1);
-    while (d.getMonth() === month) {
-      const dow = d.getDay();
-      if (dow >= 1 && dow <= 5) {
-        const tmp = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-        const dayNum = (tmp.getDay() + 6) % 7;
-        tmp.setDate(tmp.getDate() - dayNum + 3);
-        const yearStart = new Date(tmp.getFullYear(), 0, 1);
-        const wk = Math.ceil(((tmp - yearStart) / 86400000 + 1) / 7);
-        weekdayCounts.set(wk, (weekdayCounts.get(wk) || 0) + 1);
-      }
-      d.setDate(d.getDate() + 1);
-    }
-    const weeks = new Set();
-    weekdayCounts.forEach((count, wk) => { if (count >= 3) weeks.add(wk); });
-    return weeks;
-  }
-
-  const validWeeks = weeksInMonth(filterYear, filterMonth);
-
   const placed = instances
     .filter((t) => !BLOCK_TYPES.includes(t.type))
-    .filter((t) => validWeeks.has(t.week) && (t.year ?? filterYear) === filterYear)
+    .filter((t) => {
+      // Filtrér på opgavens faktiske dato (mandag i ugen + evt. ugedag), ikke
+      // blot ugenummeret - så en uge der strækker sig over et månedsskift
+      // (fx uge 31: 27. jul - 2. aug) altid lander i præcis den rigtige måned.
+      const { month, year } = instanceMonthYear(t, filterYear);
+      return month === filterMonth && year === filterYear;
+    })
     .filter((t) => statusFilter === "all" || t.status === statusFilter)
     .filter((t) => !invoiceOnly || t.invoiceReady)
     .filter((t) => !invoiceOnly || showDineroExported || !t.dineroExported)
@@ -2751,30 +2748,6 @@ const REPORT_AREAS = [
 ];
 const REPORT_MONTHS = ["Januar","Februar","Marts","April","Maj","Juni","Juli","August","September","Oktober","November","December"];
 
-function weeksInMonthReport(year, monthIndex) {
-  // monthIndex er 0-baseret (0 = januar), ligesom Date.getMonth()
-  // Samme princip som weeksInMonth: en uge der strækker sig over et månedsskift
-  // tilhører kun den måned hvor flest af dens hverdage (man-fre) ligger, så
-  // omsætning/budget ikke tælles dobbelt i to måneder.
-  const weekdayCounts = new Map();
-  const d = new Date(year, monthIndex, 1);
-  while (d.getMonth() === monthIndex) {
-    const dow = d.getDay();
-    if (dow >= 1 && dow <= 5) {
-      const tmp = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-      const dayNum = (tmp.getDay() + 6) % 7;
-      tmp.setDate(tmp.getDate() - dayNum + 3);
-      const yearStart = new Date(tmp.getFullYear(), 0, 1);
-      const wk = Math.ceil(((tmp - yearStart) / 86400000 + 1) / 7);
-      weekdayCounts.set(wk, (weekdayCounts.get(wk) || 0) + 1);
-    }
-    d.setDate(d.getDate() + 1);
-  }
-  const weeks = new Set();
-  weekdayCounts.forEach((count, wk) => { if (count >= 3) weeks.add(wk); });
-  return weeks;
-}
-
 const REPORT_AREA_COLORS = { privat: "#D6247A", nexus: "#4F46E5", aeldrelov: "#C2410C", alle: "#334155" };
 const REPORT_TABS = [...REPORT_AREAS, ["alle", "🌐 Alle"]];
 
@@ -2805,15 +2778,20 @@ function ReportsView({ instances, pricing, budgets, onSaveBudget, isAdminUser })
     const areasToSum = isAllAreas ? REPORT_AREAS.map(([k]) => k) : [selectedArea];
     return REPORT_MONTHS.map((label, idx) => {
       const month = idx + 1;
-      const validWeeks = weeksInMonthReport(selectedYear, idx);
       let plannedKr = 0;
       let registeredKr = 0;
       let budgetKr = 0;
       areasToSum.forEach((area) => {
         const rate = pricing[area] || 0;
-        const tasksInMonth = instances.filter(
-          (t) => !BLOCK_TYPES.includes(t.type) && t.assignees && t.assignees.length && validWeeks.has(t.week) && (t.year ?? selectedYear) === selectedYear && (t.contractType || "privat") === area
-        );
+        // Filtrér på opgavens faktiske dato, ikke blot ugenummeret - så en uge
+        // der strækker sig over et månedsskift altid tælles i den rigtige måned.
+        const tasksInMonth = instances.filter((t) => {
+          if (BLOCK_TYPES.includes(t.type)) return false;
+          if (!(t.assignees && t.assignees.length)) return false;
+          if ((t.contractType || "privat") !== area) return false;
+          const my = instanceMonthYear(t, selectedYear);
+          return my.month === idx && my.year === selectedYear;
+        });
         plannedKr += tasksInMonth.reduce((s, t) => s + (t.duration / 60) * rate, 0);
         registeredKr += tasksInMonth.reduce((s, t) => {
           const logged = (t.timeLog || t.time_log || []).reduce((s2, l) => s2 + (l.minutes || 0), 0);
