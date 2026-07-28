@@ -2323,15 +2323,18 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
 
   const placed = instances
     .filter((t) => !BLOCK_TYPES.includes(t.type))
-    .filter((t) => t.assignees && t.assignees.length && validWeeks.has(t.week) && (t.year ?? filterYear) === filterYear)
+    .filter((t) => validWeeks.has(t.week) && (t.year ?? filterYear) === filterYear)
     .filter((t) => statusFilter === "all" || t.status === statusFilter)
     .filter((t) => !invoiceOnly || t.invoiceReady)
     .filter((t) => !invoiceOnly || showDineroExported || !t.dineroExported)
     .sort((a, b) => {
       if (a.week !== b.week) return a.week - b.week;
-      const aEmp = (a.assignees || []).map((id) => employees.find((e) => e.id === id)?.name || "").sort().join(", ");
-      const bEmp = (b.assignees || []).map((id) => employees.find((e) => e.id === id)?.name || "").sort().join(", ");
+      const aEmp = (a.assignees || []).map((id) => employees.find((e) => e.id === id)?.name || "").sort().join(", ") || "\uffff";
+      const bEmp = (b.assignees || []).map((id) => employees.find((e) => e.id === id)?.name || "").sort().join(", ") || "\uffff";
       if (aEmp !== bEmp) return aEmp.localeCompare(bEmp, "da");
+      const aDay = a.day ? DAYS.findIndex((d) => d.key === a.day) : 99;
+      const bDay = b.day ? DAYS.findIndex((d) => d.key === b.day) : 99;
+      if (aDay !== bDay) return aDay - bDay;
       const aCust = a.customerName || "";
       const bCust = b.customerName || "";
       if (aCust !== bCust) return aCust.localeCompare(bCust, "da");
@@ -2393,6 +2396,7 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
             onChange={(e) => setStatusFilter(e.target.value)}
             title="Vis kun opgaver med denne status — brug 'Udført' for at se det reelle fakturagrundlag">
             <option value="all">📋 Alle statusser</option>
+            <option value="unscheduled">🚫 Ikke planlagt</option>
             <option value="planlagt">🗓️ Planlagt</option>
             <option value="udført">✅ Udført</option>
           </select>
@@ -2464,7 +2468,7 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
 
       <div style={{ background: "#fff", borderRadius: "0 0 10px 10px", boxShadow: "0 1px 3px rgba(0,0,0,0.06)", overflow: "hidden" }}>
         {placed.map((t, idx) => {
-          const emps = t.assignees.map((id) => employees.find((e) => e.id === id)).filter(Boolean);
+          const emps = (t.assignees || []).map((id) => employees.find((e) => e.id === id)).filter(Boolean);
           const logged = (t.timeLog || t.time_log || []).reduce((s, l) => s + (l.minutes || 0), 0);
           const dayLabel = DAYS.find((d) => d.key === t.day)?.label || t.day || "—";
           const isLow = logged > 0 && logged < t.duration * 0.5;
@@ -2478,8 +2482,14 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
             <div key={t.id} style={{ display: "grid", gridTemplateColumns: "50px 140px 120px 160px 1fr 70px 80px 100px 100px 100px 90px 70px 28px", gap: 0, padding: "10px 14px", borderBottom: idx < placed.length - 1 ? "1px solid #F1F5F9" : "none", alignItems: "center", background: t.dineroExported ? "#EEF2FF" : t.invoiceReady ? "#F0FDF4" : "transparent" }}>
               <div style={{ fontSize: 12, color: "#94A3B8", fontWeight: 600 }}>{t.week}</div>
               <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                {emps.slice(0, 2).map((emp) => <span key={emp.id} style={{ ...styles.avatar, background: emp.color, width: 22, height: 22, fontSize: 10 }}>{initials(emp.name)}</span>)}
-                <span style={{ fontSize: 11, color: "#475569", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{emps.map((e) => e.name).join(", ")}</span>
+                {emps.length === 0 ? (
+                  <span style={{ fontSize: 11, color: "#94A3B8", fontStyle: "italic" }}>Ikke tildelt</span>
+                ) : (
+                  <>
+                    {emps.slice(0, 2).map((emp) => <span key={emp.id} style={{ ...styles.avatar, background: emp.color, width: 22, height: 22, fontSize: 10 }}>{initials(emp.name)}</span>)}
+                    <span style={{ fontSize: 11, color: "#475569", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{emps.map((e) => e.name).join(", ")}</span>
+                  </>
+                )}
               </div>
               <div style={{ fontSize: 12, color: "#64748B", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.customerName || "—"}</div>
               <div style={{ fontSize: 12, color: "#94A3B8", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.address || "—"}</div>
