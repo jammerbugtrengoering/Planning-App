@@ -42,6 +42,19 @@ const TYPE_META = {
 const BLOCK_TYPES = ["sygdom", "ferie"];
 
 function uid(p) { return p + Math.random().toString(36).slice(2, 9); }
+// Oversætter en valgt kalenderdato til en gyldig hverdags-nøgle (Mon-Fri).
+// Databasen tillader kun Mon-Fri (eller NULL) i "day"/"deadline"-felterne —
+// virksomheden planlægger ikke i weekenden. Falder en valgt dato i weekenden,
+// rulles den tilbage til fredag (bevarer "senest udført"-betydningen: fredag
+// er stadig inden for den valgte uge, blot ikke selve lørdag/søndag), i
+// stedet for at gemme en ugyldig dag-værdi, som ellers ville få hele
+// opgaven til at fejle stille i databasen ved oprettelse.
+function weekdayKeyFor(date) {
+  const dayKeys = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const dow = date.getDay();
+  if (dow === 0 || dow === 6) return "Fri";
+  return dayKeys[dow];
+}
 function initials(name) { return name.split(" ").map((p) => p[0]).join("").slice(0, 2).toUpperCase(); }
 function fmtMin(min) {
   const h = Math.floor(min / 60), m = Math.round(min % 60);
@@ -748,7 +761,14 @@ function PlanningApp({ session, onSignOut }) {
       off_schedule: inst.offSchedule ?? false,
       on_schedule: inst.onSchedule ?? false,
     }, { onConflict: "id" });
-    if (error) console.error("syncInstance error:", error.message, error.details, inst.id);
+    if (error) {
+      console.error("syncInstance error:", error.message, error.details, inst.id);
+      // Uden dette forsvandt en fejlet gemning helt stille — opgaven virkede
+      // oprettet i UI'et (optimistisk lokal state), men blev aldrig faktisk
+      // gemt i databasen, og var så væk igen ved næste genindlæsning uden at
+      // brugeren nogensinde fik besked om at noget gik galt.
+      notify(`Kunne ikke gemme "${inst.title || "opgaven"}" — prøv igen (${error.message})`);
+    }
   }, []);
 
   const removeInstance = useCallback(async (id) => {
@@ -3241,9 +3261,11 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom }) {
           <input type="date" style={styles.input} value={adhocDate} onChange={(e) => {
             setAdhocDate(e.target.value);
             const d = new Date(e.target.value);
-            const dayKeys = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
-            setDay(dayKeys[d.getDay()]);
+            setDay(weekdayKeyFor(d));
           }} />
+          {(() => { const dow = new Date(adhocDate).getDay(); return (dow === 0 || dow === 6) ? (
+            <div style={styles.hint}>Valgt dato er i weekenden — der planlægges ikke i weekenden, så opgaven sættes til fredag i stedet.</div>
+          ) : null; })()}
         </>
       )}
       {type === "flexible" && (
@@ -3252,9 +3274,11 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom }) {
           <input type="date" style={styles.input} value={adhocDate} onChange={(e) => {
             setAdhocDate(e.target.value);
             const d = new Date(e.target.value);
-            const dayKeys = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
-            setDeadline(dayKeys[d.getDay()]);
+            setDeadline(weekdayKeyFor(d));
           }} />
+          {(() => { const dow = new Date(adhocDate).getDay(); return (dow === 0 || dow === 6) ? (
+            <div style={styles.hint}>Valgt dato er i weekenden — der planlægges ikke i weekenden, så fristen sættes til fredag i stedet.</div>
+          ) : null; })()}
           <label style={styles.label}>Udløbsdato (aftalen gælder til og med)</label>
           <input type="date" style={styles.input} value={expiryDate} onChange={(e) => setExpiryDate(e.target.value)} />
         </>
