@@ -929,6 +929,7 @@ function PlanningApp({ session, onSignOut }) {
     if (!task) return;
     const tplId = task.templateId || null;
     const matchTitle = task.title;
+    let skippedInvoiced = false;
 
     setInstances((prev) => prev.map((t) => {
       const sameTemplate = tplId && t.templateId === tplId;
@@ -938,12 +939,16 @@ function PlanningApp({ session, onSignOut }) {
       // sådanne løsrevne instanser aldrig opdateret sammen med resten af aftalen.
       const sameTitleFixed = t.type === "fixed" && t.title === matchTitle && !t.templateId;
       if (t.id === taskId || sameTemplate || sameTitleFixed) {
+        // Opgaver der allerede er overført til Dinero er faktureret, og må ikke
+        // ændres bagefter — data skal matche det der reelt blev sendt til Dinero.
+        if (t.dineroExported) { skippedInvoiced = true; return t; }
         const updated = { ...t, contractType: newType };
         syncInstance(updated);
         return updated;
       }
       return t;
     }));
+    if (skippedInvoiced) notify("Bemærk: opgaver allerede sendt til Dinero blev ikke ændret (faktureret)");
 
     // Opdater også skabelonen — både lokalt (så Aftaler-oversigten straks
     // afspejler ændringen) og i databasen, så fremtidige uger der materialiseres
@@ -969,6 +974,7 @@ function PlanningApp({ session, onSignOut }) {
     const tplId = task.templateId || null;
     const matchTitle = task.title;
 
+    let skippedInvoiced = false;
     setInstances((prev) => prev.map((t) => {
       const sameTemplate = tplId && t.templateId === tplId;
       // Fanger også "løsrevne" instanser af samme titel, der mangler deres egen
@@ -977,12 +983,16 @@ function PlanningApp({ session, onSignOut }) {
       // sådanne løsrevne instanser aldrig opdateret sammen med resten af aftalen.
       const sameTitleFixed = t.type === "fixed" && t.title === matchTitle && !t.templateId;
       if (t.id === taskId || sameTemplate || sameTitleFixed) {
+        // Opgaver der allerede er overført til Dinero er faktureret, og må ikke
+        // ændres bagefter — data skal matche det der reelt blev sendt til Dinero.
+        if (t.dineroExported) { skippedInvoiced = true; return t; }
         const updated = { ...t, ...fields };
         syncInstance(updated);
         return updated;
       }
       return t;
     }));
+    if (skippedInvoiced) notify("Bemærk: opgaver allerede sendt til Dinero blev ikke ændret (faktureret)");
 
     // Persistér også på selve "Fast interval"-skabelonen, så fremtidige uger,
     // der endnu ikke er materialiseret, arver de opdaterede kundeoplysninger i
