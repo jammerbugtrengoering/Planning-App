@@ -332,7 +332,7 @@ function ensureWeekInstances(week, year, allInstances, templates, employees) {
   return [...others, ...scheduleWeek(thisWeek, employees, false, [], [], newlyCreatedIds)];
 }
 
-function statusLabel(s) { return { unscheduled: "Ubemandet", planlagt: "Planlagt", i_gang: "I gang", udført: "Udført" }[s] || s; }
+function statusLabel(s) { return { unscheduled: "Ubemandet", planlagt: "Planlagt", udført: "Udført" }[s] || s; }
 
 // ---------- Transport / travel time between service orders ----------
 // NOTE: This is an estimate, not a real routing calculation. This prototype has no
@@ -377,8 +377,8 @@ function computeDaySchedule(dayTasks, travelSettings) {
 function dayTransportMinutes(dayTasks, travelSettings) {
   return computeDaySchedule(dayTasks, travelSettings).filter((s) => s.type === "transport").reduce((sum, s) => sum + s.minutes, 0);
 }
-function cycleStatus(s) { return { planlagt: "i_gang", i_gang: "udført", udført: "planlagt", unscheduled: "planlagt" }[s] || "planlagt"; }
-function statusColor(s) { return { planlagt: "#9C1B5D", i_gang: "#D97706", udført: "#111111", unscheduled: "#94A3B8" }[s]; }
+function cycleStatus(s) { return { planlagt: "udført", udført: "planlagt", unscheduled: "planlagt" }[s] || "planlagt"; }
+function statusColor(s) { return { planlagt: "#9C1B5D", udført: "#111111", unscheduled: "#94A3B8" }[s]; }
 
 export default function App() {
   // ── Auth ──
@@ -2394,7 +2394,6 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
             title="Vis kun opgaver med denne status — brug 'Udført' for at se det reelle fakturagrundlag">
             <option value="all">📋 Alle statusser</option>
             <option value="planlagt">🗓️ Planlagt</option>
-            <option value="i_gang">⏳ I gang</option>
             <option value="udført">✅ Udført</option>
           </select>
         </div>
