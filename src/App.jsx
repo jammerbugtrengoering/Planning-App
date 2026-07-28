@@ -2759,6 +2759,10 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom }) {
   const [dineroResults, setDineroResults] = useState([]);
   const [dineroSearching, setDineroSearching] = useState(false);
   const [showDineroCreate, setShowDineroCreate] = useState(false);
+  // Sand når kunden er en kendt/valgt kunde (fra Dinero-søgning eller kopieret fra en
+  // eksisterende opgave) — forhindrer at "Opret i Dinero"-knappen dukker op lige
+  // efter man har valgt en eksisterende kunde fra søgeresultaterne.
+  const [customerSelected, setCustomerSelected] = useState(!!copyFrom?.customerName);
 
   const [dineroAvailable, setDineroAvailable] = useState(true);
 
@@ -2786,7 +2790,9 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom }) {
 
   function selectDineroCustomer(c) {
     setCustomerName(c.Name);
-    setAddress([c.Street, c.ZipCode, c.City].filter(Boolean).join(", "));
+    // Adressen her er Dineros fakturaadresse for virksomheden — IKKE adressen hvor
+    // rengøringen skal udføres, så den skal ikke overskrive "Adresse for udførsel".
+    setCustomerSelected(true);
     setDineroResults([]);
   }
 
@@ -2891,7 +2897,7 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom }) {
         <input
           style={styles.input}
           value={customerName}
-          onChange={(e) => searchDinero(e.target.value)}
+          onChange={(e) => { setCustomerSelected(false); searchDinero(e.target.value); }}
           placeholder={dineroAvailable ? "Skriv kundenavn for at søge i Dinero…" : "Kundenavn…"}
         />
         {dineroSearching && <span style={{ position: "absolute", right: 10, top: 10, fontSize: 11, color: "#94A3B8" }}>Søger…</span>}
@@ -2913,7 +2919,7 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom }) {
           </div>
         )}
         {/* Vis opret-knap når ingen resultater og tekst er indtastet */}
-        {!dineroSearching && customerName.length >= 2 && dineroResults.length === 0 && !showDineroCreate && (
+        {!dineroSearching && !customerSelected && customerName.length >= 2 && dineroResults.length === 0 && !showDineroCreate && (
           <div style={{ marginTop: 4 }}>
             <button type="button"
               style={{ ...styles.addSkillBtn, fontSize: 12 }}
@@ -3847,6 +3853,10 @@ function TaskDetailModal({ task, employees, checklistTemplates, skills, onClose,
   const [dineroSearching, setDineroSearching] = useState(false);
   const [showDineroCreate, setShowDineroCreate] = useState(false);
   const [dineroAvailable, setDineroAvailable] = useState(true);
+  // Sand når kunden er en kendt/valgt kunde — se samme forklaring i TaskModal.
+  // Forhindrer at "Opret i Dinero" foreslås for en kunde der allerede er tilknyttet
+  // opgaven, eller lige er valgt fra Dinero-søgeresultaterne.
+  const [customerSelected, setCustomerSelected] = useState(false);
 
   useEffect(() => {
     if (task) {
@@ -3857,6 +3867,7 @@ function TaskDetailModal({ task, employees, checklistTemplates, skills, onClose,
       setTaskSkills(task.requiredSkills || []);
       setDineroResults([]);
       setShowDineroCreate(false);
+      setCustomerSelected(!!task.customerName);
     }
   }, [task?.id]);
 
@@ -3884,7 +3895,9 @@ function TaskDetailModal({ task, employees, checklistTemplates, skills, onClose,
 
   function selectDineroCustomerForEdit(c) {
     setCustName(c.Name);
-    setCustAddress([c.Street, c.ZipCode, c.City].filter(Boolean).join(", "));
+    // Adressen her er Dineros fakturaadresse for virksomheden — IKKE adressen hvor
+    // rengøringen skal udføres, så den skal ikke overskrive "Adresse for udførsel".
+    setCustomerSelected(true);
     setDineroResults([]);
     setShowDineroCreate(false);
   }
@@ -4086,7 +4099,7 @@ function TaskDetailModal({ task, employees, checklistTemplates, skills, onClose,
                 <input
                   style={styles.input}
                   value={custName}
-                  onChange={(e) => { searchDineroForCustomer(e.target.value); setShowDineroCreate(false); }}
+                  onChange={(e) => { setCustomerSelected(false); searchDineroForCustomer(e.target.value); setShowDineroCreate(false); }}
                   placeholder={dineroAvailable ? "Skriv kundenavn for at søge i Dinero…" : "Kundenavn"}
                 />
                 {dineroSearching && <span style={{ position: "absolute", right: 10, top: 10, fontSize: 11, color: "#94A3B8" }}>Søger…</span>}
@@ -4107,7 +4120,7 @@ function TaskDetailModal({ task, employees, checklistTemplates, skills, onClose,
                     </div>
                   </div>
                 )}
-                {!dineroSearching && custName.length >= 2 && dineroResults.length === 0 && !showDineroCreate && (
+                {!dineroSearching && !customerSelected && custName.length >= 2 && dineroResults.length === 0 && !showDineroCreate && (
                   <div style={{ marginTop: 4 }}>
                     <button type="button"
                       style={{ ...styles.addSkillBtn, fontSize: 12 }}
