@@ -263,6 +263,23 @@ function scheduleWeek(weekInstances, employees, autoOnly = false, areas = [], em
     if (outsideArea) t.outsideArea = true;
   });
 
+  // Slutkontrol: fjern ALTID en blokeret medarbejder fra en opgave, uanset om
+  // opgaven lige er (gen)tildelt i dette kald, eller allerede eksisterede fra
+  // før. Dette reparerer automatisk enhver opgave der fejlagtigt endte hos en
+  // medarbejder, som nu har en sygdom/ferie-blokering den dag (fx pga. en
+  // race mellem en reload og en blokering der lige var ved at blive gemt).
+  list.forEach((t) => {
+    if (BLOCK_TYPES.includes(t.type) || !t.day || !(t.assignees && t.assignees.length)) return;
+    const stillOk = t.assignees.filter((empId) => !isBlocked(empId, t.day));
+    if (stillOk.length !== t.assignees.length) {
+      t.assignees = stillOk;
+      if (stillOk.length === 0) {
+        t.status = "unscheduled";
+        if (t.type === "flexible") t.day = null;
+      }
+    }
+  });
+
   return list;
 }
 
@@ -617,6 +634,7 @@ function PlanningApp({ session, onSignOut }) {
         });
         const allInst = ensureWeekInstances(currentWeek, currentYear, existingInst, mapped, empMapped);
         setInstances(allInst);
+        syncHealedAssignments(existingInst, allInst);
       } else if (instData?.length) {
         setInstances(instData.map((i) => ({
           ...i, timeLog: i.time_log ?? [], requiredSkills: i.required_skills ?? [],
@@ -731,6 +749,21 @@ function PlanningApp({ session, onSignOut }) {
     await supabase.from("checklist_templates").delete().eq("id", id);
   }, []);
 
+  // Sammenligner "før" og "efter" en ensureWeekInstances-materialisering, og
+  // gemmer enhver instans hvis assignees blev ændret af "slutkontrol"-tjekket i
+  // scheduleWeek (fx en opgave der blev frigivet fra en medarbejder, som i
+  // mellemtiden har fået en sygdom/ferie-blokering den dag). Uden dette ville
+  // rettelsen kun leve i det lokale state og blive gentaget/tabt ved næste reload.
+  function syncHealedAssignments(before, after) {
+    const beforeById = new Map(before.map((t) => [t.id, t]));
+    after.forEach((t) => {
+      const prev = beforeById.get(t.id);
+      if (prev && JSON.stringify(prev.assignees || []) !== JSON.stringify(t.assignees || [])) {
+        syncInstance(t);
+      }
+    });
+  }
+
   function changeWeek(delta) {
     // Flyt ankerdatoen 7 rigtige kalenderdage ad gangen — det ruller helt naturligt
     // om ved årsskifte (uge 52/53 -> uge 1 i næste år) uden nogensinde at kunne
@@ -738,7 +771,11 @@ function PlanningApp({ session, onSignOut }) {
     const nextAnchor = new Date(weekAnchor);
     nextAnchor.setDate(nextAnchor.getDate() + delta * 7);
     const { week: nextWeek, year: nextYear } = isoWeekInfo(nextAnchor);
-    setInstances((cur) => ensureWeekInstances(nextWeek, nextYear, cur, templates, employees));
+    setInstances((cur) => {
+      const next = ensureWeekInstances(nextWeek, nextYear, cur, templates, employees);
+      syncHealedAssignments(cur, next);
+      return next;
+    });
     setWeekAnchor(nextAnchor);
   }
 
@@ -810,9 +847,11 @@ function PlanningApp({ session, onSignOut }) {
           const weeks = weeksUntilExpiry(payload.expiryDate, payload.startDate);
           let next = [...cur];
           weeks.forEach(({ week: wk, year: wy }) => {
+            const before = next;
             const expanded = ensureWeekInstances(wk, wy, next, nextT, employees);
             const newOnes = expanded.filter((i) => !next.find((c) => c.id === i.id));
             newOnes.forEach((inst) => syncInstance({ ...inst, contractType: payload.contractType, expiryDate: payload.expiryDate }));
+            syncHealedAssignments(before, expanded);
             next = expanded;
           });
           return next;
