@@ -96,6 +96,22 @@ function weekMeta(weekNo, year) {
   return { label: `${fmt(monday)} – ${fmt(friday)}`, weekNo, year, monday };
 }
 
+// Finder index (0 = mandag) for den tidligste hverdag i (week, year) man
+// stadig må planlægge en "forsinket" (fra en tidligere uge) opgave ind på —
+// bruges til at fange forsinkede opgaver op fra i dag og frem i stedet for at
+// forsøge at placere dem på en dag der allerede er passeret. Ligger ugen helt
+// i fremtiden er hele ugen åben (index 0); er ugen allerede helt overstået,
+// returneres DAYS.length, så der ikke findes nogen gyldig dag tilbage.
+function earliestAllowedDayIndex(week, year) {
+  const monday = mondayOfWeek(week, year);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const diffDays = Math.round((today - monday) / 86400000);
+  if (diffDays <= 0) return 0;
+  if (diffDays >= DAYS.length) return DAYS.length;
+  return diffDays;
+}
+
 // ---------- Skill matching ----------
 function meetsRequirement(emp, req) { return (emp.skills[req.skill] || 0) >= req.minLevel; }
 function candidatesFor(t, employees, areas = [], employeeAreas = []) {
@@ -217,7 +233,11 @@ function scheduleWeek(weekInstances, employees, autoOnly = false, areas = [], em
   }
 
   list.forEach((t) => {
-    if ((t.assignees && t.assignees.length) || !t.day || t.type === "flexible") return;
+    // Opgaver markeret med _forceWindow (forsinkede opgaver fra en tidligere
+    // uge, der genoptages i den viste uge) skal søges hen over en dag-window
+    // ligesom fleksible opgaver, i stedet for at blive tvunget ind på deres
+    // oprindelige (allerede passerede) dag — håndteres i loopet nedenfor.
+    if ((t.assignees && t.assignees.length) || !t.day || t.type === "flexible" || t._forceWindow) return;
     if (autoOnly && !t.includeInAuto) return;
     // Rør aldrig ved en instans der ikke er i den udtrykkelige "skal planlægges"-liste —
     // det forhindrer at eksisterende opgaver, som planlæggeren bevidst har sat til
@@ -240,11 +260,14 @@ function scheduleWeek(weekInstances, employees, autoOnly = false, areas = [], em
   });
 
   list.forEach((t) => {
-    if ((t.assignees && t.assignees.length) || t.type !== "flexible") return;
+    if ((t.assignees && t.assignees.length) || (t.type !== "flexible" && !t._forceWindow)) return;
     if (autoOnly && !t.includeInAuto) return;
     if (restrictToIds && !restrictToIds.has(t.id)) return;
+    // _forceWindow (array af dag-nøgler) styrer et forsinket-opgave-genoptag:
+    // søg kun blandt de dage, der er angivet (typisk i dag og frem), i stedet
+    // for det normale deadline-vindue for rigtige fleksible opgaver.
     const deadlineIdx = DAYS.findIndex((d) => d.key === (t.deadline || "Fri"));
-    const window = DAYS.slice(0, deadlineIdx + 1);
+    const window = t._forceWindow ? DAYS.filter((d) => t._forceWindow.includes(d.key)) : DAYS.slice(0, deadlineIdx + 1);
     const { candidates, outsideArea } = candidatesFor(t, employees, areas, employeeAreas);
     if (candidates.length === 0) { t.warning = "no_skill"; return; }
     let best = null;
@@ -261,6 +284,10 @@ function scheduleWeek(weekInstances, employees, autoOnly = false, areas = [], em
     t.day = best.day; t.assignees = [best.empId]; t.status = "planlagt";
     t.warning = best.rem < t.duration ? "overloaded" : null;
     if (outsideArea) t.outsideArea = true;
+    // En forsinket opgave, der genoptages i en anden uge end den oprindeligt
+    // hørte til, er pr. definition uden for den aftalte kadence — markér den
+    // derfor synligt som "uden for aftale", uanset hvilken dag den endte på.
+    if (t._forceWindow) { t.offSchedule = true; t.onSchedule = false; }
   });
 
   // Slutkontrol: fjern ALTID en blokeret medarbejder fra en opgave, uanset om
@@ -785,10 +812,39 @@ function PlanningApp({ session, onSignOut }) {
   function runAuto() {
     setInstances((prev) => {
       const thisWeek = prev.filter((t) => t.week === weekOffset && t.year === weekYear);
-      const others = prev.filter((t) => !(t.week === weekOffset && t.year === weekYear));
-      const before = thisWeek.filter((t) => !(t.assignees && t.assignees.length)).length;
-      const after = scheduleWeek(thisWeek, employees, true, areas, employeeAreas); // kun markerede
-      const still = after.filter((t) => !(t.assignees && t.assignees.length)).length;
+
+      // Forsinkede opgaver: ikke-tildelte opgaver fra en TIDLIGERE uge end den
+      // man kigger på, som er markeret til auto-planlægning. De nåede ikke at
+      // blive udført i deres egen uge, så i stedet for at ignorere dem (deres
+      // aftalte dag er jo allerede passeret), tages de med i denne kørsel og
+      // søges placeret i den viste uge — fra i dag og frem — og markeres
+      // "uden for aftale", da det afviger fra den normale kadence.
+      const isPastWeek = (t) => t.year < weekYear || (t.year === weekYear && t.week < weekOffset);
+      const overdueCandidates = prev.filter((t) =>
+        isPastWeek(t) && t.includeInAuto && !(t.assignees && t.assignees.length) && !BLOCK_TYPES.includes(t.type)
+      );
+      const overdueIds = new Set(overdueCandidates.map((t) => t.id));
+      const forceWindowKeys = DAYS.slice(earliestAllowedDayIndex(weekOffset, weekYear)).map((d) => d.key);
+      const overdueForRun = overdueCandidates.map((t) => ({ ...t, _forceWindow: forceWindowKeys }));
+
+      const others = prev.filter((t) => !(t.week === weekOffset && t.year === weekYear) && !overdueIds.has(t.id));
+
+      const before = [...thisWeek, ...overdueForRun].filter((t) => !(t.assignees && t.assignees.length)).length;
+      const scheduledBatch = scheduleWeek([...thisWeek, ...overdueForRun], employees, true, areas, employeeAreas); // kun markerede
+      const still = scheduledBatch.filter((t) => !(t.assignees && t.assignees.length)).length;
+
+      const after = scheduledBatch.map((t) => {
+        const { _forceWindow, ...rest } = t;
+        if (overdueIds.has(t.id) && rest.assignees && rest.assignees.length) {
+          // Lykkedes det at finde plads til den forsinkede opgave i den viste
+          // uge, flyttes den officielt hertil (så den ikke længere optræder
+          // som hjemmehørende i sin gamle, allerede overståede uge).
+          return { ...rest, week: weekOffset, year: weekYear };
+        }
+        return rest;
+      });
+      after.filter((t) => overdueIds.has(t.id) && t.assignees && t.assignees.length).forEach(syncInstance);
+
       notify(before - still > 0 ? `${before - still} opgave(r) planlagt automatisk` : "Ingen markerede opgaver til planlægning");
       return [...others, ...after];
     });
