@@ -2329,7 +2329,13 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
     .filter((t) => !invoiceOnly || showDineroExported || !t.dineroExported)
     .sort((a, b) => {
       if (a.week !== b.week) return a.week - b.week;
-      return DAYS.findIndex((d) => d.key === a.day) - DAYS.findIndex((d) => d.key === b.day);
+      const aEmp = (a.assignees || []).map((id) => employees.find((e) => e.id === id)?.name || "").sort().join(", ");
+      const bEmp = (b.assignees || []).map((id) => employees.find((e) => e.id === id)?.name || "").sort().join(", ");
+      if (aEmp !== bEmp) return aEmp.localeCompare(bEmp, "da");
+      const aCust = a.customerName || "";
+      const bCust = b.customerName || "";
+      if (aCust !== bCust) return aCust.localeCompare(bCust, "da");
+      return (a.title || "").localeCompare(b.title || "", "da");
     });
 
   const totalPlanned = placed.reduce((s, t) => s + t.duration, 0);
@@ -2446,8 +2452,8 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
         </div>
       )}
 
-      <div style={{ display: "grid", gridTemplateColumns: "50px 140px 1fr 120px 70px 80px 100px 100px 100px 90px 70px 28px", gap: 0, background: "#F8FAFC", borderRadius: "10px 10px 0 0", padding: "8px 14px", fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.04em", marginTop: 8 }}>
-        <span>Uge</span><span>Medarbejder</span><span>Opgave</span><span>Kunde</span><span>Dag</span>
+      <div style={{ display: "grid", gridTemplateColumns: "50px 140px 120px 160px 1fr 70px 80px 100px 100px 100px 90px 70px 28px", gap: 0, background: "#F8FAFC", borderRadius: "10px 10px 0 0", padding: "8px 14px", fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.04em", marginTop: 8 }}>
+        <span>Uge</span><span>Medarbejder</span><span>Kunde</span><span>Adresse</span><span>Opgave</span><span>Dag</span>
         <span style={{ textAlign: "right" }}>Planlagt</span>
         <span style={{ textAlign: "right" }}>Registreret</span>
         <span style={{ textAlign: "right" }}>Planlagt kr.</span>
@@ -2470,12 +2476,14 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
           const diffKr = registeredKr - plannedKr;
 
           return (
-            <div key={t.id} style={{ display: "grid", gridTemplateColumns: "50px 140px 1fr 120px 70px 80px 100px 100px 100px 90px 70px 28px", gap: 0, padding: "10px 14px", borderBottom: idx < placed.length - 1 ? "1px solid #F1F5F9" : "none", alignItems: "center", background: t.dineroExported ? "#EEF2FF" : t.invoiceReady ? "#F0FDF4" : "transparent" }}>
+            <div key={t.id} style={{ display: "grid", gridTemplateColumns: "50px 140px 120px 160px 1fr 70px 80px 100px 100px 100px 90px 70px 28px", gap: 0, padding: "10px 14px", borderBottom: idx < placed.length - 1 ? "1px solid #F1F5F9" : "none", alignItems: "center", background: t.dineroExported ? "#EEF2FF" : t.invoiceReady ? "#F0FDF4" : "transparent" }}>
               <div style={{ fontSize: 12, color: "#94A3B8", fontWeight: 600 }}>{t.week}</div>
               <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
                 {emps.slice(0, 2).map((emp) => <span key={emp.id} style={{ ...styles.avatar, background: emp.color, width: 22, height: 22, fontSize: 10 }}>{initials(emp.name)}</span>)}
                 <span style={{ fontSize: 11, color: "#475569", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{emps.map((e) => e.name).join(", ")}</span>
               </div>
+              <div style={{ fontSize: 12, color: "#64748B", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.customerName || "—"}</div>
+              <div style={{ fontSize: 12, color: "#94A3B8", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.address || "—"}</div>
               <div
                 style={{
                   fontSize: 13, fontWeight: 600, color: isAdminUser ? "#9C1B5D" : "#111111",
@@ -2487,7 +2495,6 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
                 onClick={() => { if (isAdminUser && onOpenTask) onOpenTask(t.id); }}>
                 {t.title}
               </div>
-              <div style={{ fontSize: 12, color: "#64748B", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.customerName || "—"}</div>
               <div style={{ fontSize: 12, color: "#64748B" }}>{dayLabel}</div>
               <div style={{ fontSize: 13, fontWeight: 500, color: "#111111", textAlign: "right" }}>{fmtMin(t.duration)}</div>
               <div style={{ textAlign: "right" }}>
@@ -2567,7 +2574,7 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
         const totalRegisteredKr = Math.round(expectedRevenue);
         const totalDiff = totalRegisteredKr - totalPlannedKr;
         return (
-          <div style={{ display: "grid", gridTemplateColumns: "50px 140px 1fr 120px 70px 80px 100px 100px 100px 90px 70px 28px", gap: 0, padding: "10px 14px", background: "#FCE4EF", borderRadius: 10, marginTop: 8, fontWeight: 700, fontSize: 13 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "50px 140px 120px 160px 1fr 70px 80px 100px 100px 100px 90px 70px 28px", gap: 0, padding: "10px 14px", background: "#FCE4EF", borderRadius: 10, marginTop: 8, fontWeight: 700, fontSize: 13 }}>
             <span /><span style={{ color: "#9C1B5D" }}>I alt</span>
             <span /><span /><span />
             <span style={{ textAlign: "right", color: "#111111" }}>{fmtMin(totalPlanned)}</span>
