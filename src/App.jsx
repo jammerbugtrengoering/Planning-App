@@ -31,11 +31,21 @@ const ALL_DAYS = [
 ];
 const TYPE_META = {
   fixed: { label: "Fast interval", icon: Repeat, color: "#9C1B5D", bg: "#FCE4EF" },
-  adhoc: { label: "Ad hoc", icon: Zap, color: "#B45309", bg: "#FEF3C7" },
-  flexible: { label: "Fleksibel", icon: CalendarClock, color: "#111111", bg: "#EDEDED" },
+  // Omdøbt fra "Ad hoc" til "Fleksibel" — den gamle "flexible"-type (der oprettede
+  // gentagne instanser frem til en udløbsdato) er nedlagt til fordel for denne
+  // simplere type: en enkeltstående opgave uden fast dag, der lander i "Ikke
+  // tildelt" og planlægges manuelt (eller via markering + auto-planlægning).
+  adhoc: { label: "Fleksibel", icon: Zap, color: "#B45309", bg: "#FEF3C7" },
+  // Bevaret udelukkende for korrekt visning af evt. ældre data af denne type —
+  // kan IKKE længere vælges ved oprettelse af en ny opgave (se CREATABLE_TYPES).
+  flexible: { label: "Fleksibel (ældre)", icon: CalendarClock, color: "#111111", bg: "#EDEDED" },
   sygdom: { label: "Sygdom", icon: Thermometer, color: "#B91C1C", bg: "#FEE2E2" },
   ferie: { label: "Ferie", icon: Palmtree, color: "#0E7490", bg: "#CFFAFE" },
 };
+// De eneste typer man må vælge ved oprettelse af en ny opgave i "Ny opgave"-
+// modalen. Sygdom/Ferie oprettes udelukkende via den dedikerede Sygdom/Ferie-
+// knap (addBlock-flowet), og den gamle "flexible"-type er nedlagt.
+const CREATABLE_TYPES = ["fixed", "adhoc"];
 // Bruges til at afgøre om en instans er en blokering (sygdom/ferie) i stedet for
 // en rigtig rengøringsopgave — blokeringer skal ikke tælle med i fakturagrundlag,
 // rapportering osv., og skal forhindre auto-planlægning af den pågældende medarbejder.
@@ -273,7 +283,11 @@ function scheduleWeek(weekInstances, employees, autoOnly = false, areas = [], em
   });
 
   list.forEach((t) => {
-    if ((t.assignees && t.assignees.length) || (t.type !== "flexible" && !t._forceWindow)) return;
+    // Enhver opgave uden en fast dag (uanset type — det dækker nu både den
+    // gamle "flexible"-type OG almindelige "adhoc"/"Fleksibel"-opgaver, som
+    // altid oprettes med day=null og lander i "Ikke tildelt") søges placeret
+    // via et dag-vindue i stedet for at kræve en bestemt, forudbestemt dag.
+    if ((t.assignees && t.assignees.length) || (t.day && !t._forceWindow)) return;
     if (autoOnly && !t.includeInAuto) return;
     if (restrictToIds && !restrictToIds.has(t.id)) return;
     // _forceWindow (array af dag-nøgler) styrer et forsinket-opgave-genoptag:
@@ -970,54 +984,24 @@ function PlanningApp({ session, onSignOut }) {
         return nextT;
       });
     } else {
-      const adhocWeekInfo = payload.adhocDate ? isoWeekInfo(new Date(payload.adhocDate)) : { week: weekOffset, year: weekYear };
-      const adhocWeek = adhocWeekInfo.week;
-      const adhocYear = adhocWeekInfo.year;
-
-      if (payload.type === "flexible" && payload.expiryDate) {
-        // Create one flexible instance per week until expiry
-        const weeks = weeksUntilExpiry(payload.expiryDate, null);
-        const newInstances = weeks.map(({ week: wk, year: wy }) => ({
-          id: uid("i"), title: payload.title, requiredSkills: payload.requiredSkills,
-          duration: payload.duration, assignees: [], status: "unscheduled", timeLog: [],
-          week: wk, year: wy, checklist: instantiateChecklist(checklistItemsCombined),
-          videoUrl: payload.videoUrl, customerName: payload.customerName,
-          address: payload.address, poNumber: payload.poNumber, accessInstructions: payload.accessInstructions,
-          type: "flexible", day: null, deadline: payload.deadline,
-          contractType: payload.contractType, expiryDate: payload.expiryDate,
-          dineroSynced: payload.dineroSynced || false,
-        }));
-        setInstances((prev) => {
-          let next = [...prev];
-          newInstances.forEach((inst) => {
-            const thisWeek = [...next.filter((t) => t.week === inst.week && t.year === inst.year), inst];
-            const others = next.filter((t) => !(t.week === inst.week && t.year === inst.year));
-            const scheduled = scheduleWeek(thisWeek, employees, false, areas, employeeAreas);
-            scheduled.forEach(syncInstance);
-            next = [...others, ...scheduled];
-          });
-          return next;
-        });
-      } else {
-        const base = {
-          id: uid("i"), title: payload.title, requiredSkills: payload.requiredSkills,
-          duration: payload.duration, assignees: [], status: "unscheduled", timeLog: [],
-          week: adhocWeek, year: adhocYear, checklist: instantiateChecklist(checklistItemsCombined),
-          videoUrl: payload.videoUrl, customerName: payload.customerName,
-          address: payload.address, poNumber: payload.poNumber, accessInstructions: payload.accessInstructions,
-          contractType: payload.contractType, dineroSynced: payload.dineroSynced || false,
-        };
-        const newInstance = payload.type === "adhoc"
-          ? { ...base, type: "adhoc", day: payload.day }
-          : { ...base, type: "flexible", day: null, deadline: payload.deadline };
-        setInstances((prev) => {
-          const thisWeek = [...prev.filter((t) => t.week === adhocWeek && t.year === adhocYear), newInstance];
-          const others = prev.filter((t) => !(t.week === adhocWeek && t.year === adhocYear));
-          const scheduled = scheduleWeek(thisWeek, employees, false, areas, employeeAreas);
-          scheduled.forEach(syncInstance);
-          return [...others, ...scheduled];
-        });
-      }
+      // "adhoc" (vist som "Fleksibel" i UI'et) — den eneste anden opgavetype
+      // man kan oprette. Datoen sættes altid til dags dato (der er ikke
+      // længere nogen dato-vælger for denne type), og opgaven indsættes
+      // direkte uden at blive kørt gennem den automatiske planlægning — den
+      // skal ligge i "Ikke tildelt", klar til manuel eller markeret
+      // auto-planlægning, i stedet for at blive placeret med det samme.
+      const { week: adhocWeek, year: adhocYear } = isoWeekInfo(new Date());
+      const newInstance = {
+        id: uid("i"), title: payload.title, requiredSkills: payload.requiredSkills,
+        duration: payload.duration, assignees: [], status: "unscheduled", timeLog: [],
+        week: adhocWeek, year: adhocYear, checklist: instantiateChecklist(checklistItemsCombined),
+        videoUrl: payload.videoUrl, customerName: payload.customerName,
+        address: payload.address, poNumber: payload.poNumber, accessInstructions: payload.accessInstructions,
+        contractType: payload.contractType, dineroSynced: payload.dineroSynced || false,
+        type: "adhoc", day: null,
+      };
+      setInstances((prev) => [...prev, newInstance]);
+      syncInstance(newInstance);
     }
     setShowAddTask(false);
   }
@@ -1180,14 +1164,14 @@ function PlanningApp({ session, onSignOut }) {
     updateInstance(taskId, (t) => {
       const nextAssignees = (t.assignees || []).filter((id) => id !== empId);
       return nextAssignees.length === 0
-        ? { ...t, assignees: [], day: t.type === "flexible" ? null : t.day, status: "unscheduled" }
+        ? { ...t, assignees: [], day: (t.type === "flexible" || t.type === "adhoc") ? null : t.day, status: "unscheduled" }
         : { ...t, assignees: nextAssignees };
     });
   }
   function unplace(taskId) {
     updateInstance(taskId, (t) => ({
       ...t,
-      day: t.type === "flexible" ? null : t.day,
+      day: (t.type === "flexible" || t.type === "adhoc") ? null : t.day,
       assignees: [],
       status: "unscheduled",
       offSchedule: false,
@@ -1236,7 +1220,7 @@ function PlanningApp({ session, onSignOut }) {
             if (!(t.assignees || []).includes(employeeId)) return t;
             const nextAssignees = t.assignees.filter((id) => id !== employeeId);
             const updated = nextAssignees.length === 0
-              ? { ...t, assignees: [], day: t.type === "flexible" ? null : t.day, status: "unscheduled" }
+              ? { ...t, assignees: [], day: (t.type === "flexible" || t.type === "adhoc") ? null : t.day, status: "unscheduled" }
               : { ...t, assignees: nextAssignees };
             toSync.push(updated);
             return updated;
@@ -3001,7 +2985,14 @@ function ReportsView({ instances, pricing, budgets, onSaveBudget, isAdminUser })
 
 // ---------- Modals ----------
 function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom }) {
-  const [type, setType] = useState(copyFrom?.type || "fixed");
+  // Kopiering af en ældre "flexible"-type opgave (nu nedlagt) skal falde
+  // tilbage til "adhoc" ("Fleksibel"), da den type ikke længere findes i
+  // CREATABLE_TYPES og derfor ikke kan vælges via knapperne nedenfor. En helt
+  // ny opgave (uden copyFrom) starter stadig som "fixed" som hidtil.
+  const [type, setType] = useState(() => {
+    if (!copyFrom) return "fixed";
+    return CREATABLE_TYPES.includes(copyFrom.type) ? copyFrom.type : "adhoc";
+  });
   const [contractType, setContractType] = useState(copyFrom?.contractType || "privat");
   const [title, setTitle] = useState(copyFrom ? `Kopi af ${copyFrom.title}` : "");
   const [duration, setDuration] = useState(copyFrom?.duration || 60);
@@ -3150,12 +3141,15 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom }) {
 
       <label style={styles.label}>Type</label>
       <div style={styles.typePicker}>
-        {Object.entries(TYPE_META).map(([k, m]) => (
-          <button key={k} type="button" onClick={() => setType(k)} style={type === k ? { ...styles.typePickBtn, borderColor: m.color, color: m.color, background: m.bg } : styles.typePickBtn}>{m.label}</button>
-        ))}
+        {CREATABLE_TYPES.map((k) => {
+          const m = TYPE_META[k];
+          return (
+            <button key={k} type="button" onClick={() => setType(k)} style={type === k ? { ...styles.typePickBtn, borderColor: m.color, color: m.color, background: m.bg } : styles.typePickBtn}>{m.label}</button>
+          );
+        })}
       </div>
       {type === "fixed" && <div style={styles.hint}>Faste opgaver gentages automatisk hver uge på de valgte dage — frem til udløbsdatoen.</div>}
-      {type === "flexible" && <div style={styles.hint}>Fleksible opgaver oprettes hver uge frem til udløbsdatoen.</div>}
+      {type === "adhoc" && <div style={styles.hint}>Oprettes med dags dato og lander i "Ikke tildelt", klar til at blive planlagt.</div>}
 
       <label style={styles.label}>Titel</label>
       <input style={styles.input} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="F.eks. Gulvvask kontor 2. sal" />
@@ -3251,34 +3245,6 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom }) {
           <div style={styles.skillPicker}>
             {DAYS.map((d) => <button key={d.key} type="button" onClick={() => toggleDay(d.key)} style={days.includes(d.key) ? styles.skillPickBtnActive : styles.skillPickBtn}>{d.label}</button>)}
           </div>
-          <label style={styles.label}>Udløbsdato (aftalen gælder til og med)</label>
-          <input type="date" style={styles.input} value={expiryDate} onChange={(e) => setExpiryDate(e.target.value)} />
-        </>
-      )}
-      {type === "adhoc" && (
-        <>
-          <label style={styles.label}>Senest udført dato</label>
-          <input type="date" style={styles.input} value={adhocDate} onChange={(e) => {
-            setAdhocDate(e.target.value);
-            const d = new Date(e.target.value);
-            setDay(weekdayKeyFor(d));
-          }} />
-          {(() => { const dow = new Date(adhocDate).getDay(); return (dow === 0 || dow === 6) ? (
-            <div style={styles.hint}>Valgt dato er i weekenden — der planlægges ikke i weekenden, så opgaven sættes til fredag i stedet.</div>
-          ) : null; })()}
-        </>
-      )}
-      {type === "flexible" && (
-        <>
-          <label style={styles.label}>Senest udført dato</label>
-          <input type="date" style={styles.input} value={adhocDate} onChange={(e) => {
-            setAdhocDate(e.target.value);
-            const d = new Date(e.target.value);
-            setDeadline(weekdayKeyFor(d));
-          }} />
-          {(() => { const dow = new Date(adhocDate).getDay(); return (dow === 0 || dow === 6) ? (
-            <div style={styles.hint}>Valgt dato er i weekenden — der planlægges ikke i weekenden, så fristen sættes til fredag i stedet.</div>
-          ) : null; })()}
           <label style={styles.label}>Udløbsdato (aftalen gælder til og med)</label>
           <input type="date" style={styles.input} value={expiryDate} onChange={(e) => setExpiryDate(e.target.value)} />
         </>
@@ -4320,8 +4286,7 @@ function TaskDetailModal({ task, employees, checklistTemplates, skills, isAdminU
             value={t.type}
             onChange={(e) => onUpdateCustomer(t.id, { type: e.target.value })}>
             <option value="fixed">↻ Fast interval</option>
-            <option value="adhoc">⚡ Ad hoc</option>
-            <option value="flexible">📅 Fleksibel</option>
+            <option value="adhoc">⚡ Fleksibel</option>
           </select>
         )}
         <span style={{ ...styles.typeChip, color: statusColor(t.status), background: "#F1EFE7" }}>{statusLabel(t.status)}</span>
