@@ -2439,18 +2439,26 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
 
   // Beregn hvilke ISO-uger der falder inden for den valgte måned/år
   function weeksInMonth(year, month) {
-    const weeks = new Set();
+    // Nogle uger strækker sig hen over en månedsskift (fx uge 31 kan ramme både
+    // sidste dag i juli og første dag i august). Vi tæller kun hverdage (man-fre,
+    // dem der reelt bruges til planlægning) og lader ugen tilhøre den måned hvor
+    // FLEST af dens hverdage ligger, så en uge aldrig optræder i to måneder på én gang.
+    const weekdayCounts = new Map();
     const d = new Date(year, month, 1);
     while (d.getMonth() === month) {
-      // ISO week
-      const tmp = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-      const dayNum = (tmp.getDay() + 6) % 7;
-      tmp.setDate(tmp.getDate() - dayNum + 3);
-      const yearStart = new Date(tmp.getFullYear(), 0, 1);
-      const wk = Math.ceil(((tmp - yearStart) / 86400000 + 1) / 7);
-      weeks.add(wk);
+      const dow = d.getDay();
+      if (dow >= 1 && dow <= 5) {
+        const tmp = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+        const dayNum = (tmp.getDay() + 6) % 7;
+        tmp.setDate(tmp.getDate() - dayNum + 3);
+        const yearStart = new Date(tmp.getFullYear(), 0, 1);
+        const wk = Math.ceil(((tmp - yearStart) / 86400000 + 1) / 7);
+        weekdayCounts.set(wk, (weekdayCounts.get(wk) || 0) + 1);
+      }
       d.setDate(d.getDate() + 1);
     }
+    const weeks = new Set();
+    weekdayCounts.forEach((count, wk) => { if (count >= 3) weeks.add(wk); });
     return weeks;
   }
 
@@ -2745,17 +2753,25 @@ const REPORT_MONTHS = ["Januar","Februar","Marts","April","Maj","Juni","Juli","A
 
 function weeksInMonthReport(year, monthIndex) {
   // monthIndex er 0-baseret (0 = januar), ligesom Date.getMonth()
-  const weeks = new Set();
+  // Samme princip som weeksInMonth: en uge der strækker sig over et månedsskift
+  // tilhører kun den måned hvor flest af dens hverdage (man-fre) ligger, så
+  // omsætning/budget ikke tælles dobbelt i to måneder.
+  const weekdayCounts = new Map();
   const d = new Date(year, monthIndex, 1);
   while (d.getMonth() === monthIndex) {
-    const tmp = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-    const dayNum = (tmp.getDay() + 6) % 7;
-    tmp.setDate(tmp.getDate() - dayNum + 3);
-    const yearStart = new Date(tmp.getFullYear(), 0, 1);
-    const wk = Math.ceil(((tmp - yearStart) / 86400000 + 1) / 7);
-    weeks.add(wk);
+    const dow = d.getDay();
+    if (dow >= 1 && dow <= 5) {
+      const tmp = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+      const dayNum = (tmp.getDay() + 6) % 7;
+      tmp.setDate(tmp.getDate() - dayNum + 3);
+      const yearStart = new Date(tmp.getFullYear(), 0, 1);
+      const wk = Math.ceil(((tmp - yearStart) / 86400000 + 1) / 7);
+      weekdayCounts.set(wk, (weekdayCounts.get(wk) || 0) + 1);
+    }
     d.setDate(d.getDate() + 1);
   }
+  const weeks = new Set();
+  weekdayCounts.forEach((count, wk) => { if (count >= 3) weeks.add(wk); });
   return weeks;
 }
 
