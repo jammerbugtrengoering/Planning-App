@@ -4462,7 +4462,7 @@ const styles = {
   capBarTrack: { height: 5, background: "#E2E8F0", borderRadius: 4, overflow: "hidden" },
   capBarFill: { height: "100%", borderRadius: 4 },
   capLabel: { fontSize: 10, color: "#94A3B8", margin: "3px 0 6px" },
-  taskChip: { display: "flex", flexDirection: "column", justifyContent: "center", gap: 2, height: 60, background: "#fff", border: "1px solid #E2E8F0", borderRadius: 6, padding: "5px 6px", marginBottom: 4, cursor: "pointer", position: "relative" },
+  taskChip: { display: "flex", flexDirection: "column", justifyContent: "center", gap: 2, minHeight: 60, background: "#fff", border: "1px solid #E2E8F0", borderRadius: 6, padding: "5px 6px", marginBottom: 4, cursor: "pointer", position: "relative" },
   transportChip: { display: "flex", alignItems: "center", gap: 5, fontSize: 10, color: "#64748B", background: "repeating-linear-gradient(45deg, #F1EFE7, #F1EFE7 6px, #E9E6DC 6px, #E9E6DC 12px)", border: "1px dashed #CBD5E1", borderRadius: 6, padding: "4px 6px", marginBottom: 4 },
   chipTopRow: { display: "flex", alignItems: "center", gap: 4, minWidth: 0 },
   chipSubRow: { display: "flex", alignItems: "center", gap: 6, minWidth: 0 },
