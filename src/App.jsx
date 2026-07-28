@@ -962,11 +962,12 @@ function PlanningApp({ session, onSignOut }) {
 
     setInstances((prev) => prev.map((t) => {
       const sameTemplate = tplId && t.templateId === tplId;
-      // Fanger også "løsrevne" instanser af samme titel, der mangler deres egen
-      // template_id (fx en opgave der aldrig blev korrekt linket til skabelonen) —
-      // uanset om den redigerede opgave selv har en templateId. Uden dette blev
-      // sådanne løsrevne instanser aldrig opdateret sammen med resten af aftalen.
-      const sameTitleFixed = t.type === "fixed" && t.title === matchTitle && !t.templateId;
+      // Fanger "løsrevne" instanser af samme titel, der mangler template_id —
+      // på begge sider af sammenligningen (både hvis MÅL-opgaven mangler den,
+      // og hvis den redigerede KILDE-opgave selv mangler den). Uden det sidste
+      // opdateres kun den ene retning: orphan -> skabelon, men ikke skabelon ->
+      // orphan når det er en orphan-instans man sidder og redigerer.
+      const sameTitleFixed = t.type === "fixed" && task.type === "fixed" && t.title === matchTitle && (!tplId || !t.templateId);
       if (t.id === taskId || sameTemplate || sameTitleFixed) {
         // Opgaver der allerede er overført til Dinero er faktureret, og må ikke
         // ændres bagefter — data skal matche det der reelt blev sendt til Dinero.
@@ -1006,11 +1007,12 @@ function PlanningApp({ session, onSignOut }) {
     let skippedInvoiced = false;
     setInstances((prev) => prev.map((t) => {
       const sameTemplate = tplId && t.templateId === tplId;
-      // Fanger også "løsrevne" instanser af samme titel, der mangler deres egen
-      // template_id (fx en opgave der aldrig blev korrekt linket til skabelonen) —
-      // uanset om den redigerede opgave selv har en templateId. Uden dette blev
-      // sådanne løsrevne instanser aldrig opdateret sammen med resten af aftalen.
-      const sameTitleFixed = t.type === "fixed" && t.title === matchTitle && !t.templateId;
+      // Fanger "løsrevne" instanser af samme titel, der mangler template_id —
+      // på begge sider af sammenligningen (både hvis MÅL-opgaven mangler den,
+      // og hvis den redigerede KILDE-opgave selv mangler den). Uden det sidste
+      // opdateres kun den ene retning: orphan -> skabelon, men ikke skabelon ->
+      // orphan når det er en orphan-instans man sidder og redigerer.
+      const sameTitleFixed = t.type === "fixed" && task.type === "fixed" && t.title === matchTitle && (!tplId || !t.templateId);
       if (t.id === taskId || sameTemplate || sameTitleFixed) {
         // Opgaver der allerede er overført til Dinero er faktureret, og må ikke
         // ændres bagefter — data skal matche det der reelt blev sendt til Dinero.
