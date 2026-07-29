@@ -1518,13 +1518,19 @@ function PlanningApp({ session, onSignOut }) {
     if (parts.length) window.alert(parts.join("\n\n"));
   }
 
-  // Er den aktuelt loggede planlægger/bruger administrator? Matcher login-email mod
-  // medarbejderens app_email. Hvis loginnet ikke er koblet til en medarbejder (fx ejerens
-  // egen konto), betragtes det som administrator.
+  // Hvem er den indloggede? Vi matcher primært på auth_user_id, fordi det er
+  // NØJAGTIG samme grundlag som databasens RLS-politikker bruger. Matchede vi kun
+  // på e-mail, kunne brugerfladen og databasen nå to forskellige konklusioner om
+  // samme bruger. app_email bruges kun som reserve for ældre opsætninger.
   const currentEmployeeForAuth = employees.find(
+    (e) => e.auth_user_id && session?.user?.id && e.auth_user_id === session.user.id
+  ) || employees.find(
     (e) => e.app_email && session?.user?.email && e.app_email.toLowerCase() === session.user.email.toLowerCase()
   );
-  const isAdminUser = !currentEmployeeForAuth || !!currentEmployeeForAuth.isAdmin;
+  // Adgang kræver et POSITIVT ja. Tidligere gav et login uden tilknyttet
+  // medarbejder automatisk administratorrettigheder i brugerfladen — den slags
+  // skal fejle lukket, ikke åbent.
+  const isAdminUser = !!currentEmployeeForAuth?.isAdmin;
 
   const currentIsoWeek = isoWeekInfo(new Date());
   const weekInstancesList = instances.filter((t) => t.week === weekOffset && t.year === weekYear);
@@ -1549,6 +1555,38 @@ function PlanningApp({ session, onSignOut }) {
     return (
       <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100svh", fontFamily: "system-ui, sans-serif", color: "#9C1B5D", fontSize: 15 }}>
         Indlæser data…
+      </div>
+    );
+  }
+
+  // Adgangskontrol ved indgangen. Uden den kunne enhver med et login åbne
+  // planlæggeren og få en næsten tom tavle (fordi RLS kun udleverer deres egne
+  // opgaver) — teknisk sikkert, men umuligt at forstå. Her får de i stedet en
+  // klar besked og en vej videre til medarbejder-appen.
+  if (!isAdminUser) {
+    return (
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100svh",
+        fontFamily: "system-ui, sans-serif", padding: 24, background: "#F8FAFC" }}>
+        <div style={{ background: "#fff", borderRadius: 14, padding: "28px 26px", maxWidth: 460,
+          boxShadow: "0 2px 12px rgba(0,0,0,0.08)", textAlign: "center" }}>
+          <div style={{ fontSize: 34, marginBottom: 10 }}>🔒</div>
+          <div style={{ fontWeight: 700, fontSize: 18, color: "#111111", marginBottom: 8 }}>
+            Du har ikke adgang til planlægningen
+          </div>
+          <div style={{ fontSize: 14, color: "#475569", lineHeight: 1.5, marginBottom: 18 }}>
+            {currentEmployeeForAuth
+              ? <>Din bruger <strong>{currentEmployeeForAuth.name}</strong> er ikke markeret som planlægger. Brug medarbejder-appen til dine egne opgaver, eller bed en planlægger om at give dig adgang.</>
+              : <>Dit login er ikke knyttet til en medarbejder. Kontakt en planlægger for at få det sat op.</>}
+          </div>
+          <a href="https://medarbejderapp.netlify.app/" style={{ display: "block", background: "#D6247A", color: "#fff",
+            borderRadius: 10, padding: "11px 16px", fontWeight: 700, fontSize: 14, textDecoration: "none", marginBottom: 10 }}>
+            Åbn medarbejder-appen
+          </a>
+          <button onClick={onSignOut} style={{ width: "100%", background: "#fff", color: "#475569",
+            border: "1px solid #CBD5E1", borderRadius: 10, padding: "10px 16px", fontWeight: 600, fontSize: 14, cursor: "pointer" }}>
+            Log ud
+          </button>
+        </div>
       </div>
     );
   }
