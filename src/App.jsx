@@ -2636,6 +2636,13 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
           const dayLabel = DAYS.find((d) => d.key === t.day)?.label || t.day || "—";
           const isLow = logged > 0 && logged < t.duration * 0.5;
           const isEditing = editMinutes[t.id] !== undefined;
+          // Begrundelser medarbejderne har angivet ved overskridelse af planlagt tid
+          const overrunNotes = (t.timeLog || t.time_log || [])
+            .filter((l) => l.note && String(l.note).trim())
+            .map((l) => {
+              const who = employees.find((e) => e.id === l.empId)?.name || "Medarbejder";
+              return `${who} (${fmtMin(l.minutes || 0)}): ${l.note}`;
+            });
           const rate = localPricing[t.contractType || "privat"] || 0;
           const plannedKr = Math.round((t.duration / 60) * rate);
           const registeredKr = Math.round((logged / 60) * rate);
@@ -2683,11 +2690,20 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
                     <button style={{ ...styles.primaryBtn, fontSize: 11, padding: "3px 8px" }} onClick={() => saveMinutes(t, editMinutes[t.id])}>✓</button>
                   </div>
                 ) : (
-                  <span
-                    style={{ fontSize: 13, fontWeight: 700, color: logged === 0 ? "#94A3B8" : isLow ? "#D97706" : "#16A34A", cursor: "pointer", borderBottom: "1px dashed currentColor" }}
-                    title="Klik for at justere timer"
-                    onClick={() => setEditMinutes((prev) => ({ ...prev, [t.id]: String(logged) }))}>
-                    {fmtMin(logged)}
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 4, justifyContent: "flex-end" }}>
+                    {overrunNotes.length > 0 && (
+                      <span
+                        style={{ fontSize: 12, cursor: "help" }}
+                        title={`Begrundelse for overskredet tid:\n\n${overrunNotes.join("\n")}`}>
+                        ⚠️
+                      </span>
+                    )}
+                    <span
+                      style={{ fontSize: 13, fontWeight: 700, color: logged === 0 ? "#94A3B8" : isLow ? "#D97706" : "#16A34A", cursor: "pointer", borderBottom: "1px dashed currentColor" }}
+                      title="Klik for at justere timer"
+                      onClick={() => setEditMinutes((prev) => ({ ...prev, [t.id]: String(logged) }))}>
+                      {fmtMin(logged)}
+                    </span>
                   </span>
                 )}
               </div>
