@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect, useCallback } from "react";
 import { supabase } from "./supabaseClient";
 import {
-  Plus, Download, X, Clock, Play, Square, AlertTriangle,
+  Plus, Download, X, Clock, AlertTriangle,
   Trash2, Pencil, Repeat, Zap, CalendarClock, Wand2, Star, ChevronLeft, ChevronRight,
   ClipboardList, Video, CheckCircle2, LogIn, ListChecks, Check, Lock, Navigation, Building2, Car, Copy,
   Thermometer, Palmtree,
@@ -51,7 +51,13 @@ const CREATABLE_TYPES = ["fixed", "adhoc"];
 // rapportering osv., og skal forhindre auto-planlægning af den pågældende medarbejder.
 const BLOCK_TYPES = ["sygdom", "ferie"];
 
-function uid(p) { return p + Math.random().toString(36).slice(2, 9); }
+// Bruger crypto.randomUUID når den er tilgængelig (alle moderne browsere).
+// Math.random gav kun ~36^7 kombinationer og var i praksis kollisionsfølsom,
+// når mange instanser blev genereret i samme sekund ved "Planlæg alle uger".
+function uid(p) {
+  if (typeof crypto !== "undefined" && crypto.randomUUID) return p + crypto.randomUUID().replace(/-/g, "").slice(0, 16);
+  return p + Math.random().toString(36).slice(2, 9) + Date.now().toString(36);
+}
 // Oversætter en valgt kalenderdato til en gyldig hverdags-nøgle (Mon-Fri).
 // Databasen tillader kun Mon-Fri (eller NULL) i "day"/"deadline"-felterne —
 // virksomheden planlægger ikke i weekenden. Falder en valgt dato i weekenden,
@@ -59,6 +65,18 @@ function uid(p) { return p + Math.random().toString(36).slice(2, 9); }
 // er stadig inden for den valgte uge, blot ikke selve lørdag/søndag), i
 // stedet for at gemme en ugyldig dag-værdi, som ellers ville få hele
 // opgaven til at fejle stille i databasen ved oprettelse.
+// Fælles fejlhåndtering for databaseskrivninger. Tidligere blev fejl fra Supabase
+// ignoreret de fleste steder, så en handling kunne se ud til at lykkes i browseren
+// uden nogensinde at blive gemt — og først blive opdaget ved næste genindlæsning
+// (det var præcis sådan en nyoprettet ad hoc-opgave kunne forsvinde sporløst).
+// Returnerer true hvis der VAR en fejl, så kaldstedet kan afbryde.
+function dbFail(error, whatFailed) {
+  if (!error) return false;
+  console.error(`${whatFailed} fejlede:`, error.message, error.details ?? "");
+  alert(`Kunne ikke ${whatFailed} — prøv igen.\n\n(${error.message})`);
+  return true;
+}
+
 function weekdayKeyFor(date) {
   const dayKeys = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
   const dow = date.getDay();
@@ -223,39 +241,6 @@ function checklistProgress(t) {
 function itemText(x) { return typeof x === "string" ? x : x.text; }
 
 // ---------- Seed data ----------
-const seedEmployees = [
-  { id: "e1", name: "Mette Holm", skills: { Gulvvask: 3, Sanitær: 2 }, color: "#D6247A", capacity: defaultCapacity() },
-  { id: "e2", name: "Jonas Berg", skills: { Vinduespolering: 3, Højtryk: 2 }, color: "#111111", capacity: { ...defaultCapacity(), Fri: 240 } },
-  { id: "e3", name: "Aisha Rahman", skills: { Sanitær: 3, Køkkenhygiejne: 3, Gulvvask: 1 }, color: "#9C1B5D", capacity: defaultCapacity() },
-  { id: "e4", name: "Lars Kjær", skills: { Tæpperens: 2, Gulvvask: 2 }, color: "#5B5B60", capacity: { ...defaultCapacity(), Mon: 300, Tue: 300 } },
-];
-
-const seedTemplates = [
-  { id: "tpl1", title: "Kontor 3. sal – gulvvask", requiredSkills: [rs("Gulvvask")], duration: 90, days: ["Mon", "Thu"],
-    checklistItems: seedChecklistTemplates[0].items, videoUrl: "https://example.com/videoer/gulvvask-kontor",
-    customerName: "Nordkraft A/S", address: "Nordkraftvej 12, 9000 Aalborg", poNumber: "PO-2026-0311",
-    accessInstructions: "Nøgleboks ved hovedindgang, kode 4471. Alarm slås fra på panel i receptionen (kode 8899)." },
-  { id: "tpl2", title: "Toiletter stue", requiredSkills: [rs("Sanitær", 2)], duration: 60, days: ["Mon", "Wed", "Fri"],
-    checklistItems: seedChecklistTemplates[1].items, videoUrl: "https://example.com/videoer/sanitaer-rutine",
-    customerName: "Nordkraft A/S", address: "Nordkraftvej 12, 9000 Aalborg", poNumber: "PO-2026-0311",
-    accessInstructions: "Nøgleboks ved hovedindgang, kode 4471. Alarm slås fra på panel i receptionen (kode 8899)." },
-];
-
-const seedAdhocFlex = [
-  { id: "i6", title: "Spildt kaffe – mødesal", requiredSkills: [rs("Gulvvask")], duration: 30, type: "adhoc", day: "Wed", week: 0, assignees: [], status: "unscheduled", timeLog: [],
-    checklist: instantiateChecklist(["Optag spild med papir", "Vask efter med gulvsæbe", "Sæt advarselsskilt indtil gulvet er tørt"]), videoUrl: "",
-    customerName: "Nordkraft A/S", address: "Nordkraftvej 12, 9000 Aalborg", poNumber: "PO-2026-0311", accessInstructions: "Nøgleboks ved hovedindgang, kode 4471." },
-  { id: "i7", title: "Facadevinduer syd", requiredSkills: [rs("Vinduespolering")], duration: 180, type: "flexible", day: null, deadline: "Fri", week: 0, assignees: [], status: "unscheduled", timeLog: [],
-    checklist: instantiateChecklist(seedChecklistTemplates[3].items), videoUrl: "https://example.com/videoer/facadevask",
-    customerName: "Vesterhavsgade Erhvervspark", address: "Vesterhavsgade 88, 9800 Hjørring", poNumber: "PO-2026-0298", accessInstructions: "Ring til ejendomsservice på 98 12 34 56 for adgang til facadestillads." },
-  { id: "i8", title: "Kantine dybderens", requiredSkills: [rs("Køkkenhygiejne", 2), rs("Sanitær")], duration: 150, type: "flexible", day: null, deadline: "Thu", week: 0, assignees: [], status: "unscheduled", timeLog: [],
-    checklist: instantiateChecklist(seedChecklistTemplates[2].items), videoUrl: "https://example.com/videoer/kantine-dybderens",
-    customerName: "Vesterhavsgade Erhvervspark", address: "Vesterhavsgade 88, 9800 Hjørring", poNumber: "PO-2026-0299", accessInstructions: "Nøgle afhentes hos vagten i stueetagen mod legitimation." },
-  { id: "i9", title: "P-plads højtryksspuling", requiredSkills: [rs("Højtryk")], duration: 120, type: "flexible", day: null, deadline: "Fri", week: 0, assignees: [], status: "unscheduled", timeLog: [],
-    checklist: instantiateChecklist(["Brug min. 150 bar", "Start i fjerneste hjørne mod afløb", "Brug øreværn og skridsikre støvler"]), videoUrl: "",
-    customerName: "Vesterhavsgade Erhvervspark", address: "Vesterhavsgade 88, 9800 Hjørring", poNumber: "PO-2026-0298", accessInstructions: "" },
-];
-
 // ---------- Scheduling engine (operates on ONE week's instances) ----------
 function usedMinutes(list, empId, day) {
   return list.filter((t) => t.assignees.includes(empId) && t.day === day).reduce((s, t) => s + t.duration, 0);
@@ -743,7 +728,8 @@ function PlanningApp({ session, onSignOut }) {
   // ── Supabase: sync-helpers ──
   const syncEmployee = useCallback(async (emp) => {
     const { data: skillRows_db } = await supabase.from("skills").select("id, name");
-    await supabase.from("employees").upsert({ id: emp.id, name: emp.name, color: emp.color, is_admin: emp.isAdmin ?? false }, { onConflict: "id" });
+    const { error: empErr } = await supabase.from("employees").upsert({ id: emp.id, name: emp.name, color: emp.color, is_admin: emp.isAdmin ?? false }, { onConflict: "id" });
+    if (dbFail(empErr, "gemme medarbejderen")) return;
     await supabase.from("employee_skills").delete().eq("employee_id", emp.id);
     const skillRows = Object.entries(emp.skills || {})
       .map(([name, level]) => {
@@ -764,7 +750,8 @@ function PlanningApp({ session, onSignOut }) {
   }, []);
 
   const removeEmployee = useCallback(async (id) => {
-    await supabase.from("employees").delete().eq("id", id);
+    const { error: delEmpErr } = await supabase.from("employees").delete().eq("id", id);
+    if (dbFail(delEmpErr, "slette medarbejderen")) return;
   }, []);
 
   const syncInstance = useCallback(async (inst) => {
@@ -804,7 +791,8 @@ function PlanningApp({ session, onSignOut }) {
   }, []);
 
   const removeInstance = useCallback(async (id) => {
-    await supabase.from("instances").delete().eq("id", id);
+    const { error: delInstErr } = await supabase.from("instances").delete().eq("id", id);
+    if (dbFail(delInstErr, "slette opgaven")) return;
   }, []);
 
   // Persisterer kunde-/kontraktfelter direkte på en "Fast interval"-skabelon, så
@@ -824,7 +812,8 @@ function PlanningApp({ session, onSignOut }) {
   }, []);
 
   const syncChecklistTemplate = useCallback(async (cl) => {
-    await supabase.from("checklist_templates").upsert({ id: cl.id, name: cl.name }, { onConflict: "id" });
+    const { error: clErr } = await supabase.from("checklist_templates").upsert({ id: cl.id, name: cl.name }, { onConflict: "id" });
+    if (dbFail(clErr, "gemme tjeklisten")) return;
     await supabase.from("checklist_template_items").delete().eq("checklist_template_id", cl.id);
     const rows = (cl.items || []).map((it, i) => ({
       checklist_template_id: cl.id, sort_order: i,
@@ -834,7 +823,8 @@ function PlanningApp({ session, onSignOut }) {
   }, []);
 
   const removeChecklistTemplate = useCallback(async (id) => {
-    await supabase.from("checklist_templates").delete().eq("id", id);
+    const { error: delClErr } = await supabase.from("checklist_templates").delete().eq("id", id);
+    if (dbFail(delClErr, "slette tjeklisten")) return;
   }, []);
 
   // Sammenligner "før" og "efter" en ensureWeekInstances-materialisering, og
@@ -976,7 +966,7 @@ function PlanningApp({ session, onSignOut }) {
         start_date: payload.startDate || null,
         expiry_date: payload.expiryDate || null,
       });
-      if (tplErr) console.error("service_templates insert error:", tplErr.message);
+      if (dbFail(tplErr, "oprette den faste aftale")) return;
       const { data: skillsDb } = await supabase.from("skills").select("id,name");
       const skillRows = (payload.requiredSkills || []).map((r) => {
         const sk = skillsDb?.find((s) => s.name === r.skill);
@@ -1291,7 +1281,8 @@ function PlanningApp({ session, onSignOut }) {
       const exists = prev.some((b) => b.id === id);
       return exists ? prev.map((b) => (b.id === id ? row : b)) : [...prev, row];
     });
-    await supabase.from("budgets").upsert(row, { onConflict: "id" });
+    const { error: budErr } = await supabase.from("budgets").upsert(row, { onConflict: "id" });
+    if (dbFail(budErr, "gemme budgettet")) return;
   }
   function bumpStatus(taskId) {
     updateInstance(taskId, (t) => ({ ...t, status: cycleStatus(t.status) }));
@@ -1579,7 +1570,8 @@ function PlanningApp({ session, onSignOut }) {
           pricing={pricing} onPricingChange={async (newPricing) => {
             setPricing(newPricing);
             for (const [type, rate] of Object.entries(newPricing)) {
-              await supabase.from("pricing").upsert({ id: `price_${type}`, contract_type: type, hourly_rate: rate }, { onConflict: "id" });
+              const { error: priceErr } = await supabase.from("pricing").upsert({ id: `price_${type}`, contract_type: type, hourly_rate: rate }, { onConflict: "id" });
+              if (dbFail(priceErr, "gemme timeprisen")) return;
             }
           }}
           onUpdateInstance={(taskId, fields) => updateInstance(taskId, (t) => ({ ...t, ...fields }))}
@@ -2130,13 +2122,17 @@ function EmployeesView({ employees, instances, onAdd, onEdit, onDelete, supabase
       const amount = Number(qty);
       const item = empProducts.find((i) => i.id === itemId);
       if (!item) continue;
-      await supabase.from("inventory_transactions").insert({
+      const { error: txErr } = await supabase.from("inventory_transactions").insert({
         item_id: itemId, quantity: -amount, type: "out",
         reason: `Udleveret til ${emp.name}`,
         employee_id: emp.id,
       });
-      await supabase.from("inventory_items").update({ stock: Math.max(0, item.stock - amount) }).eq("id", itemId);
-      setEmpProducts((prev) => prev.map((p) => p.id === itemId ? { ...p, stock: Math.max(0, p.stock - amount) } : p));
+      if (txErr) { console.error("inventory_transactions insert:", txErr.message); alert(`Kunne ikke registrere udlevering af "${item.name}" — prøv igen.`); setOrdering(false); return; }
+      // Atomart fradrag i databasen — undgår at to samtidige udleveringer
+      // overskriver hinandens lagertal.
+      const { data: newStock, error: stockErr } = await supabase.rpc("consume_stock", { p_item_id: itemId, p_amount: amount });
+      if (stockErr) { console.error("consume_stock:", stockErr.message); alert(`Kunne ikke opdatere lageret for "${item.name}" — prøv igen.`); setOrdering(false); return; }
+      setEmpProducts((prev) => prev.map((p) => p.id === itemId ? { ...p, stock: newStock ?? Math.max(0, p.stock - amount) } : p));
     }
     // Opdatér historik
     const { data } = await supabase
@@ -2169,7 +2165,8 @@ function EmployeesView({ employees, instances, onAdd, onEdit, onDelete, supabase
     // Kobl auth_user_id hvis vi fik et id tilbage
     const userId = data?.user?.id;
     if (userId) {
-      await supabase.from("employees").update({ auth_user_id: userId, app_email: email }).eq("id", emp.id);
+      const { error: linkErr } = await supabase.from("employees").update({ auth_user_id: userId, app_email: email }).eq("id", emp.id);
+      if (dbFail(linkErr, "knytte login til medarbejderen")) return;
       emp.auth_user_id = userId;
       emp.app_email = email;
     }
@@ -2181,7 +2178,8 @@ function EmployeesView({ employees, instances, onAdd, onEdit, onDelete, supabase
   async function deactivateUser(emp) {
     if (!window.confirm(`Luk adgang for ${emp.name}? De kan ikke længere logge ind på medarbejder-appen.`)) return;
     setInviteStatus((prev) => ({ ...prev, [emp.id]: "deactivating" }));
-    await supabase.from("employees").update({ auth_user_id: null }).eq("id", emp.id);
+    const { error: unlinkErr } = await supabase.from("employees").update({ auth_user_id: null }).eq("id", emp.id);
+    if (dbFail(unlinkErr, "fjerne login fra medarbejderen")) return;
     // Opdatér local state så kortet opdateres med det samme
     emp.auth_user_id = null;
     setInviteStatus((prev) => ({ ...prev, [emp.id]: "deactivated" }));
@@ -3434,7 +3432,8 @@ function AreasView({ supabase, areas, employees, employeeAreas, onAreasChange, o
     setSaving(true);
     const zips = areaZips.split(/[\s,]+/).map((z) => z.trim()).filter((z) => /^\d{4}$/.test(z));
     if (editArea) {
-      await supabase.from("areas").update({ name: areaName.trim(), zip_codes: zips }).eq("id", editArea.id);
+      const { error: areaUpdErr } = await supabase.from("areas").update({ name: areaName.trim(), zip_codes: zips }).eq("id", editArea.id);
+      if (dbFail(areaUpdErr, "gemme området")) return;
       onAreasChange((prev) => prev.map((a) => a.id === editArea.id ? { ...a, name: areaName.trim(), zip_codes: zips } : a));
     } else {
       const { data } = await supabase.from("areas").insert({ name: areaName.trim(), zip_codes: zips }).select().single();
@@ -3445,7 +3444,8 @@ function AreasView({ supabase, areas, employees, employeeAreas, onAreasChange, o
 
   async function deleteArea(area) {
     if (!window.confirm(`Slet området "${area.name}"?`)) return;
-    await supabase.from("areas").delete().eq("id", area.id);
+    const { error: areaDelErr } = await supabase.from("areas").delete().eq("id", area.id);
+    if (dbFail(areaDelErr, "slette området")) return;
     onAreasChange((prev) => prev.filter((a) => a.id !== area.id));
     onEmployeeAreasChange((prev) => prev.filter((ea) => ea.area_id !== area.id));
   }
@@ -3729,7 +3729,8 @@ function InventoryView({ supabase, employees }) {
 
   async function deleteItem(item) {
     if (!window.confirm(`Slet "${item.name}"? Dette kan ikke fortrydes.`)) return;
-    await supabase.from("inventory_items").delete().eq("id", item.id);
+    const { error: delItemErr } = await supabase.from("inventory_items").delete().eq("id", item.id);
+    if (dbFail(delItemErr, "slette lagervaren")) return;
     setItems((prev) => prev.filter((i) => i.id !== item.id));
   }
 
@@ -3737,11 +3738,14 @@ function InventoryView({ supabase, employees }) {
     if (!showAdjust || !adjustQty) return;
     const qty = adjustType === "out" ? -Math.abs(Number(adjustQty)) : Math.abs(Number(adjustQty));
     const newStock = showAdjust.stock + qty;
-    await supabase.from("inventory_transactions").insert({
+    const { error: txErr } = await supabase.from("inventory_transactions").insert({
       item_id: showAdjust.id, quantity: qty, type: adjustType, reason: adjustReason,
     });
-    await supabase.from("inventory_items").update({ stock: newStock }).eq("id", showAdjust.id);
-    setItems((prev) => prev.map((i) => i.id === showAdjust.id ? { ...i, stock: newStock } : i));
+    if (dbFail(txErr, "registrere lagerreguleringen")) return;
+    // Atomart: negativt p_amount lægger til, positivt trækker fra.
+    const { data: serverStock, error: stockErr } = await supabase.rpc("consume_stock", { p_item_id: showAdjust.id, p_amount: -qty });
+    if (dbFail(stockErr, "opdatere lagerbeholdningen")) return;
+    setItems((prev) => prev.map((i) => i.id === showAdjust.id ? { ...i, stock: serverStock ?? newStock } : i));
     setShowAdjust(null); setAdjustQty(""); setAdjustReason("");
   }
 
