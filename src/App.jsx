@@ -2636,9 +2636,11 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
           const dayLabel = DAYS.find((d) => d.key === t.day)?.label || t.day || "—";
           const isLow = logged > 0 && logged < t.duration * 0.5;
           const isEditing = editMinutes[t.id] !== undefined;
-          // Begrundelser medarbejderne har angivet ved overskridelse af planlagt tid
+          // Begrundelser medarbejderne har angivet ved overskridelse af planlagt tid.
+          // Planlæggerens egne justeringer (empId "planner") er ikke overskridelses-
+          // begrundelser og skal ikke give en advarsel her.
           const overrunNotes = (t.timeLog || t.time_log || [])
-            .filter((l) => l.note && String(l.note).trim())
+            .filter((l) => l.note && String(l.note).trim() && l.empId !== "planner")
             .map((l) => {
               const who = employees.find((e) => e.id === l.empId)?.name || "Medarbejder";
               return `${who} (${fmtMin(l.minutes || 0)}): ${l.note}`;
