@@ -1949,7 +1949,11 @@ function WeekView({ employees, instances, unplaced, onAdd, onAuto, onAutoAllWeek
                   const pct = cap ? Math.min((used / cap) * 100, 100) : 0;
                   const over = used > cap;
                   return (
-                    <div key={d.key} style={{ ...styles.gridCell, borderRight: i < visibleDays.length - 1 ? "1px solid #CBD5E1" : "none", ...(["Sat","Sun"].includes(d.key) ? { background: "#FAFAFA" } : {}) }}
+                    <div key={d.key} style={{ ...styles.gridCell, borderRight: i < visibleDays.length - 1 ? "1px solid #CBD5E1" : "none", ...(["Sat","Sun"].includes(d.key) ? { background: "#FAFAFA" } : {}),
+                      // Overbookede dage markeres tydeligt: en dag med mere arbejde end
+                      // kapacitet skubber de sidste opgaver ned under det synlige område,
+                      // hvor de reelt bliver usynlige for planlæggeren.
+                      ...(over ? { background: "#FEF2F2", boxShadow: "inset 3px 0 0 #DC2626" } : {}) }}
                       onDragOver={(e) => e.preventDefault()}
                       onDrop={() => {
                         if (dragId) {
@@ -1971,11 +1975,18 @@ function WeekView({ employees, instances, unplaced, onAdd, onAuto, onAutoAllWeek
                         }
                         setDragId(null);
                       }}>
+                      {over && (
+                        <div style={styles.overBanner}
+                          title={`${dayTasks.length} opgaver er planlagt på denne dag — ${fmtMin(used - cap)} mere end kapaciteten. Rul ned i kolonnen for at se dem alle.`}>
+                          <span>⚠️ Overbooket · {fmtMin(used - cap)} over</span>
+                          <span style={styles.overBannerCount}>{dayTasks.length} opgaver</span>
+                        </div>
+                      )}
                       <div style={styles.capBarTrack}>
                         <div style={{ ...styles.capBarFill, width: `${pct}%`, background: over ? "#DC2626" : pct > 80 ? "#D97706" : "#D6247A" }} />
                       </div>
                       {capView === "bar" ? (
-                        <div style={styles.capLabel}>{fmtMin(used)} / {fmtMin(cap)}{transportMin > 0 ? ` (inkl. ${fmtMin(transportMin)} transport)` : ""}</div>
+                        <div style={{ ...styles.capLabel, ...(over ? { color: "#DC2626", fontWeight: 700 } : {}) }}>{fmtMin(used)} / {fmtMin(cap)}{transportMin > 0 ? ` (inkl. ${fmtMin(transportMin)} transport)` : ""}</div>
                       ) : (
                         <div style={{ fontSize: 10, margin: "3px 0 6px", display: "flex", gap: 6, flexWrap: "wrap" }}>
                           <span style={{ color: over ? "#DC2626" : pct > 80 ? "#D97706" : "#64748B", fontWeight: 600 }}>
@@ -4712,6 +4723,13 @@ const styles = {
   capBarTrack: { height: 5, background: "#E2E8F0", borderRadius: 4, overflow: "hidden" },
   capBarFill: { height: "100%", borderRadius: 4 },
   capLabel: { fontSize: 10, color: "#94A3B8", margin: "3px 0 6px" },
+  // Banner der gør en overbooket dag umulig at overse, og som samtidig fortæller
+  // hvor mange opgaver dagen indeholder — ellers kan man ikke se at der ligger
+  // flere kort længere nede end skærmen viser.
+  overBanner: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6,
+    background: "#DC2626", color: "#fff", borderRadius: 6, padding: "3px 7px",
+    fontSize: 10, fontWeight: 700, marginBottom: 5, cursor: "help" },
+  overBannerCount: { background: "rgba(255,255,255,0.25)", borderRadius: 4, padding: "1px 5px", whiteSpace: "nowrap" },
   taskChip: { display: "flex", flexDirection: "column", justifyContent: "center", gap: 2, minHeight: 60, background: "#fff", border: "1px solid #E2E8F0", borderRadius: 6, padding: "5px 6px", marginBottom: 4, cursor: "pointer", position: "relative" },
   transportChip: { display: "flex", alignItems: "center", gap: 5, fontSize: 10, color: "#64748B", background: "repeating-linear-gradient(45deg, #F1EFE7, #F1EFE7 6px, #E9E6DC 6px, #E9E6DC 12px)", border: "1px dashed #CBD5E1", borderRadius: 6, padding: "4px 6px", marginBottom: 4 },
   chipTopRow: { display: "flex", alignItems: "center", gap: 4, minWidth: 0 },
