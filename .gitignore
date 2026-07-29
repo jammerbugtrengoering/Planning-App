@@ -23,7 +23,9 @@ dist-ssr
 *.sln
 *.sw?
 
-# Miljøvariabler - må ikke i git
-.env
-.env.*
-!.env.example
+# Miljøvariabler
+# BEMÆRK: .env er bevidst committet indtil variablerne er sat i Netlify UI,
+# da Netlify-buildet henter VITE_-variablerne herfra. Anon-nøglen er i forvejen
+# offentlig (den bundles ind i klient-JS), og RLS er den reelle sikkerhedsgrænse.
+.env.local
+.env.*.local
