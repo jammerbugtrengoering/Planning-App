@@ -77,6 +77,31 @@ function dbFail(error, whatFailed) {
   return true;
 }
 
+// Henter ALLE raekker fra en tabel. Supabase/PostgREST returnerer hoejst 1000
+// raekker pr. kald, og uden eksplicit sortering er det en VILKAARLIG delmaengde
+// der kan variere fra indlaesning til indlaesning. Med 2500+ opgaver betoed det
+// at planlaeggeren kun saa ca. 40% af data - og ikke de samme 40% hver gang.
+// Vi henter derfor i sider indtil der ikke er flere, sorteret stabilt paa id.
+async function fetchAllRows(table, columns = "*") {
+  const pageSize = 1000;
+  let from = 0;
+  const rows = [];
+  for (;;) {
+    const { data, error } = await supabase
+      .from(table).select(columns).order("id", { ascending: true })
+      .range(from, from + pageSize - 1);
+    if (error) {
+      console.error(`fetchAllRows(${table}) fejlede:`, error.message);
+      break;
+    }
+    if (!data || data.length === 0) break;
+    rows.push(...data);
+    if (data.length < pageSize) break;
+    from += pageSize;
+  }
+  return rows;
+}
+
 function weekdayKeyFor(date) {
   const dayKeys = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
   const dow = date.getDay();
@@ -580,7 +605,7 @@ function PlanningApp({ session, onSignOut }) {
         supabase.from("checklist_template_items").select("*").order("sort_order"),
         supabase.from("service_templates").select("*"),
         supabase.from("service_template_skills").select("*"),
-        supabase.from("instances").select("*"),
+        fetchAllRows("instances").then((data) => ({ data })),
         supabase.from("travel_settings").select("*").eq("id","default").single(),
         supabase.from("travel_overrides").select("*"),
       ]);
