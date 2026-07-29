@@ -1738,7 +1738,7 @@ function PlanningApp({ session, onSignOut }) {
       )}
 
       {view === "contracts" && (
-        <ContractsView templates={templates} instances={instances} />
+        <ContractsView templates={templates} instances={instances} pricing={pricing} />
       )}
 
       {view === "reports" && (
@@ -3526,7 +3526,7 @@ function DayPills({ days }) {
   );
 }
 
-function ContractsView({ templates, instances }) {
+function ContractsView({ templates, instances, pricing }) {
   // Find den reelle, aktuelle kontrakttype for en skabelon: den seneste værdi sat på
   // en tilknyttet opgave slår den statiske skabelonværdi, så redigering i ugeplanen
   // altid afspejles korrekt her.
@@ -3536,6 +3536,35 @@ function ContractsView({ templates, instances }) {
     return tpl.contractType || "privat";
   }
 
+  // Realiseret tid: summen af al registreret tid (time_log) på tværs af samtlige
+  // instanser der er materialiseret fra denne skabelon, uanset uge — dvs. for hele
+  // aftalens levetid, ikke kun den uge man tilfældigvis kigger på lige nu.
+  function realizedMinutes(tplId) {
+    return instances
+      .filter((i) => i.templateId === tplId)
+      .reduce((s, i) => s + (i.timeLog || i.time_log || []).reduce((s2, l) => s2 + (l.minutes || 0), 0), 0);
+  }
+
+  // Planlagte timer/uge for en skabelon: varighed pr. besøg × antal ugedage den
+  // gentages på.
+  function weeklyPlannedMinutes(tpl) {
+    return (tpl.duration || 0) * ((tpl.days || []).length || 0);
+  }
+
+  // Kontraktsum for hele aftaleperioden: planlagte timer/uge × antal uger fra
+  // startdato til udløbsdato × timeprisen for kontrakttypen. Uden en startdato kan
+  // "hele perioden" ikke opgøres præcist, så vi falder tilbage til en enkelt uges
+  // værdi og markerer det tydeligt i UI'et.
+  function contractSumInfo(tpl, contractType, start, expiry) {
+    const rate = pricing[contractType || "privat"] || 0;
+    const weeklyMin = weeklyPlannedMinutes(tpl);
+    if (start && expiry) {
+      const weeks = Math.max(1, Math.round((expiry - start) / (1000 * 60 * 60 * 24 * 7)));
+      return { sum: (weeklyMin * weeks / 60) * rate, weeks, wholePeriod: true };
+    }
+    return { sum: (weeklyMin / 60) * rate, weeks: 1, wholePeriod: false };
+  }
+
   // Hent alle faste kontrakter med udløbsdato — sortér efter nærmest udløbende
   const contracts = templates
     .filter((t) => t.expiryDate)
@@ -3543,13 +3572,39 @@ function ContractsView({ templates, instances }) {
       const expiry = new Date(t.expiryDate);
       const start = t.startDate ? new Date(t.startDate) : null;
       const daysLeft = Math.ceil((expiry - new Date()) / (1000 * 60 * 60 * 24));
-      return { ...t, contractType: effectiveContractType(t), expiry, start, daysLeft };
+      const contractType = effectiveContractType(t);
+      const rate = pricing[contractType || "privat"] || 0;
+      const realizedMin = realizedMinutes(t.id);
+      const { sum: plannedSum, wholePeriod } = contractSumInfo(t, contractType, start, expiry);
+      return {
+        ...t, contractType, expiry, start, daysLeft,
+        plannedSum, wholePeriod,
+        realizedMin, realizedSum: (realizedMin / 60) * rate,
+      };
     })
     .sort((a, b) => a.expiry - b.expiry);
 
   const noExpiry = templates
     .filter((t) => !t.expiryDate)
-    .map((t) => ({ ...t, contractType: effectiveContractType(t) }));
+    .map((t) => {
+      const contractType = effectiveContractType(t);
+      const rate = pricing[contractType || "privat"] || 0;
+      const realizedMin = realizedMinutes(t.id);
+      const weeklyMin = weeklyPlannedMinutes(t);
+      return {
+        ...t, contractType,
+        weeklyPlannedSum: (weeklyMin / 60) * rate,
+        realizedMin, realizedSum: (realizedMin / 60) * rate,
+      };
+    });
+
+  // Samlet overblik: kun aftaler med både start- og udløbsdato indgår i "samlet
+  // kontraktsum for hele perioden" og "realiseret", da de øvrige (uden startdato,
+  // eller løbende uden udløb) ikke har en veldefineret periode at summere over.
+  const totalPlannedSum = contracts.filter((c) => c.wholePeriod).reduce((s, c) => s + c.plannedSum, 0);
+  const totalRealizedSum = contracts.reduce((s, c) => s + c.realizedSum, 0) + noExpiry.reduce((s, c) => s + c.realizedSum, 0);
+  const totalRealizedMin = contracts.reduce((s, c) => s + c.realizedMin, 0) + noExpiry.reduce((s, c) => s + c.realizedMin, 0);
+  const missingStartCount = contracts.filter((c) => !c.wholePeriod).length;
 
   function urgencyColor(days) {
     if (days < 0) return "#DC2626";   // Udløbet
@@ -3569,6 +3624,23 @@ function ContractsView({ templates, instances }) {
     <div style={styles.page}>
       <div style={{ fontWeight: 700, fontSize: 18, color: "#111111", marginBottom: 4 }}>Aftaler</div>
       <div style={{ fontSize: 13, color: "#64748B", marginBottom: 20 }}>Faste opgaver sorteret efter udløbsdato — nærmest udløbende øverst</div>
+
+      {(contracts.length > 0 || noExpiry.length > 0) && (
+        <div style={{ display: "flex", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
+          <div style={{ ...styles.statBlock, borderLeft: "3px solid #64748B" }}>
+            <div>
+              <div style={{ ...styles.statValue, color: "#64748B" }}>{Math.round(totalPlannedSum).toLocaleString("da-DK")} kr.</div>
+              <div style={styles.statLabel}>Kontraktsum, planlagte timer{missingStartCount > 0 ? ` (${missingStartCount} mangler startdato)` : ""}</div>
+            </div>
+          </div>
+          <div style={{ ...styles.statBlock, borderLeft: "3px solid #16A34A" }}>
+            <div>
+              <div style={{ ...styles.statValue, color: "#16A34A" }}>{Math.round(totalRealizedSum).toLocaleString("da-DK")} kr.</div>
+              <div style={styles.statLabel}>Realiseret ({fmtMin(totalRealizedMin)})</div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {contracts.length === 0 && noExpiry.length === 0 && (
         <div style={{ textAlign: "center", padding: 60, color: "#94A3B8" }}>
@@ -3591,6 +3663,14 @@ function ContractsView({ templates, instances }) {
                   <span>Til {t.expiry.toLocaleDateString("da-DK", { day: "numeric", month: "short", year: "numeric" })}</span>
                   <span style={{ fontWeight: 600, color: "#9C1B5D" }}>{t.contractType === "nexus" ? "🏢 Nexus" : t.contractType === "aeldrelov" ? "👴 Ældrelov" : "🏠 Privat"}</span>
                 </div>
+                <div style={{ fontSize: 12, color: "#64748B", display: "flex", gap: 14, flexWrap: "wrap", marginTop: 5 }}>
+                  <span title={t.wholePeriod ? "Planlagte timer/uge × antal uger i aftaleperioden × timepris" : "Ingen startdato — viser kun én uges værdi"}>
+                    💰 Kontraktsum: <strong style={{ color: "#111111" }}>{Math.round(t.plannedSum).toLocaleString("da-DK")} kr.</strong>{!t.wholePeriod && <span style={{ color: "#D97706" }}> (mangler startdato, kun pr. uge)</span>}
+                  </span>
+                  <span title="Al registreret tid på denne aftales opgaver × timepris">
+                    ✅ Realiseret: <strong style={{ color: "#16A34A" }}>{Math.round(t.realizedSum).toLocaleString("da-DK")} kr.</strong> ({fmtMin(t.realizedMin)})
+                  </span>
+                </div>
               </div>
               <div style={{ textAlign: "right", flexShrink: 0 }}>
                 <div style={{ fontSize: 13, fontWeight: 700, color }}>{urgencyLabel(t.daysLeft)}</div>
@@ -3611,6 +3691,10 @@ function ContractsView({ templates, instances }) {
                     {t.customerName && <span>👤 {t.customerName}</span>}
                     <DayPills days={t.days} />
                     <span style={{ fontWeight: 600, color: "#9C1B5D" }}>{t.contractType === "nexus" ? "🏢 Nexus" : t.contractType === "aeldrelov" ? "👴 Ældrelov" : "🏠 Privat"}</span>
+                  </div>
+                  <div style={{ fontSize: 12, color: "#64748B", display: "flex", gap: 14, flexWrap: "wrap", marginTop: 5 }}>
+                    <span title="Ingen udløbsdato — viser kontraktsum pr. uge">💰 Pr. uge: <strong style={{ color: "#111111" }}>{Math.round(t.weeklyPlannedSum).toLocaleString("da-DK")} kr.</strong></span>
+                    <span title="Al registreret tid på denne aftales opgaver × timepris">✅ Realiseret: <strong style={{ color: "#16A34A" }}>{Math.round(t.realizedSum).toLocaleString("da-DK")} kr.</strong> ({fmtMin(t.realizedMin)})</span>
                   </div>
                 </div>
                 <div style={{ fontSize: 12, color: "#94A3B8" }}>Løbende</div>
