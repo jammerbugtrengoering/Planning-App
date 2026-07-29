@@ -460,6 +460,23 @@ function dayTransportMinutes(dayTasks, travelSettings) {
   return computeDaySchedule(dayTasks, travelSettings).filter((s) => s.type === "transport").reduce((sum, s) => sum + s.minutes, 0);
 }
 function cycleStatus(s) { return { planlagt: "udført", udført: "planlagt", unscheduled: "planlagt" }[s] || "planlagt"; }
+// Hvem afsluttede opgaven, og hvornår — vist på kortene i ugeplanen.
+// Skelner mellem medarbejderen (afsluttet ude hos kunden) og planlæggeren
+// (sat manuelt fra kontoret), fordi det er to forskellige ting.
+function completionInfo(t, employees) {
+  if (t.status !== "udført") return null;
+  const by = t.completedBy ?? t.completed_by ?? null;
+  const at = t.completedAt ?? t.completed_at ?? null;
+  const when = at
+    ? new Date(at).toLocaleString("da-DK", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })
+    : null;
+  if (by === "planner") return { label: "Udført (sat af planlægger)", byEmployee: false, when };
+  const emp = by ? employees.find((e) => e.id === by) : null;
+  if (emp) return { label: `Udført af ${emp.name}`, byEmployee: true, when };
+  // Ældre opgaver fra før vi begyndte at registrere det
+  return { label: "Udført", byEmployee: true, when: null };
+}
+
 function statusColor(s) { return { planlagt: "#9C1B5D", udført: "#111111", unscheduled: "#94A3B8" }[s]; }
 
 export default function App() {
@@ -713,7 +730,7 @@ function PlanningApp({ session, onSignOut }) {
             blockGroupId: i.block_group_id || null,
             dineroSynced: i.dinero_synced ?? false,
             includeInAuto: i.include_in_auto ?? false,
-            offSchedule: i.off_schedule ?? false,
+            offSchedule: i.off_schedule ?? false, completedBy: i.completed_by ?? null, completedAt: i.completed_at ?? null,
             onSchedule: i.on_schedule ?? false,
           };
         });
@@ -732,7 +749,7 @@ function PlanningApp({ session, onSignOut }) {
           blockGroupId: i.block_group_id || null,
           dineroSynced: i.dinero_synced ?? false,
           includeInAuto: i.include_in_auto ?? false,
-          offSchedule: i.off_schedule ?? false,
+          offSchedule: i.off_schedule ?? false, completedBy: i.completed_by ?? null, completedAt: i.completed_at ?? null,
           onSchedule: i.on_schedule ?? false,
         })));
       }
@@ -804,6 +821,8 @@ function PlanningApp({ session, onSignOut }) {
       include_in_auto: inst.includeInAuto ?? false,
       off_schedule: inst.offSchedule ?? false,
       on_schedule: inst.onSchedule ?? false,
+      completed_by: inst.completedBy ?? null,
+      completed_at: inst.completedAt ?? null,
     }, { onConflict: "id" });
     if (error) {
       console.error("syncInstance error:", error.message, error.details, inst.id);
@@ -1309,11 +1328,23 @@ function PlanningApp({ session, onSignOut }) {
     const { error: budErr } = await supabase.from("budgets").upsert(row, { onConflict: "id" });
     if (dbFail(budErr, "gemme budgettet")) return;
   }
+  // Når planlæggeren selv sætter en opgave til udført, markeres den med
+  // "planner" — så kan man i planen se at det ikke er medarbejderen der har
+  // afsluttet den ude hos kunden. Felterne ryddes igen hvis opgaven genåbnes.
+  function withCompletion(t, status) {
+    const done = status === "udført";
+    return {
+      ...t,
+      status,
+      completedBy: done ? (t.status === "udført" ? t.completedBy ?? "planner" : "planner") : null,
+      completedAt: done ? (t.status === "udført" ? t.completedAt ?? new Date().toISOString() : new Date().toISOString()) : null,
+    };
+  }
   function bumpStatus(taskId) {
-    updateInstance(taskId, (t) => ({ ...t, status: cycleStatus(t.status) }));
+    updateInstance(taskId, (t) => withCompletion(t, cycleStatus(t.status)));
   }
   function setTaskStatus(taskId, status) {
-    updateInstance(taskId, (t) => ({ ...t, status }));
+    updateInstance(taskId, (t) => withCompletion(t, status));
   }
   function toggleChecklistItem(taskId, itemId) {
     updateInstance(taskId, (t) => ({
@@ -2010,9 +2041,14 @@ function WeekView({ employees, instances, unplaced, onAdd, onAuto, onAutoAllWeek
                         const assignedEmps = (t.assignees || []).map((id) => employees.find((e) => e.id === id)).filter(Boolean);
                         const menuOpen = addMenuTaskId === t.id;
                         const addable = employees.filter((e) => !(t.assignees || []).includes(e.id));
+                        const done = t.status === "udført";
+                        const completion = completionInfo(t, employees);
                         return (
                           <div key={t.id} draggable onDragStart={() => setDragId(t.id)}
-                            style={{ ...styles.taskChip, ...(t.offSchedule ? { borderLeft: "3px solid #F59E0B" } : t.onSchedule ? { borderLeft: "3px solid #22C55E" } : {}), ...(t.outsideArea ? { borderTop: "2px solid #7C3AED" } : {}) }}
+                            style={{ ...styles.taskChip, ...(t.offSchedule ? { borderLeft: "3px solid #F59E0B" } : t.onSchedule ? { borderLeft: "3px solid #22C55E" } : {}), ...(t.outsideArea ? { borderTop: "2px solid #7C3AED" } : {}),
+                              // Udførte opgaver tones grønne, så man kan se med det samme
+                              // hvad der er afsluttet — den gamle 6px prik var reelt usynlig.
+                              ...(done ? { background: "#F0FDF4", borderColor: "#BBF7D0" } : {}) }}
                             onClick={() => onOpenTask(t.id)} title="Klik for at åbne serviceordren">
                             <div style={styles.chipTopRow}>
                               <TypeBadge type={t.type} mini />
@@ -2020,7 +2056,9 @@ function WeekView({ employees, instances, unplaced, onAdd, onAuto, onAutoAllWeek
                               {t.offSchedule && <span title="Planlagt uden for aftale" style={{ fontSize: 12, marginLeft: 2 }}>⚠️</span>}
                               {t.onSchedule && !t.offSchedule && <span title="Planlagt på aftalt dag" style={{ fontSize: 12, marginLeft: 2 }}>✓</span>}
                               {t.outsideArea && <span title="Planlagt uden for medarbejderens område" style={{ fontSize: 12, marginLeft: 2 }}>📍⚠️</span>}
-                              <span style={{ ...styles.statusDot, background: statusColor(t.status) }} />
+                              {done
+                                ? <span style={styles.doneCheck} title={completion?.label}>✓</span>
+                                : <span style={{ ...styles.statusDot, background: statusColor(t.status) }} />}
                               <button style={styles.chipXBtn} title="Fjern fra board" onClick={(e) => { e.stopPropagation(); onUnplace(t.id); }}><X size={11} /></button>
                             </div>
                             <div style={styles.chipSubRow}>
@@ -2029,6 +2067,14 @@ function WeekView({ employees, instances, unplaced, onAdd, onAuto, onAutoAllWeek
                               <span style={styles.taskChipDur}>{fmtMin(t.duration)}</span>
                             </div>
                             {t.address && <div style={styles.taskChipAddress}>📍 {t.address}</div>}
+                            {completion && (
+                              <div style={{ ...styles.doneNote, ...(completion.byEmployee ? {} : { color: "#92400E", background: "#FFFBEB" }) }}
+                                title={completion.byEmployee
+                                  ? "Medarbejderen har markeret opgaven som udført"
+                                  : "Sat til udført af planlæggeren — ikke afsluttet af medarbejderen"}>
+                                ✓ {completion.label}{completion.when ? ` · ${completion.when}` : ""}
+                              </div>
+                            )}
                             <div style={styles.chipAssigneeRow} onClick={(e) => e.stopPropagation()}>
                               {assignedEmps.map((a) => (
                                 <button key={a.id} type="button" style={{ ...styles.chipAvatar, background: a.color }} title={`Fjern ${a.name}`}
@@ -4739,6 +4785,9 @@ const styles = {
   taskChipAddress: { fontSize: 10, color: "#64748B", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", marginTop: 1 },
   taskChipDur: { fontSize: 10, color: "#64748B", flexShrink: 0 },
   statusDot: { width: 6, height: 6, borderRadius: 3, flexShrink: 0 },
+  doneCheck: { color: "#16A34A", fontWeight: 800, fontSize: 13, lineHeight: 1, flexShrink: 0 },
+  doneNote: { marginTop: 3, fontSize: 10, fontWeight: 700, color: "#15803D", background: "#DCFCE7",
+    borderRadius: 5, padding: "2px 6px", display: "inline-block", cursor: "help" },
   chipXBtn: { border: "none", background: "transparent", color: "#94A3B8", cursor: "pointer", padding: 0, display: "flex" },
   chipAssigneeRow: { display: "flex", alignItems: "center", gap: 3, position: "relative", flexWrap: "wrap" },
   chipAvatar: { width: 16, height: 16, borderRadius: "50%", color: "#fff", fontSize: 8, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", border: "none", cursor: "pointer", flexShrink: 0 },
