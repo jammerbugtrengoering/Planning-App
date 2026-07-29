@@ -767,6 +767,61 @@ function PlanningApp({ session, onSignOut }) {
     loadAll();
   }, []);
 
+  // ── Supabase Realtime: hold "instances" i sync på tværs af faner/apps ──
+  // Uden dette abonnement indlæses instances kun én gang ved opstart (loadAll
+  // ovenfor) — ændringer lavet i medarbejder-appen (status, tid, begrundelse,
+  // osv.) mens planlægningsappen allerede er åben, dukkede derfor aldrig op
+  // uden et manuelt genindlæs af siden. Dette lytter på INSERT/UPDATE/DELETE
+  // på "instances" og fletter ændringen ind i den lokale state med det samme,
+  // så også flere hurtige statusskift efter hinanden altid afspejles korrekt.
+  useEffect(() => {
+    function mapRealtimeInstanceRow(i) {
+      return {
+        ...i,
+        templateId: i.template_id ?? null,
+        timeLog: i.time_log ?? [],
+        requiredSkills: i.required_skills ?? [],
+        customerName: i.customer_name ?? i.customer_id ?? "",
+        address: i.address_text ?? "",
+        accessInstructions: i.access_instructions ?? "",
+        contractType: i.contract_type || "privat",
+        invoiceReady: i.invoice_ready ?? false,
+        dineroExported: i.dinero_exported ?? false,
+        startDate: i.start_date || null,
+        expiryDate: i.expiry_date || null,
+        blockGroupId: i.block_group_id || null,
+        dineroSynced: i.dinero_synced ?? false,
+        includeInAuto: i.include_in_auto ?? false,
+        offSchedule: i.off_schedule ?? false,
+        completedBy: i.completed_by ?? null,
+        completedAt: i.completed_at ?? null,
+        onSchedule: i.on_schedule ?? false,
+      };
+    }
+
+    const channel = supabase
+      .channel("instances-sync")
+      .on("postgres_changes", { event: "*", schema: "public", table: "instances" }, (payload) => {
+        if (payload.eventType === "DELETE") {
+          const deletedId = payload.old?.id;
+          if (!deletedId) return;
+          setInstances((prev) => prev.filter((t) => t.id !== deletedId));
+          return;
+        }
+        const mapped = mapRealtimeInstanceRow(payload.new);
+        setInstances((prev) => {
+          const idx = prev.findIndex((t) => t.id === mapped.id);
+          if (idx === -1) return [...prev, mapped];
+          const next = [...prev];
+          next[idx] = { ...next[idx], ...mapped };
+          return next;
+        });
+      })
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, []);
+
   // ── Supabase: sync-helpers ──
   const syncEmployee = useCallback(async (emp) => {
     const { data: skillRows_db } = await supabase.from("skills").select("id, name");
@@ -1950,7 +2005,7 @@ function WeekView({ employees, instances, unplaced, onAdd, onAuto, onAutoAllWeek
       </div>
 
       <div style={styles.legendRow}>
-        {Object.entries(TYPE_META).map(([k, m]) => (
+        {Object.entries(TYPE_META).filter(([k]) => k !== "flexible").map(([k, m]) => (
           <span key={k} style={{ ...styles.typeChip, color: m.color, background: m.bg, marginRight: 6 }}>{m.label}</span>
         ))}
         <span style={styles.hint}>Træk en opgave tilbage til "Ikke tildelt" for at frigive den, eller klik + på en opgave for at sætte flere medarbejdere på.</span>
@@ -4767,7 +4822,7 @@ const globalCss = `
 
 const styles = {
   app: { fontFamily: "'Inter', -apple-system, system-ui, sans-serif", background: "#FFF6FA", minHeight: "100vh", color: "#111111", display: "flex", flexDirection: "column" },
-  header: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 24px", background: "#111111", color: "#fff", flexWrap: "wrap", gap: 12 },
+  header: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 24px", background: "#111111", color: "#fff", flexWrap: "wrap", gap: 12, position: "sticky", top: 0, zIndex: 100 },
   brand: { display: "flex", alignItems: "center", gap: 12 },
   brandMark: { width: 36, height: 36, borderRadius: 10, background: "#D6247A", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 14 },
   brandTitle: { fontFamily: "'Space Grotesk', sans-serif", fontWeight: 600, fontSize: 16 },
