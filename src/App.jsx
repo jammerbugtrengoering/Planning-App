@@ -880,6 +880,16 @@ function PlanningApp({ session, onSignOut }) {
       completed_at: inst.completedAt ?? null,
     }, { onConflict: "id" });
     if (error) {
+      // 23505 på uniq_instance_slot betyder at en anden session (fx en anden
+      // browserfane eller enhed) allerede har oprettet præcis denne opgave
+      // (samme skabelon/uge/dag) i mellemtiden — det er en kapløbssituation,
+      // ikke en reel fejl. Den rigtige version af opgaven kommer ind via
+      // Realtime-abonnementet, så vi skal ikke skræmme brugeren med en fejl
+      // eller forsøge at gemme vores egen (nu overflødige) kopi igen.
+      if (error.code === "23505" && String(error.message || "").includes("uniq_instance_slot")) {
+        console.warn("syncInstance: opgaven findes allerede (kapløb), ignorerer", inst.id);
+        return;
+      }
       console.error("syncInstance error:", error.message, error.details, inst.id);
       // Uden dette forsvandt en fejlet gemning helt stille — opgaven virkede
       // oprettet i UI'et (optimistisk lokal state), men blev aldrig faktisk
