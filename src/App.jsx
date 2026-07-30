@@ -553,7 +553,7 @@ if (recoveryToken) {
                   <div style={{ background:"#fff",borderRadius:18,padding:32,width:360,boxShadow:"0 8px 32px rgba(0,0,0,0.10)" }}>
                             <div style={{ fontWeight:700,fontSize:17,color:"#111111",marginBottom:6 }}>Nulstil adgangskode</div>
                             <div style={{ fontSize:13,color:"#94A3B8",marginBottom:20 }}>Klik nedenfor for at fortsætte med at nulstille din adgangskode.</div>
-                            <button onClick={confirmRecovery} disabled={recoveryLoading} style={{ width:"100%",padding:"13px 0",borderRadius:10,border:"none",background:"#D6247A",color:"#fff",fontWeight:700,fontSize:15,cursor:"pointer" }}>{recoveryLoading ? "Bekræfter…" : "Fortsæt"}</button>button>
+                            <button onClick={confirmRecovery} disabled={recoveryLoading} style={{ width:"100%",padding:"13px 0",borderRadius:10,border:"none",background:"#D6247A",color:"#fff",fontWeight:700,fontSize:15,cursor:"pointer" }}>{recoveryLoading ? "Bekræfter…" : "Fortsæt"}</button>
                   </div>
           </div>
         );
