@@ -1550,7 +1550,7 @@ function PlanningApp({ session, onSignOut }) {
   function saveEmployee(emp) {
     setEmployees((prev) => {
       const exists = prev.some((e) => e.id === emp.id);
-      const next = exists ? prev.map((e) => (e.id === emp.id ? emp : e)) : [...prev, emp];
+      const next = exists ? prev.map((e) => (e.id === emp.id ? { ...e, ...emp } : e)) : [...prev, emp];
       // Ingen automatisk omfordeling ved ændring af medarbejder
       return next;
     });
