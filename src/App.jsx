@@ -1297,6 +1297,31 @@ function PlanningApp({ session, onSignOut }) {
     }));
   }
 
+  // Retter opgavens navn (opgaveoverskriften). Aendringen slaar igennem paa alle
+  // ikke-afsluttede forekomster af samme skabelon (samme strategi som
+  // updateContractType/updateCustomerInfo ovenfor) - ikke kun den enkelte opgave,
+  // saa en stavefejl kan rettes et sted og gaelder fremover. Den viste opgave rettes
+  // altid, uanset status. Kun administratorer maa kalde denne (haandhaeves i UI'en).
+  function renameTask(taskId, newTitle) {
+    const trimmed = (newTitle || "").trim();
+    if (!trimmed) return;
+    const task = instances.find((t) => t.id === taskId);
+    if (!task) return;
+    const tplId = task.templateId || null;
+
+    setInstances((prev) => prev.map((t) => {
+      const sameTemplate = tplId && t.templateId === tplId;
+      const sameOrphanTitle = !tplId && !t.templateId && t.title === task.title;
+      const isMatch = t.id === taskId || ((sameTemplate || sameOrphanTitle) && t.status !== "udført");
+      if (isMatch) {
+        const updated = { ...t, title: trimmed };
+        syncInstance(updated);
+        return updated;
+      }
+      return t;
+    }));
+  }
+
   // Opdaterer kundeoplysninger for hele aftalen (alle forekomster af samme skabelon),
   // så en rettelse af fx kundenavn slår igennem på alle relaterede opgaver — ikke kun
   // den enkelte opgave man sidder og redigerer. Matcher primært via templateId, men
@@ -1908,6 +1933,7 @@ function PlanningApp({ session, onSignOut }) {
           onUpdateCustomer={(taskId, fields) => updateInstance(taskId, (t) => ({ ...t, ...fields }))}
           onUpdateCustomerInfo={updateCustomerInfo}
           onUpdateContractType={updateContractType}
+          onRenameTask={renameTask}
           onUpdateSkills={(taskId, newSkills) => updateInstance(taskId, (t) => ({ ...t, requiredSkills: newSkills }))}
           onAddAssignee={(taskId, empId) => { const t = instances.find((x) => x.id === taskId); if (t?.day) manualPlace(taskId, t.day, empId); }}
           onRemoveAssignee={removeAssignee}
@@ -4619,7 +4645,7 @@ function EmployeeModal({ emp, onClose, onSave, skills: skillList }) {
 }
 
 // ---------- Task / service order detail ----------
-function TaskDetailModal({ task, employees, checklistTemplates, skills, isAdminUser, areas, employeeAreas, onClose, onSetStatus, onToggleChecklistItem, onAddChecklistItem, onAddChecklistTemplate, onAddAssignee, onRemoveAssignee, onUnplace, onDelete, onUpdateCustomer, onUpdateCustomerInfo, onUpdateContractType, onCopy, onUpdateSkills, onEndBlockEarly }) {
+function TaskDetailModal({ task, employees, checklistTemplates, skills, isAdminUser, areas, employeeAreas, onClose, onSetStatus, onToggleChecklistItem, onAddChecklistItem, onAddChecklistTemplate, onAddAssignee, onRemoveAssignee, onUnplace, onDelete, onUpdateCustomer, onUpdateCustomerInfo, onUpdateContractType, onRenameTask, onCopy, onUpdateSkills, onEndBlockEarly }) {
   const [addOpen, setAddOpen] = useState(false);
   const [newItemText, setNewItemText] = useState("");
   const [showTemplates, setShowTemplates] = useState(false);
@@ -4759,6 +4785,8 @@ function TaskDetailModal({ task, employees, checklistTemplates, skills, isAdminU
   }
 
   const t = task;
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [titleDraft, setTitleDraft] = useState(task.title);
   const isDone = t.status === "udført";
   // Administratorer må åbne og redigere en opgave, selvom den er markeret som
   // udført (fx for at rette en fejl efterfølgende) — alle andre har kun
@@ -4814,8 +4842,18 @@ function TaskDetailModal({ task, employees, checklistTemplates, skills, isAdminU
     ? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(custAddress || t.address)}`
     : null;
 
-  return (
-    <Modal onClose={onClose} title={t.title} persistent>
+  const titleNode = isEditingTitle
+    ? React.createElement("span", { style: { display: "flex", alignItems: "center", gap: 6 } },
+        React.createElement("input", { value: titleDraft, onChange: (e) => setTitleDraft(e.target.value), autoFocus: true, style: { font: "inherit", fontWeight: 600, padding: "2px 6px", border: "1px solid #CBD5E1", borderRadius: 6 } }),
+        React.createElement("button", { style: styles.iconBtnGhostInline, title: "Gem", onClick: () => { onRenameTask(t.id, titleDraft); setIsEditingTitle(false); } }, React.createElement(Check, { size: 16 })),
+        React.createElement("button", { style: styles.iconBtnGhostInline, title: "Annuller", onClick: () => { setTitleDraft(t.title); setIsEditingTitle(false); } }, React.createElement(X, { size: 16 }))
+            )
+  : React.createElement("span", { style: { display: "flex", alignItems: "center", gap: 6 } },
+      t.title,
+      isAdminUser && React.createElement("button", { style: styles.iconBtnGhostInline, title: "Ret opgavens navn", onClick: () => { setTitleDraft(t.title); setIsEditingTitle(true); } }, React.createElement(Pencil, { size: 14 }))
+    );
+return (
+    <Modal onClose={onClose} title={titleNode} persistent>
       <div style={styles.detailMetaRow}>
         {locked ? (
           <TypeBadge type={t.type} />
