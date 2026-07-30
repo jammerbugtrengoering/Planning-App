@@ -1668,7 +1668,7 @@ function PlanningApp({ session, onSignOut }) {
           </div>
         </div>
         <nav style={styles.nav}>
-          {[["uge", L.schedule], ["employees", L.employees], ["checklists", L.checklists], ["time", L.time], ["inventory", L.inventory], ["contracts", L.contracts], ["reports", L.reports]].map(([k, l]) => (
+          {[["uge", L.schedule], ["employees", L.employees], ["checklists", L.checklists], ["time", L.time], ["inventory", L.inventory], ["contracts", L.contracts], ["reports", L.reports], ["medExport", L.medExport]].map(([k, l]) => (
             <button key={k} onClick={() => setView(k)} style={view === k ? styles.navBtnActive : styles.navBtn}>{l}</button>
           ))}
           <div style={{ display:"flex", gap:4, marginLeft:12, borderLeft:"1px solid #333", paddingLeft:12 }}>
@@ -1745,6 +1745,7 @@ function PlanningApp({ session, onSignOut }) {
         <ReportsView instances={instances} pricing={pricing} budgets={budgets} onSaveBudget={saveBudget} isAdminUser={isAdminUser} />
       )}
 
+      {view === "medExport" && (<EmployeeExportView instances={instances} employees={employees} />)}
       {view === "inventory" && (
         <InventoryView supabase={supabase} employees={employees} />
       )}
@@ -2937,6 +2938,123 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
           </div>
         );
       })()}
+    </div>
+  );
+}
+
+function EmployeeExportView({ instances, employees }) {
+  const now = new Date();
+  const [filterMonth, setFilterMonth] = useState(now.getMonth());
+  const [filterYear, setFilterYear] = useState(now.getFullYear());
+
+  const MONTHS = ["Januar","Februar","Marts","April","Maj","Juni","Juli","August","September","Oktober","November","December"];
+  const years = [now.getFullYear() - 1, now.getFullYear(), now.getFullYear() + 1];
+
+  // En raekke pr. medarbejder pr. opgave - en opgave med flere medarbejdere
+  // giver en linje for hver af dem, med deres egne registrerede minutter og
+  // egen eventuel afvigelsesbegrundelse (samme mønster som overrunNotes i
+  // TimeView, men opdelt pr. medarbejder i stedet for samlet pr. opgave).
+  const rows = [];
+  instances
+    .filter((t) => !BLOCK_TYPES.includes(t.type))
+    .filter((t) => (t.assignees || []).length > 0)
+    .forEach((t) => {
+      const { month, year } = instanceMonthYear(t, filterYear);
+      if (month !== filterMonth || year !== filterYear) return;
+      const tl = t.timeLog || t.time_log || [];
+      (t.assignees || []).forEach((empId) => {
+        const emp = employees.find((e) => e.id === empId);
+        if (!emp) return;
+        const myLogs = tl.filter((l) => l.empId === empId);
+        const registered = myLogs.reduce((s, l) => s + (l.minutes || 0), 0);
+        const deviationText = myLogs
+          .filter((l) => l.note && String(l.note).trim() && l.empId !== "planner")
+          .map((l) => l.note.trim())
+          .join(" / ");
+        rows.push({
+          empName: emp.name,
+          week: t.week,
+          day: t.day,
+          dayLabel: DAYS.find((d) => d.key === t.day)?.label || t.day || "—",
+          title: t.title,
+          planned: t.duration,
+          registered,
+          deviationText,
+        });
+      });
+    });
+
+  rows.sort((a, b) => {
+    if (a.empName !== b.empName) return a.empName.localeCompare(b.empName, "da");
+    if (a.week !== b.week) return a.week - b.week;
+    const aDay = a.day ? DAYS.findIndex((d) => d.key === a.day) : 99;
+    const bDay = b.day ? DAYS.findIndex((d) => d.key === b.day) : 99;
+    if (aDay !== bDay) return aDay - bDay;
+    return (a.title || "").localeCompare(b.title || "", "da");
+  });
+
+  const totalPlanned = rows.reduce((s, r) => s + r.planned, 0);
+  const totalRegistered = rows.reduce((s, r) => s + r.registered, 0);
+
+  function exportRowsCSV() {
+    const header = ["Medarbejder", "Uge", "Dag", "Opgave", "Planlagt (min)", "Planlagt (timer)", "Registreret (min)", "Registreret (timer)", "Afvigelse"];
+    const data = rows.map((r) => [
+      r.empName, `Uge ${r.week}`, r.dayLabel, r.title,
+      r.planned, (r.planned / 60).toFixed(2),
+      r.registered, (r.registered / 60).toFixed(2),
+      r.deviationText || "",
+    ]);
+    const csv = [header, ...data].map((row) => row.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
+    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `medarbejder-eksport-${MONTHS[filterMonth]}-${filterYear}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  return (
+    <div style={styles.page}>
+      <div style={styles.toolbar}>
+        <div style={{ ...styles.statBlock, borderLeft: "3px solid #64748B" }}>
+          <div><div style={{ ...styles.statValue, color: "#64748B" }}>{fmtMin(totalPlanned)}</div><div style={styles.statLabel}>Planlagt i alt</div></div>
+        </div>
+        <div style={{ ...styles.statBlock, borderLeft: "3px solid #16A34A" }}>
+          <div><div style={{ ...styles.statValue, color: "#16A34A" }}>{fmtMin(totalRegistered)}</div><div style={styles.statLabel}>Registreret i alt</div></div>
+        </div>
+        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+          <select style={{ ...styles.inputSm, fontSize: 13, fontWeight: 600 }} value={filterMonth} onChange={(e) => setFilterMonth(Number(e.target.value))}>
+            {MONTHS.map((m, i) => <option key={i} value={i}>{m}</option>)}
+          </select>
+          <select style={{ ...styles.inputSm, fontSize: 13, fontWeight: 600 }} value={filterYear} onChange={(e) => setFilterYear(Number(e.target.value))}>
+            {years.map((y) => <option key={y} value={y}>{y}</option>)}
+          </select>
+        </div>
+        <div style={styles.toolbarSpacer} />
+        <button style={styles.primaryBtn} onClick={exportRowsCSV}><Download size={16} /> Eksporter CSV</button>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "160px 60px 90px 1fr 100px 100px 1fr", gap: 0, background: "#F8FAFC", borderRadius: "10px 10px 0 0", padding: "8px 14px", fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+        <span>Medarbejder</span><span>Uge</span><span>Dag</span><span>Opgave</span>
+        <span style={{ textAlign: "right" }}>Planlagt</span>
+        <span style={{ textAlign: "right" }}>Registreret</span>
+        <span>Afvigelse</span>
+      </div>
+      <div style={{ background: "#fff", borderRadius: "0 0 10px 10px", boxShadow: "0 1px 3px rgba(0,0,0,0.06)", overflow: "hidden" }}>
+        {rows.map((r, idx) => (
+          <div key={idx} style={{ display: "grid", gridTemplateColumns: "160px 60px 90px 1fr 100px 100px 1fr", gap: 0, padding: "10px 14px", borderBottom: idx < rows.length - 1 ? "1px solid #F1F5F9" : "none", alignItems: "center" }}>
+            <span style={{ fontSize: 13, fontWeight: 600, color: "#111111" }}>{r.empName}</span>
+            <span style={{ fontSize: 12, color: "#94A3B8" }}>{r.week}</span>
+            <span style={{ fontSize: 12, color: "#64748B" }}>{r.dayLabel}</span>
+            <span style={{ fontSize: 13, color: "#111111", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.title}</span>
+            <span style={{ fontSize: 13, fontWeight: 500, color: "#111111", textAlign: "right" }}>{fmtMin(r.planned)}</span>
+            <span style={{ fontSize: 13, fontWeight: 700, color: r.registered === 0 ? "#94A3B8" : "#16A34A", textAlign: "right" }}>{fmtMin(r.registered)}</span>
+            <span style={{ fontSize: 12, color: r.deviationText ? "#D97706" : "#CBD5E1" }}>{r.deviationText || "—"}</span>
+          </div>
+        ))}
+        {rows.length === 0 && <div style={{ ...styles.emptyCol, padding: 40 }}>Ingen registreringer for denne maaned</div>}
+      </div>
     </div>
   );
 }
