@@ -487,6 +487,8 @@ export default function App() {
   const [loginPassword, setLoginPassword] = useState("");
   const [loginError, setLoginError] = useState("");
   const [loginLoading, setLoginLoading] = useState(false);
+  const [resetSent, setResetSent] = useState(false);
+  const [passwordRecovery, setPasswordRecovery] = useState(false);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -496,6 +498,10 @@ export default function App() {
       setSession(session); setAuthLoading(false);
     });
     return () => subscription.unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    if (window.location.hash.includes("type=recovery")) setPasswordRecovery(true);
   }, []);
 
   async function signIn() {
@@ -509,11 +515,26 @@ export default function App() {
     if (error) setLoginError("Forkert e-mail eller adgangskode");
   }
 
+  async function requestPasswordReset() {
+    if (!loginEmail.trim()) { setLoginError("Indtast din e-mail for at nulstille adgangskoden"); return; }
+    setLoginLoading(true); setLoginError(""); setResetSent(false);
+    const { error } = await supabase.auth.resetPasswordForEmail(loginEmail.trim(), {
+      redirectTo: window.location.origin,
+    });
+    setLoginLoading(false);
+    if (error) setLoginError("Kunne ikke sende nulstillingslink — prøv igen.");
+    else setResetSent(true);
+  }
+
   if (authLoading) {
     return <div style={{ display:"flex",alignItems:"center",justifyContent:"center",height:"100svh",color:"#9C1B5D",fontFamily:"system-ui",fontSize:15 }}>Indlæser…</div>;
   }
 
-  if (!session) {
+if (passwordRecovery) {
+    return <SetNewPasswordScreen onDone={() => { setPasswordRecovery(false); window.history.replaceState(null, "", window.location.pathname); }} />;
+  }
+
+    if (!session) {
     return (
       <div style={{ display:"flex",alignItems:"center",justifyContent:"center",minHeight:"100svh",background:"#FFF6FA",fontFamily:"'Inter',system-ui,sans-serif" }}>
         <div style={{ background:"#fff",borderRadius:18,padding:32,width:360,boxShadow:"0 8px 32px rgba(0,0,0,0.10)" }}>
@@ -545,12 +566,81 @@ export default function App() {
             style={{ width:"100%",padding:"13px 0",borderRadius:10,border:"none",background:"#D6247A",color:"#fff",fontWeight:700,fontSize:15,cursor:"pointer",opacity:(loginLoading||!loginEmail.trim()||!loginPassword)?0.6:1 }}>
             {loginLoading ? "Logger ind…" : "Log ind"}
           </button>
+            <button
+              type="button"
+              onClick={requestPasswordReset}
+              disabled={loginLoading || !loginEmail.trim()}
+              style={{ width:"100%",padding:"10px 0",marginTop:10,border:"none",background:"transparent",color:"#D6247A",fontWeight:600,fontSize:13,cursor:"pointer",textAlign:"center" }}>
+              Glemt adgangskode?
+            </button>
+            {resetSent && <div style={{ fontSize:13,color:"#166534",marginTop:8,padding:"8px 10px",background:"#F0FDF4",borderRadius:8 }}>Der er sendt et link til nulstilling af adgangskode til {loginEmail.trim()}, hvis e-mailen findes i systemet.</div>}
         </div>
       </div>
     );
   }
 
   return <PlanningApp session={session} onSignOut={() => supabase.auth.signOut()} />;
+}
+
+function SetNewPasswordScreen({ onDone }) {
+  const [pw1, setPw1] = useState("");
+  const [pw2, setPw2] = useState("");
+  const [err, setErr] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [done, setDone] = useState(false);
+
+  async function save() {
+    if (pw1.length < 6) { setErr("Adgangskoden skal være mindst 6 tegn"); return; }
+    if (pw1 !== pw2) { setErr("Adgangskoderne er ikke ens"); return; }
+    setLoading(true); setErr("");
+    const { error } = await supabase.auth.updateUser({ password: pw1 });
+    setLoading(false);
+    if (error) setErr("Kunne ikke opdatere adgangskode — prøv igen.");
+    else setDone(true);
+  }
+
+  return (
+    <div style={{ display:"flex",alignItems:"center",justifyContent:"center",minHeight:"100svh",background:"#FFF6FA",fontFamily:"'Inter',system-ui,sans-serif" }}>
+      <div style={{ background:"#fff",borderRadius:18,padding:32,width:360,boxShadow:"0 8px 32px rgba(0,0,0,0.10)" }}>
+        <div style={{ display:"flex",alignItems:"center",gap:12,marginBottom:28 }}>
+          <div style={{ width:44,height:44,borderRadius:12,background:"#D6247A",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:16,color:"#fff" }}>RP</div>
+          <div>
+            <div style={{ fontWeight:700,fontSize:17,color:"#111111" }}>Rengøringsplan</div>
+            <div style={{ fontSize:12,color:"#94A3B8" }}>Nulstil adgangskode</div>
+          </div>
+        </div>
+        {done ? (
+          <>
+            <div style={{ fontSize:13,color:"#166534",marginBottom:16,padding:"8px 10px",background:"#F0FDF4",borderRadius:8 }}>Din adgangskode er opdateret.</div>
+            <button onClick={onDone} style={{ width:"100%",padding:"13px 0",borderRadius:10,border:"none",background:"#D6247A",color:"#fff",fontWeight:700,fontSize:15,cursor:"pointer" }}>Fortsæt</button>
+          </>
+        ) : (
+          <>
+            <div style={{ fontSize:13,fontWeight:600,color:"#475569",marginBottom:6 }}>Ny adgangskode</div>
+            <input
+              type="password" value={pw1} onChange={(e) => setPw1(e.target.value)}
+              placeholder="••••••••" autoFocus
+              style={{ width:"100%",padding:"11px 12px",borderRadius:10,border:"1px solid #E2E8F0",fontSize:15,color:"#111111",background:"#fff",boxSizing:"border-box",marginBottom:10 }}
+            />
+            <div style={{ fontSize:13,fontWeight:600,color:"#475569",marginBottom:6 }}>Gentag adgangskode</div>
+            <input
+              type="password" value={pw2} onChange={(e) => setPw2(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") save(); }}
+              placeholder="••••••••"
+              style={{ width:"100%",padding:"11px 12px",borderRadius:10,border:"1px solid #E2E8F0",fontSize:15,color:"#111111",background:"#fff",boxSizing:"border-box",marginBottom:10 }}
+            />
+            {err && <div style={{ fontSize:13,color:"#B91C1C",marginBottom:8,padding:"8px 10px",background:"#FEF2F2",borderRadius:8 }}>{err}</div>}
+            <button
+              disabled={loading || !pw1 || !pw2}
+              onClick={save}
+              style={{ width:"100%",padding:"13px 0",borderRadius:10,border:"none",background:"#D6247A",color:"#fff",fontWeight:700,fontSize:15,cursor:"pointer",opacity:(loading||!pw1||!pw2)?0.6:1 }}>
+              {loading ? "Gemmer…" : "Gem ny adgangskode"}
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  );
 }
 
 function PlanningApp({ session, onSignOut }) {
