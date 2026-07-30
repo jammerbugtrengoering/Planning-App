@@ -500,9 +500,19 @@ export default function App() {
     return () => subscription.unsubscribe();
   }, []);
 
-  useEffect(() => {
-    if (window.location.hash.includes("type=recovery")) setPasswordRecovery(true);
-  }, []);
+useEffect(() => {
+    if (window.location.hash.includes("type=recovery")) { setPasswordRecovery(true); return; }
+    const params = new URLSearchParams(window.location.search);
+    const tokenHash = params.get("token_hash");
+    const type = params.get("type");
+    if (tokenHash && type === "recovery") {
+          supabase.auth.verifyOtp({ token_hash: tokenHash, type: "recovery" }).then(({ error }) => {
+                  window.history.replaceState(null, "", window.location.pathname);
+                  if (error) setLoginError("Nulstillingslinket er udløbet eller allerede brugt. Bed om et nyt.");
+                  else setPasswordRecovery(true);
+          });
+    }
+}, []);
 
   async function signIn() {
     if (!loginEmail.trim() || !loginPassword) return;
@@ -519,7 +529,7 @@ export default function App() {
     if (!loginEmail.trim()) { setLoginError("Indtast din e-mail for at nulstille adgangskoden"); return; }
     setLoginLoading(true); setLoginError(""); setResetSent(false);
     const { error } = await supabase.auth.resetPasswordForEmail(loginEmail.trim(), {
-      redirectTo: window.location.origin,
+      redirectTo: window.location.origin + "/",
     });
     setLoginLoading(false);
     if (error) setLoginError("Kunne ikke sende nulstillingslink — prøv igen.");
