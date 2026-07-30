@@ -520,7 +520,6 @@ useEffect(() => {
           if (error) setLoginError("Nulstillingslinket er udløbet eller allerede brugt. Bed om et nyt.");
           else setPasswordRecovery(true);
     }
-}, []);
 
   async function signIn() {
     if (!loginEmail.trim() || !loginPassword) return;
