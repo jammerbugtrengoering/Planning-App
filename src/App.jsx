@@ -390,8 +390,8 @@ function ensureWeekInstances(week, year, allInstances, templates, employees) {
       if (weekMonday < startMonday) return;
     }
     tpl.days.forEach((day) => {
-      const exists = list.some((i) => i.templateId === tpl.id && i.week === week && i.year === year && i.day === day);
-      if (!exists) {
+      const existingIdx = list.findIndex((i) => i.templateId === tpl.id && i.week === week && i.year === year && i.day === day);
+      if (existingIdx === -1) {
         const newInst = {
           id: uid("i"), templateId: tpl.id, title: tpl.title, requiredSkills: tpl.requiredSkills,
           duration: tpl.duration, type: "fixed", day, week, year, assignees: [], status: "unscheduled", timeLog: [],
@@ -405,6 +405,22 @@ function ensureWeekInstances(week, year, allInstances, templates, employees) {
         };
         list.push(newInst);
         newlyCreatedIds.add(newInst.id);
+      } else {
+        // Selvhelbredende: hold allerede-materialiserede, ikke-fakturerede opgaver i sync
+        // med skabelonen, saa rettelser paa aftalen altid slaar igennem - ogsaa for opgaver
+        // der blev oprettet foer rettelsen, uden at man skal aabne hver enkelt opgave manuelt.
+        const existing = list[existingIdx];
+        if (!existing.dineroExported) {
+          list[existingIdx] = {
+            ...existing,
+            customerName: tpl.customerName || "",
+            address: tpl.address || "",
+            poNumber: tpl.poNumber || "",
+            accessInstructions: tpl.accessInstructions || "",
+            contractType: tpl.contractType || "privat",
+            videoUrl: tpl.videoUrl || "",
+          };
+        }
       }
     });
   });
@@ -1063,7 +1079,11 @@ function PlanningApp({ session, onSignOut }) {
     const beforeById = new Map(before.map((t) => [t.id, t]));
     after.forEach((t) => {
       const prev = beforeById.get(t.id);
-      if (prev && JSON.stringify(prev.assignees || []) !== JSON.stringify(t.assignees || [])) {
+      if (!prev) return;
+      const assigneesChanged = JSON.stringify(prev.assignees || []) !== JSON.stringify(t.assignees || []);
+      const fieldsChanged = ["customerName","address","poNumber","accessInstructions","contractType","videoUrl"]
+        .some((k) => (prev[k] ?? "") !== (t[k] ?? ""));
+      if (assigneesChanged || fieldsChanged) {
         syncInstance(t);
       }
     });
