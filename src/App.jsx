@@ -3195,6 +3195,7 @@ function EmployeeExportView({ instances, employees }) {
   const now = new Date();
   const [filterMonth, setFilterMonth] = useState(now.getMonth());
   const [filterYear, setFilterYear] = useState(now.getFullYear());
+  const [exportTab, setExportTab] = useState("hours");
 
   const MONTHS = ["Januar","Februar","Marts","April","Maj","Juni","Juli","August","September","Oktober","November","December"];
   const years = [now.getFullYear() - 1, now.getFullYear(), now.getFullYear() + 1];
@@ -3265,6 +3266,14 @@ function EmployeeExportView({ instances, employees }) {
 
   return (
     <div style={styles.page}>
+      <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+        <button onClick={() => setExportTab("hours")} style={{ padding: "8px 16px", borderRadius: 8, border: "none", fontWeight: 600, fontSize: 13, cursor: "pointer", background: exportTab === "hours" ? "#111111" : "#E5E7EB", color: exportTab === "hours" ? "#fff" : "#374151" }}>Timeopgørelse</button>
+        <button onClick={() => setExportTab("km")} style={{ padding: "8px 16px", borderRadius: 8, border: "none", fontWeight: 600, fontSize: 13, cursor: "pointer", background: exportTab === "km" ? "#111111" : "#E5E7EB", color: exportTab === "km" ? "#fff" : "#374151" }}>KM-opgørelse</button>
+      </div>
+      {exportTab === "km" ? (
+        <KmExportSection employees={employees} filterMonth={filterMonth} filterYear={filterYear} setFilterMonth={setFilterMonth} setFilterYear={setFilterYear} years={years} MONTHS={MONTHS} />
+      ) : (
+      <>
       <div style={styles.toolbar}>
         <div style={{ ...styles.statBlock, borderLeft: "3px solid #64748B" }}>
           <div><div style={{ ...styles.statValue, color: "#64748B" }}>{fmtMin(totalPlanned)}</div><div style={styles.statLabel}>Planlagt i alt</div></div>
@@ -3304,6 +3313,107 @@ function EmployeeExportView({ instances, employees }) {
         ))}
         {rows.length === 0 && <div style={{ ...styles.emptyCol, padding: 40 }}>Ingen registreringer for denne maaned</div>}
       </div>
+      </>
+      )}
+    </div>
+  );
+}
+
+function KmExportSection({ employees, filterMonth, filterYear, setFilterMonth, setFilterYear, years, MONTHS }) {
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      setLoading(true);
+      setError(null);
+      const startDate = `${filterYear}-${String(filterMonth + 1).padStart(2, "0")}-01`;
+      const endMonth = filterMonth === 11 ? 0 : filterMonth + 1;
+      const endYear = filterMonth === 11 ? filterYear + 1 : filterYear;
+      const endDate = `${endYear}-${String(endMonth + 1).padStart(2, "0")}-01`;
+      const { data, error } = await supabase
+        .from("km_log")
+        .select("employee_id, work_date, leg_order, from_address, to_address, km, minutes")
+        .gte("work_date", startDate)
+        .lt("work_date", endDate)
+        .order("employee_id", { ascending: true })
+        .order("work_date", { ascending: true })
+        .order("leg_order", { ascending: true });
+      if (cancelled) return;
+      if (error) { setError("Kunne ikke hente km-data: " + error.message); setLoading(false); return; }
+      setRows(data || []);
+      setLoading(false);
+    }
+    load();
+    return () => { cancelled = true; };
+  }, [filterMonth, filterYear]);
+
+  const empName = (id) => (employees.find((e) => e.id === id) || {}).name || id;
+
+  const totalsByEmp = {};
+  rows.forEach((r) => {
+    totalsByEmp[r.employee_id] = (totalsByEmp[r.employee_id] || 0) + (Number(r.km) || 0);
+  });
+  const grandTotal = Object.values(totalsByEmp).reduce((s, v) => s + v, 0);
+
+  function exportCSV() {
+    const header = ["Medarbejder", "Dato", "Fra", "Til", "Km", "Minutter"];
+    const data = rows.map((r) => [empName(r.employee_id), r.work_date, r.from_address, r.to_address, r.km ?? "", r.minutes ?? ""]);
+    const csv = [header, ...data].map((row) => row.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
+    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `km-opgorelse-${MONTHS[filterMonth]}-${filterYear}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  return (
+    <div>
+      <div style={styles.toolbar}>
+        <div style={{ ...styles.statBlock, borderLeft: "3px solid #4F46E5" }}>
+          <div><div style={{ ...styles.statValue, color: "#4F46E5" }}>{grandTotal.toFixed(1)} km</div><div style={styles.statLabel}>Kørsel i alt</div></div>
+        </div>
+        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+          <select style={{ ...styles.inputSm, fontSize: 13, fontWeight: 600 }} value={filterMonth} onChange={(e) => setFilterMonth(Number(e.target.value))}>
+            {MONTHS.map((m, i) => <option key={i} value={i}>{m}</option>)}
+          </select>
+          <select style={{ ...styles.inputSm, fontSize: 13, fontWeight: 600 }} value={filterYear} onChange={(e) => setFilterYear(Number(e.target.value))}>
+            {years.map((y) => <option key={y} value={y}>{y}</option>)}
+          </select>
+        </div>
+        <div style={styles.toolbarSpacer} />
+        <button style={styles.primaryBtn} onClick={exportCSV}><Download size={16} /> Eksporter CSV</button>
+      </div>
+
+      {loading && <div style={{ padding: 30, textAlign: "center", color: "#64748B" }}>Indlæser...</div>}
+      {error && <div style={{ padding: 30, textAlign: "center", color: "#DC2626" }}>{error}</div>}
+
+      {!loading && !error && (
+        <>
+          <div style={{ display: "grid", gridTemplateColumns: "160px 100px 1fr 1fr 80px 80px", gap: 0, background: "#F8FAFC", borderRadius: "10px 10px 0 0", padding: "8px 14px", fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+            <span>Medarbejder</span><span>Dato</span><span>Fra</span><span>Til</span>
+            <span style={{ textAlign: "right" }}>Km</span>
+            <span style={{ textAlign: "right" }}>Min</span>
+          </div>
+          <div style={{ background: "#fff", borderRadius: "0 0 10px 10px", boxShadow: "0 1px 3px rgba(0,0,0,0.06)", overflow: "hidden" }}>
+            {rows.map((r, idx) => (
+              <div key={r.employee_id + r.work_date + r.leg_order} style={{ display: "grid", gridTemplateColumns: "160px 100px 1fr 1fr 80px 80px", gap: 0, padding: "10px 14px", borderBottom: idx < rows.length - 1 ? "1px solid #F1F5F9" : "none", alignItems: "center" }}>
+                <span style={{ fontSize: 13, fontWeight: 600, color: "#111111" }}>{empName(r.employee_id)}</span>
+                <span style={{ fontSize: 12, color: "#64748B" }}>{r.work_date}</span>
+                <span style={{ fontSize: 12, color: "#374151", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.from_address}</span>
+                <span style={{ fontSize: 12, color: "#374151", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.to_address}</span>
+                <span style={{ fontSize: 13, textAlign: "right" }}>{r.km != null ? Number(r.km).toFixed(1) : "—"}</span>
+                <span style={{ fontSize: 12, color: "#94A3B8", textAlign: "right" }}>{r.minutes ?? "—"}</span>
+              </div>
+            ))}
+            {rows.length === 0 && <div style={{ ...styles.emptyCol, padding: 40 }}>Ingen kørsel registreret for denne måned</div>}
+          </div>
+        </>
+      )}
     </div>
   );
 }
