@@ -2130,7 +2130,6 @@ function EmployeeAppView({ employees, instances, onLogMinutes, onSetStatus, onTo
 function WeekView({ employees, instances, unplaced, onAdd, onAuto, onAutoAllWeeks, onPlace, onUnplace, onRemoveAssignee, onDelete, onOpenTask, onToggleInclude, onEditEmp, dragId, setDragId, weekLabel, weekNo, weekOffset, weekYear, onPrevWeek, onNextWeek, onTodayWeek, travelSettings, onOpenTravelSettings, currentIsoWeek, areas, employeeAreas, onOpenAddBlock }) {
   const [addMenuTaskId, setAddMenuTaskId] = useState(null);
   const [showWeekend, setShowWeekend] = useState(false);
-  const [capView, setCapView] = useState("bar");
   const [selectedAreaId, setSelectedAreaId] = useState("all"); // "all" eller area.id
   const visibleDays = showWeekend ? ALL_DAYS : DAYS;
 
@@ -2152,12 +2151,6 @@ function WeekView({ employees, instances, unplaced, onAdd, onAuto, onAutoAllWeek
           onClick={() => setShowWeekend((v) => !v)}
           title="Vis/skjul weekend">
           {showWeekend ? "Man–Søn ✓" : "Man–Fre"}
-        </button>
-        <button
-          style={{ ...styles.secondaryBtn, ...(capView === "detail" ? { background: "#EEF2FF", color: "#4F46E5", borderColor: "#4F46E5" } : {}) }}
-          onClick={() => setCapView((v) => v === "bar" ? "detail" : "bar")}
-          title="Skift kapacitetsvisning">
-          {capView === "detail" ? "📊 Belægning" : "📊 Belægning"}
         </button>
         {areas && areas.length > 0 && (
           <select
@@ -2228,17 +2221,20 @@ function WeekView({ employees, instances, unplaced, onAdd, onAuto, onAutoAllWeek
         </div>
 
         <div style={styles.gridWrap}>
-          <div style={{ display: "grid", gridTemplateColumns: `160px repeat(${visibleDays.length}, 1fr)`, gap: 8, minWidth: 700 }}>
-            <div style={styles.gridCornerCell} />
+          <div style={{ display: "grid", gridTemplateColumns: `repeat(${visibleDays.length}, minmax(0, 1fr))`, gap: 8 }}>
             {visibleDays.map((d, i) => (
               <div key={d.key} style={{ ...styles.gridHeaderCell, borderRight: i < visibleDays.length - 1 ? "1px solid #CBD5E1" : "none", ...(["Sat","Sun"].includes(d.key) ? { background: "#F8FAFC", color: "#94A3B8" } : {}) }}>{d.label}</div>
             ))}
 
             {visibleEmployees.map((emp) => (
               <React.Fragment key={emp.id}>
-                <div style={{ ...styles.gridRowLabel, cursor: "pointer" }} onClick={() => onEditEmp && onEditEmp(emp)} title={`Rediger ${emp.name}`}>
+                <div
+                  style={{ gridColumn: `1 / span ${visibleDays.length}`, display: "flex", alignItems: "center", gap: 8, cursor: "pointer", padding: "10px 2px 6px", marginTop: 6, borderTop: "2px solid #E2E8F0" }}
+                  onClick={() => onEditEmp && onEditEmp(emp)}
+                  title={`Rediger ${emp.name}`}
+                >
                   <span style={{ ...styles.avatar, background: emp.color }}>{initials(emp.name)}</span>
-                  <span style={{ textDecoration: "underline dotted", textUnderlineOffset: 3 }}>{emp.name}</span>
+                  <span style={{ fontSize: 14, fontWeight: 700, color: "#111111", textDecoration: "underline dotted", textUnderlineOffset: 3 }}>{emp.name}</span>
                 </div>
                 {visibleDays.map((d, i) => {
                   const dayTasks = instances.filter((t) => (t.assignees || []).includes(emp.id) && t.day === d.key);
@@ -2285,18 +2281,14 @@ function WeekView({ employees, instances, unplaced, onAdd, onAuto, onAutoAllWeek
                       <div style={styles.capBarTrack}>
                         <div style={{ ...styles.capBarFill, width: `${pct}%`, background: over ? "#DC2626" : pct > 80 ? "#D97706" : "#D6247A" }} />
                       </div>
-                      {capView === "bar" ? (
-                        <div style={{ ...styles.capLabel, ...(over ? { color: "#DC2626", fontWeight: 700 } : {}) }}>{fmtMin(used)} / {fmtMin(cap)}{transportMin > 0 ? ` (inkl. ${fmtMin(transportMin)} transport)` : ""}</div>
-                      ) : (
-                        <div style={{ fontSize: 10, margin: "3px 0 6px", display: "flex", gap: 6, flexWrap: "wrap" }}>
-                          <span style={{ color: over ? "#DC2626" : pct > 80 ? "#D97706" : "#64748B", fontWeight: 600 }}>
-                            {Math.round(pct)}% belægt
-                          </span>
-                          <span style={{ color: over ? "#DC2626" : "#16A34A", fontWeight: 600 }}>
-                            {over ? `${fmtMin(used - cap)} over` : `${fmtMin(cap - used)} ledig`}
-                          </span>
-                        </div>
-                      )}
+                      <div style={{ fontSize: 10, margin: "3px 0 6px", display: "flex", gap: 6, flexWrap: "wrap" }}>
+                        <span style={{ color: over ? "#DC2626" : pct > 80 ? "#D97706" : "#64748B", fontWeight: 600 }}>
+                          {Math.round(pct)}% belægt
+                        </span>
+                        <span style={{ color: over ? "#DC2626" : "#16A34A", fontWeight: 600 }}>
+                          {over ? `${fmtMin(used - cap)} over` : `${fmtMin(cap - used)} ledig`}
+                        </span>
+                      </div>
                       {schedule.map((seg) => {
                         if (seg.type === "transport") {
                           return (
@@ -2377,7 +2369,7 @@ function WeekView({ employees, instances, unplaced, onAdd, onAuto, onAutoAllWeek
       </div>
 
       {/* Ugesammenfatning — kun i detail view */}
-      {capView === "detail" && (
+      {(
         <div style={{ marginTop: 12, background: "#F8FAFC", borderRadius: 10, padding: "10px 14px" }}>
           <div style={{ fontSize: 12, fontWeight: 700, color: "#475569", marginBottom: 8 }}>📊 Ugebelægning{selectedAreaId !== "all" && areas ? ` — ${areas.find((a) => a.id === selectedAreaId)?.name}` : " — alle medarbejdere"}</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
