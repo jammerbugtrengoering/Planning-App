@@ -790,6 +790,7 @@ function PlanningApp({ session, onSignOut }) {
           auth_user_id: e.auth_user_id ?? null,
           app_email: e.app_email ?? null,
           isAdmin: e.is_admin ?? false,
+          homeAddress: e.home_address || null,
           skills: Object.fromEntries(
             (empSkillsData || []).filter((s) => s.employee_id === e.id)
               .map((s) => {
@@ -959,7 +960,7 @@ function PlanningApp({ session, onSignOut }) {
   // ── Supabase: sync-helpers ──
   const syncEmployee = useCallback(async (emp) => {
     const { data: skillRows_db } = await supabase.from("skills").select("id, name");
-    const { error: empErr } = await supabase.from("employees").upsert({ id: emp.id, name: emp.name, color: emp.color, is_admin: emp.isAdmin ?? false }, { onConflict: "id" });
+    const { error: empErr } = await supabase.from("employees").upsert({ id: emp.id, name: emp.name, color: emp.color, is_admin: emp.isAdmin ?? false, home_address: emp.homeAddress || null }, { onConflict: "id" });
     if (dbFail(empErr, "gemme medarbejderen")) return;
     await supabase.from("employee_skills").delete().eq("employee_id", emp.id);
     const skillRows = Object.entries(emp.skills || {})
@@ -2803,6 +2804,59 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
 
   useEffect(() => { if (pricingProp) setLocalPricing(pricingProp); }, [JSON.stringify(pricingProp)]);
 
+  const [kmData, setKmData] = useState(null);
+  const [kmLoading, setKmLoading] = useState(false);
+  const [kmError, setKmError] = useState(null);
+
+  async function computeKmForMonth() {
+    setKmLoading(true);
+    setKmError(null);
+    try {
+      const monthInstances = instances
+        .filter((t) => !BLOCK_TYPES.includes(t.type))
+        .filter((t) => {
+          const { month, year } = instanceMonthYear(t, filterYear);
+          return month === filterMonth && year === filterYear;
+        });
+      const byEmpDay = {};
+      monthInstances.forEach((t) => {
+        (t.assignees || []).forEach((empId) => {
+          const key = empId + "|" + t.year + "|" + t.week + "|" + t.day;
+          if (!byEmpDay[key]) byEmpDay[key] = [];
+          byEmpDay[key].push(t);
+        });
+      });
+      const allPairs = [];
+      Object.entries(byEmpDay).forEach(([key, tasks]) => {
+        const empId = key.split("|")[0];
+        const emp = employees.find((e) => e.id === empId);
+        if (!emp || !emp.homeAddress) return;
+        const addrs = [emp.homeAddress, ...tasks.map((t) => t.address || ""), emp.homeAddress].filter(Boolean);
+        for (let i = 0; i < addrs.length - 1; i++) {
+          const a = addrs[i], b = addrs[i + 1];
+          if (!a || !b || a === b) continue;
+          allPairs.push({ a, b, empId });
+        }
+      });
+      if (allPairs.length === 0) { setKmData({}); setKmLoading(false); return; }
+      const { data, error } = await supabase.functions.invoke("travel-distance", {
+        body: { pairs: allPairs.map((p) => ({ a: p.a, b: p.b })) },
+      });
+      if (error) { setKmError("Kunne ikke beregne km: " + error.message); setKmLoading(false); return; }
+      const results = (data && data.results) || [];
+      const totals = {};
+      allPairs.forEach((p, i) => {
+        const r = results[i];
+        const km = r && typeof r.km === "number" ? r.km : 0;
+        totals[p.empId] = (totals[p.empId] || 0) + km;
+      });
+      setKmData(totals);
+    } catch (e) {
+      setKmError("Kunne ikke beregne km: " + (e && e.message ? e.message : String(e)));
+    }
+    setKmLoading(false);
+  }
+
   const placed = instances
     .filter((t) => !BLOCK_TYPES.includes(t.type))
     .filter((t) => {
@@ -3102,6 +3156,37 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
           </div>
         );
       })()}
+
+      <div style={{ marginTop: 24, padding: 16, background: "#F8FAFC", borderRadius: 8 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 8 }}>
+          <strong>Kørsel (km) denne måned</strong>
+          <button style={styles.secondaryBtn} onClick={computeKmForMonth} disabled={kmLoading}>
+            {kmLoading ? "Beregner..." : "Beregn km"}
+          </button>
+        </div>
+        {kmError && <div style={{ color: "#DC2626", fontSize: 13, marginBottom: 8 }}>{kmError}</div>}
+        {kmData && (
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <thead>
+              <tr>
+                <th style={{ textAlign: "left", padding: 6 }}>Medarbejder</th>
+                <th style={{ textAlign: "right", padding: 6 }}>Km i alt</th>
+              </tr>
+            </thead>
+            <tbody>
+              {employees.filter((e) => kmData[e.id] != null).map((e) => (
+                <tr key={e.id}>
+                  <td style={{ padding: 6 }}>{e.name}</td>
+                  <td style={{ padding: 6, textAlign: "right" }}>{kmData[e.id].toFixed(1)} km</td>
+                </tr>
+              ))}
+              {Object.keys(kmData).length === 0 && (
+                <tr><td colSpan={2} style={{ padding: 6, color: "#94A3B8" }}>Ingen kørsel fundet - tjek at medarbejdere har hjemmeadresse udfyldt.</td></tr>
+              )}
+            </tbody>
+          </table>
+        )}
+      </div>
     </div>
   );
 }
@@ -4605,6 +4690,7 @@ function TravelSettingsModal({ settings, onClose, onSave }) {
 
 function EmployeeModal({ emp, onClose, onSave, skills: skillList }) {
   const [name, setName] = useState(emp?.name || "");
+  const [homeAddress, setHomeAddress] = useState(emp?.homeAddress || "");
   const [empSkills, setEmpSkills] = useState(emp?.skills || {});
   const [capacity, setCapacity] = useState(emp?.capacity || defaultCapacity());
   const [isAdmin, setIsAdmin] = useState(emp?.isAdmin || false);
@@ -4620,6 +4706,9 @@ function EmployeeModal({ emp, onClose, onSave, skills: skillList }) {
     <Modal onClose={onClose} title={emp ? `Rediger ${emp.name}` : "Ny medarbejder"} persistent>
       <label style={styles.label}>Navn</label>
       <input style={styles.input} value={name} onChange={(e) => setName(e.target.value)} placeholder="Fulde navn" />
+
+      <label style={styles.label}>Hjemmeadresse (bruges til km-beregning)</label>
+      <input style={styles.input} value={homeAddress} onChange={(e) => setHomeAddress(e.target.value)} placeholder="Fx Gammelvej 12, 9000 Aalborg" />
 
       <label style={styles.label}>Kompetenceniveau pr. kompetence</label>
       <div style={styles.skillLevelGrid}>
@@ -4658,7 +4747,7 @@ function EmployeeModal({ emp, onClose, onSave, skills: skillList }) {
 
       <div style={styles.modalActions}>
         <button style={styles.secondaryBtn} onClick={onClose}>Annuller</button>
-        <button style={styles.primaryBtn} disabled={!name.trim()} onClick={() => onSave({ id: emp?.id || uid("e"), name: name.trim(), skills: empSkills, color: emp?.color || color, capacity, isAdmin })}>Gem medarbejder</button>
+        <button style={styles.primaryBtn} disabled={!name.trim()} onClick={() => onSave({ id: emp?.id || uid("e"), name: name.trim(), skills: empSkills, color: emp?.color || color, capacity, isAdmin, homeAddress: homeAddress.trim() })}>Gem medarbejder</button>
       </div>
     </Modal>
   );
