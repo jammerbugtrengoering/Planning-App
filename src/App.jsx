@@ -2272,10 +2272,7 @@ function WeekView({ employees, instances, unplaced, onAdd, onAuto, onAutoAllWeek
           </div>
         </div>
 
-        <div style={styles.gridWrap} id="print-week-plan">
-          <div className="print-only-heading" style={{ display: "none" }}>
-            Ugeplan – Uge {weekNo} · {weekYear} ({weekLabel}){printEmployeeId !== "all" && employees.find((e) => e.id === printEmployeeId) ? ` – ${employees.find((e) => e.id === printEmployeeId).name}` : ""}
-          </div>
+        <div style={styles.gridWrap}>
           <div style={{ display: "grid", gridTemplateColumns: `repeat(${visibleDays.length}, minmax(0, 1fr))`, gap: 8 }}>
             {visibleDays.map((d, i) => (
               <div key={d.key} style={{ ...styles.gridHeaderCell, borderRight: i < visibleDays.length - 1 ? "1px solid #CBD5E1" : "none", ...(["Sat","Sun"].includes(d.key) ? { background: "#F8FAFC", color: "#94A3B8" } : {}) }}>{d.label}</div>
@@ -2455,6 +2452,46 @@ function WeekView({ employees, instances, unplaced, onAdd, onAuto, onAutoAllWeek
             })}
           </div>
         </div>
+
+      <div id="print-week-plan" style={{ display: "none" }}>
+        <div style={{ fontSize: 20, fontWeight: 700, marginBottom: 12 }}>
+          Ugeplan – Uge {weekNo} · {weekYear} ({weekLabel}){printEmployeeId !== "all" && employees.find((e) => e.id === printEmployeeId) ? ` – ${employees.find((e) => e.id === printEmployeeId).name}` : ""}
+        </div>
+        {visibleEmployees.map((emp) => {
+          const empDays = visibleDays.filter((d) => instances.some((t) => (t.assignees || []).includes(emp.id) && t.day === d.key));
+          if (empDays.length === 0) return null;
+          return (
+            <div key={emp.id} style={{ marginBottom: 28, pageBreakAfter: "always" }}>
+              <div style={{ fontSize: 17, fontWeight: 700, borderBottom: "2px solid #111111", paddingBottom: 4, marginBottom: 10 }}>{emp.name}</div>
+              {empDays.map((d) => {
+                const dayTasks = instances.filter((t) => (t.assignees || []).includes(emp.id) && t.day === d.key);
+                const schedule = computeDaySchedule(dayTasks, travelSettings, emp).filter((s) => s.type === "task");
+                return (
+                  <div key={d.key} style={{ marginBottom: 14 }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: "#D6247A", marginBottom: 6 }}>{d.label}</div>
+                    {schedule.map((seg) => {
+                      const t = seg.task;
+                      return (
+                        <div key={t.id} style={{ border: "1px solid #CBD5E1", borderRadius: 8, padding: 10, marginBottom: 8, breakInside: "avoid" }}>
+                          <div style={{ fontWeight: 700, fontSize: 14 }}>{fmtClock(seg.start)} · {t.title} ({t.duration} min)</div>
+                          {t.customerName ? <div style={{ fontSize: 13 }}>Kunde: {t.customerName}</div> : null}
+                          {t.address ? <div style={{ fontSize: 13 }}>Adresse: {t.address}</div> : null}
+                          {t.accessInstructions ? <div style={{ fontSize: 13 }}>Adgang: {t.accessInstructions}</div> : null}
+                          {(t.checklist || []).length > 0 ? (
+                            <ul style={{ margin: "6px 0 0", paddingLeft: 18, fontSize: 13 }}>
+                              {(t.checklist || []).map((c, i) => <li key={i}>☐ {c.text || c}</li>)}
+                            </ul>
+                          ) : null}
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })}
+      </div>
       )}
     </div>
   );
@@ -5513,8 +5550,7 @@ const globalCss = `
   @media print {
     body * { visibility: hidden; }
     #print-week-plan, #print-week-plan * { visibility: visible; }
-    #print-week-plan { position: absolute; left: 0; top: 0; width: 100%; }
-    .print-only-heading { display: block !important; font-size: 20px; font-weight: 700; margin-bottom: 12px; }
+    #print-week-plan { display: block !important; position: absolute; left: 0; top: 0; width: 100%; padding: 20px; }
   }
 `;
 
