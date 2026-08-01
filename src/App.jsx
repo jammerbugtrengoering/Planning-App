@@ -828,7 +828,6 @@ function PlanningApp({ session, onSignOut }) {
           auth_user_id: e.auth_user_id ?? null,
           app_email: e.app_email ?? null,
           isAdmin: e.is_admin ?? false,
-          homeAddress: e.home_address || null,
           startTime: e.start_time || null,
           skills: Object.fromEntries(
             (empSkillsData || []).filter((s) => s.employee_id === e.id)
@@ -1000,7 +999,7 @@ function PlanningApp({ session, onSignOut }) {
   // ── Supabase: sync-helpers ──
   const syncEmployee = useCallback(async (emp) => {
     const { data: skillRows_db } = await supabase.from("skills").select("id, name");
-    const { error: empErr } = await supabase.from("employees").upsert({ id: emp.id, name: emp.name, color: emp.color, is_admin: emp.isAdmin ?? false, home_address: emp.homeAddress || null, start_time: emp.startTime || null }, { onConflict: "id" });
+    const { error: empErr } = await supabase.from("employees").upsert({ id: emp.id, name: emp.name, color: emp.color, is_admin: emp.isAdmin ?? false, start_time: emp.startTime || null }, { onConflict: "id" });
     if (dbFail(empErr, "gemme medarbejderen")) return;
     await supabase.from("employee_skills").delete().eq("employee_id", emp.id);
     const skillRows = Object.entries(emp.skills || {})
@@ -4938,7 +4937,6 @@ function TravelSettingsModal({ settings, onClose, onSave }) {
 
 function EmployeeModal({ emp, onClose, onSave, skills: skillList }) {
   const [name, setName] = useState(emp?.name || "");
-  const [homeAddress, setHomeAddress] = useState(emp?.homeAddress || "");
   const [startTime, setStartTime] = useState(emp?.startTime || "");
   const [empSkills, setEmpSkills] = useState(emp?.skills || {});
   const [capacity, setCapacity] = useState(emp?.capacity || defaultCapacity());
@@ -4955,9 +4953,6 @@ function EmployeeModal({ emp, onClose, onSave, skills: skillList }) {
     <Modal onClose={onClose} title={emp ? `Rediger ${emp.name}` : "Ny medarbejder"} persistent>
       <label style={styles.label}>Navn</label>
       <input style={styles.input} value={name} onChange={(e) => setName(e.target.value)} placeholder="Fulde navn" />
-
-      <label style={styles.label}>Hjemmeadresse (bruges til km-beregning)</label>
-      <input style={styles.input} value={homeAddress} onChange={(e) => setHomeAddress(e.target.value)} placeholder="Fx Gammelvej 12, 9000 Aalborg" />
 
       <label style={styles.label}>Mødetid (bruges til at planlægge dagens første opgave)</label>
       <input style={styles.input} type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} />
@@ -4999,7 +4994,7 @@ function EmployeeModal({ emp, onClose, onSave, skills: skillList }) {
 
       <div style={styles.modalActions}>
         <button style={styles.secondaryBtn} onClick={onClose}>Annuller</button>
-        <button style={styles.primaryBtn} disabled={!name.trim()} onClick={() => onSave({ id: emp?.id || uid("e"), name: name.trim(), skills: empSkills, color: emp?.color || color, capacity, isAdmin, homeAddress: homeAddress.trim(), startTime: startTime || null })}>Gem medarbejder</button>
+        <button style={styles.primaryBtn} disabled={!name.trim()} onClick={() => onSave({ id: emp?.id || uid("e"), name: name.trim(), skills: empSkills, color: emp?.color || color, capacity, isAdmin, startTime: startTime || null })}>Gem medarbejder</button>
       </div>
     </Modal>
   );
