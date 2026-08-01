@@ -2173,12 +2173,14 @@ function WeekView({ employees, instances, unplaced, onAdd, onAuto, onAutoAllWeek
   const [addMenuTaskId, setAddMenuTaskId] = useState(null);
   const [showWeekend, setShowWeekend] = useState(false);
   const [selectedAreaId, setSelectedAreaId] = useState("all"); // "all" eller area.id
+  const [printEmployeeId, setPrintEmployeeId] = useState("all");
   const visibleDays = showWeekend ? ALL_DAYS : DAYS;
 
   // Filtrer medarbejdere baseret på valgt område
-  const visibleEmployees = selectedAreaId === "all"
+  const areaFilteredEmployees = selectedAreaId === "all"
     ? employees
     : employees.filter((e) => employeeAreas.some((ea) => ea.employee_id === e.id && ea.area_id === selectedAreaId));
+  const visibleEmployees = printEmployeeId === "all" ? areaFilteredEmployees : areaFilteredEmployees.filter((e) => e.id === printEmployeeId);
 
   return (
     <div style={styles.page}>
@@ -2203,6 +2205,14 @@ function WeekView({ employees, instances, unplaced, onAdd, onAuto, onAutoAllWeek
             {areas.map((a) => <option key={a.id} value={a.id}>📍 {a.name}</option>)}
           </select>
         )}
+        <select
+          style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid #E2E8F0", background: printEmployeeId !== "all" ? "#EEF2FF" : "#fff", fontWeight: printEmployeeId !== "all" ? 700 : 400 }}
+          value={printEmployeeId}
+          onChange={(e) => setPrintEmployeeId(e.target.value)}>
+          <option value="all">🖨️ Alle medarbejdere</option>
+          {employees.map((e) => <option key={e.id} value={e.id}>🖨️ {e.name}</option>)}
+        </select>
+        <button style={styles.secondaryBtn} onClick={() => window.print()}>🖨️ Print ugeplan</button>
         <div style={styles.toolbarSpacer} />
         <div style={styles.weekNav}>
           <button style={styles.weekNavBtn} onClick={onPrevWeek}><ChevronLeft size={16} /></button>
@@ -2262,7 +2272,10 @@ function WeekView({ employees, instances, unplaced, onAdd, onAuto, onAutoAllWeek
           </div>
         </div>
 
-        <div style={styles.gridWrap}>
+        <div style={styles.gridWrap} id="print-week-plan">
+          <div className="print-only-heading" style={{ display: "none" }}>
+            Ugeplan – Uge {weekNo} · {weekYear} ({weekLabel}){printEmployeeId !== "all" && employees.find((e) => e.id === printEmployeeId) ? ` – ${employees.find((e) => e.id === printEmployeeId).name}` : ""}
+          </div>
           <div style={{ display: "grid", gridTemplateColumns: `repeat(${visibleDays.length}, minmax(0, 1fr))`, gap: 8 }}>
             {visibleDays.map((d, i) => (
               <div key={d.key} style={{ ...styles.gridHeaderCell, borderRight: i < visibleDays.length - 1 ? "1px solid #CBD5E1" : "none", ...(["Sat","Sun"].includes(d.key) ? { background: "#F8FAFC", color: "#94A3B8" } : {}) }}>{d.label}</div>
@@ -5497,6 +5510,12 @@ const globalCss = `
   html, body, #root { margin: 0; padding: 0; width: 100%; min-height: 100vh; }
   ::-webkit-scrollbar { width: 8px; height: 8px; }
   ::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 8px; }
+  @media print {
+    body * { visibility: hidden; }
+    #print-week-plan, #print-week-plan * { visibility: visible; }
+    #print-week-plan { position: absolute; left: 0; top: 0; width: 100%; }
+    .print-only-heading { display: block !important; font-size: 20px; font-weight: 700; margin-bottom: 12px; }
+  }
 `;
 
 const styles = {
