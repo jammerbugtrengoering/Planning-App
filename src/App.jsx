@@ -2914,8 +2914,8 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
       Object.entries(byEmpDay).forEach(([key, tasks]) => {
         const empId = key.split("|")[0];
         const emp = employees.find((e) => e.id === empId);
-        if (!emp || !emp.homeAddress) return;
-        const addrs = [emp.homeAddress, ...tasks.map((t) => t.address || ""), emp.homeAddress].filter(Boolean);
+        if (!emp) return;
+        const addrs = tasks.map((t) => t.address || "").filter(Boolean);
         for (let i = 0; i < addrs.length - 1; i++) {
           const a = addrs[i], b = addrs[i + 1];
           if (!a || !b || a === b) continue;
