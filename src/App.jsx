@@ -399,6 +399,7 @@ function ensureWeekInstances(week, year, allInstances, templates, employees) {
           customerName: tpl.customerName || "", address: tpl.address || "", poNumber: tpl.poNumber || "",
           accessInstructions: tpl.accessInstructions || "",
           templateDays: tpl.days, // for off-schedule detection
+          scheduledTime: (tpl.dayTimes && tpl.dayTimes[day]) || null,
           contractType: tpl.contractType || "privat",
           expiryDate: tpl.expiryDate || null,
           dineroSynced: tpl.dineroSynced ?? false,
@@ -827,6 +828,7 @@ function PlanningApp({ session, onSignOut }) {
           // UI'et. Falder tilbage til customer_id-opslaget for evt. ældre data.
           return {
             id: t.id, title: t.title, duration: t.duration, days: t.days,
+            dayTimes: t.day_times || {}, preferredTime: t.preferred_time || null,
             videoUrl: t.video_url, poNumber: t.po_number,
             customerName: t.customer_name || cust?.name || "",
             address: t.address_text || cust?.address || "",
@@ -1014,6 +1016,7 @@ function PlanningApp({ session, onSignOut }) {
       on_schedule: inst.onSchedule ?? false,
       completed_by: inst.completedBy ?? null,
       completed_at: inst.completedAt ?? null,
+      scheduled_time: inst.scheduledTime || null,
     }, { onConflict: "id" });
     if (error) {
       // 23505 på uniq_instance_slot betyder at en anden session (fx en anden
@@ -1200,14 +1203,14 @@ function PlanningApp({ session, onSignOut }) {
       const tplId = uid("tpl");
       const tpl = {
         id: tplId, title: payload.title, requiredSkills: payload.requiredSkills,
-        duration: payload.duration, days: payload.days, checklistItems: checklistItemsCombined,
+        duration: payload.duration, days: payload.days, dayTimes: payload.dayTimes || {}, checklistItems: checklistItemsCombined,
         videoUrl: payload.videoUrl, customerName: payload.customerName, address: payload.address,
         poNumber: payload.poNumber, accessInstructions: payload.accessInstructions,
         contractType: payload.contractType, expiryDate: payload.expiryDate,
         startDate: payload.startDate || null, dineroSynced: payload.dineroSynced || false,
       };
       const { error: tplErr } = await supabase.from("service_templates").insert({
-        id: tplId, title: tpl.title, duration: tpl.duration, days: tpl.days,
+        id: tplId, title: tpl.title, duration: tpl.duration, days: tpl.days, day_times: tpl.dayTimes || {},
         video_url: tpl.videoUrl || "", po_number: tpl.poNumber || "",
         customer_name: tpl.customerName || "", address_text: tpl.address || "",
         access_instructions: tpl.accessInstructions || "", contract_type: tpl.contractType || "privat",
@@ -1259,6 +1262,7 @@ function PlanningApp({ session, onSignOut }) {
         address: payload.address, poNumber: payload.poNumber, accessInstructions: payload.accessInstructions,
         contractType: payload.contractType, dineroSynced: payload.dineroSynced || false,
         type: "adhoc", day: null, deadline: payload.deadline || "Fri",
+        scheduledTime: payload.preferredTime || null,
       };
       setInstances((prev) => [...prev, newInstance]);
       syncInstance(newInstance);
@@ -3705,6 +3709,8 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom }) {
   const [duration, setDuration] = useState(copyFrom?.duration || 60);
   const [requiredSkills, setRequiredSkills] = useState(copyFrom?.requiredSkills || [{ skill: skills[0] ?? "", minLevel: 1 }]);
   const [days, setDays] = useState(copyFrom?.templateDays || copyFrom?.days || ["Mon"]);
+  const [dayTimes, setDayTimes] = useState(copyFrom?.dayTimes || {});
+  const [preferredTime, setPreferredTime] = useState(copyFrom?.preferredTime || "");
   const [day, setDay] = useState("Mon");
   const [adhocDate, setAdhocDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [deadline, setDeadline] = useState("Fri");
@@ -3948,12 +3954,23 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom }) {
         <>
           <label style={styles.label}>Startdato (første gang opgaven udføres)</label>
           <input type="date" style={styles.input} value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+          <label style={styles.label}>Udløbsdato (aftalen gælder til og med)</label>
+          <input type="date" style={styles.input} value={expiryDate} onChange={(e) => setExpiryDate(e.target.value)} />
           <label style={styles.label}>Ugedage (gentages hver uge)</label>
           <div style={styles.skillPicker}>
             {DAYS.map((d) => <button key={d.key} type="button" onClick={() => toggleDay(d.key)} style={days.includes(d.key) ? styles.skillPickBtnActive : styles.skillPickBtn}>{d.label}</button>)}
           </div>
-          <label style={styles.label}>Udløbsdato (aftalen gælder til og med)</label>
-          <input type="date" style={styles.input} value={expiryDate} onChange={(e) => setExpiryDate(e.target.value)} />
+          {days.length > 0 && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 4 }}>
+              {DAYS.filter((d) => days.includes(d.key)).map((d) => (
+                <div key={d.key} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ width: 70, fontSize: 13, color: "#5B5B60" }}>{d.label}</span>
+                  <input type="time" style={{ ...styles.input, width: 130 }} value={dayTimes[d.key] || ""} onChange={(e) => setDayTimes((prev) => ({ ...prev, [d.key]: e.target.value }))} />
+                </div>
+              ))}
+              <div style={styles.hint}>Sæt et klokkeslæt hvis opgaven skal starte på et bestemt tidspunkt den dag. Er intet sat, placeres opgaven på ledig tid i planen.</div>
+            </div>
+          )}
         </>
       )}
 
@@ -3969,6 +3986,8 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom }) {
             <div style={styles.hint}>Valgt dato er i weekenden — der planlægges ikke i weekenden, så fristen sættes til fredag i stedet.</div>
           ) : null; })()}
           <div style={styles.hint}>Bruges af den automatiske planlægning til at finde en ledig plads senest denne dag — opgaven oprettes stadig med dags dato og lander i "Ikke tildelt".</div>
+          <label style={styles.label}>Ønsket starttidspunkt (valgfrit)</label>
+          <input type="time" style={styles.input} value={preferredTime} onChange={(e) => setPreferredTime(e.target.value)} />
         </>
       )}
 
@@ -4008,7 +4027,7 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom }) {
         <button
           style={styles.primaryBtn}
           disabled={!title.trim() || (type === "fixed" && days.length === 0) || requiredSkills.length === 0}
-          onClick={() => onSave({ type, contractType, title: title.trim(), requiredSkills, duration, days, day, adhocDate, deadline, startDate, expiryDate, checklistTemplateIds, extraItems, videoUrl: videoUrl.trim(), customerName: customerName.trim(), address: address.trim(), poNumber: poNumber.trim(), accessInstructions: accessInstructions.trim(), dineroSynced: customerDineroSynced })}
+          onClick={() => onSave({ type, contractType, title: title.trim(), requiredSkills, duration, days, dayTimes, day, adhocDate, deadline, preferredTime, startDate, expiryDate, checklistTemplateIds, extraItems, videoUrl: videoUrl.trim(), customerName: customerName.trim(), address: address.trim(), poNumber: poNumber.trim(), accessInstructions: accessInstructions.trim(), dineroSynced: customerDineroSynced })}
         >
           Gem og planlæg
         </button>
