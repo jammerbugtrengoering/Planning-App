@@ -283,6 +283,23 @@ function scheduleWeek(weekInstances, employees, autoOnly = false, areas = [], em
     return list.some((t2) => BLOCK_TYPES.includes(t2.type) && (t2.assignees || []).includes(empId) && t2.day === day);
   }
 
+  // En opgave med et fast klokkeslæt (scheduledTime) må ikke auto-placeres
+  // oven i en anden allerede tildelt opgave med et fast klokkeslæt samme dag
+  // hos samme medarbejder — opgaver uden fast klokkeslæt er fleksible og
+  // fortrænger ikke dette tjek, de lander bare i den ledige tid der er tilbage.
+  function hasTimeConflict(empId, day, task) {
+    if (!task.scheduledTime) return false;
+    const start = parseTimeToMinutes(task.scheduledTime);
+    const end = start + task.duration;
+    return list.some((t2) => {
+      if (t2.id === task.id || !t2.scheduledTime) return false;
+      if (!(t2.assignees || []).includes(empId) || t2.day !== day) return false;
+      const s2 = parseTimeToMinutes(t2.scheduledTime);
+      const e2 = s2 + t2.duration;
+      return start < e2 && s2 < end;
+    });
+  }
+
   list.forEach((t) => {
     // Opgaver markeret med _forceWindow (forsinkede opgaver fra en tidligere
     // uge, der genoptages i den viste uge) skal søges hen over en dag-window
@@ -329,6 +346,7 @@ function scheduleWeek(weekInstances, employees, autoOnly = false, areas = [], em
     window.forEach((d) => {
       candidates.forEach((e) => {
         if (isBlocked(e.id, d.key)) return;
+        if (t.scheduledTime && hasTimeConflict(e.id, d.key, t)) return;
         const rem = remaining(employees, list, e.id, d.key);
         const fits = rem >= t.duration ? 1 : 0;
         const score = fits * 1_000_000 + skillScore(e, t) * 1000 + rem;
@@ -456,17 +474,36 @@ function fmtClock(minutesFromMidnight) {
 }
 // Builds an ordered timeline for one employee's tasks on one day, inserting a
 // "Transport" segment whenever consecutive tasks have different addresses.
-function computeDaySchedule(dayTasks, travelSettings) {
-  let cursor = parseTimeToMinutes(travelSettings.dayStart);
+function computeDaySchedule(dayTasks, travelSettings, employee) {
+  // Opgaver med et fast klokkeslæt (scheduledTime — sat pr. ugedag på en fast
+  // aftale, eller som ønsket tidspunkt på en fleksibel opgave) skal altid ligge
+  // kronologisk først og bestemme rækkefølgen. Opgaver uden fast klokkeslæt
+  // lander derefter i den rækkefølge de kommer, på den ledige tid der er
+  // tilbage efter de faste opgaver.
+  const sorted = [...dayTasks].sort((a, b) => {
+    const at = a.scheduledTime, bt = b.scheduledTime;
+    if (at && bt) return parseTimeToMinutes(at) - parseTimeToMinutes(bt);
+    if (at) return -1;
+    if (bt) return 1;
+    return 0;
+  });
+  // Dagen starter ved medarbejderens mødetid hvis den er sat, ellers ved det
+  // generelle standard-starttidspunkt fra transportindstillingerne.
+  let cursor = parseTimeToMinutes((employee && employee.startTime) || travelSettings.dayStart);
   const segments = [];
-  dayTasks.forEach((t, idx) => {
+  sorted.forEach((t, idx) => {
     if (idx > 0) {
-      const prev = dayTasks[idx - 1];
+      const prev = sorted[idx - 1];
       const travel = getTravelMinutes(prev.address, t.address, travelSettings);
       if (travel > 0) {
         segments.push({ type: "transport", minutes: travel, start: cursor, end: cursor + travel, key: `${prev.id}->${t.id}` });
         cursor += travel;
       }
+    }
+    // Et fast klokkeslæt skubber cursoren frem (venter til det angivne tidspunkt)
+    // hvis der er tid tilovers inden — ellers fortsætter den bare hvor den er.
+    if (t.scheduledTime) {
+      cursor = Math.max(cursor, parseTimeToMinutes(t.scheduledTime));
     }
     segments.push({ type: "task", task: t, start: cursor, end: cursor + t.duration });
     cursor += t.duration;
@@ -1990,7 +2027,7 @@ function EmployeeAppView({ employees, instances, onLogMinutes, onSetStatus, onTo
   const emp = employees.find((e) => e.id === empId);
 
   const myTasks = instances.filter((t) => t.assignees.includes(empId) && t.day === day);
-  const schedule = computeDaySchedule(myTasks, travelSettings);
+  const schedule = computeDaySchedule(myTasks, travelSettings, emp);
 
   return (
     <div style={styles.page}>
@@ -2243,7 +2280,7 @@ function WeekView({ employees, instances, unplaced, onAdd, onAuto, onAutoAllWeek
                 </div>
                 {visibleDays.map((d, i) => {
                   const dayTasks = instances.filter((t) => (t.assignees || []).includes(emp.id) && t.day === d.key);
-                  const schedule = computeDaySchedule(dayTasks, travelSettings);
+                  const schedule = computeDaySchedule(dayTasks, travelSettings, emp);
                   const transportMin = schedule.filter((s) => s.type === "transport").reduce((s2, seg) => s2 + seg.minutes, 0);
                   const used = dayTasks.reduce((s, t) => s + t.duration, 0) + transportMin;
                   const cap = emp.capacity[d.key] || 0;
