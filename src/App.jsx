@@ -2452,6 +2452,7 @@ function WeekView({ employees, instances, unplaced, onAdd, onAuto, onAutoAllWeek
             })}
           </div>
         </div>
+      )}
 
       <div id="print-week-plan" style={{ display: "none" }}>
         <div style={{ fontSize: 20, fontWeight: 700, marginBottom: 12 }}>
@@ -2492,7 +2493,6 @@ function WeekView({ employees, instances, unplaced, onAdd, onAuto, onAutoAllWeek
           );
         })}
       </div>
-      )}
     </div>
   );
 }
