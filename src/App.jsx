@@ -3315,6 +3315,9 @@ function KmExportSection({ employees, filterMonth, filterYear, setFilterMonth, s
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [recomputing, setRecomputing] = useState(false);
+  const [recomputeProgress, setRecomputeProgress] = useState(null);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -3340,7 +3343,7 @@ function KmExportSection({ employees, filterMonth, filterYear, setFilterMonth, s
     }
     load();
     return () => { cancelled = true; };
-  }, [filterMonth, filterYear]);
+  }, [filterMonth, filterYear, refreshKey]);
 
   const empName = (id) => (employees.find((e) => e.id === id) || {}).name || id;
 
@@ -3349,6 +3352,39 @@ function KmExportSection({ employees, filterMonth, filterYear, setFilterMonth, s
     totalsByEmp[r.employee_id] = (totalsByEmp[r.employee_id] || 0) + (Number(r.km) || 0);
   });
   const grandTotal = Object.values(totalsByEmp).reduce((s, v) => s + v, 0);
+
+  async function recomputeMonth() {
+    const monthLabel = `${MONTHS[filterMonth]} ${filterYear}`;
+    if (!window.confirm(`Genberegn km for alle dage i ${monthLabel}? Dette genberegner ogsaa dage med fejlede adresser/urealistisk lange ruter. Kan tage et minut.`)) return;
+    setRecomputing(true);
+    const numDays = new Date(filterYear, filterMonth + 1, 0).getDate();
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const dates = [];
+    for (let d = 1; d <= numDays; d++) {
+      const dateStr = `${filterYear}-${String(filterMonth + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+      if (dateStr >= todayStr) break;
+      dates.push(dateStr);
+    }
+    setRecomputeProgress({ done: 0, total: dates.length, legs: 0, failed: 0 });
+    let totalLegs = 0;
+    let failedDays = 0;
+    for (const dateStr of dates) {
+      try {
+        const { data, error: fnError } = await supabase.functions.invoke("compute-daily-km", { body: { date: dateStr } });
+        if (fnError) {
+          failedDays++;
+        } else if (data && typeof data.legs === "number") {
+          totalLegs += data.legs;
+        }
+      } catch (e) {
+        failedDays++;
+      }
+      setRecomputeProgress((p) => ({ ...(p || {}), done: (p ? p.done : 0) + 1, total: dates.length, legs: totalLegs, failed: failedDays }));
+    }
+    setRecomputing(false);
+    setRefreshKey((k) => k + 1);
+    window.alert(`Faerdig!\n${dates.length} dage behandlet\n${totalLegs} koersler beregnet${failedDays ? `\n${failedDays} dage fejlede (proev igen)` : ""}`);
+  }
 
   function exportCSV() {
     const header = ["Medarbejder", "Dato", "Fra", "Til", "Km", "Minutter"];
@@ -3378,6 +3414,9 @@ function KmExportSection({ employees, filterMonth, filterYear, setFilterMonth, s
           </select>
         </div>
         <div style={styles.toolbarSpacer} />
+        <button style={{ ...styles.secondaryBtn, opacity: recomputing ? 0.7 : 1 }} onClick={recomputeMonth} disabled={recomputing} title="Genberegn km for alle dage i den valgte maaned - retter ogsaa adresser der tidligere fejlede eller fik urealistisk lang rute">
+          <Repeat size={16} /> {recomputing ? `Genberegner (${recomputeProgress ? recomputeProgress.done : 0}/${recomputeProgress ? recomputeProgress.total : 0})` : "Genberegn måned"}
+        </button>
         <button style={styles.primaryBtn} onClick={exportCSV}><Download size={16} /> Eksporter CSV</button>
       </div>
 
