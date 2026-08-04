@@ -1363,11 +1363,35 @@ function PlanningApp({ session, onSignOut }) {
         const oldDayNum = typeof oldTask.day === 'string' ? DAY_STRING_TO_NUM[oldTask.day] : oldTask.day;
         const newDayNum = typeof updated.day === 'string' ? DAY_STRING_TO_NUM[updated.day] : updated.day;
         
-        // Send email if task assigned to today
-        if (newDayNum === todayDayNum && updated.assignees?.length > 0 && (!oldTask.assignees?.length || oldDayNum !== newDayNum)) {
-          const emp = employees.find(e => e.id === updated.assignees[0]);
-          if (emp?.app_email?.trim()) {
-            notifyEmployeeOfChanges(emp.app_email.trim(), emp.name, updated.title, '✅ Ny opgave på din dagsplan').catch(e => console.error("Notify error:", e));
+        const isOldTaskToday = oldDayNum === todayDayNum;
+        const isNewTaskToday = newDayNum === todayDayNum;
+        
+        // Send email ONLY if today's tasks are affected
+        if (isOldTaskToday || isNewTaskToday) {
+          // Task added to today
+          if (!isOldTaskToday && isNewTaskToday && updated.assignees?.length > 0) {
+            const emp = employees.find(e => e.id === updated.assignees[0]);
+            if (emp?.app_email?.trim()) {
+              notifyEmployeeOfChanges(emp.app_email.trim(), emp.name, updated.title, '✅ Ny opgave på din dagsplan').catch(e => console.error("Notify error:", e));
+            }
+          }
+          
+          // Task removed from today
+          if (isOldTaskToday && !isNewTaskToday) {
+            const emp = employees.find(e => e.id === oldTask.assignees?.[0]);
+            if (emp?.app_email?.trim()) {
+              notifyEmployeeOfChanges(emp.app_email.trim(), emp.name, oldTask.title, '❌ Opgave fjernet fra din dagsplan').catch(e => console.error("Notify error:", e));
+            }
+          }
+          
+          // Task on today is modified (title, duration, assignee, etc.)
+          if (isOldTaskToday && isNewTaskToday && updated.assignees?.length > 0) {
+            if (oldTask.title !== updated.title || oldTask.duration !== updated.duration || JSON.stringify(oldTask.assignees) !== JSON.stringify(updated.assignees)) {
+              const emp = employees.find(e => e.id === updated.assignees[0]);
+              if (emp?.app_email?.trim()) {
+                notifyEmployeeOfChanges(emp.app_email.trim(), emp.name, updated.title, '📝 Opgaven på din dagsplan er ændret').catch(e => console.error("Notify error:", e));
+              }
+            }
           }
         }
         
