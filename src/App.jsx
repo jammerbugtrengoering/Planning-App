@@ -2168,6 +2168,43 @@ function EmployeeAppView({ employees, instances, onLogMinutes, onSetStatus, onTo
 }
 
 // ---------- Week view ----------
+// Send email notification to employee about day changes
+async function notifyEmployeeOfChanges(employeeEmail, employeeName, taskTitle, dayName) {
+  const mailData = {
+    to: [{ email: employeeEmail, name: employeeName }],
+    subject: `Ændring i din dagsplan - ${dayName}`,
+    htmlContent: `
+      <h2>Hej ${employeeName},</h2>
+      <p>Der er sket ændringer i din dagsplan for <strong>${dayName}</strong>.</p>
+      <p>Opgave: <strong>${taskTitle}</strong></p>
+      <p>Tjek venligst din dagsplan i Rengøringsplan for at se detaljerne.</p>
+      <p>Med venlig hilsen,<br/>Jammerbugt Rengøring</p>
+    `
+  };
+  
+  try {
+    const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+      method: 'POST',
+      headers: {
+        'api-key': 'YOUR_BREVO_API_KEY',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(mailData)
+    });
+    
+    if (response.ok) {
+      console.log('✅ Email sent to', employeeEmail);
+      return true;
+    } else {
+      console.error('❌ Failed to send email');
+      return false;
+    }
+  } catch (error) {
+    console.error('Email error:', error);
+    return false;
+  }
+}
+
 function scheduleWeekSimple(instances, employees, weekOffset, weekYear) {
   const thisWeek = instances.filter(t => t.week === weekOffset && t.year === weekYear);
   const unassigned = thisWeek.filter(t => !t.assignees || !t.assignees.length);
