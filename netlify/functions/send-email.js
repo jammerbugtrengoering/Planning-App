@@ -1,49 +1,32 @@
 export default async (req) => {
+  console.log("Function called");
+  console.log("Method:", req.method);
+  console.log("Headers:", req.headers);
+  
   if (req.method !== 'POST') {
-    return new Response('Method not allowed', { status: 405 });
+    return new Response('Only POST allowed', { status: 405 });
   }
 
   try {
-    // Parse body from string
-    let body;
-    if (typeof req.body === 'string') {
-      body = JSON.parse(req.body);
-    } else {
-      body = req.body;
-    }
-
-    console.log("📥 Body:", body);
+    // Netlify Functions passes body as is - could be Buffer or string
+    let bodyData = {};
     
-    const { email, name, subject, html } = body;
-    const brevoKey = process.env.VITE_BREVO_API_KEY;
-
-    console.log("🔑 Key exists:", !!brevoKey);
-
-    if (!brevoKey) {
-      return new Response(JSON.stringify({ error: 'API key missing' }), { status: 500 });
+    if (req.body) {
+      if (typeof req.body === 'string') {
+        bodyData = JSON.parse(req.body);
+      } else if (Buffer.isBuffer(req.body)) {
+        bodyData = JSON.parse(req.body.toString());
+      } else {
+        bodyData = req.body;
+      }
     }
-
-    const response = await fetch('https://api.brevo.com/v3/smtp/email', {
-      method: 'POST',
-      headers: {
-        'api-key': brevoKey,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        to: [{ email, name }],
-        subject,
-        htmlContent: html
-      })
-    });
-
-    if (response.ok || response.status === 201) {
-      return new Response(JSON.stringify({ success: true }), { status: 200 });
-    } else {
-      const error = await response.json();
-      return new Response(JSON.stringify({ error }), { status: response.status });
-    }
-  } catch (error) {
-    console.error('Error:', error);
-    return new Response(JSON.stringify({ error: error.toString() }), { status: 500 });
+    
+    console.log("Body:", JSON.stringify(bodyData));
+    
+    // For now just return success to test
+    return new Response(JSON.stringify({ success: true, received: bodyData }), { status: 200 });
+  } catch (err) {
+    console.error("Error:", err.message);
+    return new Response(JSON.stringify({ error: err.message }), { status: 400 });
   }
 };
