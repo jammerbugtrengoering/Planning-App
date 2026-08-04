@@ -2183,13 +2183,8 @@ async function notifyEmployeeOfChanges(employeeEmail, employeeName, taskTitle, d
   };
   
   try {
-    const response = await fetch('https://api.brevo.com/v3/smtp/email', {
-      method: 'POST',
-      headers: {
-        'api-key': 'YOUR_BREVO_API_KEY',
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(mailData)
+    const response = await supabase.functions.invoke('send-email', {
+      body: mailData
     });
     
     if (response.ok) {
