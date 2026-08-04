@@ -1306,9 +1306,6 @@ function PlanningApp({ session, onSignOut }) {
     setShowAddTask(false);
   }
 
-  // Map day strings to numbers (0=Mon, 1=Tue, 2=Wed, 3=Thu, 4=Fri)
-  const dayStringToNum = { Mon: 0, Tue: 1, Wed: 2, Thu: 3, Fri: 4 };
-  
   function updateInstance(taskId, updater) {
     setInstances((prev) => prev.map((t) => {
       if (t.id !== taskId) return t;
@@ -1324,24 +1321,15 @@ function PlanningApp({ session, onSignOut }) {
       const oldDayNum = typeof oldTask.day === 'string' ? dayStringToNum[oldTask.day] : oldTask.day;
       const newDayNum = typeof updated.day === 'string' ? dayStringToNum[updated.day] : updated.day;
       
-      console.log("📝 updateInstance:", { taskId, oldDayNum, newDayNum, todayDayNum, oldAssignees: oldTask.assignees, newAssignees: updated.assignees });
       
       // ONLY notify if the changed day is TODAY
       const isChangedDayToday = oldDayNum === todayDayNum || newDayNum === todayDayNum;
-      console.log("📅 isChangedDayToday?", isChangedDayToday);
       
       if (isChangedDayToday) {
-        console.log("✅ isChangedDayToday is TRUE - checking conditions...");
         
         // Hvis opgave fjernes fra idag - notificér den medarbejder der havde den
-        const cond1a = oldDayNum === todayDayNum;
-        const cond1b = oldTask.assignees?.length > 0;
-        const cond1c = !updated.assignees?.length || newDayNum !== oldDayNum;
-        console.log("Condition 1 (removed):", { cond1a, cond1b, cond1c, combined: cond1a && cond1b && cond1c });
         
         if (cond1a && cond1b && cond1c) {
-          console.log("✉️ REMOVED: Notifying", oldTask.assignees[0]);
-          alert("TEST: Notification triggered for " + oldTask.assignees[0]);
           const emp = employees.find(e => e.id === oldTask.assignees[0]);
           if (emp?.email) {
             notifyEmployeeOfChanges(emp.email, emp.name, oldTask.title, `Opgave fjernet fra din dagsplan`).catch(e => console.error("Email failed:", e));
@@ -1349,25 +1337,13 @@ function PlanningApp({ session, onSignOut }) {
         }
         
         // Hvis opgave tilføjes til idag - notificér den medarbejder der får den
-        const cond2a = newDayNum === todayDayNum;
-        const cond2b = updated.assignees?.length > 0;
-        const cond2c = !oldTask.assignees?.length || oldDayNum !== newDayNum;
-        console.log("Condition 2 (added):", { cond2a, cond2b, cond2c, combined: cond2a && cond2b && cond2c });
         
         if (cond2a && cond2b && cond2c) {
-          console.log("✉️ ADDED: Notifying", updated.assignees[0]);
           const empId = updated.assignees[0];
-          console.log("🔍 Looking for employee:", empId);
-          console.log("📋 Available employees:", employees.map(e => ({ id: e.id, name: e.name, email: e.email })));
           const emp = employees.find(e => e.id === empId);
-          console.log("👤 Found employee:", emp);
-          const email = emp?.email?.trim();
-          console.log("📧 Email value:", email, "type:", typeof email, "truthy:", !!email);
           if (email) {
             console.log("📧 Calling notifyEmployeeOfChanges with:", { email, name: emp.name, title: updated.title });
             notifyEmployeeOfChanges(email, emp.name, updated.title, `Ny opgave på din dagsplan`).catch(e => console.error("Email failed:", e));
-          } else {
-            console.log("❌ No email found for employee - email:", emp?.email);
           }
         }
       }
