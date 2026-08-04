@@ -534,6 +534,9 @@ function completionInfo(t, employees) {
 function statusColor(s) { return { planlagt: "#9C1B5D", udført: "#111111", unscheduled: "#94A3B8" }[s]; }
 
 export default function App() {
+  // Map day strings to numbers (0=Mon, 1=Tue, 2=Wed, 3=Thu, 4=Fri)
+  const dayStringToNum = { Mon: 0, Tue: 1, Wed: 2, Thu: 3, Fri: 4 };
+
   // ── Auth ──
   const [session, setSession] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
