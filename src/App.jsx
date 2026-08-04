@@ -1307,38 +1307,37 @@ function PlanningApp({ session, onSignOut }) {
   }
 
   function updateInstance(taskId, updater) {
-    console.log("🔄 updateInstance called for task:", taskId);
     setInstances((prev) => prev.map((t) => {
       if (t.id !== taskId) return t;
-      const oldAssignees = t.assignees || [];
+      
+      const oldTask = t;
       const updated = updater(t);
-      const newAssignees = updated.assignees || [];
       
-      const oldStr = JSON.stringify(oldAssignees);
-      const newStr = JSON.stringify(newAssignees);
-      const changed = oldStr !== newStr;
-      
-      console.log("👤 Old assignees:", oldStr);
-      console.log("👤 New assignees:", newStr);
-      console.log("👤 Changed?", changed);
-      
-      // Notificér hvis assignees ændrede
-      if (changed) {
-        console.log("✉️ YES! Notifying...");
-        // Notificér den nye medarbejder
-        if (newAssignees.length > 0) {
-          const emp = employees.find(e => e.id === newAssignees[0]);
-          if (emp?.email) {
-            notifyEmployeeOfChanges(emp.email, emp.name, updated.title, "Ny opgave tildelt").catch(e => console.error("Email failed:", e));
+      // Check hvis opgaven bliver fjernet fra en bestemt dag
+      if (oldTask.day !== undefined && oldTask.assignees?.length > 0 && (!updated.assignees?.length || updated.day !== oldTask.day)) {
+        // Notificér alle medarbejdere som har opgaver på den gamle dag
+        const oldDayTasks = prev.filter(task => task.day === oldTask.day && task.week === oldTask.week && task.year === oldTask.year);
+        const employeesOnDay = new Set();
+        oldDayTasks.forEach(task => {
+          if (task.assignees?.length > 0) {
+            task.assignees.forEach(empId => {
+              const emp = employees.find(e => e.id === empId);
+              if (emp?.email) employeesOnDay.add(JSON.stringify({ email: emp.email, name: emp.name }));
+            });
           }
-        }
+        });
         
-        // Notificér den gamle medarbejder at opgaven blev fjernet
-        if (oldAssignees.length > 0 && newAssignees.length === 0) {
-          const oldEmp = employees.find(e => e.id === oldAssignees[0]);
-          if (oldEmp?.email) {
-            notifyEmployeeOfChanges(oldEmp.email, oldEmp.name, updated.title, "Opgave fjernet fra din plan").catch(e => console.error("Email failed:", e));
-          }
+        employeesOnDay.forEach(empStr => {
+          const emp = JSON.parse(empStr);
+          notifyEmployeeOfChanges(emp.email, emp.name, oldTask.title, `Dagsplan ændret`).catch(e => console.error("Email failed:", e));
+        });
+      }
+      
+      // Check hvis opgaven bliver tilføjet til en dag
+      if (updated.day !== undefined && updated.assignees?.length > 0 && (!oldTask.assignees?.length || oldTask.day !== updated.day)) {
+        const emp = employees.find(e => e.id === updated.assignees[0]);
+        if (emp?.email) {
+          notifyEmployeeOfChanges(emp.email, emp.name, updated.title, `Ny opgave på din dagsplan`).catch(e => console.error("Email failed:", e));
         }
       }
       
