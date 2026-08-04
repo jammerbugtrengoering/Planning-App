@@ -3955,7 +3955,7 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
       <input style={styles.input} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="F.eks. Gulvvask kontor 2. sal" />
 
       <label style={styles.label}>
-        Kundenavn
+        Fakturakunde
         {dineroAvailable
           ? <span style={{ fontSize: 11, color: "#94A3B8", marginLeft: 6 }}>— søger i Dinero</span>
           : <span style={{ fontSize: 11, color: "#D97706", marginLeft: 6 }}>— Dinero ikke tilgængelig, indtast manuelt</span>
@@ -4011,19 +4011,25 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
         </div>
       )}
 
-      <label style={styles.label}>Adresse for udførsel</label>
-      <input style={styles.input} value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Vejnavn 1, 9000 Aalborg" />
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 12 }}>
+        <div>
+          <label style={styles.label}>Adresse for udførsel</label>
+          <input style={styles.input} value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Vejnavn 1, 9000 Aalborg" />
+        </div>
+        <div>
+          <label style={styles.label}>PO-nummer til fakturering (valgfrit)</label>
+          <input style={styles.input} value={poNumber} onChange={(e) => setPoNumber(e.target.value)} placeholder="F.eks. PO-2026-0311" />
+        </div>
+      </div>
+
+      <label style={styles.label}>Adgang (nøgleboks, koder, kontaktperson m.v.)</label>
+      <textarea style={styles.textarea} rows={2} value={accessInstructions} onChange={(e) => setAccessInstructions(e.target.value)} placeholder="F.eks. Nøgleboks ved hovedindgang, kode 4471" />
+
       <label style={styles.label}>Ansvarlig Medarbejder (valgfrit)</label>
       <select style={styles.input} value={assignedEmployeeId} onChange={(e) => setAssignedEmployeeId(e.target.value)}>
         <option value="">- Ingen (auto-matching) -</option>
         {employees?.map(emp => <option key={emp.id} value={emp.id}>{emp.name}</option>)}
       </select>
-
-      <label style={styles.label}>PO-nummer til fakturering (valgfrit)</label>
-      <input style={styles.input} value={poNumber} onChange={(e) => setPoNumber(e.target.value)} placeholder="F.eks. PO-2026-0311" />
-
-      <label style={styles.label}>Adgang (nøgleboks, koder, kontaktperson m.v.)</label>
-      <textarea style={styles.textarea} rows={2} value={accessInstructions} onChange={(e) => setAccessInstructions(e.target.value)} placeholder="F.eks. Nøgleboks ved hovedindgang, kode 4471" />
 
       <label style={styles.label}>Krævede kompetencer (minimumsniveau)</label>
       {requiredSkills.map((r, i) => (
