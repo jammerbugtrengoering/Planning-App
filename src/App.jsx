@@ -1355,9 +1355,16 @@ function PlanningApp({ session, onSignOut }) {
         
         if (cond2a && cond2b && cond2c) {
           console.log("✉️ ADDED: Notifying", updated.assignees[0]);
-          const emp = employees.find(e => e.id === updated.assignees[0]);
+          const empId = updated.assignees[0];
+          console.log("🔍 Looking for employee:", empId);
+          console.log("📋 Available employees:", employees.map(e => ({ id: e.id, name: e.name, email: e.email })));
+          const emp = employees.find(e => e.id === empId);
+          console.log("👤 Found employee:", emp);
           if (emp?.email) {
+            console.log("📧 Calling notifyEmployeeOfChanges with:", { email: emp.email, name: emp.name, title: updated.title });
             notifyEmployeeOfChanges(emp.email, emp.name, updated.title, `Ny opgave på din dagsplan`).catch(e => console.error("Email failed:", e));
+          } else {
+            console.log("❌ No email found for employee");
           }
         }
       }
