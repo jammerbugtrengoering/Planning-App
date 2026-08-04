@@ -7,20 +7,6 @@ import {
   Thermometer, Palmtree,
 } from "lucide-react";
 
-
-// DEBUGGING TEST
-window.testSchedule = () => { alert("testSchedule called!"); };
-window.testButton = () => {
-  const btn = document.querySelector('[title="Planlæg ugen automatisk"]');
-  if (btn) {
-    alert("Button FOUND! Calling click...");
-    btn.click();
-  } else {
-    alert("Button NOT FOUND in DOM");
-  }
-};
-console.log("Test functions added: window.testSchedule() and window.testButton()");
-
 // ---------- Constants ----------
 // SKILLS og customers hentes fra Supabase – se loadAll() i App-komponenten.
 // Fallback bruges kun hvis databasen ikke svarer ved første render.
@@ -1229,7 +1215,6 @@ function PlanningApp({ session, onSignOut }) {
       const before = [...thisWeek, ...overdueForRun].filter((t) => !(t.assignees && t.assignees.length)).length;
       const scheduledBatch = scheduleWeek([...thisWeek, ...overdueForRun], employees, true, areas, employeeAreas); // kun markerede
       const still = scheduledBatch.filter((t) => !(t.assignees && t.assignees.length)).length;
-      console.log("✅ Scheduled batch - before:", before, "still:", still, "scheduled:", before - still);
 
       const after = scheduledBatch.map((t) => {
         const { _forceWindow, ...rest } = t;
@@ -2231,18 +2216,6 @@ function EmployeeAppView({ employees, instances, onLogMinutes, onSetStatus, onTo
 
 // ---------- Week view ----------
 function WeekView({ employees, instances, unplaced, onAdd, onAuto, onAutoAllWeeks, onPlace, onUnplace, onRemoveAssignee, onDelete, onOpenTask, onToggleInclude, onEditEmp, dragId, setDragId, weekLabel, weekNo, weekOffset, weekYear, onPrevWeek, onNextWeek, onTodayWeek, travelSettings, onOpenTravelSettings, currentIsoWeek, areas, employeeAreas, onOpenAddBlock }) {
-  const handleScheduleWeek = () => {
-    console.log("Schedule week clicked, onAuto type:", typeof onAuto);
-    if (typeof onAuto === 'function') onAuto();
-    else alert("onAuto not available");
-  };
-
-  const handleScheduleAllWeeks = () => {
-    console.log("Schedule all weeks clicked, onAutoAllWeeks type:", typeof onAutoAllWeeks);
-    if (typeof onAutoAllWeeks === 'function') onAutoAllWeeks();
-    else alert("onAutoAllWeeks not available");
-  };
-
   const [addMenuTaskId, setAddMenuTaskId] = useState(null);
   const [showWeekend, setShowWeekend] = useState(false);
   const [selectedAreaId, setSelectedAreaId] = useState("all"); // "all" eller area.id
@@ -2259,8 +2232,8 @@ function WeekView({ employees, instances, unplaced, onAdd, onAuto, onAutoAllWeek
     <div style={styles.page}>
       <div style={styles.toolbar}>
         <button style={styles.primaryBtn} onClick={onAdd}><Plus size={16} /> Ny opgave</button>
-        <button style={styles.secondaryBtn} onClick={handleScheduleWeek}><Wand2 size={16} /> Planlæg</button>
-        <button style={styles.secondaryBtn} onClick={handleScheduleAllWeeks}><Wand2 size={16} /> Planlæg alle</button>
+        <button style={styles.secondaryBtn} onClick={onAuto}><Wand2 size={16} /> Planlæg ugen automatisk</button>
+        <button style={styles.secondaryBtn} onClick={onAutoAllWeeks} title="Kør automatisk planlægning for alle uger, ikke kun den du kigger på lige nu"><Wand2 size={16} /> Planlæg alle uger</button>
         <button style={styles.secondaryBtn} onClick={onOpenTravelSettings}><Car size={16} /> Transporttid</button>
         <button style={{ ...styles.secondaryBtn, color: "#B91C1C", borderColor: "#FECACA" }} onClick={onOpenAddBlock}><Thermometer size={16} /> Sygdom/Ferie</button>
         <button
