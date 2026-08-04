@@ -2217,8 +2217,7 @@ function WeekView({ employees, instances, unplaced, onAdd, onAuto, onAutoAllWeek
             });
             alert(`✅ ${result.count} opgave(r) planlagt til: ${result.employees.join(", ")}`);
           }
-        }}><Wand2 size={16} /> Planlæg denne uge</button>
-        <button style={styles.secondaryBtn} onClick={onAutoAllWeeks} title="Kør automatisk planlægning for alle uger, ikke kun den du kigger på lige nu"><Wand2 size={16} /> Planlæg alle uger</button>
+        }}><Wand2 size={16} /> Planlæg</button>
         <button style={styles.secondaryBtn} onClick={onOpenTravelSettings}><Car size={16} /> Transporttid</button>
         <button style={{ ...styles.secondaryBtn, color: "#B91C1C", borderColor: "#FECACA" }} onClick={onOpenAddBlock}><Thermometer size={16} /> Sygdom/Ferie</button>
         <button
