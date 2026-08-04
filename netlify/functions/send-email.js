@@ -1,14 +1,9 @@
 export default async (req) => {
-  console.log("Function called");
-  console.log("Method:", req.method);
-  console.log("Headers:", req.headers);
-  
   if (req.method !== 'POST') {
     return new Response('Only POST allowed', { status: 405 });
   }
 
   try {
-    // Netlify Functions passes body as is - could be Buffer or string
     let bodyData = {};
     
     if (req.body) {
@@ -21,12 +16,34 @@ export default async (req) => {
       }
     }
     
-    console.log("Body:", JSON.stringify(bodyData));
-    
-    // For now just return success to test
-    return new Response(JSON.stringify({ success: true, received: bodyData }), { status: 200 });
+    const { email, name, subject, html } = bodyData;
+    const brevoKey = process.env.VITE_BREVO_API_KEY;
+
+    if (!brevoKey) {
+      return new Response(JSON.stringify({ error: 'API key missing' }), { status: 500 });
+    }
+
+    // Send via Brevo
+    const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+      method: 'POST',
+      headers: {
+        'api-key': brevoKey,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        to: [{ email, name }],
+        subject,
+        htmlContent: html
+      })
+    });
+
+    if (response.ok || response.status === 201) {
+      return new Response(JSON.stringify({ success: true }), { status: 200 });
+    } else {
+      const error = await response.json();
+      return new Response(JSON.stringify({ error }), { status: response.status });
+    }
   } catch (err) {
-    console.error("Error:", err.message);
     return new Response(JSON.stringify({ error: err.message }), { status: 400 });
   }
 };
