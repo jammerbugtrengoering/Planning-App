@@ -1207,6 +1207,7 @@ function PlanningApp({ session, onSignOut }) {
   }
 
   function runAuto() {
+    console.warn("⚠️ runAuto() WAS CALLED!");
     setInstances((prev) => {
       const thisWeek = prev.filter((t) => t.week === weekOffset && t.year === weekYear);
 
