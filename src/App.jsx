@@ -1341,6 +1341,7 @@ function PlanningApp({ session, onSignOut }) {
         
         if (cond1a && cond1b && cond1c) {
           console.log("✉️ REMOVED: Notifying", oldTask.assignees[0]);
+          alert("TEST: Notification triggered for " + oldTask.assignees[0]);
           const emp = employees.find(e => e.id === oldTask.assignees[0]);
           if (emp?.email) {
             notifyEmployeeOfChanges(emp.email, emp.name, oldTask.title, `Opgave fjernet fra din dagsplan`).catch(e => console.error("Email failed:", e));
