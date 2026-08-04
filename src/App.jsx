@@ -4,7 +4,7 @@ import {
   Plus, Download, X, Clock, AlertTriangle,
   Trash2, Pencil, Repeat, Zap, CalendarClock, Wand2, Star, ChevronLeft, ChevronRight,
   ClipboardList, Video, CheckCircle2, LogIn, ListChecks, Check, Lock, Navigation, Building2, Car, Copy,
-  Thermometer, Palmtree,
+  Thermometer, Palmtree, Mail,
 } from "lucide-react";
 
 // ---------- Constants ----------
