@@ -2232,13 +2232,19 @@ async function notifyEmployeeOfChanges(employeeEmail, employeeName, taskTitle, d
   };
   
   try {
+    const brevoKey = import.meta.env.VITE_BREVO_API_KEY;
+    if (!brevoKey) {
+      console.error("❌ VITE_BREVO_API_KEY not set in environment");
+      return false;
+    }
+    
     console.log("📤 Calling Brevo API directly with:", mailData);
     
-    // Send directly via Brevo API - no Edge Function needed
+    // Send directly via Brevo API using environment variable
     const response = await fetch('https://api.brevo.com/v3/smtp/email', {
       method: 'POST',
       headers: {
-        'api-key': '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',
+        'api-key': brevoKey,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify(mailData)
