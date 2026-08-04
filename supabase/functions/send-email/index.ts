@@ -3,9 +3,11 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
 serve(async (req) => {
+  // Handle CORS
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
@@ -14,14 +16,21 @@ serve(async (req) => {
     const { email, name, subject, html } = await req.json();
     const brevoKey = Deno.env.get("VITE_BREVO_API_KEY");
 
+    console.log("📧 Email request:", { email, name, subject });
+
     if (!brevoKey) {
+      console.error("❌ BREVO_API_KEY not configured");
       return new Response(
         JSON.stringify({ error: "BREVO_API_KEY not configured" }),
-        { status: 500, headers: { "Content-Type": "application/json" } }
+        { 
+          status: 500, 
+          headers: { "Content-Type": "application/json", ...corsHeaders } 
+        }
       );
     }
 
-    const response = await fetch("https://api.brevo.com/v3/smtp/email", {
+    // Send via Brevo
+    const brevoResponse = await fetch("https://api.brevo.com/v3/smtp/email", {
       method: "POST",
       headers: {
         "api-key": brevoKey,
@@ -34,19 +43,23 @@ serve(async (req) => {
       }),
     });
 
-    if (response.ok || response.status === 201) {
+    console.log("📤 Brevo response:", brevoResponse.status);
+
+    if (brevoResponse.ok || brevoResponse.status === 201) {
       return new Response(JSON.stringify({ success: true }), {
         status: 200,
         headers: { "Content-Type": "application/json", ...corsHeaders },
       });
     } else {
-      const error = await response.json();
+      const error = await brevoResponse.json();
+      console.error("❌ Brevo error:", error);
       return new Response(JSON.stringify({ error }), {
-        status: response.status,
+        status: brevoResponse.status,
         headers: { "Content-Type": "application/json", ...corsHeaders },
       });
     }
   } catch (error) {
+    console.error("❌ Function error:", error.message);
     return new Response(JSON.stringify({ error: error.message }), {
       status: 400,
       headers: { "Content-Type": "application/json", ...corsHeaders },
