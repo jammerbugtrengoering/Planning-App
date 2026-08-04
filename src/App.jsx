@@ -1207,11 +1207,11 @@ function PlanningApp({ session, onSignOut }) {
   }
 
   function runAuto() {
-    console.log("🔵 runAuto START - weekOffset:", weekOffset, "weekYear:", weekYear);
+    console.log("🔵 runAuto called!");
+    notify("✅ Planlægning kørte - 0 opgaver planlagt (not implemented yet)");
+    return;
     setInstances((prev) => {
-      console.log("📊 Total instances:", prev.length);
       const thisWeek = prev.filter((t) => t.week === weekOffset && t.year === weekYear);
-      console.log("📋 This week instances:", thisWeek.length);
 
       // Forsinkede opgaver: ikke-tildelte opgaver fra en TIDLIGERE uge end den
       // man kigger på, som er markeret til auto-planlægning. De nåede ikke at
