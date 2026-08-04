@@ -1193,11 +1193,8 @@ function PlanningApp({ session, onSignOut }) {
   }
 
   function runAuto() {
-    console.log("🔵 runAuto() called");
     setInstances((prev) => {
       const thisWeek = prev.filter((t) => t.week === weekOffset && t.year === weekYear);
-      console.log("📊 thisWeek:", thisWeek.length, "tasks");
-      console.log("📋 Unassigned in week:", thisWeek.filter((t) => !(t.assignees && t.assignees.length)).length);
 
       // Forsinkede opgaver: ikke-tildelte opgaver fra en TIDLIGERE uge end den
       // man kigger på, som er markeret til auto-planlægning. De nåede ikke at
@@ -1218,7 +1215,6 @@ function PlanningApp({ session, onSignOut }) {
       const before = [...thisWeek, ...overdueForRun].filter((t) => !(t.assignees && t.assignees.length)).length;
       const scheduledBatch = scheduleWeek([...thisWeek, ...overdueForRun], employees, false, areas, employeeAreas); // alle ikke-tildelte der passer
       const still = scheduledBatch.filter((t) => !(t.assignees && t.assignees.length)).length;
-      console.log("✅ After scheduleWeek - still unassigned:", still, "- scheduled:", before - still);
 
       const after = scheduledBatch.map((t) => {
         const { _forceWindow, ...rest } = t;
@@ -2242,8 +2238,8 @@ function WeekView({ employees, instances, unplaced, onAdd, onAuto, onAutoAllWeek
     <div style={styles.page}>
       <div style={styles.toolbar}>
         <button style={styles.primaryBtn} onClick={onAdd}><Plus size={16} /> Ny opgave</button>
-        <button style={styles.secondaryBtn} onClick={() => { console.log("🔴 Button clicked! onAuto:", onAuto); onAuto(); }}><Wand2 size={16} /> Planlæg ugen automatisk</button>
-        <button style={styles.secondaryBtn} onClick={() => { console.log("🟢 All weeks button clicked! onAutoAllWeeks:", onAutoAllWeeks); onAutoAllWeeks(); }} title="Kør automatisk planlægning for alle uger, ikke kun den du kigger på lige nu"><Wand2 size={16} /> Planlæg alle uger</button>
+        <button style={styles.secondaryBtn} onClick={onAuto}><Wand2 size={16} /> Planlæg ugen automatisk</button>
+        <button style={styles.secondaryBtn} onClick={onAutoAllWeeks} title="Kør automatisk planlægning for alle uger, ikke kun den du kigger på lige nu"><Wand2 size={16} /> Planlæg alle uger</button>
         <button style={styles.secondaryBtn} onClick={onOpenTravelSettings}><Car size={16} /> Transporttid</button>
         <button style={{ ...styles.secondaryBtn, color: "#B91C1C", borderColor: "#FECACA" }} onClick={onOpenAddBlock}><Thermometer size={16} /> Sygdom/Ferie</button>
         <button
