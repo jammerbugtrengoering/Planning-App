@@ -730,7 +730,7 @@ function PlanningApp({ session, onSignOut }) {
   useEffect(() => { localStorage.setItem("rp_lang", lang); }, [lang]);
 
   const L = {
-    da: { schedule:"Ugeplan", employees:"Medarbejdere", checklists:"Tjeklister", time:"Tid & Eksport", inventory:"Lager", contracts:"Aftaler", reports:"Rapportering", medExport:"Medarbejder-eksport", signOut:"Log ud", sub:"Ugeplanlægning · kapacitet · kompetenceniveauer" },
+    da: { schedule:"Ugeplan", employees:"Medarbejdere", checklists:"Tjeklister", time:"Fakturering", inventory:"Lager", contracts:"Aftaler", reports:"Rapportering", medExport:"Medarbejder-eksport", signOut:"Log ud", sub:"Ugeplanlægning · kapacitet · kompetenceniveauer" },
     en: { schedule:"Schedule", employees:"Employees", checklists:"Checklists", time:"Time & Export", inventory:"Inventory", contracts:"Contracts", reports:"Reporting", medExport:"Employee export", signOut:"Sign out", sub:"Weekly planning · capacity · skill levels" },
   }[lang];
   // ── Dynamiske master-data fra Supabase ──
