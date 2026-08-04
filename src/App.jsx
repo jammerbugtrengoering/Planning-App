@@ -1307,14 +1307,18 @@ function PlanningApp({ session, onSignOut }) {
   }
 
   function updateInstance(taskId, updater) {
+    console.log("🔄 updateInstance called for task:", taskId);
     setInstances((prev) => prev.map((t) => {
       if (t.id !== taskId) return t;
       const oldAssignees = t.assignees || [];
       const updated = updater(t);
       const newAssignees = updated.assignees || [];
       
+      console.log("👤 Assignees changed?", JSON.stringify(oldAssignees), "→", JSON.stringify(newAssignees));
+      
       // Notificér hvis assignees ændrede
       if (JSON.stringify(oldAssignees) !== JSON.stringify(newAssignees)) {
+        console.log("✉️ YES! Assignees changed, notifying...");
         // Notificér den nye medarbejder
         if (newAssignees.length > 0) {
           const emp = employees.find(e => e.id === newAssignees[0]);
