@@ -1309,7 +1309,29 @@ function PlanningApp({ session, onSignOut }) {
   function updateInstance(taskId, updater) {
     setInstances((prev) => prev.map((t) => {
       if (t.id !== taskId) return t;
+      const oldAssignees = t.assignees || [];
       const updated = updater(t);
+      const newAssignees = updated.assignees || [];
+      
+      // Notificér hvis assignees ændrede
+      if (JSON.stringify(oldAssignees) !== JSON.stringify(newAssignees)) {
+        // Notificér den nye medarbejder
+        if (newAssignees.length > 0) {
+          const emp = employees.find(e => e.id === newAssignees[0]);
+          if (emp?.email) {
+            notifyEmployeeOfChanges(emp.email, emp.name, updated.title, "Ny opgave tildelt").catch(e => console.error("Email failed:", e));
+          }
+        }
+        
+        // Notificér den gamle medarbejder at opgaven blev fjernet
+        if (oldAssignees.length > 0 && newAssignees.length === 0) {
+          const oldEmp = employees.find(e => e.id === oldAssignees[0]);
+          if (oldEmp?.email) {
+            notifyEmployeeOfChanges(oldEmp.email, oldEmp.name, updated.title, "Opgave fjernet fra din plan").catch(e => console.error("Email failed:", e));
+          }
+        }
+      }
+      
       syncInstance(updated);
       return updated;
     }));
