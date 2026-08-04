@@ -2220,9 +2220,10 @@ async function notifyEmployeeOfChanges(employeeEmail, employeeName, taskTitle, d
   console.log("📧 notifyEmployeeOfChanges called:", { employeeEmail, employeeName, taskTitle, dayName });
   
   const mailData = {
-    to: [{ email: employeeEmail, name: employeeName }],
+    email: employeeEmail,
+    name: employeeName,
     subject: `Ændring i din dagsplan - ${dayName}`,
-    htmlContent: `
+    html: `
       <h2>Hej ${employeeName},</h2>
       <p>Der er sket ændringer i din dagsplan for <strong>${dayName}</strong>.</p>
       <p>Opgave: <strong>${taskTitle}</strong></p>
@@ -2232,32 +2233,25 @@ async function notifyEmployeeOfChanges(employeeEmail, employeeName, taskTitle, d
   };
   
   try {
-    const brevoKey = import.meta.env.VITE_BREVO_API_KEY;
-    if (!brevoKey) {
-      console.error("❌ VITE_BREVO_API_KEY not set in environment");
-      return false;
-    }
+    console.log("📤 Calling Netlify function with:", mailData);
     
-    console.log("📤 Calling Brevo API directly with:", mailData);
-    
-    // Send directly via Brevo API using environment variable
-    const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+    // Call Netlify serverless function
+    const response = await fetch('/.netlify/functions/send-email', {
       method: 'POST',
       headers: {
-        'api-key': brevoKey,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify(mailData)
     });
     
-    console.log("📥 Brevo response:", response);
+    console.log("📥 Function response:", response);
     
-    if (response.ok || response.status === 201) {
+    if (response.ok || response.status === 200) {
       console.log('✅ Email sent to', employeeEmail);
       return true;
     } else {
       const error = await response.json();
-      console.error('❌ Brevo error:', error);
+      console.error('❌ Function error:', error);
       return false;
     }
   } catch (error) {
