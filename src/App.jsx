@@ -3927,7 +3927,7 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
   function removeSkillRow(i) { setRequiredSkills((prev) => prev.filter((_, idx) => idx !== i)); }
 
   return (
-    <Modal onClose={onClose} title={copyFrom ? `Kopiér: ${copyFrom.title}` : "Ny opgave"} persistent>
+    <Modal onClose={onClose} title={copyFrom ? `Kopiér: ${copyFrom.title}` : "Ny opgave"} persistent fullscreen>
       {/* Kontrakttype */}
       <label style={styles.label}>Kontrakttype</label>
       <div style={styles.typePicker}>
@@ -5528,15 +5528,15 @@ return (
   );
 }
 
-function Modal({ title, children, onClose, persistent = false }) {
+function Modal({ title, children, onClose, persistent = false, fullscreen = false }) {
   return (
-    <div style={styles.overlay} onClick={persistent ? undefined : onClose}>
-      <div style={styles.modal} onClick={(e) => e.stopPropagation()}>
+    <div style={fullscreen ? { ...styles.overlay, background: "rgba(0,0,0,0.1)" } : styles.overlay} onClick={persistent ? undefined : onClose}>
+      <div style={fullscreen ? { ...styles.modal, width: "100%", height: "100vh", maxHeight: "100vh", borderRadius: 0, maxWidth: "100%" } : styles.modal} onClick={(e) => e.stopPropagation()}>
         <div style={styles.modalHeader}>
           <span style={styles.modalTitle}>{title}</span>
           <button style={styles.iconBtnGhostInline} onClick={onClose}><X size={16} /></button>
         </div>
-        <div style={styles.modalBody}>{children}</div>
+        <div style={fullscreen ? { ...styles.modalBody, height: "calc(100vh - 60px)", overflowY: "auto" } : styles.modalBody}>{children}</div>
       </div>
     </div>
   );
