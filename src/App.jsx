@@ -1317,8 +1317,11 @@ function PlanningApp({ session, onSignOut }) {
       const today = new Date();
       const todayDayNum = (today.getDay() + 6) % 7; // Convert JS day (0=Sun) to our day (0=Mon)
       
+      console.log("📝 updateInstance:", { taskId, oldDay: oldTask.day, newDay: updated.day, todayDayNum, oldAssignees: oldTask.assignees, newAssignees: updated.assignees });
+      
       // ONLY notify if the changed day is TODAY
       const isChangedDayToday = oldTask.day === todayDayNum || updated.day === todayDayNum;
+      console.log("📅 isChangedDayToday?", isChangedDayToday);
       
       if (isChangedDayToday) {
         // Hvis opgave fjernes fra idag - notificér den medarbejder der havde den
