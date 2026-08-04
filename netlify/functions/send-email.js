@@ -1,24 +1,28 @@
-export default async (req, context) => {
-  console.log("📧 Function called with:", req.method);
-  
+export default async (req) => {
   if (req.method !== 'POST') {
     return new Response('Method not allowed', { status: 405 });
   }
 
   try {
-    const body = await req.json();
-    console.log("📥 Request body:", body);
+    // Parse body from string
+    let body;
+    if (typeof req.body === 'string') {
+      body = JSON.parse(req.body);
+    } else {
+      body = req.body;
+    }
+
+    console.log("📥 Body:", body);
     
     const { email, name, subject, html } = body;
     const brevoKey = process.env.VITE_BREVO_API_KEY;
 
+    console.log("🔑 Key exists:", !!brevoKey);
+
     if (!brevoKey) {
-      console.error("❌ VITE_BREVO_API_KEY not configured");
-      return new Response(JSON.stringify({ error: 'BREVO_API_KEY not configured' }), { status: 500 });
+      return new Response(JSON.stringify({ error: 'API key missing' }), { status: 500 });
     }
 
-    console.log("📤 Sending email to:", email);
-    
     const response = await fetch('https://api.brevo.com/v3/smtp/email', {
       method: 'POST',
       headers: {
@@ -32,17 +36,14 @@ export default async (req, context) => {
       })
     });
 
-    console.log("📥 Brevo response:", response.status);
-
     if (response.ok || response.status === 201) {
       return new Response(JSON.stringify({ success: true }), { status: 200 });
     } else {
       const error = await response.json();
-      console.error("❌ Brevo error:", error);
       return new Response(JSON.stringify({ error }), { status: response.status });
     }
   } catch (error) {
-    console.error('❌ Function error:', error.message);
-    return new Response(JSON.stringify({ error: error.message }), { status: 500 });
+    console.error('Error:', error);
+    return new Response(JSON.stringify({ error: error.toString() }), { status: 500 });
   }
 };
