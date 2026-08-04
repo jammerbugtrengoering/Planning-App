@@ -1213,7 +1213,7 @@ function PlanningApp({ session, onSignOut }) {
       const others = prev.filter((t) => !(t.week === weekOffset && t.year === weekYear) && !overdueIds.has(t.id));
 
       const before = [...thisWeek, ...overdueForRun].filter((t) => !(t.assignees && t.assignees.length)).length;
-      const scheduledBatch = scheduleWeek([...thisWeek, ...overdueForRun], employees, true, areas, employeeAreas); // kun markerede
+      const scheduledBatch = scheduleWeek([...thisWeek, ...overdueForRun], employees, false, areas, employeeAreas); // alle ikke-tildelte der passer
       const still = scheduledBatch.filter((t) => !(t.assignees && t.assignees.length)).length;
 
       const after = scheduledBatch.map((t) => {
@@ -1248,7 +1248,7 @@ function PlanningApp({ session, onSignOut }) {
         const thisWeek = result.filter((t) => t.week === wk && t.year === wy);
         const others = result.filter((t) => !(t.week === wk && t.year === wy));
         const before = thisWeek.filter((t) => !(t.assignees && t.assignees.length)).length;
-        const after = scheduleWeek(thisWeek, employees, true, areas, employeeAreas);
+        const after = scheduleWeek(thisWeek, employees, false, areas, employeeAreas);
         const still = after.filter((t) => !(t.assignees && t.assignees.length)).length;
         totalBefore += before;
         totalStill += still;
