@@ -1331,8 +1331,16 @@ function PlanningApp({ session, onSignOut }) {
       console.log("📅 isChangedDayToday?", isChangedDayToday);
       
       if (isChangedDayToday) {
+        console.log("✅ isChangedDayToday is TRUE - checking conditions...");
+        
         // Hvis opgave fjernes fra idag - notificér den medarbejder der havde den
-        if (oldDayNum === todayDayNum && oldTask.assignees?.length > 0 && (!updated.assignees?.length || newDayNum !== oldDayNum)) {
+        const cond1a = oldDayNum === todayDayNum;
+        const cond1b = oldTask.assignees?.length > 0;
+        const cond1c = !updated.assignees?.length || newDayNum !== oldDayNum;
+        console.log("Condition 1 (removed):", { cond1a, cond1b, cond1c, combined: cond1a && cond1b && cond1c });
+        
+        if (cond1a && cond1b && cond1c) {
+          console.log("✉️ REMOVED: Notifying", oldTask.assignees[0]);
           const emp = employees.find(e => e.id === oldTask.assignees[0]);
           if (emp?.email) {
             notifyEmployeeOfChanges(emp.email, emp.name, oldTask.title, `Opgave fjernet fra din dagsplan`).catch(e => console.error("Email failed:", e));
@@ -1340,7 +1348,13 @@ function PlanningApp({ session, onSignOut }) {
         }
         
         // Hvis opgave tilføjes til idag - notificér den medarbejder der får den
-        if (newDayNum === todayDayNum && updated.assignees?.length > 0 && (!oldTask.assignees?.length || oldDayNum !== newDayNum)) {
+        const cond2a = newDayNum === todayDayNum;
+        const cond2b = updated.assignees?.length > 0;
+        const cond2c = !oldTask.assignees?.length || oldDayNum !== newDayNum;
+        console.log("Condition 2 (added):", { cond2a, cond2b, cond2c, combined: cond2a && cond2b && cond2c });
+        
+        if (cond2a && cond2b && cond2c) {
+          console.log("✉️ ADDED: Notifying", updated.assignees[0]);
           const emp = employees.find(e => e.id === updated.assignees[0]);
           if (emp?.email) {
             notifyEmployeeOfChanges(emp.email, emp.name, updated.title, `Ny opgave på din dagsplan`).catch(e => console.error("Email failed:", e));
