@@ -1345,8 +1345,14 @@ function PlanningApp({ session, onSignOut }) {
         if (newDayNum === todayDayNum && updated.assignees?.length > 0 && (!oldTask.assignees?.length || oldDayNum !== newDayNum)) {
           console.log("📧 ADDING: Calling notifyEmployeeOfChanges");
           const emp = employees.find(e => e.id === updated.assignees[0]);
+          console.log("📧 Found employee:", emp);
           if (emp?.email?.trim()) {
-            notifyEmployeeOfChanges(emp.email.trim(), emp.name, updated.title, `Ny opgave på din dagsplan`).catch(e => console.error("Email failed:", e));
+            console.log("📧 About to call notifyEmployeeOfChanges");
+            notifyEmployeeOfChanges(emp.email.trim(), emp.name, updated.title, `Ny opgave på din dagsplan`)
+              .then(result => console.log("✅ Notify result:", result))
+              .catch(e => console.error("❌ Notify error:", e));
+          } else {
+            console.log("❌ No email found for employee");
           }
         }
       }
