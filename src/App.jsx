@@ -2230,6 +2230,18 @@ function EmployeeAppView({ employees, instances, onLogMinutes, onSetStatus, onTo
 
 // ---------- Week view ----------
 function WeekView({ employees, instances, unplaced, onAdd, onAuto, onAutoAllWeeks, onPlace, onUnplace, onRemoveAssignee, onDelete, onOpenTask, onToggleInclude, onEditEmp, dragId, setDragId, weekLabel, weekNo, weekOffset, weekYear, onPrevWeek, onNextWeek, onTodayWeek, travelSettings, onOpenTravelSettings, currentIsoWeek, areas, employeeAreas, onOpenAddBlock }) {
+  const handleScheduleWeek = () => {
+    console.log("Schedule week clicked, onAuto type:", typeof onAuto);
+    if (typeof onAuto === 'function') onAuto();
+    else alert("onAuto not available");
+  };
+
+  const handleScheduleAllWeeks = () => {
+    console.log("Schedule all weeks clicked, onAutoAllWeeks type:", typeof onAutoAllWeeks);
+    if (typeof onAutoAllWeeks === 'function') onAutoAllWeeks();
+    else alert("onAutoAllWeeks not available");
+  };
+
   const [addMenuTaskId, setAddMenuTaskId] = useState(null);
   const [showWeekend, setShowWeekend] = useState(false);
   const [selectedAreaId, setSelectedAreaId] = useState("all"); // "all" eller area.id
