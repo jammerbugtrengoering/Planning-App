@@ -1226,8 +1226,10 @@ function PlanningApp({ session, onSignOut }) {
         }
         return rest;
       });
-      after.filter((t) => overdueIds.has(t.id) && t.assignees && t.assignees.length).forEach(syncInstance);
-
+      
+      // Sync alle instances der blev planlagt (assignees ændret)
+      syncHealedAssignments([...thisWeek, ...overdueForRun], after);
+      
       notify(before - still > 0 ? `${before - still} opgave(r) planlagt automatisk` : "Ingen markerede opgaver til planlægning");
       return [...others, ...after];
     });
@@ -1252,6 +1254,10 @@ function PlanningApp({ session, onSignOut }) {
         const still = after.filter((t) => !(t.assignees && t.assignees.length)).length;
         totalBefore += before;
         totalStill += still;
+        
+        // Sync instances der blev planlagt denne uge
+        syncHealedAssignments(thisWeek, after);
+        
         result = [...others, ...after];
       });
       notify(totalBefore - totalStill > 0 ? `${totalBefore - totalStill} opgave(r) planlagt automatisk på tværs af alle uger` : "Ingen markerede opgaver til planlægning");
