@@ -1310,50 +1310,32 @@ function PlanningApp({ session, onSignOut }) {
   }
 
   function updateInstance(taskId, updater) {
-    setInstances((prev) => prev.map((t) => {
-      if (t.id !== taskId) return t;
-      
-      const oldTask = t;
-      const updated = updater(t);
-      
-      // Find today's day number (0=Monday, 4=Friday)
-      const today = new Date();
-      const todayDayNum = (today.getDay() + 6) % 7; // Convert JS day (0=Sun) to our day (0=Mon)
-      
-      // Convert day strings to numbers for comparison
-      const oldDayNum = typeof oldTask.day === 'string' ? DAY_STRING_TO_NUM[oldTask.day] : oldTask.day;
-      const newDayNum = typeof updated.day === 'string' ? DAY_STRING_TO_NUM[updated.day] : updated.day;
-      
-      
-      // ONLY notify if the changed day is TODAY
-      const isChangedDayToday = oldDayNum === todayDayNum || newDayNum === todayDayNum;
-      
-      if (isChangedDayToday) {
+    setInstances((prev) => {
+      const newInstances = prev.map((t) => {
+        if (t.id !== taskId) return t;
         
-        // Hvis opgave fjernes fra idag - notificér den medarbejder der havde den
-        if (oldDayNum === todayDayNum && oldTask.assignees?.length > 0 && (!updated.assignees?.length || newDayNum !== oldDayNum)) {
-          const emp = employees.find(e => e.id === oldTask.assignees[0]);
-          if (emp?.app_email?.trim()) {
-            notifyEmployeeOfChanges(emp.app_email.trim(), emp.name, oldTask.title, `Opgave fjernet fra din dagsplan`).catch(e => console.error("Email failed:", e));
-          }
+        const oldTask = t;
+        const updated = updater(t);
+        
+        // If title changed, sync to all instances of same task
+        if (oldTask.title !== updated.title) {
+          return prev.map(inst => {
+            if (inst.title === oldTask.title) {
+              return { ...inst, title: updated.title };
+            }
+            return inst;
+          });
         }
         
-        // Hvis opgave tilføjes til idag - notificér den medarbejder der får den
-        if (newDayNum === todayDayNum && updated.assignees?.length > 0 && (!oldTask.assignees?.length || oldDayNum !== newDayNum)) {
-          const emp = employees.find(e => e.id === updated.assignees[0]);
-          if (emp?.app_email?.trim()) {
-              notifyEmployeeOfChanges(emp.app_email.trim(), emp.name, updated.title, `Ny opgave på din dagsplan`)
-              .then(result => console.log("✅ Notify result:", result))
-              .catch(e => console.error("❌ Notify error:", e));
-          } else {
-            console.log("❌ No email found for employee");
-          }
-        }
-      }
+        return updated;
+      }).flat();
       
-      syncInstance(updated);
-      return updated;
-    }));
+      // Sync the main updated instance
+      const updated = newInstances.find(t => t.id === taskId);
+      if (updated) syncInstance(updated);
+      
+      return newInstances;
+    });
   }
 
   // Opdaterer kontrakttype for hele aftalen (alle forekomster af samme skabelon),
