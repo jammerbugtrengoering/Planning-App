@@ -1213,7 +1213,7 @@ function PlanningApp({ session, onSignOut }) {
       const others = prev.filter((t) => !(t.week === weekOffset && t.year === weekYear) && !overdueIds.has(t.id));
 
       const before = [...thisWeek, ...overdueForRun].filter((t) => !(t.assignees && t.assignees.length)).length;
-      const scheduledBatch = scheduleWeek([...thisWeek, ...overdueForRun], employees, false, areas, employeeAreas); // alle ikke-tildelte der passer
+      const scheduledBatch = scheduleWeek([...thisWeek, ...overdueForRun], employees, true, areas, employeeAreas); // kun markerede
       const still = scheduledBatch.filter((t) => !(t.assignees && t.assignees.length)).length;
 
       const after = scheduledBatch.map((t) => {
@@ -1226,14 +1226,9 @@ function PlanningApp({ session, onSignOut }) {
         }
         return rest;
       });
-      
+      after.filter((t) => overdueIds.has(t.id) && t.assignees && t.assignees.length).forEach(syncInstance);
+
       notify(before - still > 0 ? `${before - still} opgave(r) planlagt automatisk` : "Ingen markerede opgaver til planlægning");
-      
-      // Gem ændringer efter state update (async)
-      setTimeout(() => {
-        syncHealedAssignments([...thisWeek, ...overdueForRun], after);
-      }, 0);
-      
       return [...others, ...after];
     });
   }
@@ -1253,11 +1248,10 @@ function PlanningApp({ session, onSignOut }) {
         const thisWeek = result.filter((t) => t.week === wk && t.year === wy);
         const others = result.filter((t) => !(t.week === wk && t.year === wy));
         const before = thisWeek.filter((t) => !(t.assignees && t.assignees.length)).length;
-        const after = scheduleWeek(thisWeek, employees, false, areas, employeeAreas);
+        const after = scheduleWeek(thisWeek, employees, true, areas, employeeAreas);
         const still = after.filter((t) => !(t.assignees && t.assignees.length)).length;
         totalBefore += before;
         totalStill += still;
-        
         result = [...others, ...after];
       });
       notify(totalBefore - totalStill > 0 ? `${totalBefore - totalStill} opgave(r) planlagt automatisk på tværs af alle uger` : "Ingen markerede opgaver til planlægning");
