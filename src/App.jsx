@@ -537,6 +537,7 @@ function statusColor(s) { return { planlagt: "#9C1B5D", udført: "#111111", unsc
 const DAY_STRING_TO_NUM = { Mon: 0, Tue: 1, Wed: 2, Thu: 3, Fri: 4 };
 
 export default function App() {
+  // v2 - Fixed dayStringToNum
   // ── Auth ──
   const [session, setSession] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
