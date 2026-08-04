@@ -1336,8 +1336,8 @@ function PlanningApp({ session, onSignOut }) {
         if (oldDayNum === todayDayNum && oldTask.assignees?.length > 0 && (!updated.assignees?.length || newDayNum !== oldDayNum)) {
           console.log("📧 REMOVING: Calling notifyEmployeeOfChanges");
           const emp = employees.find(e => e.id === oldTask.assignees[0]);
-          if (emp?.email?.trim()) {
-            notifyEmployeeOfChanges(emp.email.trim(), emp.name, oldTask.title, `Opgave fjernet fra din dagsplan`).catch(e => console.error("Email failed:", e));
+          if (emp?.app_email?.trim()) {
+            notifyEmployeeOfChanges(emp.app_email.trim(), emp.name, oldTask.title, `Opgave fjernet fra din dagsplan`).catch(e => console.error("Email failed:", e));
           }
         }
         
@@ -1346,9 +1346,9 @@ function PlanningApp({ session, onSignOut }) {
           console.log("📧 ADDING: Calling notifyEmployeeOfChanges");
           const emp = employees.find(e => e.id === updated.assignees[0]);
           console.log("📧 Found employee:", emp);
-          if (emp?.email?.trim()) {
+          if (emp?.app_email?.trim()) {
             console.log("📧 About to call notifyEmployeeOfChanges");
-            notifyEmployeeOfChanges(emp.email.trim(), emp.name, updated.title, `Ny opgave på din dagsplan`)
+            notifyEmployeeOfChanges(emp.app_email.trim(), emp.name, updated.title, `Ny opgave på din dagsplan`)
               .then(result => console.log("✅ Notify result:", result))
               .catch(e => console.error("❌ Notify error:", e));
           } else {
