@@ -1959,7 +1959,7 @@ function PlanningApp({ session, onSignOut }) {
         <SkillsView supabase={supabase} skills={skills} onSkillsChange={setSkills} />
       )}
 
-      {showAddTask && <TaskModal onClose={() => { setShowAddTask(false); setCopyPayload(null); }} onSave={addTask} checklistTemplates={checklistTemplates} skills={skills} copyFrom={copyPayload} />}
+      {showAddTask && <TaskModal onClose={() => { setShowAddTask(false); setCopyPayload(null); }} onSave={addTask} checklistTemplates={checklistTemplates} skills={skills} copyFrom={copyPayload} employees={employees} />}
       {showAddEmp && <EmployeeModal emp={editEmp} onClose={() => { setShowAddEmp(false); setEditEmp(null); }} onSave={saveEmployee} skills={skills} />}
       {showAddBlock && <BlockModal employees={employees} onClose={() => setShowAddBlock(false)} onSave={addBlock} />}
       {showTravelSettings && (
@@ -3781,7 +3781,7 @@ function ReportsView({ instances, pricing, budgets, onSaveBudget, isAdminUser })
 }
 
 // ---------- Modals ----------
-function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom }) {
+function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, employees }) {
   // Kopiering af en ældre "flexible"-type opgave (nu nedlagt) skal falde
   // tilbage til "adhoc" ("Fleksibel"), da den type ikke længere findes i
   // CREATABLE_TYPES og derfor ikke kan vælges via knapperne nedenfor. En helt
