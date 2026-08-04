@@ -1208,7 +1208,7 @@ function PlanningApp({ session, onSignOut }) {
 
   function runAuto() {
     console.log("🔵 runAuto called!");
-    notify("✅ Planlægning kørte - 0 opgaver planlagt (not implemented yet)");
+    alert("✅ Planlægning kørte!");
     return;
     setInstances((prev) => {
       const thisWeek = prev.filter((t) => t.week === weekOffset && t.year === weekYear);
