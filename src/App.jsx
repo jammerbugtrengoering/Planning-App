@@ -1332,7 +1332,7 @@ function PlanningApp({ session, onSignOut }) {
       
       if (isChangedDayToday) {
         // Hvis opgave fjernes fra idag - notificér den medarbejder der havde den
-        if (oldDayNum === todayDayNum && oldTask.assignees?.length > 0 && (!updated.assignees?.length || updated.day !== oldTask.day)) {
+        if (oldDayNum === todayDayNum && oldTask.assignees?.length > 0 && (!updated.assignees?.length || newDayNum !== oldDayNum)) {
           const emp = employees.find(e => e.id === oldTask.assignees[0]);
           if (emp?.email) {
             notifyEmployeeOfChanges(emp.email, emp.name, oldTask.title, `Opgave fjernet fra din dagsplan`).catch(e => console.error("Email failed:", e));
@@ -1340,7 +1340,7 @@ function PlanningApp({ session, onSignOut }) {
         }
         
         // Hvis opgave tilføjes til idag - notificér den medarbejder der får den
-        if (newDayNum === todayDayNum && updated.assignees?.length > 0 && (!oldTask.assignees?.length || oldTask.day !== updated.day)) {
+        if (newDayNum === todayDayNum && updated.assignees?.length > 0 && (!oldTask.assignees?.length || oldDayNum !== newDayNum)) {
           const emp = employees.find(e => e.id === updated.assignees[0]);
           if (emp?.email) {
             notifyEmployeeOfChanges(emp.email, emp.name, updated.title, `Ny opgave på din dagsplan`).catch(e => console.error("Email failed:", e));
