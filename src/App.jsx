@@ -2245,9 +2245,17 @@ function WeekView({ employees, instances, unplaced, onAdd, onAuto, onAutoAllWeek
             result.updates.forEach(u => {
               (async () => {
                 await supabase.from("instances").update({ assignees: u.assignees, status: u.status }).eq("id", u.id);
+                
+                // Auto-notify assigned employee
+                if (u.assignees && u.assignees.length > 0) {
+                  const emp = employees.find(e => e.id === u.assignees[0]);
+                  if (emp?.email) {
+                    await notifyEmployeeOfChanges(emp.email, emp.name, u.title || "Opgave", "Planlagt");
+                  }
+                }
               })();
             });
-            alert(`✅ ${result.count} opgave(r) planlagt til: ${result.employees.join(", ")}`);
+            alert(`✅ ${result.count} opgave(r) planlagt til: ${result.employees.join(", ")} - Emails sendt!`);
           }
         }}><Wand2 size={16} /> Planlæg</button>
         <button style={styles.secondaryBtn} onClick={onOpenTravelSettings}><Car size={16} /> Transporttid</button>
