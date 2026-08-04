@@ -4,8 +4,7 @@ export default async (req, context) => {
         }
 
           const { email, name, subject, html } = await req.json();
-            const brevoKey = context.env.VITE_BREVO_API_KEY;
-
+  const brevoKey = process.env.VITE_BREVO_API_KEY;
               if (!brevoKey) {
                   return new Response(JSON.stringify({ error: 'BREVO_API_KEY not configured' }), { status: 500 });
                     }
