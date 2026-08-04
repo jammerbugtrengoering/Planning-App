@@ -1207,8 +1207,11 @@ function PlanningApp({ session, onSignOut }) {
   }
 
   function runAuto() {
+    console.log("🔵 runAuto START - weekOffset:", weekOffset, "weekYear:", weekYear);
     setInstances((prev) => {
+      console.log("📊 Total instances:", prev.length);
       const thisWeek = prev.filter((t) => t.week === weekOffset && t.year === weekYear);
+      console.log("📋 This week instances:", thisWeek.length);
 
       // Forsinkede opgaver: ikke-tildelte opgaver fra en TIDLIGERE uge end den
       // man kigger på, som er markeret til auto-planlægning. De nåede ikke at
@@ -1229,6 +1232,7 @@ function PlanningApp({ session, onSignOut }) {
       const before = [...thisWeek, ...overdueForRun].filter((t) => !(t.assignees && t.assignees.length)).length;
       const scheduledBatch = scheduleWeek([...thisWeek, ...overdueForRun], employees, true, areas, employeeAreas); // kun markerede
       const still = scheduledBatch.filter((t) => !(t.assignees && t.assignees.length)).length;
+      console.log("✅ Scheduled batch - before:", before, "still:", still, "scheduled:", before - still);
 
       const after = scheduledBatch.map((t) => {
         const { _forceWindow, ...rest } = t;
