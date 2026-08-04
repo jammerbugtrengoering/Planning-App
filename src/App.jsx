@@ -1316,35 +1316,21 @@ function PlanningApp({ session, onSignOut }) {
       // Find today's day number (0=Monday, 4=Friday)
       const today = new Date();
       const todayDayNum = (today.getDay() + 6) % 7; // Convert JS day (0=Sun) to our day (0=Mon)
-      const todayWeek = Math.ceil((today.getDate() - today.getDay() + 4) / 7);
-      const todayYear = today.getFullYear();
       
       // ONLY notify if the changed day is TODAY
       const isChangedDayToday = oldTask.day === todayDayNum || updated.day === todayDayNum;
       
       if (isChangedDayToday) {
-        // Check hvis opgaven bliver fjernet fra dag
-        if (oldTask.day !== undefined && oldTask.assignees?.length > 0 && (!updated.assignees?.length || updated.day !== oldTask.day)) {
-          // Notificér alle medarbejdere som har opgaver på den dag (idag)
-          const dayTasks = prev.filter(task => task.day === oldTask.day && task.week === todayWeek && task.year === todayYear);
-          const employeesOnDay = new Set();
-          dayTasks.forEach(task => {
-            if (task.assignees?.length > 0) {
-              task.assignees.forEach(empId => {
-                const emp = employees.find(e => e.id === empId);
-                if (emp?.email) employeesOnDay.add(JSON.stringify({ email: emp.email, name: emp.name }));
-              });
-            }
-          });
-          
-          employeesOnDay.forEach(empStr => {
-            const emp = JSON.parse(empStr);
-            notifyEmployeeOfChanges(emp.email, emp.name, oldTask.title, `Din dagsplan er ændret`).catch(e => console.error("Email failed:", e));
-          });
+        // Hvis opgave fjernes fra idag - notificér den medarbejder der havde den
+        if (oldTask.day === todayDayNum && oldTask.assignees?.length > 0 && (!updated.assignees?.length || updated.day !== oldTask.day)) {
+          const emp = employees.find(e => e.id === oldTask.assignees[0]);
+          if (emp?.email) {
+            notifyEmployeeOfChanges(emp.email, emp.name, oldTask.title, `Opgave fjernet fra din dagsplan`).catch(e => console.error("Email failed:", e));
+          }
         }
         
-        // Check hvis opgaven bliver tilføjet til dag (idag)
-        if (updated.day !== undefined && updated.day === todayDayNum && updated.assignees?.length > 0 && (!oldTask.assignees?.length || oldTask.day !== updated.day)) {
+        // Hvis opgave tilføjes til idag - notificér den medarbejder der får den
+        if (updated.day === todayDayNum && updated.assignees?.length > 0 && (!oldTask.assignees?.length || oldTask.day !== updated.day)) {
           const emp = employees.find(e => e.id === updated.assignees[0]);
           if (emp?.email) {
             notifyEmployeeOfChanges(emp.email, emp.name, updated.title, `Ny opgave på din dagsplan`).catch(e => console.error("Email failed:", e));
