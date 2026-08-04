@@ -304,13 +304,31 @@ function scheduleWeek(weekInstances, employees, autoOnly = false, areas = [], em
     // Opgaver markeret med _forceWindow (forsinkede opgaver fra en tidligere
     // uge, der genoptages i den viste uge) skal søges hen over en dag-window
     // ligesom fleksible opgaver, i stedet for at blive tvunget ind på deres
-    // oprindelige (allerede passerede) dag — håndteres i loopet nedenfor.
+    // oprindelige (allerede passerede) dag — håndteles i loopet nedenfor.
     if ((t.assignees && t.assignees.length) || !t.day || t.type === "flexible" || t._forceWindow) return;
     if (autoOnly && !t.includeInAuto) return;
     // Rør aldrig ved en instans der ikke er i den udtrykkelige "skal planlægges"-liste —
     // det forhindrer at eksisterende opgaver, som planlæggeren bevidst har sat til
     // "ikke tildelt", bliver auto-tildelt igen ved næste visning af ugen.
     if (restrictToIds && !restrictToIds.has(t.id)) return;
+    
+    // Hvis medarbejder er eksplicit tildelt: ignorér kompetence- og tidsbegrænsninger
+    if (t.assigned_employee_id) {
+      const assignedEmp = employees.find((e) => e.id === t.assigned_employee_id);
+      if (!assignedEmp) { t.warning = "emp_not_found"; return; }
+      if (isBlocked(assignedEmp.id, t.day)) { t.warning = "emp_blocked"; return; }
+      if (t.scheduledTime && hasTimeConflict(assignedEmp.id, t.day, t)) { t.warning = "time_conflict"; return; }
+      
+      // Planlæg med tildelt medarbejder, men markér hvis mangler kompetencer
+      const { candidates } = candidatesFor(t, employees, areas, employeeAreas);
+      const hasSkills = candidates.some((c) => c.id === assignedEmp.id);
+      
+      t.assignees = [assignedEmp.id];
+      t.status = "planlagt";
+      t.warning = hasSkills ? null : "incompetence"; // Mangler kompetencer
+      return;
+    }
+    
     const { candidates: allCandidates, outsideArea } = candidatesFor(t, employees, areas, employeeAreas);
     const candidates = allCandidates.filter((e) => !isBlocked(e.id, t.day));
     if (candidates.length === 0) { t.warning = "no_skill"; return; }
@@ -335,9 +353,38 @@ function scheduleWeek(weekInstances, employees, autoOnly = false, areas = [], em
     if ((t.assignees && t.assignees.length) || (t.day && !t._forceWindow)) return;
     if (autoOnly && !t.includeInAuto) return;
     if (restrictToIds && !restrictToIds.has(t.id)) return;
-    // _forceWindow (array af dag-nøgler) styrer et forsinket-opgave-genoptag:
-    // søg kun blandt de dage, der er angivet (typisk i dag og frem), i stedet
-    // for det normale deadline-vindue for rigtige fleksible opgaver.
+    
+    // Hvis medarbejder er eksplicit tildelt: ignorér kompetence- og tidsbegrænsninger
+    if (t.assigned_employee_id) {
+      const assignedEmp = employees.find((e) => e.id === t.assigned_employee_id);
+      if (!assignedEmp) { t.warning = "emp_not_found"; return; }
+      
+      // Find første ledig dag i deadline-vinduet (eller force-window)
+      const deadlineIdx = DAYS.findIndex((d) => d.key === (t.deadline || "Fri"));
+      const window = t._forceWindow ? DAYS.filter((d) => t._forceWindow.includes(d.key)) : DAYS.slice(0, deadlineIdx + 1);
+      
+      let bestDay = null;
+      for (const d of window) {
+        if (!isBlocked(assignedEmp.id, d.key) && !(t.scheduledTime && hasTimeConflict(assignedEmp.id, d.key, t))) {
+          bestDay = d.key;
+          break;
+        }
+      }
+      
+      if (!bestDay) { t.warning = "no_available_day"; return; }
+      
+      // Markér hvis medarbejder mangler kompetencer
+      const { candidates } = candidatesFor(t, employees, areas, employeeAreas);
+      const hasSkills = candidates.some((c) => c.id === assignedEmp.id);
+      
+      t.day = bestDay;
+      t.assignees = [assignedEmp.id];
+      t.status = "planlagt";
+      t.warning = hasSkills ? null : "incompetence"; // Mangler kompetencer
+      if (t._forceWindow) { t.offSchedule = true; t.onSchedule = false; }
+      return;
+    }
+    
     const deadlineIdx = DAYS.findIndex((d) => d.key === (t.deadline || "Fri"));
     const window = t._forceWindow ? DAYS.filter((d) => t._forceWindow.includes(d.key)) : DAYS.slice(0, deadlineIdx + 1);
     const { candidates, outsideArea } = candidatesFor(t, employees, areas, employeeAreas);
