@@ -2192,6 +2192,8 @@ function EmployeeAppView({ employees, instances, onLogMinutes, onSetStatus, onTo
 // ---------- Week view ----------
 // Send email notification to employee about day changes
 async function notifyEmployeeOfChanges(employeeEmail, employeeName, taskTitle, dayName) {
+  console.log("📧 notifyEmployeeOfChanges called:", { employeeEmail, employeeName, taskTitle, dayName });
+  
   const mailData = {
     to: [{ email: employeeEmail, name: employeeName }],
     subject: `Ændring i din dagsplan - ${dayName}`,
@@ -2205,19 +2207,22 @@ async function notifyEmployeeOfChanges(employeeEmail, employeeName, taskTitle, d
   };
   
   try {
+    console.log("📤 Calling Edge Function with:", mailData);
     const response = await supabase.functions.invoke('send-email', {
       body: mailData
     });
     
-    if (response.ok) {
+    console.log("📥 Edge Function response:", response);
+    
+    if (response.data?.success || response.status === 200) {
       console.log('✅ Email sent to', employeeEmail);
       return true;
     } else {
-      console.error('❌ Failed to send email');
+      console.error('❌ Failed to send email:', response);
       return false;
     }
   } catch (error) {
-    console.error('Email error:', error);
+    console.error('❌ Email error:', error);
     return false;
   }
 }
