@@ -2246,7 +2246,7 @@ function WeekView({ employees, instances, unplaced, onAdd, onAuto, onAutoAllWeek
     <div style={styles.page}>
       <div style={styles.toolbar}>
         <button style={styles.primaryBtn} onClick={onAdd}><Plus size={16} /> Ny opgave</button>
-        <button style={styles.secondaryBtn} onClick={onAuto}><Wand2 size={16} /> Planlæg</button>
+        <button style={styles.secondaryBtn} onClick={() => { alert("Direct onClick works!"); if(onAuto) { onAuto(); } else { alert("onAuto is undefined!"); } }}><Wand2 size={16} /> Planlæg</button>
         <button style={styles.secondaryBtn} onClick={onAutoAllWeeks}><Wand2 size={16} /> Planlæg alle</button>
         <button style={styles.secondaryBtn} onClick={onOpenTravelSettings}><Car size={16} /> Transporttid</button>
         <button style={{ ...styles.secondaryBtn, color: "#B91C1C", borderColor: "#FECACA" }} onClick={onOpenAddBlock}><Thermometer size={16} /> Sygdom/Ferie</button>
