@@ -536,6 +536,45 @@ function statusColor(s) { return { planlagt: "#9C1B5D", udført: "#111111", unsc
 // Map day strings to numbers (0=Mon, 1=Tue, 2=Wed, 3=Thu, 4=Fri)
 const DAY_STRING_TO_NUM = { Mon: 0, Tue: 1, Wed: 2, Thu: 3, Fri: 4 };
 
+// Send email notification via Supabase Edge Function
+async function notifyEmployeeOfChanges(employeeEmail, employeeName, taskTitle, changeType) {
+  try {
+    const response = await fetch(
+      'https://gteowfoahsfpunzgdxum.supabase.co/functions/v1/send-email',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${supabaseClient.auth.session?.access_token || ''}`,
+        },
+        body: JSON.stringify({
+          email: employeeEmail,
+          name: employeeName,
+          subject: `Ændring i din dagsplan - ${changeType}`,
+          html: `
+            <h2>Hej ${employeeName},</h2>
+            <p>${changeType}</p>
+            <p>Opgave: <strong>${taskTitle}</strong></p>
+            <p>Tjek venligst din dagsplan i Rengøringsplan for at se detaljerne.</p>
+            <p>Med venlig hilsen,<br/>Jammerbugt Rengøring</p>
+          `
+        })
+      }
+    );
+
+    if (response.ok) {
+      console.log('✅ Email sent to', employeeEmail);
+      return true;
+    } else {
+      console.error('❌ Email error:', await response.json());
+      return false;
+    }
+  } catch (error) {
+    console.error('❌ Email error:', error);
+    return false;
+  }
+}
+
 export default function App() {
   // ── Auth ──
   const [session, setSession] = useState(null);
@@ -1316,6 +1355,21 @@ function PlanningApp({ session, onSignOut }) {
         
         const oldTask = t;
         const updated = updater(t);
+        
+        // Check if today is affected
+        const today = new Date();
+        const todayDayNum = (today.getDay() + 6) % 7;
+        
+        const oldDayNum = typeof oldTask.day === 'string' ? DAY_STRING_TO_NUM[oldTask.day] : oldTask.day;
+        const newDayNum = typeof updated.day === 'string' ? DAY_STRING_TO_NUM[updated.day] : updated.day;
+        
+        // Send email if task assigned to today
+        if (newDayNum === todayDayNum && updated.assignees?.length > 0 && (!oldTask.assignees?.length || oldDayNum !== newDayNum)) {
+          const emp = employees.find(e => e.id === updated.assignees[0]);
+          if (emp?.app_email?.trim()) {
+            notifyEmployeeOfChanges(emp.app_email.trim(), emp.name, updated.title, '✅ Ny opgave på din dagsplan').catch(e => console.error("Notify error:", e));
+          }
+        }
         
         // If title changed, sync to all instances of same task
         if (oldTask.title !== updated.title) {
