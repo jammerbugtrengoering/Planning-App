@@ -3823,6 +3823,7 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom }) {
   // eller netop oprettet der) — bruges til at undlade at foreslå "Send til Dinero"
   // for en kunde der allerede findes derinde.
   const [customerDineroSynced, setCustomerDineroSynced] = useState(!!copyFrom?.dineroSynced);
+  const [assignedEmployeeId, setAssignedEmployeeId] = useState(copyFrom?.assigned_employee_id || "");
 
   const [dineroAvailable, setDineroAvailable] = useState(true);
 
@@ -4012,6 +4013,11 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom }) {
 
       <label style={styles.label}>Adresse for udførsel</label>
       <input style={styles.input} value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Vejnavn 1, 9000 Aalborg" />
+      <label style={styles.label}>Ansvarlig Medarbejder (valgfrit)</label>
+      <select style={styles.input} value={assignedEmployeeId} onChange={(e) => setAssignedEmployeeId(e.target.value)}>
+        <option value="">- Ingen (auto-matching) -</option>
+        {employees?.map(emp => <option key={emp.id} value={emp.id}>{emp.name}</option>)}
+      </select>
 
       <label style={styles.label}>PO-nummer til fakturering (valgfrit)</label>
       <input style={styles.input} value={poNumber} onChange={(e) => setPoNumber(e.target.value)} placeholder="F.eks. PO-2026-0311" />
@@ -4113,7 +4119,7 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom }) {
         <button
           style={styles.primaryBtn}
           disabled={!title.trim() || (type === "fixed" && days.length === 0) || requiredSkills.length === 0}
-          onClick={() => onSave({ type, contractType, title: title.trim(), requiredSkills, duration, days, dayTimes, day, adhocDate, deadline, preferredTime, startDate, expiryDate, checklistTemplateIds, extraItems, videoUrl: videoUrl.trim(), customerName: customerName.trim(), address: address.trim(), poNumber: poNumber.trim(), accessInstructions: accessInstructions.trim(), dineroSynced: customerDineroSynced })}
+          onClick={() => onSave({ type, contractType, title: title.trim(), requiredSkills, duration, days, dayTimes, day, adhocDate, deadline, preferredTime, startDate, expiryDate, checklistTemplateIds, extraItems, videoUrl: videoUrl.trim(), customerName: customerName.trim(), address: address.trim(), poNumber: poNumber.trim(), accessInstructions: accessInstructions.trim(), dineroSynced: customerDineroSynced, assigned_employee_id: assignedEmployeeId })}
         >
           Gem og planlæg
         </button>
@@ -5726,3 +5732,4 @@ const styles = {
   checklistItemDescription: { fontSize: 11.5, color: "#64748B", fontStyle: "italic", marginBottom: 4, lineHeight: 1.4 },
   videoBtnSmall: { display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11, fontWeight: 600, color: "#111111", background: "#FCE4EF", borderRadius: 6, padding: "4px 8px", textDecoration: "none" },
 };
+
