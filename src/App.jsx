@@ -545,7 +545,6 @@ async function notifyEmployeeOfChanges(employeeEmail, employeeName, taskTitle, c
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${supabaseClient.auth.session?.access_token || ''}`,
         },
         body: JSON.stringify({
           email: employeeEmail,
