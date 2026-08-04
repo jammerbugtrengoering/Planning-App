@@ -7,6 +7,20 @@ import {
   Thermometer, Palmtree,
 } from "lucide-react";
 
+
+// DEBUGGING TEST
+window.testSchedule = () => { alert("testSchedule called!"); };
+window.testButton = () => {
+  const btn = document.querySelector('[title="Planlæg ugen automatisk"]');
+  if (btn) {
+    alert("Button FOUND! Calling click...");
+    btn.click();
+  } else {
+    alert("Button NOT FOUND in DOM");
+  }
+};
+console.log("Test functions added: window.testSchedule() and window.testButton()");
+
 // ---------- Constants ----------
 // SKILLS og customers hentes fra Supabase – se loadAll() i App-komponenten.
 // Fallback bruges kun hvis databasen ikke svarer ved første render.
