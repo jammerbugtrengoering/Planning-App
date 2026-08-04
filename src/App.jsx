@@ -2205,7 +2205,19 @@ function WeekView({ employees, instances, unplaced, onAdd, onAuto, onAutoAllWeek
     <div style={styles.page}>
       <div style={styles.toolbar}>
         <button style={styles.primaryBtn} onClick={onAdd}><Plus size={16} /> Ny opgave</button>
-        <button style={styles.secondaryBtn} onClick={onAuto}><Wand2 size={16} /> Planlæg ugen automatisk</button>
+        <button style={styles.secondaryBtn} onClick={() => {
+          const result = scheduleWeekSimple(instances, employees, weekOffset, weekYear);
+          if (result.count === 0) {
+            alert("ℹ️ Ingen uplanlagte opgaver denne uge");
+          } else {
+            result.updates.forEach(u => {
+              (async () => {
+                await supabase.from("instances").update({ assignees: u.assignees, status: u.status }).eq("id", u.id);
+              })();
+            });
+            alert(`✅ ${result.count} opgave(r) planlagt til: ${result.employees.join(", ")}`);
+          }
+        }}><Wand2 size={16} /> Planlæg denne uge</button>
         <button style={styles.secondaryBtn} onClick={onAutoAllWeeks} title="Kør automatisk planlægning for alle uger, ikke kun den du kigger på lige nu"><Wand2 size={16} /> Planlæg alle uger</button>
         <button style={styles.secondaryBtn} onClick={onOpenTravelSettings}><Car size={16} /> Transporttid</button>
         <button style={{ ...styles.secondaryBtn, color: "#B91C1C", borderColor: "#FECACA" }} onClick={onOpenAddBlock}><Thermometer size={16} /> Sygdom/Ferie</button>
