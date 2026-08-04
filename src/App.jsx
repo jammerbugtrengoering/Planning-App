@@ -533,10 +533,10 @@ function completionInfo(t, employees) {
 
 function statusColor(s) { return { planlagt: "#9C1B5D", udført: "#111111", unscheduled: "#94A3B8" }[s]; }
 
-export default function App() {
-  // Map day strings to numbers (0=Mon, 1=Tue, 2=Wed, 3=Thu, 4=Fri)
-  const dayStringToNum = { Mon: 0, Tue: 1, Wed: 2, Thu: 3, Fri: 4 };
+// Map day strings to numbers (0=Mon, 1=Tue, 2=Wed, 3=Thu, 4=Fri)
+const DAY_STRING_TO_NUM = { Mon: 0, Tue: 1, Wed: 2, Thu: 3, Fri: 4 };
 
+export default function App() {
   // ── Auth ──
   const [session, setSession] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
@@ -1321,8 +1321,8 @@ function PlanningApp({ session, onSignOut }) {
       const todayDayNum = (today.getDay() + 6) % 7; // Convert JS day (0=Sun) to our day (0=Mon)
       
       // Convert day strings to numbers for comparison
-      const oldDayNum = typeof oldTask.day === 'string' ? dayStringToNum[oldTask.day] : oldTask.day;
-      const newDayNum = typeof updated.day === 'string' ? dayStringToNum[updated.day] : updated.day;
+      const oldDayNum = typeof oldTask.day === 'string' ? DAY_STRING_TO_NUM[oldTask.day] : oldTask.day;
+      const newDayNum = typeof updated.day === 'string' ? DAY_STRING_TO_NUM[updated.day] : updated.day;
       
       
       // ONLY notify if the changed day is TODAY
