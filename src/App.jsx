@@ -7,6 +7,20 @@ import {
   Thermometer, Palmtree,
 } from "lucide-react";
 
+
+// DEBUGGING TEST
+window.testSchedule = () => { alert("testSchedule called!"); };
+window.testButton = () => {
+  const btn = document.querySelector('[title="Planlæg ugen automatisk"]');
+  if (btn) {
+    alert("Button FOUND! Calling click...");
+    btn.click();
+  } else {
+    alert("Button NOT FOUND in DOM");
+  }
+};
+console.log("Test functions added: window.testSchedule() and window.testButton()");
+
 // ---------- Constants ----------
 // SKILLS og customers hentes fra Supabase – se loadAll() i App-komponenten.
 // Fallback bruges kun hvis databasen ikke svarer ved første render.
@@ -2232,8 +2246,8 @@ function WeekView({ employees, instances, unplaced, onAdd, onAuto, onAutoAllWeek
     <div style={styles.page}>
       <div style={styles.toolbar}>
         <button style={styles.primaryBtn} onClick={onAdd}><Plus size={16} /> Ny opgave</button>
-        <button style={styles.secondaryBtn} onClick={onAuto}><Wand2 size={16} /> Planlæg ugen automatisk</button>
-        <button style={styles.secondaryBtn} onClick={onAutoAllWeeks} title="Kør automatisk planlægning for alle uger, ikke kun den du kigger på lige nu"><Wand2 size={16} /> Planlæg alle uger</button>
+        <button style={styles.secondaryBtn} onClick={handleScheduleWeek}><Wand2 size={16} /> Planlæg</button>
+        <button style={styles.secondaryBtn} onClick={handleScheduleAllWeeks}><Wand2 size={16} /> Planlæg alle</button>
         <button style={styles.secondaryBtn} onClick={onOpenTravelSettings}><Car size={16} /> Transporttid</button>
         <button style={{ ...styles.secondaryBtn, color: "#B91C1C", borderColor: "#FECACA" }} onClick={onOpenAddBlock}><Thermometer size={16} /> Sygdom/Ferie</button>
         <button
