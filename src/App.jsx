@@ -537,7 +537,6 @@ function statusColor(s) { return { planlagt: "#9C1B5D", udført: "#111111", unsc
 const DAY_STRING_TO_NUM = { Mon: 0, Tue: 1, Wed: 2, Thu: 3, Fri: 4 };
 
 export default function App() {
-  // v2 - Fixed dayStringToNum
   // ── Auth ──
   const [session, setSession] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
@@ -1325,29 +1324,23 @@ function PlanningApp({ session, onSignOut }) {
       const oldDayNum = typeof oldTask.day === 'string' ? DAY_STRING_TO_NUM[oldTask.day] : oldTask.day;
       const newDayNum = typeof updated.day === 'string' ? DAY_STRING_TO_NUM[updated.day] : updated.day;
       
-      
       // ONLY notify if the changed day is TODAY
       const isChangedDayToday = oldDayNum === todayDayNum || newDayNum === todayDayNum;
       
       if (isChangedDayToday) {
-        
         // Hvis opgave fjernes fra idag - notificér den medarbejder der havde den
-        
-        if (cond1a && cond1b && cond1c) {
+        if (oldDayNum === todayDayNum && oldTask.assignees?.length > 0 && (!updated.assignees?.length || newDayNum !== oldDayNum)) {
           const emp = employees.find(e => e.id === oldTask.assignees[0]);
-          if (emp?.email) {
-            notifyEmployeeOfChanges(emp.email, emp.name, oldTask.title, `Opgave fjernet fra din dagsplan`).catch(e => console.error("Email failed:", e));
+          if (emp?.email?.trim()) {
+            notifyEmployeeOfChanges(emp.email.trim(), emp.name, oldTask.title, `Opgave fjernet fra din dagsplan`).catch(e => console.error("Email failed:", e));
           }
         }
         
         // Hvis opgave tilføjes til idag - notificér den medarbejder der får den
-        
-        if (cond2a && cond2b && cond2c) {
-          const empId = updated.assignees[0];
-          const emp = employees.find(e => e.id === empId);
-          if (email) {
-            console.log("📧 Calling notifyEmployeeOfChanges with:", { email, name: emp.name, title: updated.title });
-            notifyEmployeeOfChanges(email, emp.name, updated.title, `Ny opgave på din dagsplan`).catch(e => console.error("Email failed:", e));
+        if (newDayNum === todayDayNum && updated.assignees?.length > 0 && (!oldTask.assignees?.length || oldDayNum !== newDayNum)) {
+          const emp = employees.find(e => e.id === updated.assignees[0]);
+          if (emp?.email?.trim()) {
+            notifyEmployeeOfChanges(emp.email.trim(), emp.name, updated.title, `Ny opgave på din dagsplan`).catch(e => console.error("Email failed:", e));
           }
         }
       }
