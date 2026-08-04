@@ -2210,50 +2210,6 @@ function EmployeeAppView({ employees, instances, onLogMinutes, onSetStatus, onTo
 
 // ---------- Week view ----------
 // Send email notification to employee about day changes
-async function notifyEmployeeOfChanges(employeeEmail, employeeName, taskTitle, dayName) {
-  console.log("📧 notifyEmployeeOfChanges called:", { employeeEmail, employeeName, taskTitle, dayName });
-  
-  const mailData = {
-    email: employeeEmail,
-    name: employeeName,
-    subject: `Ændring i din dagsplan - ${dayName}`,
-    html: `
-      <h2>Hej ${employeeName},</h2>
-      <p>Der er sket ændringer i din dagsplan for <strong>${dayName}</strong>.</p>
-      <p>Opgave: <strong>${taskTitle}</strong></p>
-      <p>Tjek venligst din dagsplan i Rengøringsplan for at se detaljerne.</p>
-      <p>Med venlig hilsen,<br/>Jammerbugt Rengøring</p>
-    `
-  };
-  
-  try {
-    console.log("📤 Calling Netlify function with:", mailData);
-    
-    // Call Netlify serverless function
-    const response = await fetch('/.netlify/functions/send-email', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(mailData)
-    });
-    
-    console.log("📥 Function response:", response);
-    
-    if (response.ok || response.status === 200) {
-      console.log('✅ Email sent to', employeeEmail);
-      return true;
-    } else {
-      const error = await response.json();
-      console.error('❌ Function error:', error);
-      return false;
-    }
-  } catch (error) {
-    console.error('❌ Email error:', error);
-    return false;
-  }
-}
-
 function scheduleWeekSimple(instances, employees, weekOffset, weekYear) {
   const thisWeek = instances.filter(t => t.week === weekOffset && t.year === weekYear);
   const unassigned = thisWeek.filter(t => !t.assignees || !t.assignees.length);
