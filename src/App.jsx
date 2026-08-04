@@ -1324,12 +1324,17 @@ function PlanningApp({ session, onSignOut }) {
       const oldDayNum = typeof oldTask.day === 'string' ? DAY_STRING_TO_NUM[oldTask.day] : oldTask.day;
       const newDayNum = typeof updated.day === 'string' ? DAY_STRING_TO_NUM[updated.day] : updated.day;
       
+      console.log("🔄 updateInstance:", { oldDayNum, newDayNum, todayDayNum });
+      
       // ONLY notify if the changed day is TODAY
       const isChangedDayToday = oldDayNum === todayDayNum || newDayNum === todayDayNum;
       
       if (isChangedDayToday) {
+        console.log("✅ isChangedDayToday TRUE");
+        
         // Hvis opgave fjernes fra idag - notificér den medarbejder der havde den
         if (oldDayNum === todayDayNum && oldTask.assignees?.length > 0 && (!updated.assignees?.length || newDayNum !== oldDayNum)) {
+          console.log("📧 REMOVING: Calling notifyEmployeeOfChanges");
           const emp = employees.find(e => e.id === oldTask.assignees[0]);
           if (emp?.email?.trim()) {
             notifyEmployeeOfChanges(emp.email.trim(), emp.name, oldTask.title, `Opgave fjernet fra din dagsplan`).catch(e => console.error("Email failed:", e));
@@ -1338,6 +1343,7 @@ function PlanningApp({ session, onSignOut }) {
         
         // Hvis opgave tilføjes til idag - notificér den medarbejder der får den
         if (newDayNum === todayDayNum && updated.assignees?.length > 0 && (!oldTask.assignees?.length || oldDayNum !== newDayNum)) {
+          console.log("📧 ADDING: Calling notifyEmployeeOfChanges");
           const emp = employees.find(e => e.id === updated.assignees[0]);
           if (emp?.email?.trim()) {
             notifyEmployeeOfChanges(emp.email.trim(), emp.name, updated.title, `Ny opgave på din dagsplan`).catch(e => console.error("Email failed:", e));
