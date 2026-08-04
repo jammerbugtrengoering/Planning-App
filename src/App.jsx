@@ -2232,18 +2232,26 @@ async function notifyEmployeeOfChanges(employeeEmail, employeeName, taskTitle, d
   };
   
   try {
-    console.log("📤 Calling Edge Function with:", mailData);
-    const response = await supabase.functions.invoke('send-email', {
-      body: mailData
+    console.log("📤 Calling Brevo API directly with:", mailData);
+    
+    // Send directly via Brevo API - no Edge Function needed
+    const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+      method: 'POST',
+      headers: {
+        'api-key': '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',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(mailData)
     });
     
-    console.log("📥 Edge Function response:", response);
+    console.log("📥 Brevo response:", response);
     
-    if (response.data?.success || response.status === 200) {
+    if (response.ok || response.status === 201) {
       console.log('✅ Email sent to', employeeEmail);
       return true;
     } else {
-      console.error('❌ Failed to send email:', response);
+      const error = await response.json();
+      console.error('❌ Brevo error:', error);
       return false;
     }
   } catch (error) {
