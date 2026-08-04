@@ -5591,6 +5591,18 @@ return (
       <div style={styles.modalActions}>
         {onCopy && <button style={{ ...styles.secondaryBtn, color: "#9C1B5D", borderColor: "#FCE4EF" }} onClick={() => onCopy(t)}><Copy size={14} /> Kopiér</button>}
         <button style={{ ...styles.secondaryBtn, color: "#B91C1C", borderColor: "#FEE2E2" }} onClick={() => onDelete(t.id)}><Trash2 size={14} /> Slet</button>
+        {t.assignees && t.assignees.length > 0 && (
+          <button style={{ ...styles.secondaryBtn, color: "#7C3AED", borderColor: "#EDE9FE" }} onClick={async () => {
+            const emp = employees.find(e => e.id === t.assignees[0]);
+            if (emp?.email) {
+              const dayName = ["Man", "Tir", "Ons", "Tor", "Fre"][t.day] || t.day;
+              await notifyEmployeeOfChanges(emp.email, emp.name, t.title, dayName);
+              alert(`✅ Email sendt til ${emp.name}`);
+            } else {
+              alert("❌ Medarbejder har ingen email");
+            }
+          }}><Mail size={14} /> Notificér</button>
+        )}
         <button style={{ ...styles.primaryBtn, marginLeft: "auto" }} onClick={onClose}>Luk</button>
       </div>
     </Modal>
