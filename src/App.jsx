@@ -1207,7 +1207,6 @@ function PlanningApp({ session, onSignOut }) {
   }
 
   function runAuto() {
-    console.warn("⚠️ runAuto() WAS CALLED!");
     setInstances((prev) => {
       const thisWeek = prev.filter((t) => t.week === weekOffset && t.year === weekYear);
 
@@ -2247,8 +2246,8 @@ function WeekView({ employees, instances, unplaced, onAdd, onAuto, onAutoAllWeek
     <div style={styles.page}>
       <div style={styles.toolbar}>
         <button style={styles.primaryBtn} onClick={onAdd}><Plus size={16} /> Ny opgave</button>
-        <button style={styles.secondaryBtn} onClick={onAuto} onclick="console.warn('HTML ONCLICK WORKS'); alert('HTML onclick handler called!')"><Wand2 size={16} /> Planlæg ugen automatisk</button>
-        <button style={styles.secondaryBtn} onClick={onAutoAllWeeks} title="Kør automatisk planlægning for alle uger, ikke kun den du kigger på lige nu"><Wand2 size={16} /> Planlæg alle uger</button>
+        <button style={styles.secondaryBtn} onClick={onAuto}><Wand2 size={16} /> Planlæg</button>
+        <button style={styles.secondaryBtn} onClick={onAutoAllWeeks}><Wand2 size={16} /> Planlæg alle</button>
         <button style={styles.secondaryBtn} onClick={onOpenTravelSettings}><Car size={16} /> Transporttid</button>
         <button style={{ ...styles.secondaryBtn, color: "#B91C1C", borderColor: "#FECACA" }} onClick={onOpenAddBlock}><Thermometer size={16} /> Sygdom/Ferie</button>
         <button
