@@ -7,20 +7,6 @@ import {
   Thermometer, Palmtree,
 } from "lucide-react";
 
-
-// DEBUGGING TEST
-window.testSchedule = () => { alert("testSchedule called!"); };
-window.testButton = () => {
-  const btn = document.querySelector('[title="Planlæg ugen automatisk"]');
-  if (btn) {
-    alert("Button FOUND! Calling click...");
-    btn.click();
-  } else {
-    alert("Button NOT FOUND in DOM");
-  }
-};
-console.log("Test functions added: window.testSchedule() and window.testButton()");
-
 // ---------- Constants ----------
 // SKILLS og customers hentes fra Supabase – se loadAll() i App-komponenten.
 // Fallback bruges kun hvis databasen ikke svarer ved første render.
@@ -318,31 +304,13 @@ function scheduleWeek(weekInstances, employees, autoOnly = false, areas = [], em
     // Opgaver markeret med _forceWindow (forsinkede opgaver fra en tidligere
     // uge, der genoptages i den viste uge) skal søges hen over en dag-window
     // ligesom fleksible opgaver, i stedet for at blive tvunget ind på deres
-    // oprindelige (allerede passerede) dag — håndteles i loopet nedenfor.
+    // oprindelige (allerede passerede) dag — håndteres i loopet nedenfor.
     if ((t.assignees && t.assignees.length) || !t.day || t.type === "flexible" || t._forceWindow) return;
     if (autoOnly && !t.includeInAuto) return;
     // Rør aldrig ved en instans der ikke er i den udtrykkelige "skal planlægges"-liste —
     // det forhindrer at eksisterende opgaver, som planlæggeren bevidst har sat til
     // "ikke tildelt", bliver auto-tildelt igen ved næste visning af ugen.
     if (restrictToIds && !restrictToIds.has(t.id)) return;
-    
-    // Hvis medarbejder er eksplicit tildelt: ignorér kompetence- og tidsbegrænsninger
-    if (t.assigned_employee_id) {
-      const assignedEmp = employees.find((e) => e.id === t.assigned_employee_id);
-      if (!assignedEmp) { t.warning = "emp_not_found"; return; }
-      if (isBlocked(assignedEmp.id, t.day)) { t.warning = "emp_blocked"; return; }
-      if (t.scheduledTime && hasTimeConflict(assignedEmp.id, t.day, t)) { t.warning = "time_conflict"; return; }
-      
-      // Planlæg med tildelt medarbejder, men markér hvis mangler kompetencer
-      const { candidates } = candidatesFor(t, employees, areas, employeeAreas);
-      const hasSkills = candidates.some((c) => c.id === assignedEmp.id);
-      
-      t.assignees = [assignedEmp.id];
-      t.status = "planlagt";
-      t.warning = hasSkills ? null : "incompetence"; // Mangler kompetencer
-      return;
-    }
-    
     const { candidates: allCandidates, outsideArea } = candidatesFor(t, employees, areas, employeeAreas);
     const candidates = allCandidates.filter((e) => !isBlocked(e.id, t.day));
     if (candidates.length === 0) { t.warning = "no_skill"; return; }
@@ -367,38 +335,9 @@ function scheduleWeek(weekInstances, employees, autoOnly = false, areas = [], em
     if ((t.assignees && t.assignees.length) || (t.day && !t._forceWindow)) return;
     if (autoOnly && !t.includeInAuto) return;
     if (restrictToIds && !restrictToIds.has(t.id)) return;
-    
-    // Hvis medarbejder er eksplicit tildelt: ignorér kompetence- og tidsbegrænsninger
-    if (t.assigned_employee_id) {
-      const assignedEmp = employees.find((e) => e.id === t.assigned_employee_id);
-      if (!assignedEmp) { t.warning = "emp_not_found"; return; }
-      
-      // Find første ledig dag i deadline-vinduet (eller force-window)
-      const deadlineIdx = DAYS.findIndex((d) => d.key === (t.deadline || "Fri"));
-      const window = t._forceWindow ? DAYS.filter((d) => t._forceWindow.includes(d.key)) : DAYS.slice(0, deadlineIdx + 1);
-      
-      let bestDay = null;
-      for (const d of window) {
-        if (!isBlocked(assignedEmp.id, d.key) && !(t.scheduledTime && hasTimeConflict(assignedEmp.id, d.key, t))) {
-          bestDay = d.key;
-          break;
-        }
-      }
-      
-      if (!bestDay) { t.warning = "no_available_day"; return; }
-      
-      // Markér hvis medarbejder mangler kompetencer
-      const { candidates } = candidatesFor(t, employees, areas, employeeAreas);
-      const hasSkills = candidates.some((c) => c.id === assignedEmp.id);
-      
-      t.day = bestDay;
-      t.assignees = [assignedEmp.id];
-      t.status = "planlagt";
-      t.warning = hasSkills ? null : "incompetence"; // Mangler kompetencer
-      if (t._forceWindow) { t.offSchedule = true; t.onSchedule = false; }
-      return;
-    }
-    
+    // _forceWindow (array af dag-nøgler) styrer et forsinket-opgave-genoptag:
+    // søg kun blandt de dage, der er angivet (typisk i dag og frem), i stedet
+    // for det normale deadline-vindue for rigtige fleksible opgaver.
     const deadlineIdx = DAYS.findIndex((d) => d.key === (t.deadline || "Fri"));
     const window = t._forceWindow ? DAYS.filter((d) => t._forceWindow.includes(d.key)) : DAYS.slice(0, deadlineIdx + 1);
     const { candidates, outsideArea } = candidatesFor(t, employees, areas, employeeAreas);
@@ -2229,26 +2168,24 @@ function EmployeeAppView({ employees, instances, onLogMinutes, onSetStatus, onTo
 }
 
 // ---------- Week view ----------
-// Simple scheduling for current week
-function scheduleWeekSimple(weekInstances, employees, weekOffset, weekYear) {
-  const thisWeek = weekInstances.filter(t => t.week === weekOffset && t.year === weekYear);
+function scheduleWeekSimple(instances, employees, weekOffset, weekYear) {
+  const thisWeek = instances.filter(t => t.week === weekOffset && t.year === weekYear);
   const unassigned = thisWeek.filter(t => !t.assignees || !t.assignees.length);
   
   if (unassigned.length === 0) return { count: 0, employees: [] };
   
   const assignedEmployees = new Set();
-  const scheduled = [];
+  const updates = [];
   
   unassigned.forEach((task, idx) => {
-    // Round-robin assign to employees
     const emp = employees[idx % employees.length];
     if (emp) {
       assignedEmployees.add(emp.name);
-      scheduled.push({ ...task, assignees: [emp.id], status: "planlagt" });
+      updates.push({ id: task.id, assignees: [emp.id], status: "planlagt" });
     }
   });
   
-  return { count: scheduled.length, employees: Array.from(assignedEmployees), updates: scheduled };
+  return { count: updates.length, employees: Array.from(assignedEmployees), updates };
 }
 
 function WeekView({ employees, instances, unplaced, onAdd, onAuto, onAutoAllWeeks, onPlace, onUnplace, onRemoveAssignee, onDelete, onOpenTask, onToggleInclude, onEditEmp, dragId, setDragId, weekLabel, weekNo, weekOffset, weekYear, onPrevWeek, onNextWeek, onTodayWeek, travelSettings, onOpenTravelSettings, currentIsoWeek, areas, employeeAreas, onOpenAddBlock }) {
@@ -2268,8 +2205,8 @@ function WeekView({ employees, instances, unplaced, onAdd, onAuto, onAutoAllWeek
     <div style={styles.page}>
       <div style={styles.toolbar}>
         <button style={styles.primaryBtn} onClick={onAdd}><Plus size={16} /> Ny opgave</button>
-        <button style={styles.secondaryBtn} onClick={handleScheduleWeek}><Wand2 size={16} /> Planlæg</button>
-        <button style={styles.secondaryBtn} onClick={handleScheduleAllWeeks}><Wand2 size={16} /> Planlæg alle</button>
+        <button style={styles.secondaryBtn} onClick={onAuto}><Wand2 size={16} /> Planlæg ugen automatisk</button>
+        <button style={styles.secondaryBtn} onClick={onAutoAllWeeks} title="Kør automatisk planlægning for alle uger, ikke kun den du kigger på lige nu"><Wand2 size={16} /> Planlæg alle uger</button>
         <button style={styles.secondaryBtn} onClick={onOpenTravelSettings}><Car size={16} /> Transporttid</button>
         <button style={{ ...styles.secondaryBtn, color: "#B91C1C", borderColor: "#FECACA" }} onClick={onOpenAddBlock}><Thermometer size={16} /> Sygdom/Ferie</button>
         <button
