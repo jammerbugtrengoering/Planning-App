@@ -2217,6 +2217,7 @@ function WeekView({ employees, instances, unplaced, onAdd, onAuto, onAutoAllWeek
   const [showWeekend, setShowWeekend] = useState(false);
   const [selectedAreaId, setSelectedAreaId] = useState("all"); // "all" eller area.id
   const [printEmployeeId, setPrintEmployeeId] = useState("all");
+  const [unassignedFilter, setUnassignedFilter] = useState("current"); // "current" eller "all"
   const visibleDays = showWeekend ? ALL_DAYS : DAYS;
 
   // Filtrer medarbejdere baseret på valgt område
@@ -2224,6 +2225,11 @@ function WeekView({ employees, instances, unplaced, onAdd, onAuto, onAutoAllWeek
     ? employees
     : employees.filter((e) => employeeAreas.some((ea) => ea.employee_id === e.id && ea.area_id === selectedAreaId));
   const visibleEmployees = printEmployeeId === "all" ? areaFilteredEmployees : areaFilteredEmployees.filter((e) => e.id === printEmployeeId);
+
+  // Filtrer ikke-tildelt opgaver baseret på uge
+  const filteredUnplaced = unassignedFilter === "current"
+    ? unplaced.filter(t => t.week === weekOffset && t.year === weekYear)
+    : unplaced;
 
   return (
     <div style={styles.page}>
@@ -2300,10 +2306,20 @@ function WeekView({ employees, instances, unplaced, onAdd, onAuto, onAutoAllWeek
           onDragOver={(e) => e.preventDefault()}
           onDrop={() => { if (dragId) onUnplace(dragId); setDragId(null); }}
         >
-          <div style={styles.backlogTitle}>Ikke tildelt ({unplaced.length})</div>
-          {unplaced.length === 0 && <div style={styles.emptyCol}>Alt er planlagt 🎉</div>}
+          <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%'}}>
+            <div style={styles.backlogTitle}>Ikke tildelt ({filteredUnplaced.length})</div>
+            <select 
+              value={unassignedFilter}
+              onChange={(e) => setUnassignedFilter(e.target.value)}
+              style={{padding: '4px 8px', fontSize: '12px', border: '1px solid #CBD5E1', borderRadius: '4px', background: '#fff', cursor: 'pointer'}}
+            >
+              <option value="current">Denne uge</option>
+              <option value="all">Alle uger</option>
+            </select>
+          </div>
+          {filteredUnplaced.length === 0 && <div style={styles.emptyCol}>Alt er planlagt 🎉</div>}
           <div style={styles.backlogList}>
-            {unplaced.map((t) => {
+            {filteredUnplaced.map((t) => {
               // Kompetence-/områdetjekket genberegnes live her (i stedet for kun at
               // stole på det gemte t.warning-felt), så advarslen straks forsvinder
               // hvis man lige har rettet en medarbejders kompetence eller område —
