@@ -2229,6 +2229,28 @@ function EmployeeAppView({ employees, instances, onLogMinutes, onSetStatus, onTo
 }
 
 // ---------- Week view ----------
+// Simple scheduling for current week
+function scheduleWeekSimple(weekInstances, employees, weekOffset, weekYear) {
+  const thisWeek = weekInstances.filter(t => t.week === weekOffset && t.year === weekYear);
+  const unassigned = thisWeek.filter(t => !t.assignees || !t.assignees.length);
+  
+  if (unassigned.length === 0) return { count: 0, employees: [] };
+  
+  const assignedEmployees = new Set();
+  const scheduled = [];
+  
+  unassigned.forEach((task, idx) => {
+    // Round-robin assign to employees
+    const emp = employees[idx % employees.length];
+    if (emp) {
+      assignedEmployees.add(emp.name);
+      scheduled.push({ ...task, assignees: [emp.id], status: "planlagt" });
+    }
+  });
+  
+  return { count: scheduled.length, employees: Array.from(assignedEmployees), updates: scheduled };
+}
+
 function WeekView({ employees, instances, unplaced, onAdd, onAuto, onAutoAllWeeks, onPlace, onUnplace, onRemoveAssignee, onDelete, onOpenTask, onToggleInclude, onEditEmp, dragId, setDragId, weekLabel, weekNo, weekOffset, weekYear, onPrevWeek, onNextWeek, onTodayWeek, travelSettings, onOpenTravelSettings, currentIsoWeek, areas, employeeAreas, onOpenAddBlock }) {
   const [addMenuTaskId, setAddMenuTaskId] = useState(null);
   const [showWeekend, setShowWeekend] = useState(false);
