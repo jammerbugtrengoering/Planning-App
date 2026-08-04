@@ -1314,11 +1314,17 @@ function PlanningApp({ session, onSignOut }) {
       const updated = updater(t);
       const newAssignees = updated.assignees || [];
       
-      console.log("👤 Assignees changed?", JSON.stringify(oldAssignees), "→", JSON.stringify(newAssignees));
+      const oldStr = JSON.stringify(oldAssignees);
+      const newStr = JSON.stringify(newAssignees);
+      const changed = oldStr !== newStr;
+      
+      console.log("👤 Old assignees:", oldStr);
+      console.log("👤 New assignees:", newStr);
+      console.log("👤 Changed?", changed);
       
       // Notificér hvis assignees ændrede
-      if (JSON.stringify(oldAssignees) !== JSON.stringify(newAssignees)) {
-        console.log("✉️ YES! Assignees changed, notifying...");
+      if (changed) {
+        console.log("✉️ YES! Notifying...");
         // Notificér den nye medarbejder
         if (newAssignees.length > 0) {
           const emp = employees.find(e => e.id === newAssignees[0]);
