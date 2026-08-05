@@ -459,7 +459,9 @@ function ensureWeekInstances(week, year, allInstances, templates, employees) {
       }
     });
     
-    daysToCreate.forEach((day) => {
+    const DAY_INDEX_TO_STRING = ["Mon", "Tue", "Wed", "Thu", "Fri"];
+    daysToCreate.forEach((dayIdx) => {
+      const day = DAY_INDEX_TO_STRING[dayIdx];
       const existingIdx = list.findIndex((i) => i.templateId === tpl.id && i.week === week && i.year === year && i.day === day);
       if (existingIdx === -1) {
         const newInst = {
