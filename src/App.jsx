@@ -1771,7 +1771,9 @@ function PlanningApp({ session, onSignOut }) {
       toSync.forEach(syncInstance);
       return list;
     });
-    
+    notify(`${TYPE_META[blockType]?.label || blockType} registreret for ${emp?.name || "medarbejderen"}`);
+  }
+
   function addActivity(payload) {
     const { employeeId, customerName, address, date, time, duration, description } = payload;
     const emp = employees.find((e) => e.id === employeeId);
