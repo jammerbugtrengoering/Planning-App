@@ -1254,6 +1254,7 @@ function PlanningApp({ session, onSignOut }) {
   }
 
   async function addTask(payload) {
+    console.log("🔍 addTask payload:", { assigned_employee_id: payload.assigned_employee_id, day: payload.day, hasEmployeeAndDay: !!(payload.assigned_employee_id && payload.day) });
     const checklistItemsCombined = [
       ...payload.checklistTemplateIds.flatMap((id) => checklistTemplates.find((c) => c.id === id)?.items || []),
       ...payload.extraItems,
