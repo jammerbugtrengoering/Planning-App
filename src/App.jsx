@@ -4187,6 +4187,15 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
         {employees?.map(emp => <option key={emp.id} value={emp.id}>{emp.name}</option>)}
       </select>
 
+      {type === "adhoc" && assignedEmployeeId && (
+        <>
+          <label style={styles.label}>Ønsket dag (når medarbejder er valgt)</label>
+          <select style={styles.input} value={day} onChange={(e) => setDay(e.target.value)}>
+            {DAYS.map((d) => <option key={d.key} value={d.key}>{d.label}</option>)}
+          </select>
+        </>
+      )}
+
       <label style={styles.label}>Krævede kompetencer (minimumsniveau)</label>
       {requiredSkills.map((r, i) => (
         <div key={i} style={styles.skillReqRow}>
