@@ -411,8 +411,6 @@ function ensureWeekInstances(week, year, allInstances, templates, employees) {
       typeof d === "string" ? DAY_STRING_TO_INDEX[d] : d
     ).filter((d) => d !== undefined);
     
-    console.log("📋 Template:", tpl.title, "Days:", tpl.days, "Indices:", dayIndices, "Start:", tpl.startDate, "End:", tpl.expiryDate);
-    
     const daysToCreate = dayIndices.filter((day) => {
       try {
         // Create a date for this specific day
@@ -460,8 +458,6 @@ function ensureWeekInstances(week, year, allInstances, templates, employees) {
         return true;
       }
     });
-    
-    console.log("✅ DaysToCreate for week", week, ":", daysToCreate);
     
     daysToCreate.forEach((day) => {
       const existingIdx = list.findIndex((i) => i.templateId === tpl.id && i.week === week && i.year === year && i.day === day);
@@ -1124,9 +1120,13 @@ function PlanningApp({ session, onSignOut }) {
   }, []);
 
   const syncInstance = useCallback(async (inst) => {
+    // Convert day string to numeric index if needed
+    const DAY_STRING_TO_INDEX = { "Mon": 0, "Tue": 1, "Wed": 2, "Thu": 3, "Fri": 4 };
+    const dayValue = typeof inst.day === "string" ? DAY_STRING_TO_INDEX[inst.day] : inst.day;
+    
     const { error } = await supabase.from("instances").upsert({
       id: inst.id, template_id: inst.templateId ?? null, title: inst.title,
-      type: inst.type, week: inst.week, year: inst.year ?? null, day: inst.day ?? null,
+      type: inst.type, week: inst.week, year: inst.year ?? null, day: dayValue ?? null,
       deadline: inst.deadline ?? null, duration: inst.duration,
       status: inst.status ?? "unscheduled", video_url: inst.videoUrl ?? "",
       customer_id: null, po_number: inst.poNumber ?? "",
