@@ -403,11 +403,17 @@ function ensureWeekInstances(week, year, allInstances, templates, employees) {
       if (weekMonday < startMonday) return;
     }
     
-    // Filter days to only those within start/expiry interval
+    // Filter days to only those within start/expiry interval and not excluded
     const daysToCreate = tpl.days.filter((day) => {
       const dayDate = new Date(weekMonday);
       // day is 0=Mon, 1=Tue, ..., 4=Fri
       dayDate.setDate(dayDate.getDate() + day);
+      
+      // Check if day is in excludedDays (format: YYYY-MM-DD)
+      const dayDateString = dayDate.toISOString().split("T")[0];
+      if (tpl.excludedDays && tpl.excludedDays.includes(dayDateString)) {
+        return false;
+      }
       
       // Check if day is before startDate
       if (tpl.startDate) {
@@ -932,6 +938,7 @@ function PlanningApp({ session, onSignOut }) {
             checklistItems: [],
             startDate: t.start_date || null,
             expiryDate: t.expiry_date || null,
+            excludedDays: t.excluded_days ? JSON.parse(t.excluded_days) : [],
             requiredSkills: (tplSkillsData || [])
               .filter((s) => s.template_id === t.id)
               .map((s) => {
@@ -1634,7 +1641,41 @@ function PlanningApp({ session, onSignOut }) {
     }));
   }
   function deleteTask(taskId) {
+    const task = instances.find((t) => t.id === taskId);
+    if (!task) return;
+    
+    // Hvis det er en kontrakt-opgave (har templateId), marker dagen som udeladet i stedet
+    if (task.templateId) {
+      const dayDate = new Date(mondayOfWeek(task.week, task.year));
+      dayDate.setDate(dayDate.getDate() + task.day);
+      const dayDateString = dayDate.toISOString().split("T")[0];
+      
+      const template = templates.find((t) => t.id === task.templateId);
+      if (template) {
+        const excludedDays = template.excludedDays ? [...template.excludedDays] : [];
+        if (!excludedDays.includes(dayDateString)) {
+          excludedDays.push(dayDateString);
+        }
+        
+        // Opdater template lokalt
+        setTemplates((prev) => prev.map((t) => 
+          t.id === template.id ? { ...t, excludedDays } : t
+        ));
+        
+        // Gem til database
+        supabase.from("service_templates")
+          .update({ excluded_days: JSON.stringify(excludedDays) })
+          .eq("id", task.templateId)
+          .then(({ error }) => {
+            if (error) console.error("Failed to mark day as excluded:", error);
+          });
+      }
+    }
+    
+    // Fjern fra state
     setInstances((prev) => prev.filter((t) => t.id !== taskId));
+    
+    // Slet fra database
     removeInstance(taskId);
   }
 
