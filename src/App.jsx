@@ -385,29 +385,46 @@ function scheduleWeek(weekInstances, employees, autoOnly = false, areas = [], em
 
 function ensureWeekInstances(week, year, allInstances, templates, employees) {
   let list = [...allInstances];
-  // Mandagen i den uge vi arbejder med — bruges til korrekte dato-sammenligninger
-  // med kontraktens start-/udløbsdato, i stedet for at sammenligne rå ugenumre
-  // (som giver forkerte svar når start/udløb ligger i et andet år).
   const weekMonday = mondayOfWeek(week, year);
-  // Holder styr på hvilke instanser der bliver oprettet i netop dette kald, så
-  // auto-planlægning bagefter KUN rører disse — og aldrig instanser der allerede
-  // fandtes (uanset om de er tildelt eller bevidst sat til "ikke tildelt" af
-  // planlæggeren). Uden dette ville en opgave, man har fjernet medarbejdere fra,
-  // blive auto-tildelt igen næste gang ugen genindlæses/besøges.
   const newlyCreatedIds = new Set();
+  
   templates.forEach((tpl) => {
     if (!tpl.days || tpl.days.length === 0) return;
+    
     // Skip if past expiry date
     if (tpl.expiryDate) {
       const expiryMonday = mondayOf(new Date(tpl.expiryDate));
       if (weekMonday > expiryMonday) return;
     }
+    
     // Skip if before start date
     if (tpl.startDate) {
       const startMonday = mondayOf(new Date(tpl.startDate));
       if (weekMonday < startMonday) return;
     }
-    tpl.days.forEach((day) => {
+    
+    // Filter days to only those within start/expiry interval
+    const daysToCreate = tpl.days.filter((day) => {
+      const dayDate = new Date(weekMonday);
+      // day is 0=Mon, 1=Tue, ..., 4=Fri
+      dayDate.setDate(dayDate.getDate() + day);
+      
+      // Check if day is before startDate
+      if (tpl.startDate) {
+        const startDate = new Date(tpl.startDate);
+        if (dayDate < startDate) return false;
+      }
+      
+      // Check if day is after expiryDate
+      if (tpl.expiryDate) {
+        const expiryDate = new Date(tpl.expiryDate);
+        if (dayDate > expiryDate) return false;
+      }
+      
+      return true;
+    });
+    
+    daysToCreate.forEach((day) => {
       const existingIdx = list.findIndex((i) => i.templateId === tpl.id && i.week === week && i.year === year && i.day === day);
       if (existingIdx === -1) {
         const newInst = {
