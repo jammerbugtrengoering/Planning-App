@@ -404,7 +404,14 @@ function ensureWeekInstances(week, year, allInstances, templates, employees) {
     }
     
     // Filter days to only those within start/expiry interval and not excluded
-    const daysToCreate = tpl.days.filter((day) => {
+    const DAY_STRING_TO_INDEX = { "Mon": 0, "Tue": 1, "Wed": 2, "Thu": 3, "Fri": 4 };
+    
+    // Convert day strings to numeric indices if needed
+    const dayIndices = (tpl.days || []).map((d) => 
+      typeof d === "string" ? DAY_STRING_TO_INDEX[d] : d
+    ).filter((d) => d !== undefined);
+    
+    const daysToCreate = dayIndices.filter((day) => {
       try {
         // Create a date for this specific day
         const dayDate = new Date(weekMonday);
