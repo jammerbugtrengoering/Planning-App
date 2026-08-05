@@ -406,33 +406,43 @@ function ensureWeekInstances(week, year, allInstances, templates, employees) {
     // Filter days to only those within start/expiry interval and not excluded
     const daysToCreate = tpl.days.filter((day) => {
       try {
+        // Create a date for this specific day
         const dayDate = new Date(weekMonday);
-        if (isNaN(dayDate.getTime())) return true; // Invalid date, include it
-        
         dayDate.setDate(dayDate.getDate() + day);
         
-        // Check if day is in excludedDays (format: YYYY-MM-DD)
+        // Convert to ISO date string for consistent comparison (YYYY-MM-DD)
+        const year = dayDate.getFullYear();
+        const month = String(dayDate.getMonth() + 1).padStart(2, "0");
+        const dateNum = String(dayDate.getDate()).padStart(2, "0");
+        const dayDateString = `${year}-${month}-${dateNum}`;
+        
+        // Check if day is in excludedDays
         if (tpl.excludedDays && Array.isArray(tpl.excludedDays) && tpl.excludedDays.length > 0) {
-          const year = dayDate.getFullYear();
-          const month = String(dayDate.getMonth() + 1).padStart(2, "0");
-          const dateNum = String(dayDate.getDate()).padStart(2, "0");
-          const dayDateString = `${year}-${month}-${dateNum}`;
-          
           if (tpl.excludedDays.includes(dayDateString)) {
             return false;
           }
         }
         
-        // Check if day is before startDate
+        // Check if day is before startDate (compare as strings: YYYY-MM-DD)
         if (tpl.startDate) {
-          const startDate = new Date(tpl.startDate);
-          if (dayDate < startDate) return false;
+          const startDateStr = typeof tpl.startDate === 'string' 
+            ? tpl.startDate.slice(0, 10)  // Ensure it's just YYYY-MM-DD
+            : new Date(tpl.startDate).toISOString().slice(0, 10);
+          
+          if (dayDateString < startDateStr) {
+            return false;
+          }
         }
         
-        // Check if day is after expiryDate
+        // Check if day is after expiryDate (compare as strings: YYYY-MM-DD)
         if (tpl.expiryDate) {
-          const expiryDate = new Date(tpl.expiryDate);
-          if (dayDate > expiryDate) return false;
+          const expiryDateStr = typeof tpl.expiryDate === 'string'
+            ? tpl.expiryDate.slice(0, 10)  // Ensure it's just YYYY-MM-DD
+            : new Date(tpl.expiryDate).toISOString().slice(0, 10);
+          
+          if (dayDateString > expiryDateStr) {
+            return false;
+          }
         }
         
         return true;
