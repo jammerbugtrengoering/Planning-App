@@ -1331,9 +1331,13 @@ function PlanningApp({ session, onSignOut }) {
       
       // Konvertér konkret dato til ugedag når medarbejder er valgt
       let dayForPlacement = null;
+      let deadlineDay = payload.deadline || "Fri";
+      
       if (hasEmployeeAndDate) {
         const dateObj = new Date(payload.adhocDate);
         dayForPlacement = weekdayKeyFor(dateObj);
+        // Sæt deadline til samme dag som den ønskede placering
+        deadlineDay = dayForPlacement;
       }
       
       const newInstance = {
@@ -1345,7 +1349,7 @@ function PlanningApp({ session, onSignOut }) {
         videoUrl: payload.videoUrl, customerName: payload.customerName,
         address: payload.address, poNumber: payload.poNumber, accessInstructions: payload.accessInstructions,
         contractType: payload.contractType, dineroSynced: payload.dineroSynced || false,
-        type: "adhoc", day: dayForPlacement, deadline: payload.deadline || "Fri",
+        type: "adhoc", day: dayForPlacement, deadline: deadlineDay,
         scheduledTime: payload.preferredTime || null,
       };
       setInstances((prev) => [...prev, newInstance]);
