@@ -39,6 +39,7 @@ const TYPE_META = {
   // Bevaret udelukkende for korrekt visning af evt. ældre data af denne type —
   // kan IKKE længere vælges ved oprettelse af en ny opgave (se CREATABLE_TYPES).
   flexible: { label: "Fleksibel (ældre)", icon: CalendarClock, color: "#111111", bg: "#EDEDED" },
+  aktivitet: { label: "Anden aktivitet", icon: Building2, color: "#7C3AED", bg: "#EDE9FE" },
   sygdom: { label: "Sygdom", icon: Thermometer, color: "#B91C1C", bg: "#FEE2E2" },
   ferie: { label: "Ferie", icon: Palmtree, color: "#0E7490", bg: "#CFFAFE" },
 };
@@ -851,6 +852,7 @@ function PlanningApp({ session, onSignOut }) {
   const [view, setView] = useState("uge");
   const [showAddTask, setShowAddTask] = useState(false);
   const [showAddBlock, setShowAddBlock] = useState(false);
+  const [showAddActivity, setShowAddActivity] = useState(false);
   const [copyPayload, setCopyPayload] = useState(null);
   const [showAddEmp, setShowAddEmp] = useState(false);
   const [editEmp, setEditEmp] = useState(null);
@@ -1769,7 +1771,27 @@ function PlanningApp({ session, onSignOut }) {
       toSync.forEach(syncInstance);
       return list;
     });
-    notify(`${TYPE_META[blockType]?.label || blockType} registreret for ${emp?.name || "medarbejderen"}`);
+    
+  function addActivity(payload) {
+    const { employeeId, customerName, address, date, time, duration, description } = payload;
+    const emp = employees.find((e) => e.id === employeeId);
+    if (!emp || !date) { notify("Vælg medarbejder og dato"); return; }
+    const d = new Date(date);
+    if (isNaN(d)) { notify("Ugyldig dato"); return; }
+    const { week, year } = isoWeekInfo(d);
+    const dayKey = weekdayKeyFor(d);
+    const activityInst = {
+      id: uid("act"), type: "aktivitet", title: customerName || "Anden aktivitet",
+      day: dayKey, week, year, assignees: [employeeId], status: "planlagt",
+      duration: Number(duration) || 60, scheduledTime: time || null,
+      requiredSkills: [], checklist: [], timeLog: [],
+      warning: null, address: address || "", customerName: customerName || "",
+      accessInstructions: description || "",
+      poNumber: "", contractType: "privat", invoiceReady: false, dineroExported: false,
+    };
+    setInstances((prev) => [...prev, activityInst]);
+    syncInstance(activityInst);
+    notify(`Aktivitet oprettet for ${emp.name || "medarbejderen"}`);
   }
 
   function dateOfBlockInstance(t) {
@@ -2113,6 +2135,7 @@ function PlanningApp({ session, onSignOut }) {
           currentIsoWeek={currentIsoWeek}
           travelSettings={travelSettings} onOpenTravelSettings={() => setShowTravelSettings(true)}
           onOpenAddBlock={() => setShowAddBlock(true)}
+          onOpenAddActivity={() => setShowAddActivity(true)}
         />
       )}
       {view === "employees" && (
@@ -2166,6 +2189,7 @@ function PlanningApp({ session, onSignOut }) {
       {showAddTask && <TaskModal onClose={() => { setShowAddTask(false); setCopyPayload(null); }} onSave={addTask} checklistTemplates={checklistTemplates} skills={skills} copyFrom={copyPayload} employees={employees} />}
       {showAddEmp && <EmployeeModal emp={editEmp} onClose={() => { setShowAddEmp(false); setEditEmp(null); }} onSave={saveEmployee} skills={skills} />}
       {showAddBlock && <BlockModal employees={employees} onClose={() => setShowAddBlock(false)} onSave={addBlock} />}
+      {showAddActivity && <ActivityModal employees={employees} onClose={() => setShowAddActivity(false)} onSave={addActivity} />}
       {showTravelSettings && (
         <TravelSettingsModal
           settings={travelSettings}
@@ -2393,7 +2417,7 @@ function scheduleWeekSimple(instances, employees, weekOffset, weekYear) {
   return { count: updates.length, employees: Array.from(assignedEmployees), updates };
 }
 
-function WeekView({ employees, instances, unplaced, onAdd, onAuto, onAutoAllWeeks, onPlace, onUnplace, onRemoveAssignee, onDelete, onOpenTask, onToggleInclude, onEditEmp, dragId, setDragId, weekLabel, weekNo, weekOffset, weekYear, onPrevWeek, onNextWeek, onTodayWeek, travelSettings, onOpenTravelSettings, currentIsoWeek, areas, employeeAreas, onOpenAddBlock }) {
+function WeekView({ employees, instances, unplaced, onAdd, onAuto, onAutoAllWeeks, onPlace, onUnplace, onRemoveAssignee, onDelete, onOpenTask, onToggleInclude, onEditEmp, dragId, setDragId, weekLabel, weekNo, weekOffset, weekYear, onPrevWeek, onNextWeek, onTodayWeek, travelSettings, onOpenTravelSettings, currentIsoWeek, areas, employeeAreas, onOpenAddBlock, onOpenAddActivity }) {
   const [addMenuTaskId, setAddMenuTaskId] = useState(null);
   const [showWeekend, setShowWeekend] = useState(false);
   const [selectedAreaId, setSelectedAreaId] = useState("all"); // "all" eller area.id
@@ -2439,6 +2463,7 @@ function WeekView({ employees, instances, unplaced, onAdd, onAuto, onAutoAllWeek
         }}><Wand2 size={16} /> Planlæg</button>
         <button style={styles.secondaryBtn} onClick={onOpenTravelSettings}><Car size={16} /> Transporttid</button>
         <button style={{ ...styles.secondaryBtn, color: "#B91C1C", borderColor: "#FECACA" }} onClick={onOpenAddBlock}><Thermometer size={16} /> Sygdom/Ferie</button>
+        <button style={{ ...styles.secondaryBtn, color: "#7C3AED", borderColor: "#DDD6FE" }} onClick={onOpenAddActivity}><Building2 size={16} /> Anden aktivitet</button>
         <button
           style={{ ...styles.secondaryBtn, ...(showWeekend ? { background: "#FCE4EF", color: "#D6247A", borderColor: "#D6247A" } : {}) }}
           onClick={() => setShowWeekend((v) => !v)}
@@ -3846,7 +3871,7 @@ function ReportsView({ instances, pricing, budgets, onSaveBudget, isAdminUser })
         // Filtrér på opgavens faktiske dato, ikke blot ugenummeret - så en uge
         // der strækker sig over et månedsskift altid tælles i den rigtige måned.
         const tasksInMonth = instances.filter((t) => {
-          if (BLOCK_TYPES.includes(t.type)) return false;
+          if (BLOCK_TYPES.includes(t.type) || t.type === "aktivitet") return false;
           if (!(t.assignees && t.assignees.length)) return false;
           if ((t.contractType || "privat") !== area) return false;
           const my = instanceMonthYear(t, selectedYear);
@@ -5161,6 +5186,61 @@ function BlockModal({ employees, onClose, onSave }) {
   );
 }
 
+
+function ActivityModal({ employees, onClose, onSave }) {
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const [employeeId, setEmployeeId] = useState(employees[0]?.id || "");
+  const [customerName, setCustomerName] = useState("");
+  const [address, setAddress] = useState("");
+  const [date, setDate] = useState(todayStr);
+  const [time, setTime] = useState("09:00");
+  const [duration, setDuration] = useState(60);
+  const [description, setDescription] = useState("");
+
+  function submit() {
+    if (!employeeId || !date) return;
+    onSave({ employeeId, customerName, address, date, time, duration, description });
+    onClose();
+  }
+
+  return (
+    <Modal onClose={onClose} title="Anden aktivitet">
+      <div style={styles.hint}>
+        Opretter en enkeltstående aktivitet (fx kundebesøg) i kalenderen. Aktiviteten optager medarbejderens
+        kapacitet ligesom en almindelig opgave, men indgår ikke i fakturering eller rapporter.
+      </div>
+
+      <label style={styles.label}>Kundenavn</label>
+      <input style={styles.input} value={customerName} onChange={(e) => setCustomerName(e.target.value)} />
+
+      <label style={styles.label}>Adresse</label>
+      <input style={styles.input} value={address} onChange={(e) => setAddress(e.target.value)} />
+
+      <label style={styles.label}>Medarbejder</label>
+      <select style={styles.input} value={employeeId} onChange={(e) => setEmployeeId(e.target.value)}>
+        {employees.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
+      </select>
+
+      <label style={styles.label}>Dato</label>
+      <input type="date" style={styles.input} value={date} onChange={(e) => setDate(e.target.value)} />
+
+      <label style={styles.label}>Tidspunkt</label>
+      <input type="time" style={styles.input} value={time} onChange={(e) => setTime(e.target.value)} />
+
+      <label style={styles.label}>Varighed (minutter)</label>
+      <input type="number" min="5" step="5" style={styles.input} value={duration} onChange={(e) => setDuration(e.target.value)} />
+
+      <label style={styles.label}>Beskrivelse</label>
+      <textarea style={{ ...styles.input, minHeight: 70 }} value={description} onChange={(e) => setDescription(e.target.value)} />
+
+      <div style={styles.modalActions}>
+        <button style={styles.secondaryBtn} onClick={onClose}>Annuller</button>
+        <button style={styles.primaryBtn} onClick={submit} disabled={!employeeId || !date}>Opret aktivitet</button>
+      </div>
+    </Modal>
+  );
+}
+
 function TravelSettingsModal({ settings, onClose, onSave }) {
   const [defaultMinutes, setDefaultMinutes] = useState(settings.defaultMinutes);
   const [dayStart, setDayStart] = useState(settings.dayStart);
@@ -5391,6 +5471,30 @@ function TaskDetailModal({ task, employees, checklistTemplates, skills, isAdminU
   }
 
   if (!task) return null;
+
+  if (task.type === "aktivitet") {
+    const emp = employees.find((e) => (task.assignees || []).includes(e.id));
+    const dayLabel = DAYS.find((d) => d.key === task.day)?.label || task.day;
+    return (
+      <Modal title="Anden aktivitet" onClose={onClose}>
+        <div style={{ padding: "4px 0 16px" }}>
+          <p style={{ margin: "0 0 8px", color: "#475569" }}>
+            <strong>{emp?.name || "Ukendt medarbejder"}</strong> · {dayLabel} · Uge {task.week} · {task.year}
+            {task.scheduledTime ? ` · ${task.scheduledTime}` : ""}
+          </p>
+          {task.customerName && <p style={{ margin: "0 0 4px" }}><strong>Kunde:</strong> {task.customerName}</p>}
+          {task.address && <p style={{ margin: "0 0 4px" }}><strong>Adresse:</strong> {task.address}</p>}
+          {task.accessInstructions && <p style={{ margin: "0 0 4px" }}><strong>Beskrivelse:</strong> {task.accessInstructions}</p>}
+          <p style={{ margin: "8px 0 16px", color: "#475569" }}><strong>Varighed:</strong> {task.duration} min</p>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button style={styles.secondaryBtn} onClick={() => onDelete(task.id)}>
+              <Trash2 size={14} /> Slet aktivitet
+            </button>
+          </div>
+        </div>
+      </Modal>
+    );
+  }
 
   // Sygdom/ferie er en blokering, ikke en rigtig rengøringsopgave — vis en
   // forenklet dialog i stedet for hele det almindelige opgave-UI (kunde,
