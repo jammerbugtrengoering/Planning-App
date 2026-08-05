@@ -405,29 +405,41 @@ function ensureWeekInstances(week, year, allInstances, templates, employees) {
     
     // Filter days to only those within start/expiry interval and not excluded
     const daysToCreate = tpl.days.filter((day) => {
-      const dayDate = new Date(weekMonday);
-      // day is 0=Mon, 1=Tue, ..., 4=Fri
-      dayDate.setDate(dayDate.getDate() + day);
-      
-      // Check if day is in excludedDays (format: YYYY-MM-DD)
-      const dayDateString = dayDate.toISOString().split("T")[0];
-      if (tpl.excludedDays && tpl.excludedDays.includes(dayDateString)) {
-        return false;
+      try {
+        const dayDate = new Date(weekMonday);
+        if (isNaN(dayDate.getTime())) return true; // Invalid date, include it
+        
+        dayDate.setDate(dayDate.getDate() + day);
+        
+        // Check if day is in excludedDays (format: YYYY-MM-DD)
+        if (tpl.excludedDays && Array.isArray(tpl.excludedDays) && tpl.excludedDays.length > 0) {
+          const year = dayDate.getFullYear();
+          const month = String(dayDate.getMonth() + 1).padStart(2, "0");
+          const dateNum = String(dayDate.getDate()).padStart(2, "0");
+          const dayDateString = `${year}-${month}-${dateNum}`;
+          
+          if (tpl.excludedDays.includes(dayDateString)) {
+            return false;
+          }
+        }
+        
+        // Check if day is before startDate
+        if (tpl.startDate) {
+          const startDate = new Date(tpl.startDate);
+          if (dayDate < startDate) return false;
+        }
+        
+        // Check if day is after expiryDate
+        if (tpl.expiryDate) {
+          const expiryDate = new Date(tpl.expiryDate);
+          if (dayDate > expiryDate) return false;
+        }
+        
+        return true;
+      } catch (e) {
+        console.error("Error filtering day:", e);
+        return true;
       }
-      
-      // Check if day is before startDate
-      if (tpl.startDate) {
-        const startDate = new Date(tpl.startDate);
-        if (dayDate < startDate) return false;
-      }
-      
-      // Check if day is after expiryDate
-      if (tpl.expiryDate) {
-        const expiryDate = new Date(tpl.expiryDate);
-        if (dayDate > expiryDate) return false;
-      }
-      
-      return true;
     });
     
     daysToCreate.forEach((day) => {
@@ -1648,7 +1660,11 @@ function PlanningApp({ session, onSignOut }) {
     if (task.templateId) {
       const dayDate = new Date(mondayOfWeek(task.week, task.year));
       dayDate.setDate(dayDate.getDate() + task.day);
-      const dayDateString = dayDate.toISOString().split("T")[0];
+      
+      const year = dayDate.getFullYear();
+      const month = String(dayDate.getMonth() + 1).padStart(2, "0");
+      const dateNum = String(dayDate.getDate()).padStart(2, "0");
+      const dayDateString = `${year}-${month}-${dateNum}`;
       
       const template = templates.find((t) => t.id === task.templateId);
       if (template) {
