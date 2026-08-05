@@ -1254,7 +1254,6 @@ function PlanningApp({ session, onSignOut }) {
   }
 
   async function addTask(payload) {
-    console.log("🔍 addTask payload:", { assigned_employee_id: payload.assigned_employee_id, day: payload.day, hasEmployeeAndDay: !!(payload.assigned_employee_id && payload.day) });
     const checklistItemsCombined = [
       ...payload.checklistTemplateIds.flatMap((id) => checklistTemplates.find((c) => c.id === id)?.items || []),
       ...payload.extraItems,
@@ -1324,22 +1323,29 @@ function PlanningApp({ session, onSignOut }) {
     } else {
       // "adhoc" (vist som "Fleksibel" i UI'et) — den eneste anden opgavetype
       // man kan oprette. Oprettelsesugen sættes altid til dags dato-ugen.
-      // Hvis planlæggeren har valgt en medarbejder + dag, placeres opgaven direkte.
+      // Hvis planlæggeren har valgt en medarbejder + dato, placeres opgaven direkte.
       // Ellers lander den i "Ikke tildelt", klar til manuel eller markeret auto-planlægning.
       const { week: adhocWeek, year: adhocYear } = isoWeekInfo(new Date());
       
-      const hasEmployeeAndDay = payload.assigned_employee_id && payload.day;
+      const hasEmployeeAndDate = payload.assigned_employee_id && payload.adhocDate;
+      
+      // Konvertér konkret dato til ugedag når medarbejder er valgt
+      let dayForPlacement = null;
+      if (hasEmployeeAndDate) {
+        const dateObj = new Date(payload.adhocDate);
+        dayForPlacement = weekdayKeyFor(dateObj);
+      }
       
       const newInstance = {
         id: uid("i"), title: payload.title, requiredSkills: payload.requiredSkills,
         duration: payload.duration, 
-        assignees: hasEmployeeAndDay ? [payload.assigned_employee_id] : [], 
+        assignees: hasEmployeeAndDate ? [payload.assigned_employee_id] : [], 
         status: "unscheduled", timeLog: [],
         week: adhocWeek, year: adhocYear, checklist: instantiateChecklist(checklistItemsCombined),
         videoUrl: payload.videoUrl, customerName: payload.customerName,
         address: payload.address, poNumber: payload.poNumber, accessInstructions: payload.accessInstructions,
         contractType: payload.contractType, dineroSynced: payload.dineroSynced || false,
-        type: "adhoc", day: hasEmployeeAndDay ? payload.day : null, deadline: payload.deadline || "Fri",
+        type: "adhoc", day: dayForPlacement, deadline: payload.deadline || "Fri",
         scheduledTime: payload.preferredTime || null,
       };
       setInstances((prev) => [...prev, newInstance]);
@@ -4190,10 +4196,9 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
 
       {type === "adhoc" && assignedEmployeeId && (
         <>
-          <label style={styles.label}>Ønsket dag (når medarbejder er valgt)</label>
-          <select style={styles.input} value={day} onChange={(e) => setDay(e.target.value)}>
-            {DAYS.map((d) => <option key={d.key} value={d.key}>{d.label}</option>)}
-          </select>
+          <label style={styles.label}>Ønsket dato (når medarbejder er valgt)</label>
+          <input type="date" style={styles.input} value={adhocDate} onChange={(e) => setAdhocDate(e.target.value)} />
+          <div style={styles.hint}>Opgaven placeres på denne konkrete dato for den valgte medarbejder.</div>
         </>
       )}
 
