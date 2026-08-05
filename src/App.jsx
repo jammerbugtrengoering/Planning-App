@@ -1322,23 +1322,23 @@ function PlanningApp({ session, onSignOut }) {
       });
     } else {
       // "adhoc" (vist som "Fleksibel" i UI'et) — den eneste anden opgavetype
-      // man kan oprette. Oprettelsesugen sættes altid til dags dato-ugen (der
-      // er ikke nogen separat "startdato"-vælger for denne type), og opgaven
-      // indsættes direkte uden at blive kørt gennem den automatiske
-      // planlægning med det samme — den skal ligge i "Ikke tildelt", klar til
-      // manuel eller markeret auto-planlægning. "Senest udført dato" bruges
-      // udelukkende som deadline (dag-i-ugen) til selve planlægningen, dvs.
-      // hvor sent i ugen scheduleWeek's dag-vindue-søgning må lede efter en
-      // ledig plads.
+      // man kan oprette. Oprettelsesugen sættes altid til dags dato-ugen.
+      // Hvis planlæggeren har valgt en medarbejder + dag, placeres opgaven direkte.
+      // Ellers lander den i "Ikke tildelt", klar til manuel eller markeret auto-planlægning.
       const { week: adhocWeek, year: adhocYear } = isoWeekInfo(new Date());
+      
+      const hasEmployeeAndDay = payload.assigned_employee_id && payload.day;
+      
       const newInstance = {
         id: uid("i"), title: payload.title, requiredSkills: payload.requiredSkills,
-        duration: payload.duration, assignees: [], status: "unscheduled", timeLog: [],
+        duration: payload.duration, 
+        assignees: hasEmployeeAndDay ? [payload.assigned_employee_id] : [], 
+        status: "unscheduled", timeLog: [],
         week: adhocWeek, year: adhocYear, checklist: instantiateChecklist(checklistItemsCombined),
         videoUrl: payload.videoUrl, customerName: payload.customerName,
         address: payload.address, poNumber: payload.poNumber, accessInstructions: payload.accessInstructions,
         contractType: payload.contractType, dineroSynced: payload.dineroSynced || false,
-        type: "adhoc", day: null, deadline: payload.deadline || "Fri",
+        type: "adhoc", day: hasEmployeeAndDay ? payload.day : null, deadline: payload.deadline || "Fri",
         scheduledTime: payload.preferredTime || null,
       };
       setInstances((prev) => [...prev, newInstance]);
