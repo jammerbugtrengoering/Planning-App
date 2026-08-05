@@ -1122,13 +1122,9 @@ function PlanningApp({ session, onSignOut }) {
   }, []);
 
   const syncInstance = useCallback(async (inst) => {
-    // Convert day string to numeric index if needed
-    const DAY_STRING_TO_INDEX = { "Mon": 0, "Tue": 1, "Wed": 2, "Thu": 3, "Fri": 4 };
-    const dayValue = typeof inst.day === "string" ? DAY_STRING_TO_INDEX[inst.day] : inst.day;
-    
     const { error } = await supabase.from("instances").upsert({
       id: inst.id, template_id: inst.templateId ?? null, title: inst.title,
-      type: inst.type, week: inst.week, year: inst.year ?? null, day: dayValue ?? null,
+      type: inst.type, week: inst.week, year: inst.year ?? null, day: inst.day ?? null,
       deadline: inst.deadline ?? null, duration: inst.duration,
       status: inst.status ?? "unscheduled", video_url: inst.videoUrl ?? "",
       customer_id: null, po_number: inst.poNumber ?? "",
