@@ -411,6 +411,8 @@ function ensureWeekInstances(week, year, allInstances, templates, employees) {
       typeof d === "string" ? DAY_STRING_TO_INDEX[d] : d
     ).filter((d) => d !== undefined);
     
+    console.log("📋 Template:", tpl.title, "Days:", tpl.days, "Indices:", dayIndices, "Start:", tpl.startDate, "End:", tpl.expiryDate);
+    
     const daysToCreate = dayIndices.filter((day) => {
       try {
         // Create a date for this specific day
@@ -458,6 +460,8 @@ function ensureWeekInstances(week, year, allInstances, templates, employees) {
         return true;
       }
     });
+    
+    console.log("✅ DaysToCreate for week", week, ":", daysToCreate);
     
     daysToCreate.forEach((day) => {
       const existingIdx = list.findIndex((i) => i.templateId === tpl.id && i.week === week && i.year === year && i.day === day);
