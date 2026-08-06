@@ -1309,6 +1309,36 @@ function PlanningApp({ session, onSignOut }) {
     });
   }
 
+  // "Planlæg"-knappen i ugeplanen: forsøg at placere ALLE uplanlagte opgaver i
+  // den viste uge (uanset "inkludér i auto"-flaget) med den samme
+  // kompetence/kapacitet/dag-bevidste motor (scheduleWeek) som bruges alle
+  // andre steder, og gem korrekt via syncInstance — så feltet "day" (som den
+  // tidligere simple version glemte at gemme, hvorfor opgaven forsvandt fra
+  // gridet efter planlægning) også bliver persisteret.
+  function runScheduleWeek() {
+    setInstances((prev) => {
+      const thisWeek = prev.filter((t) => t.week === weekOffset && t.year === weekYear);
+      const others = prev.filter((t) => !(t.week === weekOffset && t.year === weekYear));
+      const unassignedIds = new Set(
+        thisWeek.filter((t) => !(t.assignees && t.assignees.length) && !BLOCK_TYPES.includes(t.type)).map((t) => t.id)
+      );
+      if (unassignedIds.size === 0) {
+        notify("Ingen uplanlagte opgaver denne uge");
+        return prev;
+      }
+      const after = scheduleWeek(thisWeek, employees, false, areas, employeeAreas, unassignedIds);
+      const newlyAssigned = after.filter((t) => unassignedIds.has(t.id) && t.assignees && t.assignees.length);
+      newlyAssigned.forEach(syncInstance);
+      newlyAssigned.forEach((t) => {
+        const emp = employees.find((e) => e.id === t.assignees[0]);
+        if (emp?.email) notifyEmployeeOfChanges(emp.email, emp.name, t.title || "Opgave", "Planlagt");
+      });
+      const names = Array.from(new Set(newlyAssigned.map((t) => employees.find((e) => e.id === t.assignees[0])?.name).filter(Boolean)));
+      notify(newlyAssigned.length > 0 ? `${newlyAssigned.length} opgave(r) planlagt til: ${names.join(", ")}` : "Ingen ledige medarbejdere med rette kompetencer fundet lige nu");
+      return [...others, ...after];
+    });
+  }
+
   // Samme automatiske planlægning som runAuto, men kørt for ALLE uger på tværs af
   // hele systemet i stedet for kun den uge man aktuelt kigger på — nyttigt når en
   // medarbejders kompetencer/område lige er blevet opdateret, og der ligger
@@ -2163,7 +2193,7 @@ function PlanningApp({ session, onSignOut }) {
       {view === "uge" && (
         <WeekView
           employees={employees} instances={weekInstancesList} unplaced={unplaced}
-          onAdd={() => setShowAddTask(true)} onAuto={runAuto} onAutoAllWeeks={runAutoAllWeeks}
+          onAdd={() => setShowAddTask(true)} onAuto={runAuto} onScheduleWeek={runScheduleWeek} onAutoAllWeeks={runAutoAllWeeks}
           onPlace={manualPlace} onUnplace={unplace} onRemoveAssignee={removeAssignee} onDelete={deleteTask}
           onToggleInclude={(taskId) => updateInstance(taskId, (t) => ({ ...t, includeInAuto: !t.includeInAuto }))}
           onEditEmp={(emp) => { setEditEmp(emp); setShowAddEmp(true); }}
@@ -2458,7 +2488,7 @@ function scheduleWeekSimple(instances, employees, weekOffset, weekYear) {
   return { count: updates.length, employees: Array.from(assignedEmployees), updates };
 }
 
-function WeekView({ employees, instances, unplaced, onAdd, onAuto, onAutoAllWeeks, onPlace, onUnplace, onRemoveAssignee, onDelete, onOpenTask, onToggleInclude, onEditEmp, dragId, setDragId, weekLabel, weekNo, weekOffset, weekYear, onPrevWeek, onNextWeek, onTodayWeek, travelSettings, onOpenTravelSettings, currentIsoWeek, areas, employeeAreas, onOpenAddBlock, onOpenAddActivity }) {
+function WeekView({ employees, instances, unplaced, onAdd, onAuto, onScheduleWeek, onAutoAllWeeks, onPlace, onUnplace, onRemoveAssignee, onDelete, onOpenTask, onToggleInclude, onEditEmp, dragId, setDragId, weekLabel, weekNo, weekOffset, weekYear, onPrevWeek, onNextWeek, onTodayWeek, travelSettings, onOpenTravelSettings, currentIsoWeek, areas, employeeAreas, onOpenAddBlock, onOpenAddActivity }) {
   const [addMenuTaskId, setAddMenuTaskId] = useState(null);
   const [showWeekend, setShowWeekend] = useState(false);
   const [selectedAreaId, setSelectedAreaId] = useState("all"); // "all" eller area.id
@@ -2481,27 +2511,7 @@ function WeekView({ employees, instances, unplaced, onAdd, onAuto, onAutoAllWeek
     <div style={styles.page}>
       <div style={styles.toolbar}>
         <button style={styles.primaryBtn} onClick={onAdd}><Plus size={16} /> Ny opgave</button>
-        <button style={styles.secondaryBtn} onClick={() => {
-          const result = scheduleWeekSimple(instances, employees, weekOffset, weekYear);
-          if (result.count === 0) {
-            alert("ℹ️ Ingen uplanlagte opgaver denne uge");
-          } else {
-            result.updates.forEach(u => {
-              (async () => {
-                await supabase.from("instances").update({ assignees: u.assignees, status: u.status }).eq("id", u.id);
-                
-                // Auto-notify assigned employee
-                if (u.assignees && u.assignees.length > 0) {
-                  const emp = employees.find(e => e.id === u.assignees[0]);
-                  if (emp?.email) {
-                    await notifyEmployeeOfChanges(emp.email, emp.name, u.title || "Opgave", "Planlagt");
-                  }
-                }
-              })();
-            });
-            alert(`✅ ${result.count} opgave(r) planlagt til: ${result.employees.join(", ")} - Emails sendt!`);
-          }
-        }}><Wand2 size={16} /> Planlæg</button>
+        <button style={styles.secondaryBtn} onClick={onScheduleWeek}><Wand2 size={16} /> Planlæg</button>
         <button style={styles.secondaryBtn} onClick={onOpenTravelSettings}><Car size={16} /> Transporttid</button>
         <button style={{ ...styles.secondaryBtn, color: "#B91C1C", borderColor: "#FECACA" }} onClick={onOpenAddBlock}><Thermometer size={16} /> Sygdom/Ferie</button>
         <button style={{ ...styles.secondaryBtn, color: "#7C3AED", borderColor: "#DDD6FE" }} onClick={onOpenAddActivity}><Building2 size={16} /> Anden aktivitet</button>
