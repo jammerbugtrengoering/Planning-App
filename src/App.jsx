@@ -474,6 +474,8 @@ function ensureWeekInstances(week, year, allInstances, templates, employees) {
           templateDays: tpl.days, // for off-schedule detection
           scheduledTime: (tpl.dayTimes && tpl.dayTimes[day]) || null,
           contractType: tpl.contractType || "privat",
+          pricingType: tpl.pricingType || "hourly",
+          fixedPrice: tpl.fixedPrice ?? null,
           expiryDate: tpl.expiryDate || null,
           dineroSynced: tpl.dineroSynced ?? false,
         };
@@ -492,6 +494,8 @@ function ensureWeekInstances(week, year, allInstances, templates, employees) {
             poNumber: tpl.poNumber || "",
             accessInstructions: tpl.accessInstructions || "",
             contractType: tpl.contractType || "privat",
+            pricingType: tpl.pricingType || "hourly",
+            fixedPrice: tpl.fixedPrice ?? null,
             videoUrl: tpl.videoUrl || "",
           };
         }
@@ -1139,6 +1143,8 @@ function PlanningApp({ session, onSignOut }) {
       address_text: inst.address ?? "",
       access_instructions: inst.accessInstructions ?? "",
       contract_type: inst.contractType ?? "privat",
+      pricing_type: inst.pricingType || "hourly",
+      fixed_price: inst.fixedPrice ?? null,
       invoice_ready: inst.invoiceReady ?? false,
       dinero_exported: inst.dineroExported ?? false,
       start_date: inst.startDate || null,
@@ -1341,6 +1347,7 @@ function PlanningApp({ session, onSignOut }) {
         videoUrl: payload.videoUrl, customerName: payload.customerName, address: payload.address,
         poNumber: payload.poNumber, accessInstructions: payload.accessInstructions,
         contractType: payload.contractType, expiryDate: payload.expiryDate,
+        pricingType: payload.pricingType || "hourly", fixedPrice: payload.pricingType === "fixed" ? (Number(payload.fixedPrice) || 0) : null,
         startDate: payload.startDate || null, dineroSynced: payload.dineroSynced || false,
       };
       const { error: tplErr } = await supabase.from("service_templates").insert({
@@ -1348,6 +1355,7 @@ function PlanningApp({ session, onSignOut }) {
         video_url: tpl.videoUrl || "", po_number: tpl.poNumber || "",
         customer_name: tpl.customerName || "", address_text: tpl.address || "",
         access_instructions: tpl.accessInstructions || "", contract_type: tpl.contractType || "privat",
+        pricing_type: tpl.pricingType || "hourly", fixed_price: tpl.fixedPrice,
         dinero_synced: tpl.dineroSynced,
         start_date: payload.startDate || null,
         expiry_date: payload.expiryDate || null,
@@ -1369,7 +1377,7 @@ function PlanningApp({ session, onSignOut }) {
             const before = next;
             const expanded = ensureWeekInstances(wk, wy, next, nextT, employees);
             const newOnes = expanded.filter((i) => !next.find((c) => c.id === i.id));
-            newOnes.forEach((inst) => syncInstance({ ...inst, contractType: payload.contractType, expiryDate: payload.expiryDate }));
+            newOnes.forEach((inst) => syncInstance({ ...inst, contractType: payload.contractType, expiryDate: payload.expiryDate, pricingType: tpl.pricingType, fixedPrice: tpl.fixedPrice }));
             syncHealedAssignments(before, expanded);
             next = expanded;
           });
@@ -1406,6 +1414,8 @@ function PlanningApp({ session, onSignOut }) {
         videoUrl: payload.videoUrl, customerName: payload.customerName,
         address: payload.address, poNumber: payload.poNumber, accessInstructions: payload.accessInstructions,
         contractType: payload.contractType, dineroSynced: payload.dineroSynced || false,
+        pricingType: payload.pricingType || "hourly",
+        fixedPrice: payload.pricingType === "fixed" ? (Number(payload.fixedPrice) || 0) : null,
         type: "adhoc", day: dayForPlacement, deadline: deadlineDay,
         scheduledTime: payload.preferredTime || null,
       };
@@ -1962,6 +1972,14 @@ function PlanningApp({ session, onSignOut }) {
     for (const customerName of customerNames) {
       const tasks = groups[customerName];
       const lines = tasks.map((t) => {
+        if (t.pricingType === "fixed") {
+          return {
+            description: `${t.title} (Uge ${t.week}, ${dayLabelOf(t)})${t.poNumber ? ` — PO: ${t.poNumber}` : ""} — Fastpris`,
+            quantity: 1,
+            unitPrice: Number(t.fixedPrice) || 0,
+            unit: "fixed",
+          };
+        }
         const logged = (t.timeLog || t.time_log || []).reduce((s, l) => s + (l.minutes || 0), 0);
         const minutes = logged > 0 ? logged : t.duration;
         const hours = Math.round((minutes / 60) * 100) / 100;
@@ -3258,6 +3276,10 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
 
   // Forventet omsætning baseret på registreret tid og timepriser
   const expectedRevenue = placed.reduce((s, t) => {
+    if (t.pricingType === "fixed") {
+      const hasLog = (t.timeLog || t.time_log || []).length > 0 || t.status === "udført";
+      return s + (hasLog ? (Number(t.fixedPrice) || 0) : 0);
+    }
     const logged = (t.timeLog || t.time_log || []).reduce((s2, l) => s2 + (l.minutes || 0), 0);
     const rate = localPricing[t.contractType || "privat"] || 0;
     return s + (logged / 60) * rate;
@@ -3278,7 +3300,7 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
     <div style={styles.page}>
       <div style={styles.toolbar}>
         {(() => {
-          const plannedRev = placed.reduce((s, t) => s + (t.duration / 60) * (localPricing[t.contractType || "privat"] || 0), 0);
+          const plannedRev = placed.reduce((s, t) => s + (t.pricingType === "fixed" ? (Number(t.fixedPrice) || 0) : (t.duration / 60) * (localPricing[t.contractType || "privat"] || 0)), 0);
           const regRev = expectedRevenue;
           const diff = Math.round(regRev - plannedRev);
           return (
@@ -3395,8 +3417,9 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
               return `${who} (${fmtMin(l.minutes || 0)}): ${l.note}`;
             });
           const rate = localPricing[t.contractType || "privat"] || 0;
-          const plannedKr = Math.round((t.duration / 60) * rate);
-          const registeredKr = Math.round((logged / 60) * rate);
+          const isFixedPrice = t.pricingType === "fixed";
+          const plannedKr = isFixedPrice ? Math.round(Number(t.fixedPrice) || 0) : Math.round((t.duration / 60) * rate);
+          const registeredKr = isFixedPrice ? (logged > 0 ? plannedKr : 0) : Math.round((logged / 60) * rate);
           const diffKr = registeredKr - plannedKr;
 
           return (
@@ -3460,11 +3483,11 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
               </div>
               {/* Beløb planlagt */}
               <div style={{ fontSize: 13, fontWeight: 500, color: "#64748B", textAlign: "right" }}>
-                {rate > 0 ? `${plannedKr.toLocaleString("da-DK")} kr` : "—"}
+                {(isFixedPrice || rate > 0) ? `${isFixedPrice ? "💰 " : ""}${plannedKr.toLocaleString("da-DK")} kr` : "—"}
               </div>
               {/* Beløb registreret */}
               <div style={{ fontSize: 13, fontWeight: 600, color: logged > 0 ? "#16A34A" : "#94A3B8", textAlign: "right" }}>
-                {rate > 0 && logged > 0 ? `${registeredKr.toLocaleString("da-DK")} kr` : "—"}
+                {(isFixedPrice || rate > 0) && logged > 0 ? `${isFixedPrice ? "💰 " : ""}${registeredKr.toLocaleString("da-DK")} kr` : "—"}
               </div>
               {/* Difference */}
               <div style={{ fontSize: 13, fontWeight: 700, color: diffKr > 0 ? "#16A34A" : diffKr < 0 ? "#DC2626" : "#94A3B8", textAlign: "right" }}>
@@ -3879,8 +3902,12 @@ function ReportsView({ instances, pricing, budgets, onSaveBudget, isAdminUser })
           const my = instanceMonthYear(t, selectedYear);
           return my.month === idx && my.year === selectedYear;
         });
-        plannedKr += tasksInMonth.reduce((s, t) => s + (t.duration / 60) * rate, 0);
+        plannedKr += tasksInMonth.reduce((s, t) => s + (t.pricingType === "fixed" ? (Number(t.fixedPrice) || 0) : (t.duration / 60) * rate), 0);
         registeredKr += tasksInMonth.reduce((s, t) => {
+          if (t.pricingType === "fixed") {
+            const hasLog = (t.timeLog || t.time_log || []).length > 0 || t.status === "udført";
+            return s + (hasLog ? (Number(t.fixedPrice) || 0) : 0);
+          }
           const logged = (t.timeLog || t.time_log || []).reduce((s2, l) => s2 + (l.minutes || 0), 0);
           return s + (logged / 60) * rate;
         }, 0);
@@ -4078,6 +4105,8 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
     return CREATABLE_TYPES.includes(copyFrom.type) ? copyFrom.type : "adhoc";
   });
   const [contractType, setContractType] = useState(copyFrom?.contractType || "privat");
+  const [pricingType, setPricingType] = useState(copyFrom?.pricingType || "hourly");
+  const [fixedPrice, setFixedPrice] = useState(copyFrom?.fixedPrice ?? "");
   const [title, setTitle] = useState(copyFrom ? `Kopi af ${copyFrom.title}` : "");
   const [duration, setDuration] = useState(copyFrom?.duration || 60);
   const [requiredSkills, setRequiredSkills] = useState(copyFrom?.requiredSkills || [{ skill: skills[0] ?? "", minLevel: 1 }]);
@@ -4237,6 +4266,22 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
       </div>
       {type === "fixed" && <div style={styles.hint}>Faste opgaver gentages automatisk hver uge på de valgte dage — frem til udløbsdatoen.</div>}
       {type === "adhoc" && <div style={styles.hint}>Oprettes med dags dato og lander i "Ikke tildelt", klar til at blive planlagt.</div>}
+
+      <label style={styles.label}>Prismodel</label>
+      <div style={styles.typePicker}>
+        {[["hourly","⏱️ Timebaseret"],["fixed","💰 Fastpris"]].map(([k,l]) => (
+          <button key={k} type="button" onClick={() => setPricingType(k)}
+            style={pricingType === k ? { ...styles.typePickBtn, borderColor:"#16A34A", color:"#16A34A", background:"#DCFCE7" } : styles.typePickBtn}>
+            {l}
+          </button>
+        ))}
+      </div>
+      {pricingType === "fixed" && (
+        <>
+          <label style={styles.label}>Fastpris (kr. pr. opgave)</label>
+          <input style={styles.input} type="number" min="0" value={fixedPrice} onChange={(e) => setFixedPrice(e.target.value)} placeholder="f.eks. 1200" />
+        </>
+      )}
 
       <label style={styles.label}>Titel</label>
       <input style={styles.input} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="F.eks. Gulvvask kontor 2. sal" />
@@ -4420,7 +4465,7 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
         <button
           style={styles.primaryBtn}
           disabled={!title.trim() || (type === "fixed" && days.length === 0) || requiredSkills.length === 0}
-          onClick={() => onSave({ type, contractType, title: title.trim(), requiredSkills, duration, days, dayTimes, day, adhocDate, deadline, preferredTime, startDate, expiryDate, checklistTemplateIds, extraItems, videoUrl: videoUrl.trim(), customerName: customerName.trim(), address: address.trim(), poNumber: poNumber.trim(), accessInstructions: accessInstructions.trim(), dineroSynced: customerDineroSynced, assigned_employee_id: assignedEmployeeId })}
+          onClick={() => onSave({ type, contractType, pricingType, fixedPrice: pricingType === "fixed" ? (Number(fixedPrice) || 0) : null, title: title.trim(), requiredSkills, duration, days, dayTimes, day, adhocDate, deadline, preferredTime, startDate, expiryDate, checklistTemplateIds, extraItems, videoUrl: videoUrl.trim(), customerName: customerName.trim(), address: address.trim(), poNumber: poNumber.trim(), accessInstructions: accessInstructions.trim(), dineroSynced: customerDineroSynced, assigned_employee_id: assignedEmployeeId })}
         >
           Gem og planlæg
         </button>
@@ -4479,11 +4524,14 @@ function ContractsView({ templates, instances, pricing }) {
   function contractSumInfo(tpl, contractType, start, expiry) {
     const rate = pricing[contractType || "privat"] || 0;
     const weeklyMin = weeklyPlannedMinutes(tpl);
+    const weeklyValue = tpl.pricingType === "fixed"
+      ? (Number(tpl.fixedPrice) || 0) * ((tpl.days || []).length || 0)
+      : (weeklyMin / 60) * rate;
     if (start && expiry) {
       const weeks = Math.max(1, Math.round((expiry - start) / (1000 * 60 * 60 * 24 * 7)));
-      return { sum: (weeklyMin * weeks / 60) * rate, weeks, wholePeriod: true };
+      return { sum: weeklyValue * weeks, weeks, wholePeriod: true };
     }
-    return { sum: (weeklyMin / 60) * rate, weeks: 1, wholePeriod: false };
+    return { sum: weeklyValue, weeks: 1, wholePeriod: false };
   }
 
   // Hent alle faste kontrakter med udløbsdato — sortér efter nærmest udløbende
