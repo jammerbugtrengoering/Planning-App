@@ -404,6 +404,16 @@ function ensureWeekInstances(week, year, allInstances, templates, employees) {
       if (weekMonday < startMonday) return;
     }
     
+    // Gentagelsesinterval (Plan parametre): spring uger over der ikke matcher
+    // det valgte interval (uge/14 dage/måned/3 måned), talt fra startdatoen.
+    const PLAN_INTERVAL_WEEKS = { uge: 1, "14_dage": 2, maaned: 4, "3_maaned": 13 };
+    const planIntervalWeeks = PLAN_INTERVAL_WEEKS[tpl.planInterval] || 1;
+    if (planIntervalWeeks > 1) {
+      const anchorMonday = tpl.startDate ? mondayOf(new Date(tpl.startDate)) : weekMonday;
+      const weeksSinceAnchor = Math.round((weekMonday - anchorMonday) / (7 * 24 * 60 * 60 * 1000));
+      if (weeksSinceAnchor % planIntervalWeeks !== 0) return;
+    }
+    
     // Filter days to only those within start/expiry interval and not excluded
     const DAY_STRING_TO_INDEX = { "Mon": 0, "Tue": 1, "Wed": 2, "Thu": 3, "Fri": 4 };
     
@@ -973,6 +983,7 @@ function PlanningApp({ session, onSignOut }) {
             contractType: t.contract_type || "privat",
             pricingType: t.pricing_type || "hourly",
             fixedPrice: t.fixed_price,
+            planInterval: t.plan_interval || "uge",
             dineroSynced: t.dinero_synced ?? false,
             checklistItems: [],
             startDate: t.start_date || null,
@@ -1356,6 +1367,7 @@ function PlanningApp({ session, onSignOut }) {
         poNumber: payload.poNumber, accessInstructions: payload.accessInstructions,
         contractType: payload.contractType, expiryDate: payload.expiryDate,
         pricingType: payload.pricingType || "hourly", fixedPrice: payload.pricingType === "fixed" ? (Number(payload.fixedPrice) || 0) : null,
+        planInterval: payload.planInterval || "uge",
         startDate: payload.startDate || null, dineroSynced: payload.dineroSynced || false,
       };
       const { error: tplErr } = await supabase.from("service_templates").insert({
@@ -1364,6 +1376,7 @@ function PlanningApp({ session, onSignOut }) {
         customer_name: tpl.customerName || "", address_text: tpl.address || "",
         access_instructions: tpl.accessInstructions || "", contract_type: tpl.contractType || "privat",
         pricing_type: tpl.pricingType || "hourly", fixed_price: tpl.fixedPrice,
+        plan_interval: tpl.planInterval || "uge",
         dinero_synced: tpl.dineroSynced,
         start_date: payload.startDate || null,
         expiry_date: payload.expiryDate || null,
@@ -4116,6 +4129,7 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
   const [contractType, setContractType] = useState(copyFrom?.contractType || "privat");
   const [pricingType, setPricingType] = useState(copyFrom?.pricingType || "hourly");
   const [fixedPrice, setFixedPrice] = useState(copyFrom?.fixedPrice ?? "");
+  const [planInterval, setPlanInterval] = useState(copyFrom?.planInterval || "uge");
   const [title, setTitle] = useState(copyFrom ? `Kopi af ${copyFrom.title}` : "");
   const [duration, setDuration] = useState(copyFrom?.duration || 60);
   const [requiredSkills, setRequiredSkills] = useState(copyFrom?.requiredSkills || [{ skill: skills[0] ?? "", minLevel: 1 }]);
@@ -4403,6 +4417,15 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
           <input type="date" style={styles.input} value={startDate} onChange={(e) => setStartDate(e.target.value)} />
           <label style={styles.label}>Udløbsdato (aftalen gælder til og med)</label>
           <input type="date" style={styles.input} value={expiryDate} onChange={(e) => setExpiryDate(e.target.value)} />
+          <label style={styles.label}>Plan parametre</label>
+          <div style={styles.typePicker}>
+            {[["uge","Uge"],["14_dage","14 dage"],["maaned","Måned"],["3_maaned","3 måned"]].map(([k,l]) => (
+              <button key={k} type="button" onClick={() => setPlanInterval(k)}
+                style={planInterval === k ? { ...styles.typePickBtn, borderColor:"#D6247A", color:"#D6247A", background:"#FCE4EF" } : styles.typePickBtn}>
+                {l}
+              </button>
+            ))}
+          </div>
           <label style={styles.label}>Ugedage (gentages hver uge)</label>
           <div style={styles.skillPicker}>
             {DAYS.map((d) => <button key={d.key} type="button" onClick={() => toggleDay(d.key)} style={days.includes(d.key) ? styles.skillPickBtnActive : styles.skillPickBtn}>{d.label}</button>)}
@@ -4474,7 +4497,7 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
         <button
           style={styles.primaryBtn}
           disabled={!title.trim() || (type === "fixed" && days.length === 0) || requiredSkills.length === 0}
-          onClick={() => onSave({ type, contractType, pricingType, fixedPrice: pricingType === "fixed" ? (Number(fixedPrice) || 0) : null, title: title.trim(), requiredSkills, duration, days, dayTimes, day, adhocDate, deadline, preferredTime, startDate, expiryDate, checklistTemplateIds, extraItems, videoUrl: videoUrl.trim(), customerName: customerName.trim(), address: address.trim(), poNumber: poNumber.trim(), accessInstructions: accessInstructions.trim(), dineroSynced: customerDineroSynced, assigned_employee_id: assignedEmployeeId })}
+          onClick={() => onSave({ type, contractType, pricingType, fixedPrice: pricingType === "fixed" ? (Number(fixedPrice) || 0) : null, planInterval, title: title.trim(), requiredSkills, duration, days, dayTimes, day, adhocDate, deadline, preferredTime, startDate, expiryDate, checklistTemplateIds, extraItems, videoUrl: videoUrl.trim(), customerName: customerName.trim(), address: address.trim(), poNumber: poNumber.trim(), accessInstructions: accessInstructions.trim(), dineroSynced: customerDineroSynced, assigned_employee_id: assignedEmployeeId })}
         >
           Gem og planlæg
         </button>
