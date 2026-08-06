@@ -3538,6 +3538,7 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
 
       {placed.length > 0 && (() => {
         const totalPlannedKr = placed.reduce((s, t) => {
+          if (t.pricingType === "fixed") return s + Math.round(Number(t.fixedPrice) || 0);
           const rate = localPricing[t.contractType || "privat"] || 0;
           return s + Math.round((t.duration / 60) * rate);
         }, 0);
