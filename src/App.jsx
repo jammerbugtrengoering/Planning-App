@@ -5803,6 +5803,11 @@ return (
             <span style={{ ...styles.avatar, background: e.color }}>{initials(e.name)}</span>
             <span style={{ flex: 1, fontSize: 13 }}>{e.name}</span>
             {byEmployee[e.id] > 0 && <span style={styles.cardMeta}>{fmtMin(byEmployee[e.id])} registreret</span>}
+            {assignedEmps.length > 1 && (
+              (t.completedByEmployee || t.completed_by_employee || {})[e.id]
+                ? <span style={{ fontSize: 11, color: "#16A34A", fontWeight: 700, whiteSpace: "nowrap" }}>✓ Udført</span>
+                : <span style={{ fontSize: 11, color: "#94A3B8", whiteSpace: "nowrap" }}>Ikke afsluttet</span>
+            )}
             <button type="button" style={styles.iconBtnGhostInline} onClick={() => onRemoveAssignee(t.id, e.id)} title="Fjern fra opgaven"><X size={13} /></button>
           </div>
         ))}
