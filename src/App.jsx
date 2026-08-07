@@ -5083,16 +5083,16 @@ function InventoryView({ supabase, employees, currentUserName }) {
 
   async function saveEditItem() {
     if (!showEditItem || !editItemName.trim()) return;
-    const { error } = await supabase.from("inventory_items").update({
+    // Hent varen med opdateret kategori-join tilbage fra serveren, så ikon/navn/type
+    // for en evt. ny kategori vises korrekt med det samme — ikke først efter reload.
+    const { data, error } = await supabase.from("inventory_items").update({
       name: editItemName.trim(),
       unit: editItemUnit,
       min_stock: Number(editItemMin),
       category_id: editItemCat,
-    }).eq("id", showEditItem.id);
-    if (!error) {
-      setItems((prev) => prev.map((i) => i.id === showEditItem.id
-        ? { ...i, name: editItemName.trim(), unit: editItemUnit, min_stock: Number(editItemMin), category_id: editItemCat }
-        : i));
+    }).eq("id", showEditItem.id).select("*, inventory_categories(name,type,icon)").single();
+    if (!error && data) {
+      setItems((prev) => prev.map((i) => (i.id === showEditItem.id ? data : i)));
       setShowEditItem(null);
     }
   }
