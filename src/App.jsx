@@ -939,6 +939,24 @@ function PlanningApp({ session, onSignOut }) {
     }
   }
 
+  // Manuel rettelse af "sendt til Dinero"-status for en enkelt produktlinje (admin).
+  async function toggleProductDineroExported(txId, next) {
+    setProductUsage((prev) => prev.map((tx) => (tx.id === txId ? { ...tx, dinero_exported: next } : tx)));
+    const { error } = await supabase.from("inventory_transactions").update({ dinero_exported: next }).eq("id", txId);
+    if (error) {
+      notify("Kunne ikke opdatere Dinero-status for produktlinjen");
+      setProductUsage((prev) => prev.map((tx) => (tx.id === txId ? { ...tx, dinero_exported: !next } : tx)));
+    }
+  }
+
+  // Markér produktlinjer som sendt til Dinero efter en succesfuld fakturakladde-oprettelse.
+  async function markProductLinesDineroExported(txIds) {
+    if (!txIds.length) return;
+    const now = new Date().toISOString();
+    setProductUsage((prev) => prev.map((tx) => (txIds.includes(tx.id) ? { ...tx, dinero_exported: true, dinero_exported_at: now } : tx)));
+    await supabase.from("inventory_transactions").update({ dinero_exported: true, dinero_exported_at: now }).in("id", txIds);
+  }
+
   // ── Supabase: load alt ved opstart ──
   useEffect(() => {
     async function loadAll() {
@@ -2077,28 +2095,34 @@ function PlanningApp({ session, onSignOut }) {
   }
 
   // Kundeprodukter brugt på en given opgave, formateret som Dinero-fakturalinjer.
+  // Kun produktlinjer der endnu ikke er sendt til Dinero — så en opgave der allerede
+  // er faktureret for timer/fastpris godt kan få nye produktlinjer med senere,
+  // uden at timerne bliver sendt igen.
+  function pendingProductTxForTask(taskId) {
+    return productUsage.filter((tx) => tx.instance_id === taskId && tx.invoice_ready !== false && !tx.dinero_exported);
+  }
   function productLinesForTask(taskId) {
-    return productUsage
-      .filter((tx) => tx.instance_id === taskId && tx.invoice_ready !== false)
-      .map((tx) => {
-        const item = tx.inventory_items || {};
-        const qty = Math.abs(Number(tx.quantity) || 0);
-        const numberPart = item.item_number ? `${item.item_number} — ` : "";
-        return {
-          description: `${numberPart}${item.name || "Produkt"}`,
-          quantity: qty,
-          unitPrice: Number(item.price) || 0,
-          unit: item.unit || "stk",
-        };
-      });
+    return pendingProductTxForTask(taskId).map((tx) => {
+      const item = tx.inventory_items || {};
+      const qty = Math.abs(Number(tx.quantity) || 0);
+      const numberPart = item.item_number ? `${item.item_number} — ` : "";
+      return {
+        description: `${numberPart}${item.name || "Produkt"}`,
+        quantity: qty,
+        unitPrice: Number(item.price) || 0,
+        unit: item.unit || "stk",
+      };
+    });
   }
 
   async function exportToDinero(filteredInstances, label) {
-    // Ekskluderer altid opgaver der allerede er markeret som sendt til Dinero –
-    // uanset visningsfiltre i UI'et – så samme linje aldrig kan overføres to gange.
-    const toExport = (filteredInstances || instances.filter((t) => t.assignees && t.assignees.length))
-      .filter((t) => t.invoiceReady)
-      .filter((t) => !t.dineroExported);
+    // En opgave er klar til Dinero hvis selve opgaven (timer/fastpris) endnu ikke er
+    // sendt, ELLER hvis den har nye produktlinjer der endnu ikke er sendt — sådan kan
+    // produkter brugt EFTER opgaven allerede er faktureret stadig komme med senere,
+    // uden at timerne/fastprisen bliver faktureret to gange.
+    const base = (filteredInstances || instances.filter((t) => t.assignees && t.assignees.length))
+      .filter((t) => t.invoiceReady);
+    const toExport = base.filter((t) => !t.dineroExported || pendingProductTxForTask(t.id).length > 0);
     if (toExport.length === 0) {
       notify("Ingen nye opgaver klar til Dinero (allerede sendt eller intet fakturagrundlag)");
       return;
@@ -2134,7 +2158,24 @@ function PlanningApp({ session, onSignOut }) {
 
     for (const customerName of customerNames) {
       const tasks = groups[customerName];
+      const groupProductTxIds = [];
       const lines = tasks.flatMap((t) => {
+        const pendingProductTx = pendingProductTxForTask(t.id);
+        pendingProductTx.forEach((tx) => groupProductTxIds.push(tx.id));
+        const productLines = pendingProductTx.map((tx) => {
+          const item = tx.inventory_items || {};
+          const qty = Math.abs(Number(tx.quantity) || 0);
+          const numberPart = item.item_number ? `${item.item_number} — ` : "";
+          return {
+            description: `${numberPart}${item.name || "Produkt"}`,
+            quantity: qty,
+            unitPrice: Number(item.price) || 0,
+            unit: item.unit || "stk",
+          };
+        });
+        // Timer/fastpris springes over hvis opgaven allerede er sendt til Dinero —
+        // kun de nye produktlinjer skal så med.
+        if (t.dineroExported) return productLines;
         const serviceLine = t.pricingType === "fixed"
           ? {
               description: `${t.title} (Uge ${t.week}, ${dayLabelOf(t)})${t.poNumber ? ` — PO: ${t.poNumber}` : ""} — Fastpris`,
@@ -2155,7 +2196,7 @@ function PlanningApp({ session, onSignOut }) {
               };
             })();
         // Én ekstra fakturalinje pr. kundeprodukt der er registreret brugt på opgaven.
-        return [serviceLine, ...productLinesForTask(t.id)];
+        return [serviceLine, ...productLines];
       });
 
       try {
@@ -2182,6 +2223,8 @@ function PlanningApp({ session, onSignOut }) {
           results.success.push({ customerName, guid: data.Guid });
           // Markér alle opgaver i denne gruppe som sendt til Dinero, så de ikke kan eksporteres igen.
           tasks.forEach((t) => updateInstance(t.id, (old) => ({ ...old, dineroExported: true })));
+          // Markér de medsendte produktlinjer som sendt til Dinero.
+          markProductLinesDineroExported(groupProductTxIds);
         } else {
           results.error.push({ customerName, message: "Uventet svar fra Dinero" });
         }
@@ -2343,7 +2386,7 @@ function PlanningApp({ session, onSignOut }) {
       {view === "time" && (
         <TimeView instances={instances} employees={employees}
           onExportToDinero={exportToDinero} totalLogged={totalLogged} weekLabel={wk.label}
-          isAdminUser={isAdminUser} productUsage={productUsage} onToggleProductInvoice={toggleProductInvoiceReady}
+          isAdminUser={isAdminUser} productUsage={productUsage} onToggleProductInvoice={toggleProductInvoiceReady} onToggleProductDinero={toggleProductDineroExported}
           pricing={pricing} onPricingChange={async (newPricing) => {
             setPricing(newPricing);
             for (const [type, rate] of Object.entries(newPricing)) {
@@ -3342,7 +3385,7 @@ function ChecklistModal({ checklist, onClose, onSave }) {
 }
 
 // ---------- Time & Export ----------
-function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLabel, onUpdateInstance, pricing: pricingProp, onPricingChange, isAdminUser, onOpenTask, productUsage, onToggleProductInvoice }) {
+function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLabel, onUpdateInstance, pricing: pricingProp, onPricingChange, isAdminUser, onOpenTask, productUsage, onToggleProductInvoice, onToggleProductDinero }) {
   const productLinesByTask = useMemo(() => {
     const map = {};
     (productUsage || []).forEach((tx) => {
@@ -3355,6 +3398,7 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
         unit: item.unit || "stk",
         amount: Math.abs(Number(tx.quantity) || 0) * (Number(item.price) || 0),
         invoiceReady: tx.invoice_ready !== false,
+        dineroExported: !!tx.dinero_exported,
       });
     });
     return map;
@@ -3708,8 +3752,9 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
               </div>
             </div>
             {taskProductLines.map((pl, plIdx) => (
-              <div key={pl.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 14px 4px 60px", fontSize: 11, color: pl.invoiceReady ? "#92600A" : "#B0B0B0", background: pl.invoiceReady ? "#FFFBEB" : "#F8F8F8", borderBottom: (idx < placed.length - 1 || plIdx < taskProductLines.length - 1) ? "1px solid #F1F5F9" : "none" }}>
+              <div key={pl.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 14px 4px 60px", fontSize: 11, color: pl.invoiceReady ? "#92600A" : "#B0B0B0", background: pl.dineroExported ? "#EEF2FF" : pl.invoiceReady ? "#FFFBEB" : "#F8F8F8", borderBottom: (idx < placed.length - 1 || plIdx < taskProductLines.length - 1) ? "1px solid #F1F5F9" : "none" }}>
                 <span style={{ textDecoration: pl.invoiceReady ? "none" : "line-through" }}>📦 {pl.label}</span>
+                {pl.dineroExported && <span style={{ fontSize: 9, fontWeight: 700, color: "#4F46E5", background: "#E0E7FF", borderRadius: 4, padding: "1px 5px" }}>Sendt til Dinero</span>}
                 <span style={{ color: pl.invoiceReady ? "#B45309" : "#B0B0B0" }}>{pl.qty} {pl.unit}</span>
                 <span style={{ fontWeight: 600 }}>{Math.round(pl.amount)} kr</span>
                 <span
@@ -3718,6 +3763,14 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
                   onClick={() => onToggleProductInvoice(pl.id, !pl.invoiceReady)}>
                   {pl.invoiceReady && <Check size={10} color="#fff" strokeWidth={3} />}
                 </span>
+                {isAdminUser && (
+                  <span
+                    title={pl.dineroExported ? "Fjern markering: sendt til Dinero" : "Markér manuelt som sendt til Dinero"}
+                    style={{ width: 16, height: 16, borderRadius: 4, border: pl.dineroExported ? "2px solid #4F46E5" : "2px solid #CBD5E1", background: pl.dineroExported ? "#4F46E5" : "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}
+                    onClick={() => onToggleProductDinero(pl.id, !pl.dineroExported)}>
+                    {pl.dineroExported && <Check size={10} color="#fff" strokeWidth={3} />}
+                  </span>
+                )}
               </div>
             ))}
             </React.Fragment>
