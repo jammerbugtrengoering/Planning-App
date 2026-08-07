@@ -340,7 +340,11 @@ function scheduleWeek(weekInstances, employees, autoOnly = false, areas = [], em
     // søg kun blandt de dage, der er angivet (typisk i dag og frem), i stedet
     // for det normale deadline-vindue for rigtige fleksible opgaver.
     const deadlineIdx = DAYS.findIndex((d) => d.key === (t.deadline || "Fri"));
-    const window = t._forceWindow ? DAYS.filter((d) => t._forceWindow.includes(d.key)) : DAYS.slice(0, deadlineIdx + 1);
+    // En opgave må aldrig auto-placeres på en dag der allerede er passeret —
+    // vinduet starter derfor tidligst i dag (earliestAllowedDayIndex), ikke
+    // altid mandag, når det er den viste/indeværende uge der planlægges i.
+    const earliestIdx = earliestAllowedDayIndex(t.week, t.year);
+    const window = t._forceWindow ? DAYS.filter((d) => t._forceWindow.includes(d.key)) : DAYS.slice(earliestIdx, deadlineIdx + 1);
     const { candidates, outsideArea } = candidatesFor(t, employees, areas, employeeAreas);
     if (candidates.length === 0) { t.warning = "no_skill"; return; }
     let best = null;
