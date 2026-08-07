@@ -929,6 +929,16 @@ function PlanningApp({ session, onSignOut }) {
     loadProductUsage();
   }, [supabase]);
 
+  // Slår en enkelt produktlinje til/fra som fakturagrundlag — uafhængigt af opgavens egen toggle.
+  async function toggleProductInvoiceReady(txId, next) {
+    setProductUsage((prev) => prev.map((tx) => (tx.id === txId ? { ...tx, invoice_ready: next } : tx)));
+    const { error } = await supabase.from("inventory_transactions").update({ invoice_ready: next }).eq("id", txId);
+    if (error) {
+      notify("Kunne ikke opdatere fakturagrundlag for produktlinjen");
+      setProductUsage((prev) => prev.map((tx) => (tx.id === txId ? { ...tx, invoice_ready: !next } : tx)));
+    }
+  }
+
   // ── Supabase: load alt ved opstart ──
   useEffect(() => {
     async function loadAll() {
@@ -2069,7 +2079,7 @@ function PlanningApp({ session, onSignOut }) {
   // Kundeprodukter brugt på en given opgave, formateret som Dinero-fakturalinjer.
   function productLinesForTask(taskId) {
     return productUsage
-      .filter((tx) => tx.instance_id === taskId)
+      .filter((tx) => tx.instance_id === taskId && tx.invoice_ready !== false)
       .map((tx) => {
         const item = tx.inventory_items || {};
         const qty = Math.abs(Number(tx.quantity) || 0);
@@ -2333,7 +2343,7 @@ function PlanningApp({ session, onSignOut }) {
       {view === "time" && (
         <TimeView instances={instances} employees={employees}
           onExportToDinero={exportToDinero} totalLogged={totalLogged} weekLabel={wk.label}
-          isAdminUser={isAdminUser} productUsage={productUsage}
+          isAdminUser={isAdminUser} productUsage={productUsage} onToggleProductInvoice={toggleProductInvoiceReady}
           pricing={pricing} onPricingChange={async (newPricing) => {
             setPricing(newPricing);
             for (const [type, rate] of Object.entries(newPricing)) {
@@ -3332,7 +3342,7 @@ function ChecklistModal({ checklist, onClose, onSave }) {
 }
 
 // ---------- Time & Export ----------
-function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLabel, onUpdateInstance, pricing: pricingProp, onPricingChange, isAdminUser, onOpenTask, productUsage }) {
+function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLabel, onUpdateInstance, pricing: pricingProp, onPricingChange, isAdminUser, onOpenTask, productUsage, onToggleProductInvoice }) {
   const productLinesByTask = useMemo(() => {
     const map = {};
     (productUsage || []).forEach((tx) => {
@@ -3344,6 +3354,7 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
         qty: Math.abs(Number(tx.quantity) || 0),
         unit: item.unit || "stk",
         amount: Math.abs(Number(tx.quantity) || 0) * (Number(item.price) || 0),
+        invoiceReady: tx.invoice_ready !== false,
       });
     });
     return map;
@@ -3697,10 +3708,16 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
               </div>
             </div>
             {taskProductLines.map((pl, plIdx) => (
-              <div key={pl.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 14px 4px 60px", fontSize: 11, color: "#92600A", background: "#FFFBEB", borderBottom: (idx < placed.length - 1 || plIdx < taskProductLines.length - 1) ? "1px solid #F1F5F9" : "none" }}>
-                <span>📦 {pl.label}</span>
-                <span style={{ color: "#B45309" }}>{pl.qty} {pl.unit}</span>
-                <span style={{ marginLeft: "auto", fontWeight: 600 }}>{Math.round(pl.amount)} kr</span>
+              <div key={pl.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 14px 4px 60px", fontSize: 11, color: pl.invoiceReady ? "#92600A" : "#B0B0B0", background: pl.invoiceReady ? "#FFFBEB" : "#F8F8F8", borderBottom: (idx < placed.length - 1 || plIdx < taskProductLines.length - 1) ? "1px solid #F1F5F9" : "none" }}>
+                <span style={{ textDecoration: pl.invoiceReady ? "none" : "line-through" }}>📦 {pl.label}</span>
+                <span style={{ color: pl.invoiceReady ? "#B45309" : "#B0B0B0" }}>{pl.qty} {pl.unit}</span>
+                <span style={{ fontWeight: 600 }}>{Math.round(pl.amount)} kr</span>
+                <span
+                  title={pl.invoiceReady ? "Fjern produktlinjen fra fakturagrundlag" : "Medtag produktlinjen i fakturagrundlag"}
+                  style={{ marginLeft: "auto", width: 16, height: 16, borderRadius: 4, border: pl.invoiceReady ? "2px solid #16A34A" : "2px solid #CBD5E1", background: pl.invoiceReady ? "#16A34A" : "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}
+                  onClick={() => onToggleProductInvoice(pl.id, !pl.invoiceReady)}>
+                  {pl.invoiceReady && <Check size={10} color="#fff" strokeWidth={3} />}
+                </span>
               </div>
             ))}
             </React.Fragment>
