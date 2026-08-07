@@ -2316,7 +2316,7 @@ function PlanningApp({ session, onSignOut }) {
 
       {view === "medExport" && (<EmployeeExportView instances={instances} employees={employees} />)}
       {view === "inventory" && (
-        <InventoryView supabase={supabase} employees={employees} />
+        <InventoryView supabase={supabase} employees={employees} currentUserName={currentEmployeeForAuth?.name || null} />
       )}
 
       {view === "skills" && (
@@ -5027,10 +5027,11 @@ function SkillsView({ supabase, skills: skillNames, onSkillsChange }) {
 }
 
 // ── Inventory View ────────────────────────────────────────────────────────────
-function InventoryView({ supabase, employees }) {
+function InventoryView({ supabase, employees, currentUserName }) {
   const [categories, setCategories] = useState([]);
   const [items, setItems] = useState([]);
   const [transactions, setTransactions] = useState([]);
+  const [pendingOrders, setPendingOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showAddItem, setShowAddItem] = useState(false);
   const [showAdjust, setShowAdjust] = useState(null);
@@ -5055,14 +5056,16 @@ function InventoryView({ supabase, employees }) {
   useEffect(() => {
     async function load() {
       setLoading(true);
-      const [{ data: cats }, { data: itms }, { data: txns }] = await Promise.all([
+      const [{ data: cats }, { data: itms }, { data: txns }, { data: pending }] = await Promise.all([
         supabase.from("inventory_categories").select("*").order("type"),
         supabase.from("inventory_items").select("*, inventory_categories(name,type,icon)").order("name"),
         supabase.from("inventory_transactions").select("*, inventory_items(name), employees(name)").order("created_at", { ascending: false }).limit(50),
+        supabase.from("inventory_transactions").select("*, inventory_items(name,unit), employees(name)").eq("status", "pending").order("created_at", { ascending: true }),
       ]);
       setCategories(cats || []);
       setItems(itms || []);
       setTransactions(txns || []);
+      setPendingOrders(pending || []);
       setLoading(false);
       if (cats?.length) setNewCat(cats[0].id);
     }
@@ -5100,6 +5103,44 @@ function InventoryView({ supabase, employees }) {
     if (dbFail(delItemErr, "slette lagervaren")) return;
     setItems((prev) => prev.filter((i) => i.id !== item.id));
   }
+
+  // Godkender en bestilling af medarbejderprodukter: nedskriver lageret (først nu!)
+  // og markerer alle linjer i bestillingen som godkendt.
+  async function approveOrderGroup(groupId) {
+    const rows = pendingOrders.filter((o) => (o.order_group_id || o.id) === groupId);
+    for (const row of rows) {
+      const { error: consumeErr } = await supabase.rpc("consume_stock", { p_item_id: row.item_id, p_amount: Math.abs(row.quantity) });
+      if (consumeErr) { alert(`Kunne ikke opdatere lageret for "${row.inventory_items?.name || row.item_id}" — prøv igen.`); return; }
+      await supabase.from("inventory_transactions").update({
+        status: "approved", approved_by: currentUserName || null, approved_at: new Date().toISOString(),
+      }).eq("id", row.id);
+    }
+    setPendingOrders((prev) => prev.filter((o) => (o.order_group_id || o.id) !== groupId));
+    setItems((prev) => prev.map((it) => {
+      const consumed = rows.filter((r) => r.item_id === it.id).reduce((s, r) => s + Math.abs(r.quantity), 0);
+      return consumed ? { ...it, stock: Math.max(0, it.stock - consumed) } : it;
+    }));
+  }
+
+  async function rejectOrderGroup(groupId) {
+    if (!window.confirm("Afvis denne bestilling? Lageret ændres ikke.")) return;
+    const rows = pendingOrders.filter((o) => (o.order_group_id || o.id) === groupId);
+    for (const row of rows) {
+      await supabase.from("inventory_transactions").update({
+        status: "rejected", approved_by: currentUserName || null, approved_at: new Date().toISOString(),
+      }).eq("id", row.id);
+    }
+    setPendingOrders((prev) => prev.filter((o) => (o.order_group_id || o.id) !== groupId));
+  }
+
+  const orderGroups = Object.values(
+    pendingOrders.reduce((acc, o) => {
+      const key = o.order_group_id || o.id;
+      if (!acc[key]) acc[key] = { key, employeeName: o.employees?.name || "?", createdAt: o.created_at, rows: [] };
+      acc[key].rows.push(o);
+      return acc;
+    }, {})
+  );
 
   async function adjust() {
     if (!showAdjust || !adjustQty) return;
@@ -5156,6 +5197,29 @@ function InventoryView({ supabase, employees }) {
           </div>
         ))}
       </div>
+
+      {orderGroups.length > 0 && (
+        <div style={{ background: "#FFFBEB", border: "1px solid #FDE68A", borderRadius: 12, padding: 14, marginBottom: 16 }}>
+          <div style={{ fontWeight: 800, fontSize: 14, color: "#92400E", marginBottom: 8 }}>
+            📦 Afventende bestillinger ({orderGroups.length})
+          </div>
+          {orderGroups.map((g) => (
+            <div key={g.key} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, background: "#fff", borderRadius: 8, padding: "8px 12px", marginBottom: 6, flexWrap: "wrap" }}>
+              <div style={{ flex: 1, minWidth: 200 }}>
+                <div style={{ fontWeight: 700, fontSize: 13, color: "#111111" }}>{g.employeeName}</div>
+                <div style={{ fontSize: 12, color: "#64748B" }}>
+                  {g.rows.map((r) => `${Math.abs(r.quantity)} × ${r.inventory_items?.name || r.item_id}`).join(", ")}
+                </div>
+                {g.createdAt && <div style={{ fontSize: 11, color: "#94A3B8", marginTop: 2 }}>{new Date(g.createdAt).toLocaleString("da-DK")}</div>}
+              </div>
+              <div style={{ display: "flex", gap: 6 }}>
+                <button style={{ border: "none", background: "#16A34A", color: "#fff", borderRadius: 8, padding: "6px 12px", fontSize: 12, fontWeight: 700, cursor: "pointer" }} onClick={() => approveOrderGroup(g.key)}>Godkend</button>
+                <button style={{ border: "none", background: "#F1F5F9", color: "#475569", borderRadius: 8, padding: "6px 12px", fontSize: 12, fontWeight: 700, cursor: "pointer" }} onClick={() => rejectOrderGroup(g.key)}>Afvis</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Product list */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px,1fr))", gap: 10 }}>
