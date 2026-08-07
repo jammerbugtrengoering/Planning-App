@@ -350,7 +350,17 @@ function scheduleWeek(weekInstances, employees, autoOnly = false, areas = [], em
         if (t.scheduledTime && hasTimeConflict(e.id, d.key, t)) return;
         const rem = remaining(employees, list, e.id, d.key);
         const fits = rem >= t.duration ? 1 : 0;
-        const score = fits * 1_000_000 + skillScore(e, t) * 1000 + rem;
+        // En opgave med et ønsket starttidspunkt bør helst placeres hos en
+        // medarbejder/dag hvor det tidspunkt rent faktisk er nåeligt — dvs.
+        // medarbejderens allerede planlagte tid denne dag ikke i sig selv
+        // skubber forbi det ønskede klokkeslæt, inden opgaven overhovedet nås.
+        let timeScore = 0;
+        if (t.scheduledTime) {
+          const desiredMin = parseTimeToMinutes(t.scheduledTime);
+          const estimatedArrival = parseTimeToMinutes(e.startTime || "07:00") + usedMinutes(list, e.id, d.key);
+          timeScore = estimatedArrival <= desiredMin ? 2000 : -2000;
+        }
+        const score = fits * 1_000_000 + timeScore + skillScore(e, t) * 1000 + rem;
         if (!best || score > best.score) best = { day: d.key, empId: e.id, rem, score };
       });
     });
@@ -2588,7 +2598,7 @@ function WeekView({ employees, instances, unplaced, onAdd, onAuto, onScheduleWee
                 <div style={styles.cardTitle}>{t.title}</div>
                 {t.customerName && <div style={styles.taskChipCustomer}>{t.customerName}</div>}
                 {t.address && <div style={styles.taskChipAddress}>📍 {t.address}</div>}
-                <div style={styles.cardMeta}>Uge {t.week}{t.day ? ` · ${DAYS.find((d) => d.key === t.day)?.label}` : ""} · {skillLabel(t)} · {fmtMin(t.duration)}{t.deadline ? ` · senest ${DAYS.find((d) => d.key === t.deadline)?.label}` : ""}</div>
+                <div style={styles.cardMeta}>Uge {t.week}{t.day ? ` · ${DAYS.find((d) => d.key === t.day)?.label}` : ""} · {skillLabel(t)} · {fmtMin(t.duration)}{t.deadline ? ` · senest ${DAYS.find((d) => d.key === t.deadline)?.label}` : ""}{t.scheduledTime ? ` · ønsket kl. ${t.scheduledTime}` : ""}</div>
                 {liveNoSkill && <span style={styles.errorChip}><AlertTriangle size={12} /> Ingen har alle krævede kompetencer</span>}
                 {!liveNoSkill && t.warning === "overloaded" && <span style={styles.warnChip}><AlertTriangle size={12} /> Ingen ledig kapacitet</span>}
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 6 }} onClick={(e) => e.stopPropagation()}>
@@ -2701,6 +2711,7 @@ function WeekView({ employees, instances, unplaced, onAdd, onAuto, onScheduleWee
                             <div style={styles.chipTopRow}>
                               <TypeBadge type={t.type} mini />
                               <span style={styles.taskChipTitle}>{seg.start != null ? `${fmtClock(seg.start)} · ` : ""}{t.title}</span>
+                              {t.scheduledTime && (seg.start == null || fmtClock(seg.start) !== t.scheduledTime) && <span title={`Ønsket kl. ${t.scheduledTime}`} style={{ fontSize: 11, marginLeft: 2, color: "#D97706" }}>🎯{t.scheduledTime}</span>}
                               {t.offSchedule && <span title="Planlagt uden for aftale" style={{ fontSize: 12, marginLeft: 2 }}>⚠️</span>}
                               {t.onSchedule && !t.offSchedule && <span title="Planlagt på aftalt dag" style={{ fontSize: 12, marginLeft: 2 }}>✓</span>}
                               {t.outsideArea && <span title="Planlagt uden for medarbejderens område" style={{ fontSize: 12, marginLeft: 2 }}>📍⚠️</span>}
