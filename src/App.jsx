@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect, useCallback } from "react";
 import { supabase } from "./supabaseClient";
 import {
   Plus, Download, X, Clock, AlertTriangle,
-  Trash2, Pencil, Repeat, Zap, CalendarClock, Wand2, Star, ChevronLeft, ChevronRight,
+  Trash2, Pencil, Repeat, Zap, CalendarClock, Wand2, Star, ChevronLeft, ChevronRight, ChevronUp, ChevronDown,
   ClipboardList, Video, CheckCircle2, LogIn, ListChecks, Check, Lock, Navigation, Building2, Car, Copy,
   Thermometer, Palmtree, Mail,
 } from "lucide-react";
@@ -3235,6 +3235,19 @@ function ChecklistModal({ checklist, onClose, onSave }) {
     resetDraft();
   }
   function removeItem(i) { setItems((prev) => prev.filter((_, idx) => idx !== i)); if (editIndex === i) resetDraft(); }
+  // Flytter et tjekliste-punkt op (dir=-1) eller ned (dir=1), så man kan indsætte
+  // et nyt punkt et bestemt sted (fx som nr. 2) i stedet for kun nederst.
+  function moveItem(i, dir) {
+    setItems((prev) => {
+      const j = i + dir;
+      if (j < 0 || j >= prev.length) return prev;
+      const next = [...prev];
+      [next[i], next[j]] = [next[j], next[i]];
+      return next;
+    });
+    if (editIndex === i) setEditIndex(i + dir);
+    else if (editIndex === i + dir) setEditIndex(i);
+  }
 
   return (
     <Modal onClose={onClose} title={checklist ? "Rediger tjekliste" : "Ny tjekliste"} persistent>
@@ -3250,6 +3263,10 @@ function ChecklistModal({ checklist, onClose, onSave }) {
               {it.description && <span style={styles.itemFlagTag}><ClipboardList size={10} /> Beskrivelse</span>}
               {it.videoUrl && <span style={styles.itemFlagTag}><Video size={10} /> Video</span>}
             </div>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+            <button type="button" disabled={i === 0} style={{ ...styles.iconBtnGhostInline, padding: 2, opacity: i === 0 ? 0.3 : 1, cursor: i === 0 ? "default" : "pointer" }} onClick={() => moveItem(i, -1)} title="Flyt op"><ChevronUp size={13} /></button>
+            <button type="button" disabled={i === items.length - 1} style={{ ...styles.iconBtnGhostInline, padding: 2, opacity: i === items.length - 1 ? 0.3 : 1, cursor: i === items.length - 1 ? "default" : "pointer" }} onClick={() => moveItem(i, 1)} title="Flyt ned"><ChevronDown size={13} /></button>
           </div>
           <button type="button" style={styles.iconBtnGhostInline} onClick={() => startEdit(i)}><Pencil size={13} /></button>
           <button type="button" style={styles.iconBtnGhostInline} onClick={() => removeItem(i)}><X size={13} /></button>
