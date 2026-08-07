@@ -106,7 +106,6 @@ async function fetchAllRows(table, columns = "*") {
 function weekdayKeyFor(date) {
   const dayKeys = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
   const dow = date.getDay();
-  if (dow === 0 || dow === 6) return "Fri";
   return dayKeys[dow];
 }
 function initials(name) { return name.split(" ").map((p) => p[0]).join("").slice(0, 2).toUpperCase(); }
@@ -1494,19 +1493,22 @@ function PlanningApp({ session, onSignOut }) {
       // man kan oprette. Oprettelsesugen sættes altid til dags dato-ugen.
       // Hvis planlæggeren har valgt en medarbejder + dato, placeres opgaven direkte.
       // Ellers lander den i "Ikke tildelt", klar til manuel eller markeret auto-planlægning.
-      const { week: adhocWeek, year: adhocYear } = isoWeekInfo(new Date());
-      
       const hasEmployeeAndDate = payload.assigned_employee_id && payload.adhocDate;
       
       // Konvertér konkret dato til ugedag når medarbejder er valgt
       let dayForPlacement = null;
       let deadlineDay = payload.deadline || "Fri";
+      let adhocWeek, adhocYear;
       
       if (hasEmployeeAndDate) {
         const dateObj = new Date(payload.adhocDate);
         dayForPlacement = weekdayKeyFor(dateObj);
         // Sæt deadline til samme dag som den ønskede placering
         deadlineDay = dayForPlacement;
+        // Ugen/året skal følge den valgte dato, ikke dags dato
+        ({ week: adhocWeek, year: adhocYear } = isoWeekInfo(dateObj));
+      } else {
+        ({ week: adhocWeek, year: adhocYear } = isoWeekInfo(new Date()));
       }
       
       const newInstance = {
@@ -4549,7 +4551,7 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
             setDeadline(weekdayKeyFor(d));
           }} />
           {(() => { const dow = new Date(adhocDate).getDay(); return (dow === 0 || dow === 6) ? (
-            <div style={styles.hint}>Valgt dato er i weekenden — der planlægges ikke i weekenden, så fristen sættes til fredag i stedet.</div>
+            <div style={styles.hint}>Valgt dato er i weekenden — opgaven placeres på lørdag/søndag. Husk at slå "Alle dage" til i ugeplanen for at se den.</div>
           ) : null; })()}
           <div style={styles.hint}>Bruges af den automatiske planlægning til at finde en ledig plads senest denne dag — opgaven oprettes stadig med dags dato og lander i "Ikke tildelt".</div>
           <label style={styles.label}>Ønsket starttidspunkt (valgfrit)</label>
