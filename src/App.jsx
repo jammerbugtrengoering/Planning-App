@@ -3763,7 +3763,7 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
                 </div>
                 <div style={{ gridColumn: "8", textAlign: "right", fontSize: 11, color: pl.invoiceReady ? "#B45309" : "#B0B0B0" }}>{pl.qty} {pl.unit}</div>
                 <div style={{ gridColumn: "10", textAlign: "right", fontSize: 11, fontWeight: 600, color: pl.invoiceReady ? "#92600A" : "#B0B0B0" }}>{Math.round(pl.amount)} kr</div>
-                <div style={{ gridColumn: "12", display: "flex", justifyContent: "center" }}>
+                <div style={{ gridColumn: "13", display: "flex", justifyContent: "center" }}>
                   <span
                     title={pl.invoiceReady ? "Fjern produktlinjen fra fakturagrundlag" : "Medtag produktlinjen i fakturagrundlag"}
                     style={{ width: 16, height: 16, borderRadius: 4, border: pl.invoiceReady ? "2px solid #16A34A" : "2px solid #CBD5E1", background: pl.invoiceReady ? "#16A34A" : "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}
@@ -3771,7 +3771,7 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
                     {pl.invoiceReady && <Check size={10} color="#fff" strokeWidth={3} />}
                   </span>
                 </div>
-                <div style={{ gridColumn: "13", display: "flex", justifyContent: "center" }}>
+                <div style={{ gridColumn: "12", display: "flex", justifyContent: "center" }}>
                   {isAdminUser && (
                     <span
                       title={pl.dineroExported ? "Fjern markering: sendt til Dinero" : "Markér manuelt som sendt til Dinero"}
