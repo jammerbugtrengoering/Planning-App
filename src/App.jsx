@@ -914,20 +914,24 @@ function PlanningApp({ session, onSignOut }) {
   function notify(msg) { setToast(msg); setTimeout(() => setToast(null), 2800); }
 
   // ── Kundeprodukter brugt på opgaver — bruges til fakturaoverblik og Dinero-eksport ──
-  useEffect(() => {
-    async function loadProductUsage() {
-      const { data, error } = await supabase
-        .from("inventory_transactions")
-        .select("*, inventory_items(name, item_number, price, unit, category_id, inventory_categories(type))")
-        .eq("type", "out")
-        .eq("status", "approved")
-        .not("instance_id", "is", null);
-      if (!error && data) {
-        setProductUsage(data.filter((tx) => tx.inventory_items?.inventory_categories?.type === "kunde"));
-      }
+  // Eksponeret som en almindelig funktion (ikke kun i useEffect), så Lager-visningen
+  // kan bede om en genindlæsning når et produkts pris/varenummer ændres — ellers ville
+  // fakturagrundlaget vise en forældet pris indtil man genindlæser hele siden.
+  const loadProductUsage = useCallback(async () => {
+    const { data, error } = await supabase
+      .from("inventory_transactions")
+      .select("*, inventory_items(name, item_number, price, unit, category_id, inventory_categories(type))")
+      .eq("type", "out")
+      .eq("status", "approved")
+      .not("instance_id", "is", null);
+    if (!error && data) {
+      setProductUsage(data.filter((tx) => tx.inventory_items?.inventory_categories?.type === "kunde"));
     }
-    loadProductUsage();
   }, [supabase]);
+
+  useEffect(() => {
+    loadProductUsage();
+  }, [loadProductUsage]);
 
   // Slår en enkelt produktlinje til/fra som fakturagrundlag — uafhængigt af opgavens egen toggle.
   async function toggleProductInvoiceReady(txId, next) {
@@ -2408,7 +2412,7 @@ function PlanningApp({ session, onSignOut }) {
 
       {view === "medExport" && (<EmployeeExportView instances={instances} employees={employees} />)}
       {view === "inventory" && (
-        <InventoryView supabase={supabase} employees={employees} currentUserName={currentEmployeeForAuth?.name || null} />
+        <InventoryView supabase={supabase} employees={employees} currentUserName={currentEmployeeForAuth?.name || null} onInventoryChanged={loadProductUsage} />
       )}
 
       {view === "skills" && (
@@ -3752,25 +3756,31 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
               </div>
             </div>
             {taskProductLines.map((pl, plIdx) => (
-              <div key={pl.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 14px 4px 60px", fontSize: 11, color: pl.invoiceReady ? "#92600A" : "#B0B0B0", background: pl.dineroExported ? "#EEF2FF" : pl.invoiceReady ? "#FFFBEB" : "#F8F8F8", borderBottom: (idx < placed.length - 1 || plIdx < taskProductLines.length - 1) ? "1px solid #F1F5F9" : "none" }}>
-                <span style={{ textDecoration: pl.invoiceReady ? "none" : "line-through" }}>📦 {pl.label}</span>
-                {pl.dineroExported && <span style={{ fontSize: 9, fontWeight: 700, color: "#4F46E5", background: "#E0E7FF", borderRadius: 4, padding: "1px 5px" }}>Sendt til Dinero</span>}
-                <span style={{ color: pl.invoiceReady ? "#B45309" : "#B0B0B0" }}>{pl.qty} {pl.unit}</span>
-                <span style={{ fontWeight: 600 }}>{Math.round(pl.amount)} kr</span>
-                <span
-                  title={pl.invoiceReady ? "Fjern produktlinjen fra fakturagrundlag" : "Medtag produktlinjen i fakturagrundlag"}
-                  style={{ marginLeft: "auto", width: 16, height: 16, borderRadius: 4, border: pl.invoiceReady ? "2px solid #16A34A" : "2px solid #CBD5E1", background: pl.invoiceReady ? "#16A34A" : "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}
-                  onClick={() => onToggleProductInvoice(pl.id, !pl.invoiceReady)}>
-                  {pl.invoiceReady && <Check size={10} color="#fff" strokeWidth={3} />}
-                </span>
-                {isAdminUser && (
+              <div key={pl.id} style={{ display: "grid", gridTemplateColumns: "50px 140px 120px 160px 1fr 70px 80px 100px 100px 100px 90px 70px 28px", gap: 0, padding: "4px 14px", alignItems: "center", background: pl.dineroExported ? "#EEF2FF" : pl.invoiceReady ? "#FFFBEB" : "#F8F8F8", borderBottom: (idx < placed.length - 1 || plIdx < taskProductLines.length - 1) ? "1px solid #F1F5F9" : "none" }}>
+                <div style={{ gridColumn: "5", display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: pl.invoiceReady ? "#92600A" : "#B0B0B0", textDecoration: pl.invoiceReady ? "none" : "line-through", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", paddingLeft: 20 }}>
+                  📦 {pl.label}
+                  {pl.dineroExported && <span style={{ textDecoration: "none", fontSize: 9, fontWeight: 700, color: "#4F46E5", background: "#E0E7FF", borderRadius: 4, padding: "1px 5px", flexShrink: 0 }}>Sendt til Dinero</span>}
+                </div>
+                <div style={{ gridColumn: "8", textAlign: "right", fontSize: 11, color: pl.invoiceReady ? "#B45309" : "#B0B0B0" }}>{pl.qty} {pl.unit}</div>
+                <div style={{ gridColumn: "10", textAlign: "right", fontSize: 11, fontWeight: 600, color: pl.invoiceReady ? "#92600A" : "#B0B0B0" }}>{Math.round(pl.amount)} kr</div>
+                <div style={{ gridColumn: "12", display: "flex", justifyContent: "center" }}>
                   <span
-                    title={pl.dineroExported ? "Fjern markering: sendt til Dinero" : "Markér manuelt som sendt til Dinero"}
-                    style={{ width: 16, height: 16, borderRadius: 4, border: pl.dineroExported ? "2px solid #4F46E5" : "2px solid #CBD5E1", background: pl.dineroExported ? "#4F46E5" : "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}
-                    onClick={() => onToggleProductDinero(pl.id, !pl.dineroExported)}>
-                    {pl.dineroExported && <Check size={10} color="#fff" strokeWidth={3} />}
+                    title={pl.invoiceReady ? "Fjern produktlinjen fra fakturagrundlag" : "Medtag produktlinjen i fakturagrundlag"}
+                    style={{ width: 16, height: 16, borderRadius: 4, border: pl.invoiceReady ? "2px solid #16A34A" : "2px solid #CBD5E1", background: pl.invoiceReady ? "#16A34A" : "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}
+                    onClick={() => onToggleProductInvoice(pl.id, !pl.invoiceReady)}>
+                    {pl.invoiceReady && <Check size={10} color="#fff" strokeWidth={3} />}
                   </span>
-                )}
+                </div>
+                <div style={{ gridColumn: "13", display: "flex", justifyContent: "center" }}>
+                  {isAdminUser && (
+                    <span
+                      title={pl.dineroExported ? "Fjern markering: sendt til Dinero" : "Markér manuelt som sendt til Dinero"}
+                      style={{ width: 16, height: 16, borderRadius: 4, border: pl.dineroExported ? "2px solid #4F46E5" : "2px solid #CBD5E1", background: pl.dineroExported ? "#4F46E5" : "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}
+                      onClick={() => onToggleProductDinero(pl.id, !pl.dineroExported)}>
+                      {pl.dineroExported && <Check size={10} color="#fff" strokeWidth={3} />}
+                    </span>
+                  )}
+                </div>
               </div>
             ))}
             </React.Fragment>
@@ -5178,7 +5188,7 @@ function SkillsView({ supabase, skills: skillNames, onSkillsChange }) {
 }
 
 // ── Inventory View ────────────────────────────────────────────────────────────
-function InventoryView({ supabase, employees, currentUserName }) {
+function InventoryView({ supabase, employees, currentUserName, onInventoryChanged }) {
   const [categories, setCategories] = useState([]);
   const [items, setItems] = useState([]);
   const [transactions, setTransactions] = useState([]);
@@ -5252,6 +5262,8 @@ function InventoryView({ supabase, employees, currentUserName }) {
     if (!error && data) {
       setItems((prev) => prev.map((i) => (i.id === showEditItem.id ? data : i)));
       setShowEditItem(null);
+      // Sørg for at prisen/varenummeret også opdateres i fakturerings-overblikket med det samme.
+      onInventoryChanged?.();
     }
   }
 
