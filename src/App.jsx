@@ -909,8 +909,25 @@ function PlanningApp({ session, onSignOut }) {
   const [dragId, setDragId] = useState(null);
   const [openTaskId, setOpenTaskId] = useState(null);
   const [showTravelSettings, setShowTravelSettings] = useState(false);
+  const [productUsage, setProductUsage] = useState([]);
 
   function notify(msg) { setToast(msg); setTimeout(() => setToast(null), 2800); }
+
+  // ── Kundeprodukter brugt på opgaver — bruges til fakturaoverblik og Dinero-eksport ──
+  useEffect(() => {
+    async function loadProductUsage() {
+      const { data, error } = await supabase
+        .from("inventory_transactions")
+        .select("*, inventory_items(name, item_number, price, unit, category_id, inventory_categories(type))")
+        .eq("type", "out")
+        .eq("status", "approved")
+        .not("instance_id", "is", null);
+      if (!error && data) {
+        setProductUsage(data.filter((tx) => tx.inventory_items?.inventory_categories?.type === "kunde"));
+      }
+    }
+    loadProductUsage();
+  }, [supabase]);
 
   // ── Supabase: load alt ved opstart ──
   useEffect(() => {
@@ -2049,6 +2066,23 @@ function PlanningApp({ session, onSignOut }) {
     notify("Eksport downloadet");
   }
 
+  // Kundeprodukter brugt på en given opgave, formateret som Dinero-fakturalinjer.
+  function productLinesForTask(taskId) {
+    return productUsage
+      .filter((tx) => tx.instance_id === taskId)
+      .map((tx) => {
+        const item = tx.inventory_items || {};
+        const qty = Math.abs(Number(tx.quantity) || 0);
+        const numberPart = item.item_number ? `${item.item_number} — ` : "";
+        return {
+          description: `${numberPart}${item.name || "Produkt"}`,
+          quantity: qty,
+          unitPrice: Number(item.price) || 0,
+          unit: item.unit || "stk",
+        };
+      });
+  }
+
   async function exportToDinero(filteredInstances, label) {
     // Ekskluderer altid opgaver der allerede er markeret som sendt til Dinero –
     // uanset visningsfiltre i UI'et – så samme linje aldrig kan overføres to gange.
@@ -2090,25 +2124,28 @@ function PlanningApp({ session, onSignOut }) {
 
     for (const customerName of customerNames) {
       const tasks = groups[customerName];
-      const lines = tasks.map((t) => {
-        if (t.pricingType === "fixed") {
-          return {
-            description: `${t.title} (Uge ${t.week}, ${dayLabelOf(t)})${t.poNumber ? ` — PO: ${t.poNumber}` : ""} — Fastpris`,
-            quantity: 1,
-            unitPrice: Number(t.fixedPrice) || 0,
-            unit: "fixed",
-          };
-        }
-        const logged = (t.timeLog || t.time_log || []).reduce((s, l) => s + (l.minutes || 0), 0);
-        const minutes = logged > 0 ? logged : t.duration;
-        const hours = Math.round((minutes / 60) * 100) / 100;
-        const rate = pricing[t.contractType || "privat"] || 0;
-        return {
-          description: `${t.title} (Uge ${t.week}, ${dayLabelOf(t)})${t.poNumber ? ` — PO: ${t.poNumber}` : ""}`,
-          quantity: hours,
-          unitPrice: rate,
-          unit: "hours",
-        };
+      const lines = tasks.flatMap((t) => {
+        const serviceLine = t.pricingType === "fixed"
+          ? {
+              description: `${t.title} (Uge ${t.week}, ${dayLabelOf(t)})${t.poNumber ? ` — PO: ${t.poNumber}` : ""} — Fastpris`,
+              quantity: 1,
+              unitPrice: Number(t.fixedPrice) || 0,
+              unit: "fixed",
+            }
+          : (() => {
+              const logged = (t.timeLog || t.time_log || []).reduce((s, l) => s + (l.minutes || 0), 0);
+              const minutes = logged > 0 ? logged : t.duration;
+              const hours = Math.round((minutes / 60) * 100) / 100;
+              const rate = pricing[t.contractType || "privat"] || 0;
+              return {
+                description: `${t.title} (Uge ${t.week}, ${dayLabelOf(t)})${t.poNumber ? ` — PO: ${t.poNumber}` : ""}`,
+                quantity: hours,
+                unitPrice: rate,
+                unit: "hours",
+              };
+            })();
+        // Én ekstra fakturalinje pr. kundeprodukt der er registreret brugt på opgaven.
+        return [serviceLine, ...productLinesForTask(t.id)];
       });
 
       try {
@@ -2296,7 +2333,7 @@ function PlanningApp({ session, onSignOut }) {
       {view === "time" && (
         <TimeView instances={instances} employees={employees}
           onExportToDinero={exportToDinero} totalLogged={totalLogged} weekLabel={wk.label}
-          isAdminUser={isAdminUser}
+          isAdminUser={isAdminUser} productUsage={productUsage}
           pricing={pricing} onPricingChange={async (newPricing) => {
             setPricing(newPricing);
             for (const [type, rate] of Object.entries(newPricing)) {
@@ -3295,7 +3332,22 @@ function ChecklistModal({ checklist, onClose, onSave }) {
 }
 
 // ---------- Time & Export ----------
-function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLabel, onUpdateInstance, pricing: pricingProp, onPricingChange, isAdminUser, onOpenTask }) {
+function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLabel, onUpdateInstance, pricing: pricingProp, onPricingChange, isAdminUser, onOpenTask, productUsage }) {
+  const productLinesByTask = useMemo(() => {
+    const map = {};
+    (productUsage || []).forEach((tx) => {
+      if (!map[tx.instance_id]) map[tx.instance_id] = [];
+      const item = tx.inventory_items || {};
+      map[tx.instance_id].push({
+        id: tx.id,
+        label: item.item_number ? `${item.item_number} — ${item.name}` : (item.name || "Produkt"),
+        qty: Math.abs(Number(tx.quantity) || 0),
+        unit: item.unit || "stk",
+        amount: Math.abs(Number(tx.quantity) || 0) * (Number(item.price) || 0),
+      });
+    });
+    return map;
+  }, [productUsage]);
   const now = new Date();
   const [filterMonth, setFilterMonth] = useState(now.getMonth());
   const [filterYear, setFilterYear] = useState(now.getFullYear());
@@ -3541,8 +3593,10 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
           const registeredKr = isFixedPrice ? (logged > 0 ? plannedKr : 0) : Math.round((logged / 60) * rate);
           const diffKr = registeredKr - plannedKr;
 
+          const taskProductLines = productLinesByTask[t.id] || [];
           return (
-            <div key={t.id} style={{ display: "grid", gridTemplateColumns: "50px 140px 120px 160px 1fr 70px 80px 100px 100px 100px 90px 70px 28px", gap: 0, padding: "10px 14px", borderBottom: idx < placed.length - 1 ? "1px solid #F1F5F9" : "none", alignItems: "center", background: t.dineroExported ? "#EEF2FF" : t.invoiceReady ? "#F0FDF4" : "transparent" }}>
+            <React.Fragment key={t.id}>
+            <div style={{ display: "grid", gridTemplateColumns: "50px 140px 120px 160px 1fr 70px 80px 100px 100px 100px 90px 70px 28px", gap: 0, padding: "10px 14px", borderBottom: (idx < placed.length - 1 || taskProductLines.length > 0) ? "1px solid #F1F5F9" : "none", alignItems: "center", background: t.dineroExported ? "#EEF2FF" : t.invoiceReady ? "#F0FDF4" : "transparent" }}>
               <div style={{ fontSize: 12, color: "#94A3B8", fontWeight: 600 }}>{t.week}</div>
               <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
                 {emps.length === 0 ? (
@@ -3642,6 +3696,14 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
                 </span>
               </div>
             </div>
+            {taskProductLines.map((pl, plIdx) => (
+              <div key={pl.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 14px 4px 60px", fontSize: 11, color: "#92600A", background: "#FFFBEB", borderBottom: (idx < placed.length - 1 || plIdx < taskProductLines.length - 1) ? "1px solid #F1F5F9" : "none" }}>
+                <span>📦 {pl.label}</span>
+                <span style={{ color: "#B45309" }}>{pl.qty} {pl.unit}</span>
+                <span style={{ marginLeft: "auto", fontWeight: 600 }}>{Math.round(pl.amount)} kr</span>
+              </div>
+            ))}
+            </React.Fragment>
           );
         })}
         {placed.length === 0 && <div style={{ ...styles.emptyCol, padding: 40 }}>Ingen planlagte opgaver denne uge</div>}
@@ -5056,9 +5118,11 @@ function InventoryView({ supabase, employees, currentUserName }) {
   const [showAdjust, setShowAdjust] = useState(null);
   const [showEditItem, setShowEditItem] = useState(null);
   const [editItemName, setEditItemName] = useState("");
+  const [editItemNumber, setEditItemNumber] = useState("");
   const [editItemUnit, setEditItemUnit] = useState("");
   const [editItemMin, setEditItemMin] = useState(0);
   const [editItemCat, setEditItemCat] = useState("");
+  const [editItemPrice, setEditItemPrice] = useState(0);
   const [adjustQty, setAdjustQty] = useState("");
   const [adjustReason, setAdjustReason] = useState("");
   const [adjustType, setAdjustType] = useState("in");
@@ -5067,10 +5131,12 @@ function InventoryView({ supabase, employees, currentUserName }) {
 
   // New item form
   const [newName, setNewName] = useState("");
+  const [newItemNumber, setNewItemNumber] = useState("");
   const [newCat, setNewCat] = useState("");
   const [newUnit, setNewUnit] = useState("stk");
   const [newStock, setNewStock] = useState(0);
   const [newMin, setNewMin] = useState(0);
+  const [newPrice, setNewPrice] = useState(0);
 
   useEffect(() => {
     async function load() {
@@ -5096,8 +5162,9 @@ function InventoryView({ supabase, employees, currentUserName }) {
     const { data } = await supabase.from("inventory_items").insert({
       name: newName.trim(), category_id: newCat, unit: newUnit,
       stock: Number(newStock), min_stock: Number(newMin),
+      item_number: newItemNumber.trim() || null, price: Number(newPrice) || 0,
     }).select("*, inventory_categories(name,type,icon)").single();
-    if (data) { setItems((prev) => [...prev, data]); setShowAddItem(false); setNewName(""); setNewStock(0); setNewMin(0); }
+    if (data) { setItems((prev) => [...prev, data]); setShowAddItem(false); setNewName(""); setNewItemNumber(""); setNewStock(0); setNewMin(0); setNewPrice(0); }
   }
 
   async function saveEditItem() {
@@ -5106,9 +5173,11 @@ function InventoryView({ supabase, employees, currentUserName }) {
     // for en evt. ny kategori vises korrekt med det samme — ikke først efter reload.
     const { data, error } = await supabase.from("inventory_items").update({
       name: editItemName.trim(),
+      item_number: editItemNumber.trim() || null,
       unit: editItemUnit,
       min_stock: Number(editItemMin),
       category_id: editItemCat,
+      price: Number(editItemPrice) || 0,
     }).eq("id", showEditItem.id).select("*, inventory_categories(name,type,icon)").single();
     if (!error && data) {
       setItems((prev) => prev.map((i) => (i.id === showEditItem.id ? data : i)));
@@ -5249,14 +5318,14 @@ function InventoryView({ supabase, employees, currentUserName }) {
             <div key={item.id} style={{ background: "#fff", borderRadius: 12, padding: 14, boxShadow: "0 1px 3px rgba(0,0,0,0.06)", borderLeft: `4px solid ${low ? "#DC2626" : cat?.type === "medarbejder" ? "#4F46E5" : "#D6247A"}` }}>
               <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 8 }}>
                 <div>
-                  <div style={{ fontWeight: 700, fontSize: 14, color: "#111111" }}>{item.name}</div>
-                  <div style={{ fontSize: 12, color: "#64748B" }}>{cat?.icon} {cat?.name}</div>
+                  <div style={{ fontWeight: 700, fontSize: 14, color: "#111111" }}>{item.name}{item.item_number ? ` (${item.item_number})` : ""}</div>
+                  <div style={{ fontSize: 12, color: "#64748B" }}>{cat?.icon} {cat?.name}{cat?.type === "kunde" ? ` · ${Number(item.price || 0).toFixed(2)} kr/${item.unit}` : ""}</div>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
                   <button style={{ ...styles.addSkillBtn, fontSize: 12 }} onClick={() => { setShowAdjust(item); setAdjustType("in"); }}>
                     Justér
                   </button>
-                  <button style={styles.iconBtnGhostInline} onClick={() => { setShowEditItem(item); setEditItemName(item.name); setEditItemUnit(item.unit); setEditItemMin(item.min_stock); setEditItemCat(item.category_id); }} title="Rediger"><Pencil size={13} /></button>
+                  <button style={styles.iconBtnGhostInline} onClick={() => { setShowEditItem(item); setEditItemName(item.name); setEditItemNumber(item.item_number || ""); setEditItemUnit(item.unit); setEditItemMin(item.min_stock); setEditItemCat(item.category_id); setEditItemPrice(item.price || 0); }} title="Rediger"><Pencil size={13} /></button>
                   <button style={{ ...styles.iconBtnGhostInline, color: "#DC2626" }} onClick={() => deleteItem(item)} title="Slet"><Trash2 size={13} /></button>
                 </div>
               </div>
@@ -5301,6 +5370,8 @@ function InventoryView({ supabase, employees, currentUserName }) {
         <Modal onClose={() => setShowAddItem(false)} title="Nyt produkt" persistent>
           <label style={styles.label}>Navn</label>
           <input style={styles.input} value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Fx Toiletruller" autoFocus />
+          <label style={styles.label}>Varenummer</label>
+          <input style={styles.input} value={newItemNumber} onChange={(e) => setNewItemNumber(e.target.value)} placeholder="Fx 1024" />
           <label style={styles.label}>Kategori</label>
           <select style={styles.input} value={newCat} onChange={(e) => setNewCat(e.target.value)}>
             {categories.map((c) => <option key={c.id} value={c.id}>{c.icon} {c.name} ({c.type === "kunde" ? "Kundeprodukt" : "Medarbejderprodukt"})</option>)}
@@ -5309,6 +5380,8 @@ function InventoryView({ supabase, employees, currentUserName }) {
           <select style={styles.input} value={newUnit} onChange={(e) => setNewUnit(e.target.value)}>
             {["stk","rulle","par","dunk","liter","kg","pose","æske","sæt"].map((u) => <option key={u} value={u}>{u}</option>)}
           </select>
+          <label style={styles.label}>Pris pr. enhed (kr., ekskl. moms)</label>
+          <input type="number" style={styles.input} value={newPrice} onChange={(e) => setNewPrice(e.target.value)} min={0} step="0.01" placeholder="Bruges til fakturering" />
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
             <div>
               <label style={styles.label}>Startbeholdning</label>
@@ -5331,6 +5404,8 @@ function InventoryView({ supabase, employees, currentUserName }) {
         <Modal onClose={() => setShowEditItem(null)} title={`Rediger: ${showEditItem.name}`} persistent>
           <label style={styles.label}>Navn</label>
           <input style={styles.input} value={editItemName} onChange={(e) => setEditItemName(e.target.value)} autoFocus />
+          <label style={styles.label}>Varenummer</label>
+          <input style={styles.input} value={editItemNumber} onChange={(e) => setEditItemNumber(e.target.value)} placeholder="Fx 1024" />
           <label style={styles.label}>Kategori</label>
           <select style={styles.input} value={editItemCat} onChange={(e) => setEditItemCat(e.target.value)}>
             {categories.map((c) => <option key={c.id} value={c.id}>{c.icon} {c.name} ({c.type === "kunde" ? "Kundeprodukt" : "Medarbejderprodukt"})</option>)}
@@ -5339,6 +5414,8 @@ function InventoryView({ supabase, employees, currentUserName }) {
           <select style={styles.input} value={editItemUnit} onChange={(e) => setEditItemUnit(e.target.value)}>
             {["stk","rulle","par","dunk","liter","kg","pose","æske","sæt"].map((u) => <option key={u} value={u}>{u}</option>)}
           </select>
+          <label style={styles.label}>Pris pr. enhed (kr., ekskl. moms)</label>
+          <input type="number" style={styles.input} value={editItemPrice} onChange={(e) => setEditItemPrice(e.target.value)} min={0} step="0.01" placeholder="Bruges til fakturering" />
           <label style={styles.label}>Minimumbeholdning</label>
           <input type="number" style={styles.input} value={editItemMin} onChange={(e) => setEditItemMin(e.target.value)} min={0} />
           <div style={styles.modalActions}>
