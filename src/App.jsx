@@ -260,6 +260,25 @@ function instantiateChecklist(items) {
     return { id: uid("ck"), text: o.text, description: o.description || "", videoUrl: o.videoUrl || "", done: false };
   });
 }
+function buildChecklistItems(checklistTemplateIds, extraItems, checklistTemplatesLib, existingItems) {
+  const libItems = (checklistTemplateIds || []).flatMap((id) => {
+    const cl = (checklistTemplatesLib || []).find((c) => c.id === id);
+    return cl ? cl.items : [];
+  });
+  const customItems = (extraItems || []).map((text) => ({ text: typeof text === "string" ? text : text.text }));
+  const combined = [...libItems, ...customItems];
+  const prevByText = new Map((existingItems || []).map((it) => [it.text, it]));
+  return combined.map((it) => {
+    const prev = prevByText.get(it.text);
+    return {
+      id: prev ? prev.id : uid("ck"),
+      text: it.text,
+      description: it.description || "",
+      videoUrl: it.videoUrl || "",
+      done: prev ? !!prev.done : false,
+    };
+  });
+}
 function checklistProgress(t) {
   const items = t.checklist || [];
   return { done: items.filter((i) => i.done).length, total: items.length };
@@ -492,7 +511,9 @@ function ensureWeekInstances(week, year, allInstances, templates, employees) {
         const newInst = {
           id: uid("i"), templateId: tpl.id, title: tpl.title, requiredSkills: tpl.requiredSkills,
           duration: tpl.duration, type: "fixed", day, week, year, assignees: [], status: "unscheduled", timeLog: [],
-          checklist: instantiateChecklist(tpl.checklistItems || []), videoUrl: tpl.videoUrl || "",
+          checklist: instantiateChecklist(tpl.checklistItems || []),
+          checklistTemplateIds: tpl.checklistTemplateIds || [], extraItems: tpl.extraItems || [],
+          videoUrl: tpl.videoUrl || "",
           customerName: tpl.customerName || "", address: tpl.address || "", poNumber: tpl.poNumber || "",
           accessInstructions: tpl.accessInstructions || "",
           templateDays: tpl.days, // for off-schedule detection
@@ -970,13 +991,14 @@ function PlanningApp({ session, onSignOut }) {
       }
 
       // Checklist-skabeloner – saml items ind
+      let clMapped = [];
       if (clData?.length) {
-        const mapped = clData.map((cl) => ({
+        clMapped = clData.map((cl) => ({
           id: cl.id, name: cl.name,
           items: (clItemsData || []).filter((i) => i.checklist_template_id === cl.id)
             .map((i) => ({ text: i.text, description: i.description, videoUrl: i.video_url })),
         }));
-        setChecklistTemplates(mapped);
+        setChecklistTemplates(clMapped);
       }
 
       // Serviceordre-skabeloner – saml skills op + hent kundedata
@@ -999,7 +1021,9 @@ function PlanningApp({ session, onSignOut }) {
             fixedPrice: t.fixed_price,
             planInterval: t.plan_interval || "uge",
             dineroSynced: t.dinero_synced ?? false,
-            checklistItems: [],
+            checklistTemplateIds: t.checklist_template_ids || [],
+            extraItems: t.extra_items || [],
+            checklistItems: buildChecklistItems(t.checklist_template_ids || [], t.extra_items || [], clMapped, []),
             startDate: t.start_date || null,
             expiryDate: t.expiry_date || null,
             excludedDays: t.excluded_days ? JSON.parse(t.excluded_days) : [],
@@ -1029,6 +1053,8 @@ function PlanningApp({ session, onSignOut }) {
             pricingType: i.pricing_type || "hourly",
             fixedPrice: i.fixed_price,
             scheduledTime: i.scheduled_time ? i.scheduled_time.slice(0, 5) : null,
+            checklistTemplateIds: i.checklist_template_ids || [],
+            extraItems: i.extra_items || [],
             invoiceReady: i.invoice_ready ?? false,
             dineroExported: i.dinero_exported ?? false,
             startDate: i.start_date || null,
@@ -1051,6 +1077,8 @@ function PlanningApp({ session, onSignOut }) {
           pricingType: i.pricing_type || "hourly",
           fixedPrice: i.fixed_price,
           scheduledTime: i.scheduled_time ? i.scheduled_time.slice(0, 5) : null,
+          checklistTemplateIds: i.checklist_template_ids || [],
+          extraItems: i.extra_items || [],
           invoiceReady: i.invoice_ready ?? false,
           dineroExported: i.dinero_exported ?? false,
           startDate: i.start_date || null,
@@ -1097,6 +1125,8 @@ function PlanningApp({ session, onSignOut }) {
         pricingType: i.pricing_type || "hourly",
         fixedPrice: i.fixed_price,
         scheduledTime: i.scheduled_time ? i.scheduled_time.slice(0, 5) : null,
+        checklistTemplateIds: i.checklist_template_ids || [],
+        extraItems: i.extra_items || [],
         invoiceReady: i.invoice_ready ?? false,
         dineroExported: i.dinero_exported ?? false,
         startDate: i.start_date || null,
@@ -1193,6 +1223,8 @@ function PlanningApp({ session, onSignOut }) {
       completed_by: inst.completedBy ?? null,
       completed_at: inst.completedAt ?? null,
       scheduled_time: inst.scheduledTime || null,
+      checklist_template_ids: inst.checklistTemplateIds || [],
+      extra_items: inst.extraItems || [],
     }, { onConflict: "id" });
     if (error) {
       // 23505 på uniq_instance_slot betyder at en anden session (fx en anden
@@ -1409,7 +1441,9 @@ function PlanningApp({ session, onSignOut }) {
       const tplId = uid("tpl");
       const tpl = {
         id: tplId, title: payload.title, requiredSkills: payload.requiredSkills,
-        duration: payload.duration, days: payload.days, dayTimes: payload.dayTimes || {}, checklistItems: checklistItemsCombined,
+        duration: payload.duration, days: payload.days, dayTimes: payload.dayTimes || {},
+        checklistTemplateIds: payload.checklistTemplateIds || [], extraItems: payload.extraItems || [],
+        checklistItems: checklistItemsCombined,
         videoUrl: payload.videoUrl, customerName: payload.customerName, address: payload.address,
         poNumber: payload.poNumber, accessInstructions: payload.accessInstructions,
         contractType: payload.contractType, expiryDate: payload.expiryDate,
@@ -1425,6 +1459,8 @@ function PlanningApp({ session, onSignOut }) {
         pricing_type: tpl.pricingType || "hourly", fixed_price: tpl.fixedPrice,
         plan_interval: tpl.planInterval || "uge",
         dinero_synced: tpl.dineroSynced,
+        checklist_template_ids: tpl.checklistTemplateIds || [],
+        extra_items: tpl.extraItems || [],
         start_date: payload.startDate || null,
         expiry_date: payload.expiryDate || null,
       });
@@ -1479,6 +1515,7 @@ function PlanningApp({ session, onSignOut }) {
         assignees: hasEmployeeAndDate ? [payload.assigned_employee_id] : [], 
         status: "unscheduled", timeLog: [],
         week: adhocWeek, year: adhocYear, checklist: instantiateChecklist(checklistItemsCombined),
+        checklistTemplateIds: payload.checklistTemplateIds || [], extraItems: payload.extraItems || [],
         videoUrl: payload.videoUrl, customerName: payload.customerName,
         address: payload.address, poNumber: payload.poNumber, accessInstructions: payload.accessInstructions,
         contractType: payload.contractType, dineroSynced: payload.dineroSynced || false,
@@ -1928,10 +1965,22 @@ function PlanningApp({ session, onSignOut }) {
     }));
   }
   function saveChecklistTemplate(tpl) {
-    setChecklistTemplates((prev) => {
-      const exists = prev.some((c) => c.id === tpl.id);
-      return exists ? prev.map((c) => (c.id === tpl.id ? tpl : c)) : [...prev, tpl];
-    });
+    // Genopbyg tjeklisten pa alle skabeloner og opgaver der allerede bruger den,
+    // sa en redigering slar igennem med det samme - uden at nulstille punkter
+    // der allerede er afkrydset pa opgaver i gang.
+    const exists = checklistTemplates.some((c) => c.id === tpl.id);
+    const nextLib = exists ? checklistTemplates.map((c) => (c.id === tpl.id ? tpl : c)) : [...checklistTemplates, tpl];
+    setChecklistTemplates(nextLib);
+    setTemplates((prev) => prev.map((t) => {
+      if (!(t.checklistTemplateIds || []).includes(tpl.id)) return t;
+      return { ...t, checklistItems: buildChecklistItems(t.checklistTemplateIds, t.extraItems, nextLib, t.checklistItems) };
+    }));
+    setInstances((prev) => prev.map((inst) => {
+      if (!(inst.checklistTemplateIds || []).includes(tpl.id)) return inst;
+      const updated = { ...inst, checklist: buildChecklistItems(inst.checklistTemplateIds, inst.extraItems, nextLib, inst.checklist) };
+      syncInstance(updated);
+      return updated;
+    }));
     syncChecklistTemplate(tpl);
   }
   function deleteChecklistTemplate(id) {
@@ -3192,7 +3241,7 @@ function ChecklistModal({ checklist, onClose, onSave }) {
 
       <label style={styles.label}>Tasks ({items.length})</label>
       {items.map((it, i) => (
-        <div key={i} style={styles.checklistEditRow}>
+        <div key={i} style={i === editIndex ? { ...styles.checklistEditRow, background: "#FCE4EF", borderLeft: "3px solid #D6247A", borderRadius: 4, paddingLeft: 6 } : styles.checklistEditRow}>
           <div style={{ flex: 1 }}>
             <div style={styles.previewItemText}>{i + 1}. {it.text}</div>
             <div style={styles.itemFlags}>
