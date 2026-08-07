@@ -2349,13 +2349,15 @@ function PlanningApp({ session, onSignOut }) {
           onAddChecklistItem={(taskId, text) => updateInstance(taskId, (t) => ({
             ...t,
             checklist: [...(t.checklist || []), { id: uid("ck"), text, description: "", videoUrl: "", done: false }],
+            extraItems: [...(t.extraItems || []), text],
           }))}
           onAddChecklistTemplate={(taskId, cl) => updateInstance(taskId, (t) => {
             const existingTexts = new Set((t.checklist || []).map((i) => i.text));
             const newItems = (cl.items || [])
               .filter((it) => !existingTexts.has(it.text || it))
               .map((it) => ({ id: uid("ck"), text: it.text || it, description: it.description || "", videoUrl: it.videoUrl || "", done: false }));
-            return { ...t, checklist: [...(t.checklist || []), ...newItems] };
+            const nextTemplateIds = (t.checklistTemplateIds || []).includes(cl.id) ? (t.checklistTemplateIds || []) : [...(t.checklistTemplateIds || []), cl.id];
+            return { ...t, checklist: [...(t.checklist || []), ...newItems], checklistTemplateIds: nextTemplateIds };
           })}
           onUpdateCustomer={(taskId, fields) => updateInstance(taskId, (t) => ({ ...t, ...fields }))}
           onUpdateCustomerInfo={updateCustomerInfo}
