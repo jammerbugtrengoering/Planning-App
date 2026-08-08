@@ -530,7 +530,14 @@ function ensureWeekInstances(week, year, allInstances, templates, employees) {
         // med skabelonen, saa rettelser paa aftalen altid slaar igennem - ogsaa for opgaver
         // der blev oprettet foer rettelsen, uden at man skal aabne hver enkelt opgave manuelt.
         const existing = list[existingIdx];
-        if (!existing.dineroExported) {
+        // Roer aldrig en opgave der allerede er sendt til Dinero, er udfoert, eller
+        // har registreret tid: saa er arbejdet leveret, og en senere prisaendring paa
+        // aftalen maa ikke omprissaette det med tilbagevirkende kraft.
+        const alreadyDelivered =
+          existing.dineroExported ||
+          existing.status === "udført" ||
+          ((existing.timeLog || []).reduce((s, l) => s + (l.minutes || 0), 0) > 0);
+        if (!alreadyDelivered) {
           list[existingIdx] = {
             ...existing,
             customerName: tpl.customerName || "",
@@ -2144,6 +2151,10 @@ function PlanningApp({ session, onSignOut }) {
     }
 
     const missingCustomer = toExport.filter((t) => !t.customerName || !t.customerName.trim());
+    // Opgaver uden registreret tid faktureres ikke for arbejdet - vis det tydeligt
+    // i bekraeftelsen, saa planlaeggeren kan naa at rette op inden kladden dannes.
+    const noTimeLogged = toExport.filter((t) => !t.dineroExported &&
+      ((t.timeLog || t.time_log || []).reduce((s, l) => s + (l.minutes || 0), 0) <= 0));
     const withCustomer = toExport.filter((t) => t.customerName && t.customerName.trim());
 
     const groups = {};
@@ -2162,7 +2173,8 @@ function PlanningApp({ session, onSignOut }) {
     const confirmMsg =
       `Opret ${customerNames.length} fakturakladde(r) i Dinero for ${label}?\n\n` +
       `Kunder: ${customerNames.join(", ")}` +
-      (missingCustomer.length ? `\n\n⚠️ ${missingCustomer.length} opgave(r) uden kundenavn springes over (fx "${missingCustomer[0].title}").` : "");
+      (missingCustomer.length ? `\n\n⚠️ ${missingCustomer.length} opgave(r) uden kundenavn springes over (fx "${missingCustomer[0].title}").` : "") +
+      (noTimeLogged.length ? `\n\n⚠️ ${noTimeLogged.length} opgave(r) har ingen registreret tid og faktureres derfor ikke for selve arbejdet (fx "${noTimeLogged[0].title}"). Evt. forbrugte produkter kommer stadig med.` : "");
 
     if (!window.confirm(confirmMsg)) return;
 
@@ -2191,6 +2203,12 @@ function PlanningApp({ session, onSignOut }) {
         // Timer/fastpris springes over hvis opgaven allerede er sendt til Dinero —
         // kun de nye produktlinjer skal så med.
         if (t.dineroExported) return productLines;
+        // Er der ikke registreret tid paa opgaven, er arbejdet ikke udfoert - og saa maa
+        // der ikke faktureres for det. Tidligere faldt beregningen tilbage til den
+        // PLANLAGTE varighed, saa en opgave der aldrig blev udfoert endte paa fakturaen
+        // med det planlagte beloeb, mens skaermen viste 0 kr under "Registreret kr.".
+        const loggedMinutes = (t.timeLog || t.time_log || []).reduce((s, l) => s + (l.minutes || 0), 0);
+        if (loggedMinutes <= 0) return productLines;
         const serviceLine = t.pricingType === "fixed"
           ? {
               description: `${t.title} (Uge ${t.week}, ${dayLabelOf(t)})${t.poNumber ? ` — PO: ${t.poNumber}` : ""} — Fastpris`,
@@ -2199,9 +2217,7 @@ function PlanningApp({ session, onSignOut }) {
               unit: "fixed",
             }
           : (() => {
-              const logged = (t.timeLog || t.time_log || []).reduce((s, l) => s + (l.minutes || 0), 0);
-              const minutes = logged > 0 ? logged : t.duration;
-              const hours = Math.round((minutes / 60) * 100) / 100;
+              const hours = Math.round((loggedMinutes / 60) * 100) / 100;
               const rate = pricing[t.contractType || "privat"] || 0;
               return {
                 description: `${t.title} (Uge ${t.week}, ${dayLabelOf(t)})${t.poNumber ? ` — PO: ${t.poNumber}` : ""}`,
@@ -3789,8 +3805,10 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
                 </div>
                 <div style={{ gridColumn: "13", display: "flex", justifyContent: "center" }}>
                   <span
-                    title={pl.invoiceReady ? "Fjern produktlinjen fra fakturagrundlag" : "Medtag produktlinjen i fakturagrundlag"}
-                    style={{ width: 18, height: 18, borderRadius: 5, border: pl.invoiceReady ? "2px solid #16A34A" : "2px solid #CBD5E1", background: pl.invoiceReady ? "#16A34A" : "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
+                    title={!t.invoiceReady
+                      ? "Opgaven er ikke markeret som fakturagrundlag — produktet faktureres derfor ikke. Markér opgaven først."
+                      : (pl.invoiceReady ? "Fjern produktlinjen fra fakturagrundlag" : "Medtag produktlinjen i fakturagrundlag")}
+                    style={{ width: 18, height: 18, borderRadius: 5, border: pl.invoiceReady ? "2px solid #16A34A" : "2px solid #CBD5E1", background: pl.invoiceReady ? "#16A34A" : "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", opacity: t.invoiceReady ? 1 : 0.35 }}
                     onClick={() => onToggleProductInvoice(pl.id, !pl.invoiceReady)}>
                     {pl.invoiceReady && <Check size={11} color="#fff" strokeWidth={3} />}
                   </span>
