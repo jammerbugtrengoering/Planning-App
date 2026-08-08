@@ -1002,7 +1002,13 @@ function PlanningApp({ session, onSignOut }) {
     if (!txIds.length) return;
     const now = new Date().toISOString();
     setProductUsage((prev) => prev.map((tx) => (txIds.includes(tx.id) ? { ...tx, dinero_exported: true, dinero_exported_at: now } : tx)));
-    await supabase.from("inventory_transactions").update({ dinero_exported: true, dinero_exported_at: now }).in("id", txIds);
+    const { error: markErr } = await supabase.from("inventory_transactions")
+      .update({ dinero_exported: true, dinero_exported_at: now }).in("id", txIds);
+    if (markErr) {
+      // Kladden ER dannet i Dinero, saa linjerne maa ikke fremstaa som ikke-sendte:
+      // sig det tydeligt, saa de ikke bliver faktureret igen ved naeste eksport.
+      notify("Fakturakladden blev oprettet, men produktlinjerne kunne ikke markeres som sendt til Dinero — tjek dem manuelt");
+    }
   }
 
   // ── Supabase: load alt ved opstart ──
@@ -1261,13 +1267,18 @@ function PlanningApp({ session, onSignOut }) {
     const { data: skillRows_db } = await supabase.from("skills").select("id, name");
     const { error: empErr } = await supabase.from("employees").upsert({ id: emp.id, name: emp.name, color: emp.color, is_admin: emp.isAdmin ?? false, start_time: emp.startTime || null }, { onConflict: "id" });
     if (dbFail(empErr, "gemme medarbejderen")) return;
-    await supabase.from("employee_skills").delete().eq("employee_id", emp.id);
     const skillRows = Object.entries(emp.skills || {})
       .map(([name, level]) => {
         const match = skillRows_db?.find((s) => s.name === name);
-        return match ? { employee_id: emp.id, skill_id: match.id, level } : null;
+        return match ? { skill_id: match.id, level } : null;
       }).filter(Boolean);
-    if (skillRows.length) await supabase.from("employee_skills").insert(skillRows);
+    // Slet-og-indsaet koeres i databasen som een transaktion. Foer blev kompetencerne
+    // slettet foerst, og fejlede indsaettelsen bagefter, stod medarbejderen tilbage
+    // helt uden kompetencer - lydloest, for der blev ikke tjekket for fejl.
+    const { error: skillErr } = await supabase.rpc("replace_employee_skills", {
+      p_employee_id: emp.id, p_rows: skillRows,
+    });
+    if (dbFail(skillErr, "gemme medarbejderens kompetencer")) return;
     const capRows = Object.entries(emp.capacity || {}).map(([weekday, minutes]) => ({ employee_id: emp.id, weekday, minutes }));
     if (capRows.length) {
       const { error: capErr } = await supabase.from("employee_capacity").upsert(capRows, { onConflict: "employee_id,weekday" });
@@ -1371,12 +1382,15 @@ function PlanningApp({ session, onSignOut }) {
   const syncChecklistTemplate = useCallback(async (cl) => {
     const { error: clErr } = await supabase.from("checklist_templates").upsert({ id: cl.id, name: cl.name }, { onConflict: "id" });
     if (dbFail(clErr, "gemme tjeklisten")) return;
-    await supabase.from("checklist_template_items").delete().eq("checklist_template_id", cl.id);
     const rows = (cl.items || []).map((it, i) => ({
-      checklist_template_id: cl.id, sort_order: i,
-      text: it.text, description: it.description || "", video_url: it.videoUrl || "",
+      sort_order: i, text: it.text,
+      description: it.description || "", video_url: it.videoUrl || "",
     }));
-    if (rows.length) await supabase.from("checklist_template_items").insert(rows);
+    // Transaktionel udskiftning - se kommentaren ved replace_employee_skills.
+    const { error: itemsErr } = await supabase.rpc("replace_checklist_template_items", {
+      p_template_id: cl.id, p_rows: rows,
+    });
+    if (dbFail(itemsErr, "gemme tjeklistens punkter")) return;
   }, []);
 
   const removeChecklistTemplate = useCallback(async (id) => {
@@ -1571,7 +1585,10 @@ function PlanningApp({ session, onSignOut }) {
         const sk = skillsDb?.find((s) => s.name === r.skill);
         return sk ? { template_id: tplId, skill_id: sk.id, min_level: r.minLevel } : null;
       }).filter(Boolean);
-      if (skillRows.length) await supabase.from("service_template_skills").insert(skillRows);
+      if (skillRows.length) {
+        const { error: tplSkillErr } = await supabase.from("service_template_skills").insert(skillRows);
+        if (tplSkillErr) dbFail(tplSkillErr, "gemme opgavens kompetencekrav");
+      }
 
       setTemplates((prevT) => {
         const nextT = [...prevT, tpl];
@@ -5050,10 +5067,12 @@ function AreasView({ supabase, areas, employees, employeeAreas, onAreasChange, o
   async function toggleEmpArea(empId, areaId) {
     const exists = employeeAreas.some((ea) => ea.employee_id === empId && ea.area_id === areaId);
     if (exists) {
-      await supabase.from("employee_areas").delete().match({ employee_id: empId, area_id: areaId });
+      const { error: delAreaErr } = await supabase.from("employee_areas").delete().match({ employee_id: empId, area_id: areaId });
+      if (delAreaErr) { dbFail(delAreaErr, "fjerne omraadet fra medarbejderen"); return; }
       onEmployeeAreasChange((prev) => prev.filter((ea) => !(ea.employee_id === empId && ea.area_id === areaId)));
     } else {
-      await supabase.from("employee_areas").insert({ employee_id: empId, area_id: areaId });
+      const { error: insAreaErr } = await supabase.from("employee_areas").insert({ employee_id: empId, area_id: areaId });
+      if (insAreaErr) { dbFail(insAreaErr, "tilfoeje omraadet til medarbejderen"); return; }
       onEmployeeAreasChange((prev) => [...prev, { employee_id: empId, area_id: areaId }]);
     }
   }
@@ -5180,7 +5199,8 @@ function SkillsView({ supabase, skills: skillNames, onSkillsChange }) {
 
   async function deleteSkill(item) {
     if (!window.confirm(`Slet kompetencen "${item.name}"? Dette fjerner den fra alle medarbejdere og opgaver.`)) return;
-    await supabase.from("skills").delete().eq("id", item.id);
+    const { error: delSkillErr } = await supabase.from("skills").delete().eq("id", item.id);
+    if (delSkillErr) { dbFail(delSkillErr, "slette kompetencen"); return; }
     setItems((prev) => prev.filter((s) => s.id !== item.id));
     onSkillsChange((prev) => prev.filter((n) => n !== item.name));
   }
@@ -5350,9 +5370,13 @@ function InventoryView({ supabase, employees, currentUserName, onInventoryChange
     for (const row of rows) {
       const { error: consumeErr } = await supabase.rpc("consume_stock", { p_item_id: row.item_id, p_amount: Math.abs(row.quantity) });
       if (consumeErr) { alert(`Kunne ikke opdatere lageret for "${row.inventory_items?.name || row.item_id}" — prøv igen.`); return; }
-      await supabase.from("inventory_transactions").update({
+      // Lageret er allerede traukket via consume_stock. Fejler statusopdateringen her,
+      // ville bestillingen blive staaende som afventende og kunne godkendes igen -
+      // og dermed traekke lageret to gange. Derfor stoppes der med det samme.
+      const { error: apprErr } = await supabase.from("inventory_transactions").update({
         status: "approved", approved_by: currentUserName || null, approved_at: new Date().toISOString(),
       }).eq("id", row.id);
+      if (apprErr) { alert("Lageret blev opdateret, men bestillingen kunne ikke markeres som godkendt — genindlaes siden og tjek status."); return; }
     }
     setPendingOrders((prev) => prev.filter((o) => (o.order_group_id || o.id) !== groupId));
     setItems((prev) => prev.map((it) => {
@@ -5365,9 +5389,10 @@ function InventoryView({ supabase, employees, currentUserName, onInventoryChange
     if (!window.confirm("Afvis denne bestilling? Lageret ændres ikke.")) return;
     const rows = pendingOrders.filter((o) => (o.order_group_id || o.id) === groupId);
     for (const row of rows) {
-      await supabase.from("inventory_transactions").update({
+      const { error: rejErr } = await supabase.from("inventory_transactions").update({
         status: "rejected", approved_by: currentUserName || null, approved_at: new Date().toISOString(),
       }).eq("id", row.id);
+      if (rejErr) { alert("Bestillingen kunne ikke afvises — proev igen."); return; }
     }
     setPendingOrders((prev) => prev.filter((o) => (o.order_group_id || o.id) !== groupId));
   }
