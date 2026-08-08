@@ -409,7 +409,10 @@ function scheduleWeek(weekInstances, employees, autoOnly = false, areas = [], em
         if (!best || score > best.score) best = { day: d.key, empId: e.id, rem, score };
       });
     });
-    if (!best) { t.warning = "no_skill"; return; }
+    // Der ER kandidater med kompetencen (tjekket ovenfor) - naar best er tom, skyldes
+    // det at der ikke fandtes en lovlig dag: fristen er passeret, eller alle dage i
+    // vinduet er blokeret. "no_skill" her var direkte misvisende.
+    if (!best) { t.warning = "no_slot"; return; }
     t.day = best.day; t.assignees = [best.empId]; t.status = "planlagt";
     t.warning = best.rem < t.duration ? "overloaded" : null;
     if (outsideArea) t.outsideArea = true;
@@ -1548,6 +1551,20 @@ function PlanningApp({ session, onSignOut }) {
     });
   }
 
+  // Placerer EEN opgave med det samme. Kan opgaven ikke placeres i sin egen uge -
+  // typisk fordi fristen allerede er passeret - rulles den videre til de foelgende
+  // uger og soeges placeret inden for den samme aftalte deadline-ugedag. Det svarer
+  // til det man ellers skulle goere i haanden: gaa en uge frem og trykke Planlaeg.
+  function planTaskNow(task, allInstances) {
+    const weekList = allInstances.filter(
+      (t) => t.week === task.week && t.year === task.year && t.id !== task.id
+    );
+    const result = scheduleWeek(
+      [...weekList, task], employees, false, areas, employeeAreas, new Set([task.id])
+    );
+    return result.find((t) => t.id === task.id) || { ...task, warning: "no_slot" };
+  }
+
   async function addTask(payload) {
     const checklistItemsCombined = [
       ...payload.checklistTemplateIds.flatMap((id) => checklistTemplates.find((c) => c.id === id)?.items || []),
@@ -1663,9 +1680,33 @@ function PlanningApp({ session, onSignOut }) {
         fixedPrice: payload.pricingType === "fixed" ? (Number(payload.fixedPrice) || 0) : null,
         type: "adhoc", day: dayForPlacement, deadline: deadlineDay,
         scheduledTime: payload.preferredTime || null,
+        // Nye fleksible opgaver er med i auto-planlaegning som standard. Foer skulle
+        // fluebenet saettes manuelt bagefter, og indtil da sprang Planlaeg-knappen
+        // opgaven over uden nogen form for besked.
+        includeInAuto: true,
       };
-      setInstances((prev) => [...prev, newInstance]);
-      syncInstance(newInstance);
+      if (hasEmployeeAndDate) {
+        setInstances((prev) => [...prev, newInstance]);
+        syncInstance(newInstance);
+      } else {
+        // "Gem og planlaeg" skal rent faktisk planlaegge. Opgaven placeres med det samme
+        // hvis betingelserne kan opfyldes - ellers lander den i "Ikke tildelt" med en
+        // forklarende advarsel i stedet for bare at blive liggende uden begrundelse.
+        setInstances((prev) => {
+          const placed = planTaskNow(newInstance, prev);
+          if (placed.assignees && placed.assignees.length) {
+            const emp = employees.find((e) => e.id === placed.assignees[0]);
+            const dayLabel = ALL_DAYS.find((x) => x.key === placed.day)?.label || placed.day;
+            notify(`Planlagt til ${emp?.name || "medarbejder"} ${String(dayLabel).toLowerCase()}`);
+          } else {
+            notify(placed.warning === "no_skill"
+              ? "Ingen medarbejder har de krævede kompetencer i området — opgaven ligger i Ikke tildelt"
+              : "Ingen ledig dag inden fristen — opgaven ligger i Ikke tildelt");
+          }
+          syncInstance(placed);
+          return [...prev, placed];
+        });
+      }
     }
     setShowAddTask(false);
   }
@@ -2857,7 +2898,8 @@ function WeekView({ employees, instances, unplaced, onAdd, onAuto, onScheduleWee
                 {t.address && <div style={styles.taskChipAddress}>📍 {t.address}</div>}
                 <div style={styles.cardMeta}>Uge {t.week}{t.day ? ` · ${ALL_DAYS.find((d) => d.key === t.day)?.label}` : ""} · {skillLabel(t)} · {fmtMin(t.duration)}{t.deadline ? ` · senest ${ALL_DAYS.find((d) => d.key === t.deadline)?.label}` : ""}{t.scheduledTime ? ` · ønsket kl. ${t.scheduledTime}` : ""}</div>
                 {liveNoSkill && <span style={styles.errorChip}><AlertTriangle size={12} /> Ingen har alle krævede kompetencer</span>}
-                {!liveNoSkill && t.warning === "overloaded" && <span style={styles.warnChip}><AlertTriangle size={12} /> Ingen ledig kapacitet</span>}
+                {!liveNoSkill && t.warning === "no_slot" && <span style={styles.warnChip}><AlertTriangle size={12} /> Ingen ledig dag inden fristen</span>}
+              {!liveNoSkill && t.warning === "overloaded" && <span style={styles.warnChip}><AlertTriangle size={12} /> Ingen ledig kapacitet</span>}
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 6 }} onClick={(e) => e.stopPropagation()}>
                   <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: t.includeInAuto ? "#D6247A" : "#94A3B8", cursor: "pointer", fontWeight: t.includeInAuto ? 700 : 400 }}
                     onClick={(e) => { e.stopPropagation(); onToggleInclude(t.id); }}>
