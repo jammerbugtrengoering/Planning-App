@@ -951,6 +951,129 @@ function SetNewPasswordScreen({ onDone }) {
   );
 }
 
+
+// ── Modulhjælp ────────────────────────────────────────────────────────────────
+// Hvert modul har sin egen "?"-knap. Indholdet er det samme som i den trykte
+// brugervejledning, men vises for det modul man faktisk står i.
+const MODULE_HELP = {
+  uge: { title: "Ugeplan", intro: "Her planlægger du ugen. Hver medarbejder har en række, hver dag en kolonne.", blocks: [
+    { h: "Ikke tildelt", p: ["En opgave havner her hvis den er ny, hvis medarbejderen er blevet syg, eller hvis systemet ikke kunne finde nogen der passer.",
+                             "Træk den over på en medarbejder, eller sæt Auto-planlæg og tryk Planlæg."] },
+    { h: "Hvorfor bliver en opgave ikke planlagt?", p: [
+        "«Ingen har alle krævede kompetencer» — ingen har kompetencerne på det krævede niveau. Sænk kravet, eller giv kompetencen under Medarbejdere.",
+        "«Ingen ledig dag inden fristen» — fristen er passeret, eller alle dage er optaget eller blokeret. Ret fristen på opgaven.",
+        "«Overbelastet» — opgaven er lagt på alligevel, men medarbejderen har ikke timer nok den dag."] },
+    { h: "Ret dato og tidspunkt", p: ["Klik på opgaven, find «Frist og tidspunkt» og tryk Rediger.",
+        "Sæt ny dato og evt. ønsket starttidspunkt, og tryk «Gem og planlæg igen». Opgaven flytter til den rigtige uge og får en medarbejder, hvis nogen kan nå det."] },
+    { h: "Weekend", p: ["Lørdag og søndag vises automatisk hvis der ligger opgaver. Ellers slå dem til med knappen Man–Fre."] },
+  ], warn: "En fleksibel opgave har en «senest udført»-dato. Er fristen passeret, planlægges opgaven ikke — den rulles ikke videre af sig selv. Ret fristen, så placeres den med det samme." },
+
+  employees: { title: "Medarbejdere", intro: "Her styrer du hvem der kan hvad, hvor meget tid de har, og hvilke områder de dækker.", blocks: [
+    { h: "Opret og redigér", p: ["Tryk «Ny medarbejder», eller blyanten på et kort.",
+        "Mødetid bruges til at beregne hvornår dagens første opgave kan starte.",
+        "Sæt kompetenceniveau: Nybegynder, Øvet eller Ekspert.",
+        "Sæt timer til rådighed for mandag til fredag."] },
+    { h: "Kompetencer og områder", p: ["Kompetencer opretter de færdigheder du kan kræve på en opgave.",
+        "Områder knytter postnumre til medarbejdere, så planlægningen holder folk i deres eget område."] },
+    { h: "Adgang til Worklist", p: ["Skriv medarbejderens e-mail nederst på kortet og tryk Opret. Hun får en mail og kan logge ind i medarbejder-appen."] },
+  ], warn: "Weekendarbejde kræver flueben på medarbejderen. Uden det kan hun slet ikke planlægges lørdag og søndag. Med fluebenet er der ingen timegrænse i weekenden — derfor står der Ja/Nej og ikke et timetal." },
+
+  checklists: { title: "Tjeklister", intro: "Tjeklister er de arbejdsopgaver medarbejderen sætter flueben ved ude hos kunden.", blocks: [
+    { h: "Sådan gør du", p: ["Tryk «Ny tjekliste» og giv den et navn.",
+        "Tilføj punkter i den rækkefølge de skal udføres.",
+        "Sæt evt. beskrivelse og video på det enkelte punkt — det ses direkte i medarbejder-appen.",
+        "Vælg tjeklisten når du opretter en opgave. Der kan vælges flere."] },
+  ], warn: "Retter du i en tjekliste, slår det igennem på nye opgaver. Allerede oprettede opgaver beholder den liste de blev født med, så en igangværende uge ikke ændrer sig under fødderne på medarbejderen." },
+
+  time: { title: "Fakturering", intro: "Her omsætter du udført arbejde til fakturakladder i Dinero.", blocks: [
+    { h: "Kolonnerne", p: ["Planlagt er den tid der er sat af. Registreret er den tid medarbejderen har logget.",
+        "Dinero (blå) markerer at linjen er sendt. Det grønne flueben er fakturagrundlag."] },
+    { h: "Sådan fakturerer du", p: ["Vælg måned og år.", "Gennemgå listen og ret manglende registreringer med medarbejderen.",
+        "Sæt fakturagrundlag på det der skal faktureres.", "Tryk «Eksportér til Dinero» og bekræft.",
+        "Linjerne markeres som sendt, så de ikke kan faktureres igen."] },
+    { h: "Produkter", p: ["Produktforbrug vises som egne linjer under opgaven med antal og beløb.",
+        "Hver produktlinje har sit eget flueben, men kræver at selve opgaven også er fakturagrundlag."] },
+    { h: "Timepriser", p: ["Tryk «Timepriser» for at rette satsen pr. kontrakttype. Satsen bruges i fakturering, ugebelægning og rapportering.",
+        "Opgaver med fastpris bruger deres egen pris i stedet."] },
+  ], warn: "Der faktureres kun registreret tid. Er der ikke logget tid, springes selve arbejdet over — også selvom opgaven er markeret som fakturagrundlag. Bekræftelsen fortæller hvor mange det gælder. Forbrugte produkter kommer stadig med." },
+
+  inventory: { title: "Lager", intro: "Både det medarbejderne bruger hos kunderne, og arbejdstøj de kan bestille.", blocks: [
+    { h: "De to slags produkter", p: ["Kundeprodukter bruges hos kunden og faktureres videre. De skal have varenummer og pris.",
+        "Medarbejderprodukter er arbejdstøj og handsker. Dem bestiller medarbejderne selv, og du godkender."] },
+    { h: "Daglig brug", p: ["«Justér» retter beholdningen efter optælling eller leverance.",
+        "«Nyt produkt» opretter en vare — husk varenummer og pris på kundeprodukter.",
+        "Varer under minimumbeholdning fremhæves.",
+        "Bestillinger skal godkendes, før de trækkes fra lageret."] },
+  ], warn: "Retter du prisen på et kundeprodukt, slår den igennem i Fakturering med det samme. Allerede sendte fakturalinjer røres ikke." },
+
+  contracts: { title: "Aftaler", intro: "De faste kundeaftaler, sorteret så den der udløber først står øverst.", blocks: [
+    { h: "Sådan læses den", p: ["Kontraktsum er forventet omsætning over hele perioden ud fra planlagte timer.",
+        "Realiseret er hvad der faktisk er registreret.", "Dage tilbage viser hvor længe der er til aftalen udløber."] },
+    { h: "Gentagelse", p: ["En aftale kan gentages hver uge, hver 14. dag, hver måned eller hvert kvartal."] },
+  ], warn: "Måned betyder kalendermåned. En månedlig aftale lander i den uge der indeholder samme dato som startdatoen — altså 12 besøg om året. Er startdatoen den 31., rammes sidste dag i korte måneder, så ingen måned springes over." },
+
+  reports: { title: "Rapportering", intro: "Budget mod faktisk omsætning, opdelt pr. kontrakttype.", blocks: [
+    { h: "Tallene", p: ["Budget er det du selv lægger ind med «Redigér budget».",
+        "Planlagt er værdien af det der ligger i kalenderen.",
+        "Registreret er den tid der faktisk er logget.",
+        "Forecast fremskriver resten af året."] },
+  ], warn: "Er «Registreret» meget lavere end «Planlagt», er det som regel manglende tidsregistrering — ikke manglende arbejde. Tjek Medarbejder-eksport." },
+
+  medExport: { title: "Medarbejder-eksport", intro: "Grundlaget for løn: timer og kørsel pr. medarbejder.", blocks: [
+    { h: "Sådan gør du", p: ["Vælg måned og år.", "«Afvigelse» viser hvor medarbejderen har skrevet en begrundelse.",
+        "«Heraf weekend» er timer der udløser tillæg.",
+        "Tryk «Eksportér CSV» og send til lønsystemet. Filen har egne kolonner for weekend og weekendtimer."] },
+    { h: "Hvis tallene ikke passer", p: ["Timer mangler — medarbejderen har ikke registreret.",
+        "Kørsel mangler — der er ikke registreret tid, eller adresserne mangler.",
+        "Weekendtimer er 0 — tjek weekendaftalen, og at opgaven lå lørdag eller søndag."] },
+  ], warn: "Kørsel beregnes automatisk hver nat ud fra opgaverne — men kun for opgaver med registreret tid. Derfor får medarbejderne en påmindelse på mail hver dag kl. 18." },
+};
+
+function ModuleHelp({ view, onClose }) {
+  const h = MODULE_HELP[view];
+  if (!h) return null;
+  return (
+    <div onClick={onClose} style={{ position:"fixed", inset:0, background:"rgba(17,17,17,0.45)", zIndex:200, display:"flex", justifyContent:"flex-end" }}>
+      <div onClick={(e) => e.stopPropagation()}
+        style={{ width:"min(560px, 100%)", background:"#fff", height:"100%", display:"flex", flexDirection:"column", boxShadow:"-4px 0 24px rgba(0,0,0,0.18)" }}>
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"16px 20px", background:"#111", color:"#fff" }}>
+          <div>
+            <div style={{ fontSize:11, letterSpacing:0.6, color:"#94A3B8", fontWeight:700 }}>HJÆLP</div>
+            <div style={{ fontWeight:800, fontSize:17 }}>{h.title}</div>
+          </div>
+          <button onClick={onClose} style={{ border:"none", background:"#333", color:"#fff", borderRadius:8, width:34, height:34, fontSize:17, cursor:"pointer" }}>✕</button>
+        </div>
+        <div style={{ flex:1, overflowY:"auto", padding:"18px 20px 30px", textAlign:"left" }}>
+          <div style={{ fontSize:14.5, lineHeight:1.55, color:"#334155", marginBottom:18 }}>{h.intro}</div>
+          {h.blocks.map((b, i) => (
+            <div key={i} style={{ marginBottom:18 }}>
+              <div style={{ fontWeight:800, fontSize:15, color:"#111111", marginBottom:6 }}>{b.h}</div>
+              {b.p.map((line, j) => (
+                <div key={j} style={{ fontSize:14, lineHeight:1.55, color:"#334155", marginBottom:5 }}>{line}</div>
+              ))}
+            </div>
+          ))}
+          {h.warn && (
+            <div style={{ background:"#FEF3C7", borderLeft:"4px solid #D97706", borderRadius:6,
+                          padding:"12px 14px", fontSize:14, lineHeight:1.5, color:"#111111", fontWeight:600 }}>
+              {h.warn}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function HelpButton({ onClick }) {
+  return (
+    <button onClick={onClick} title="Hjælp til dette modul"
+      style={{ position:"fixed", right:22, bottom:22, zIndex:150, width:46, height:46, borderRadius:"50%",
+               border:"none", background:"#9C1B5D", color:"#fff", fontSize:21, fontWeight:800,
+               cursor:"pointer", boxShadow:"0 4px 14px rgba(156,27,93,0.4)" }}>?</button>
+  );
+}
+
 function PlanningApp({ session, onSignOut }) {
   const [lang, setLang] = useState(() => localStorage.getItem("rp_lang") || "da");
   useEffect(() => { localStorage.setItem("rp_lang", lang); }, [lang]);
@@ -981,6 +1104,7 @@ function PlanningApp({ session, onSignOut }) {
   const { week: weekOffset, year: weekYear } = isoWeekInfo(weekAnchor);
   const [view, setView] = useState("uge");
   const [showAddTask, setShowAddTask] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
   const [showAddBlock, setShowAddBlock] = useState(false);
   const [showAddActivity, setShowAddActivity] = useState(false);
   const [copyPayload, setCopyPayload] = useState(null);
@@ -2501,6 +2625,10 @@ function PlanningApp({ session, onSignOut }) {
       </header>
 
       {toast && <div style={styles.toast}>{toast}</div>}
+
+      {/* Modulhjælp: knappen ligger i selve modulet og aabner hjaelp for netop det view man staar i. */}
+      {MODULE_HELP[view] && <HelpButton onClick={() => setShowHelp(true)} />}
+      {showHelp && <ModuleHelp view={view} onClose={() => setShowHelp(false)} />}
 
       {view === "uge" && (
         <WeekView
