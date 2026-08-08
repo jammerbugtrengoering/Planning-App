@@ -983,7 +983,7 @@ const MODULE_HELP = {
         "Tilføj punkter i den rækkefølge de skal udføres.",
         "Sæt evt. beskrivelse og video på det enkelte punkt — det ses direkte i medarbejder-appen.",
         "Vælg tjeklisten når du opretter en opgave. Der kan vælges flere."] },
-  ], warn: "Retter du i en tjekliste, slår det igennem på nye opgaver. Allerede oprettede opgaver beholder den liste de blev født med, så en igangværende uge ikke ændrer sig under fødderne på medarbejderen." },
+  ], warn: "Retter du i en tjekliste, slår ændringen igennem med det samme på alle opgaver der endnu ikke er udført — også dem der allerede ligger i kalenderen. Punkter medarbejderen har sat flueben ved bevares. Udførte opgaver røres ikke, så det står fast hvad der faktisk blev gjort." },
 
   time: { title: "Fakturering", intro: "Her omsætter du udført arbejde til fakturakladder i Dinero.", blocks: [
     { h: "Kolonnerne", p: ["Planlagt er den tid der er sat af. Registreret er den tid medarbejderen har logget.",
@@ -2289,9 +2289,10 @@ function PlanningApp({ session, onSignOut }) {
     }));
   }
   function saveChecklistTemplate(tpl) {
-    // Genopbyg tjeklisten pa alle skabeloner og opgaver der allerede bruger den,
-    // sa en redigering slar igennem med det samme - uden at nulstille punkter
-    // der allerede er afkrydset pa opgaver i gang.
+    // Genopbyg tjeklisten paa alle skabeloner og paa alle IKKE-udfoerte opgaver der
+    // bruger den, saa en redigering slaar igennem med det samme - uden at nulstille
+    // punkter der allerede er afkrydset paa opgaver i gang. Udfoerte opgaver
+    // undtages, saa historikken over hvad der blev gjort staar fast.
     const exists = checklistTemplates.some((c) => c.id === tpl.id);
     const nextLib = exists ? checklistTemplates.map((c) => (c.id === tpl.id ? tpl : c)) : [...checklistTemplates, tpl];
     setChecklistTemplates(nextLib);
@@ -2301,6 +2302,9 @@ function PlanningApp({ session, onSignOut }) {
     }));
     setInstances((prev) => prev.map((inst) => {
       if (!(inst.checklistTemplateIds || []).includes(tpl.id)) return inst;
+      // Udfoerte opgaver roeres ikke. Deres tjekliste er dokumentation for hvad der
+      // faktisk blev gjort ude hos kunden, og den maa ikke aendre sig bagudrettet.
+      if (inst.status === "udført") return inst;
       const updated = { ...inst, checklist: buildChecklistItems(inst.checklistTemplateIds, inst.extraItems, nextLib, inst.checklist) };
       syncInstance(updated);
       return updated;
