@@ -47,6 +47,18 @@ const TYPE_META = {
 // modalen. Sygdom/Ferie oprettes udelukkende via den dedikerede Sygdom/Ferie-
 // knap (addBlock-flowet), og den gamle "flexible"-type er nedlagt.
 const CREATABLE_TYPES = ["fixed", "adhoc"];
+// Kontrakttyper samlet ét sted: etiket, ikon og farver. Skal der en ny til, tilfoejes
+// den her (plus en raekke i pricing-tabellen og i instances_contract_type_check).
+const CONTRACT_TYPES = [
+  { key: "privat",    label: "Privat",   icon: "🏠", color: "#9C1B5D", bg: "#FFF6FA", chart: "#D6247A" },
+  { key: "erhverv",   label: "Erhverv",  icon: "💼", color: "#0F766E", bg: "#F0FDFA", chart: "#0D9488" },
+  { key: "nexus",     label: "Nexus",    icon: "🏢", color: "#4F46E5", bg: "#EEF2FF", chart: "#4F46E5" },
+  { key: "aeldrelov", label: "Ældrelov", icon: "👴", color: "#C2410C", bg: "#FFF7ED", chart: "#C2410C" },
+];
+const CONTRACT_META = Object.fromEntries(CONTRACT_TYPES.map((c) => [c.key, c]));
+function contractMeta(key) { return CONTRACT_META[key] || CONTRACT_META.privat; }
+function contractLabel(key) { return contractMeta(key).label; }
+function contractIconLabel(key) { const c = contractMeta(key); return c.icon + " " + c.label; }
 // Bruges til at afgøre om en instans er en blokering (sygdom/ferie) i stedet for
 // en rigtig rengøringsopgave — blokeringer skal ikke tælle med i fakturagrundlag,
 // rapportering osv., og skal forhindre auto-planlægning af den pågældende medarbejder.
@@ -948,7 +960,7 @@ function PlanningApp({ session, onSignOut }) {
   const [employees, setEmployees] = useState([]);
   const [areas, setAreas] = useState([]);
   const [employeeAreas, setEmployeeAreas] = useState([]);
-  const [pricing, setPricing] = useState({ privat: 450, nexus: 380, aeldrelov: 410 }); // [{employee_id, area_id}]
+  const [pricing, setPricing] = useState({ privat: 450, erhverv: 550, nexus: 380, aeldrelov: 410 }); // [{employee_id, area_id}]
   const [budgets, setBudgets] = useState([]); // [{id, contract_type, year, month, amount}]
   const [templates, setTemplates] = useState([]);
   const [checklistTemplates, setChecklistTemplates] = useState([]);
@@ -2213,7 +2225,7 @@ function PlanningApp({ session, onSignOut }) {
         t.address || "",
         t.poNumber || "",
         TYPE_META[t.type]?.label || t.type,
-        t.contractType === "nexus" ? "Nexus" : t.contractType === "aeldrelov" ? "Ældrelov" : "Privat",
+        contractLabel(t.contractType),
         names.length ? names.join(" + ") : "Ikke tildelt",
         statusLabel(t.status),
         t.duration,
@@ -3597,7 +3609,7 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
   const [editMinutes, setEditMinutes] = useState({});
   const [showPricing, setShowPricing] = useState(false);
   const [exportingToDinero, setExportingToDinero] = useState(false);
-  const [localPricing, setLocalPricing] = useState(pricingProp || { privat: 450, nexus: 380, aeldrelov: 410 });
+  const [localPricing, setLocalPricing] = useState(pricingProp || { privat: 450, erhverv: 550, nexus: 380, aeldrelov: 410 });
 
   useEffect(() => { if (pricingProp) setLocalPricing(pricingProp); }, [JSON.stringify(pricingProp)]);
 
@@ -3777,7 +3789,7 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
         <div style={{ background: "#fff", borderRadius: 12, padding: 16, marginBottom: 12, boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
           <div style={{ fontWeight: 700, fontSize: 14, color: "#111111", marginBottom: 12 }}>💰 Timepriser pr. kontrakttype</div>
           <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 12 }}>
-            {[["privat", "🏠 Privat"], ["nexus", "🏢 Nexus"], ["aeldrelov", "👴 Ældrelov"]].map(([type, label]) => (
+            {CONTRACT_TYPES.map((c) => [c.key, c.icon + " " + c.label]).map(([type, label]) => (
               <div key={type} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                 <label style={styles.label}>{label}</label>
                 <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
@@ -4299,14 +4311,10 @@ function KmExportSection({ employees, filterMonth, filterYear, setFilterMonth, s
 }
 
 // ── Reports View (Rapportering: budget vs. omsætning pr. område) ──────────────
-const REPORT_AREAS = [
-  ["privat", "🏠 Privat"],
-  ["nexus", "🏢 Nexus"],
-  ["aeldrelov", "👴 Ældrelov"],
-];
+const REPORT_AREAS = CONTRACT_TYPES.map((c) => [c.key, c.icon + " " + c.label]);
 const REPORT_MONTHS = ["Januar","Februar","Marts","April","Maj","Juni","Juli","August","September","Oktober","November","December"];
 
-const REPORT_AREA_COLORS = { privat: "#D6247A", nexus: "#4F46E5", aeldrelov: "#C2410C", alle: "#334155" };
+const REPORT_AREA_COLORS = { ...Object.fromEntries(CONTRACT_TYPES.map((c) => [c.key, c.chart])), alle: "#334155" };
 const REPORT_TABS = [...REPORT_AREAS, ["alle", "🌐 Alle"]];
 
 function ReportsView({ instances, pricing, budgets, onSaveBudget, isAdminUser }) {
@@ -4696,7 +4704,7 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
       {/* Kontrakttype */}
       <label style={styles.label}>Kontrakttype</label>
       <div style={styles.typePicker}>
-        {[["privat","🏠 Privat"],["nexus","🏢 Nexus"],["aeldrelov","👴 Ældrelov"]].map(([k,l]) => (
+        {CONTRACT_TYPES.map((c) => [c.key, c.icon + " " + c.label]).map(([k,l]) => (
           <button key={k} type="button" onClick={() => setContractType(k)}
             style={contractType === k ? { ...styles.typePickBtn, borderColor:"#D6247A", color:"#D6247A", background:"#FCE4EF" } : styles.typePickBtn}>
             {l}
@@ -5088,7 +5096,7 @@ function ContractsView({ templates, instances, pricing }) {
                   <DayPills days={t.days} />
                   {t.start && <span>Fra {t.start.toLocaleDateString("da-DK", { day: "numeric", month: "short", year: "numeric" })}</span>}
                   <span>Til {t.expiry.toLocaleDateString("da-DK", { day: "numeric", month: "short", year: "numeric" })}</span>
-                  <span style={{ fontWeight: 600, color: "#9C1B5D" }}>{t.contractType === "nexus" ? "🏢 Nexus" : t.contractType === "aeldrelov" ? "👴 Ældrelov" : "🏠 Privat"}</span>
+                  <span style={{ fontWeight: 600, color: "#9C1B5D" }}>{contractIconLabel(t.contractType)}</span>
                 </div>
                 <div style={{ fontSize: 12, color: "#64748B", display: "flex", gap: 14, flexWrap: "wrap", marginTop: 5 }}>
                   <span title={t.wholePeriod ? "Planlagte timer/uge × antal uger i aftaleperioden × timepris" : "Ingen startdato — viser kun én uges værdi"}>
@@ -5117,7 +5125,7 @@ function ContractsView({ templates, instances, pricing }) {
                   <div style={{ fontSize: 12, color: "#64748B", display: "flex", gap: 12, flexWrap: "wrap" }}>
                     {t.customerName && <span>👤 {t.customerName}</span>}
                     <DayPills days={t.days} />
-                    <span style={{ fontWeight: 600, color: "#9C1B5D" }}>{t.contractType === "nexus" ? "🏢 Nexus" : t.contractType === "aeldrelov" ? "👴 Ældrelov" : "🏠 Privat"}</span>
+                    <span style={{ fontWeight: 600, color: "#9C1B5D" }}>{contractIconLabel(t.contractType)}</span>
                   </div>
                   <div style={{ fontSize: 12, color: "#64748B", display: "flex", gap: 14, flexWrap: "wrap", marginTop: 5 }}>
                     <span title="Ingen udløbsdato — viser kontraktsum pr. uge">💰 Pr. uge: <strong style={{ color: "#111111" }}>{Math.round(t.weeklyPlannedSum).toLocaleString("da-DK")} kr.</strong></span>
@@ -6219,10 +6227,10 @@ return (
         )}
         <span style={{ ...styles.typeChip, color: statusColor(t.status), background: "#F1EFE7" }}>{statusLabel(t.status)}</span>
         {locked ? (
-          t.contractType && <span style={{ ...styles.typeChip, background: t.contractType === "nexus" ? "#EEF2FF" : t.contractType === "aeldrelov" ? "#FFF7ED" : "#FFF6FA", color: t.contractType === "nexus" ? "#4F46E5" : t.contractType === "aeldrelov" ? "#C2410C" : "#9C1B5D" }}>{t.contractType === "nexus" ? "🏢 Nexus" : t.contractType === "aeldrelov" ? "👴 Ældrelov" : "🏠 Privat"}</span>
+          t.contractType && <span style={{ ...styles.typeChip, background: contractMeta(t.contractType).bg, color: contractMeta(t.contractType).color }}>{contractIconLabel(t.contractType)}</span>
         ) : (
           <select
-            style={{ fontSize: 12, fontWeight: 600, padding: "3px 8px", borderRadius: 99, border: "1.5px solid #E2E8F0", background: t.contractType === "nexus" ? "#EEF2FF" : t.contractType === "aeldrelov" ? "#FFF7ED" : "#FFF6FA", color: t.contractType === "nexus" ? "#4F46E5" : t.contractType === "aeldrelov" ? "#C2410C" : "#9C1B5D", cursor: "pointer" }}
+            style={{ fontSize: 12, fontWeight: 600, padding: "3px 8px", borderRadius: 99, border: "1.5px solid #E2E8F0", background: contractMeta(t.contractType).bg, color: contractMeta(t.contractType).color, cursor: "pointer" }}
             value={t.contractType || "privat"}
             onChange={(e) => onUpdateContractType(t.id, e.target.value)}>
             <option value="privat">🏠 Privat</option>
