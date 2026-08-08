@@ -2476,17 +2476,7 @@ function PlanningApp({ session, onSignOut }) {
           {[["uge", L.schedule], ["employees", L.employees], ["checklists", L.checklists], ["time", L.time], ["inventory", L.inventory], ["contracts", L.contracts], ["reports", L.reports], ["medExport", L.medExport]].map(([k, l]) => (
             <button key={k} onClick={() => setView(k)} style={view === k ? styles.navBtnActive : styles.navBtn}>{l}</button>
           ))}
-          <div style={{ display:"flex", gap:4, marginLeft:12, borderLeft:"1px solid #333", paddingLeft:12 }}>
-            <button onClick={() => setLang("da")} style={{ fontSize:20, background:"none", border:"none", cursor:"pointer", opacity: lang==="da" ? 1 : 0.35, padding:"2px 4px", borderRadius:6 }}>🇩🇰</button>
-            <button onClick={() => setLang("en")} style={{ fontSize:20, background:"none", border:"none", cursor:"pointer", opacity: lang==="en" ? 1 : 0.35, padding:"2px 4px", borderRadius:6 }}>🇬🇧</button>
-          </div>
-          <a
-            href={`https://translate.google.com/translate?sl=da&tl=en&u=${encodeURIComponent(window.location.href)}`}
-            target="_blank" rel="noreferrer"
-            style={{ fontSize:13, color:"#94A3B8", textDecoration:"none", padding:"4px 8px", borderRadius:6, border:"1px solid #333", marginLeft:4 }}
-            title="Oversæt siden til engelsk via Google Translate">
-            🌐 Oversæt
-          </a>
+          {/* Sprogvalg og Google Translate fjernet - planlaegningsappen bruges kun paa dansk. */}
           <button onClick={onSignOut} style={{ ...styles.navBtn, marginLeft: 4, color: "#E8AFC9", borderLeft: "1px solid #333", paddingLeft:12 }}>{L.signOut}</button>
         </nav>
       </header>
@@ -2601,6 +2591,36 @@ function PlanningApp({ session, onSignOut }) {
           onUpdateContractType={updateContractType}
           onRenameTask={renameTask}
           onUpdateSkills={(taskId, newSkills) => updateInstance(taskId, (t) => ({ ...t, requiredSkills: newSkills }))}
+          onUpdateSchedule={(taskId, dateStr, timeStr) => {
+            setInstances((prev) => {
+              const current = prev.find((x) => x.id === taskId);
+              if (!current) return prev;
+              const dateObj = new Date(dateStr);
+              const wi = isoWeekInfo(dateObj);
+              // Ny frist: placeringen nulstilles og opgaven soeges placeret paa ny.
+              // Den gamle dag kan ligge efter den nye frist, saa den maa ikke beholdes.
+              const reset = {
+                ...current,
+                week: wi.week, year: wi.year,
+                deadline: weekdayKeyFor(dateObj),
+                scheduledTime: timeStr,
+                day: null, assignees: [], status: "unscheduled", warning: null,
+              };
+              const others = prev.filter((x) => x.id !== taskId);
+              const placed = planTaskNow(reset, others);
+              if (placed.assignees && placed.assignees.length) {
+                const emp = employees.find((e) => e.id === placed.assignees[0]);
+                const dayLabel = ALL_DAYS.find((x) => x.key === placed.day)?.label || placed.day;
+                notify(`Flyttet og planlagt til ${emp?.name || "medarbejder"} ${String(dayLabel).toLowerCase()} i uge ${placed.week}`);
+              } else {
+                notify(placed.warning === "no_skill"
+                  ? "Ingen medarbejder har de krævede kompetencer — opgaven ligger i Ikke tildelt"
+                  : "Ingen ledig dag inden den nye frist — opgaven ligger i Ikke tildelt");
+              }
+              syncInstance(placed);
+              return [...others, placed];
+            });
+          }}
           onAddAssignee={(taskId, empId) => { const t = instances.find((x) => x.id === taskId); if (t?.day) manualPlace(taskId, t.day, empId); }}
           onRemoveAssignee={removeAssignee}
           onUnplace={(taskId) => { unplace(taskId); setOpenTaskId(null); }}
@@ -5949,12 +5969,15 @@ function EmployeeModal({ emp, onClose, onSave, skills: skillList }) {
 }
 
 // ---------- Task / service order detail ----------
-function TaskDetailModal({ task, employees, checklistTemplates, skills, isAdminUser, areas, employeeAreas, onClose, onSetStatus, onToggleChecklistItem, onAddChecklistItem, onAddChecklistTemplate, onAddAssignee, onRemoveAssignee, onUnplace, onDelete, onUpdateCustomer, onUpdateCustomerInfo, onUpdateContractType, onRenameTask, onCopy, onUpdateSkills, onEndBlockEarly }) {
+function TaskDetailModal({ task, employees, checklistTemplates, skills, isAdminUser, areas, employeeAreas, onClose, onSetStatus, onToggleChecklistItem, onAddChecklistItem, onAddChecklistTemplate, onAddAssignee, onRemoveAssignee, onUnplace, onDelete, onUpdateCustomer, onUpdateCustomerInfo, onUpdateContractType, onRenameTask, onCopy, onUpdateSkills, onEndBlockEarly, onUpdateSchedule }) {
   const [addOpen, setAddOpen] = useState(false);
   const [newItemText, setNewItemText] = useState("");
   const [showTemplates, setShowTemplates] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState(false);
   const [editingSkills, setEditingSkills] = useState(false);
+  const [editingSchedule, setEditingSchedule] = useState(false);
+  const [schedDate, setSchedDate] = useState("");
+  const [schedTime, setSchedTime] = useState("");
   const [custName, setCustName] = useState("");
   const [custAddress, setCustAddress] = useState("");
   const [custPo, setCustPo] = useState("");
@@ -6244,6 +6267,58 @@ return (
           <div style={styles.cardMeta}>{skillLabel(t)}</div>
         )}
       </div>
+
+      {/* Frist og tidspunkt — kan rettes paa fleksible opgaver indtil de er udfoert.
+          Aendres datoen til en anden uge, flytter opgaven med, og placeringen
+          nulstilles saa opgaven kan planlaegges paa ny inden for den nye frist. */}
+      {t.type === "adhoc" && !isDone && (
+        <div style={{ marginBottom: 12 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+            <label style={styles.label}>Frist og tidspunkt</label>
+            {!editingSchedule && (
+              <button style={{ ...styles.addSkillBtn, fontSize: 11 }} onClick={() => {
+                const monday = mondayOfWeek(t.week, t.year);
+                const idx = Math.max(0, ALL_DAYS.findIndex((x) => x.key === (t.deadline || "Fri")));
+                const dl = new Date(monday);
+                dl.setDate(dl.getDate() + idx);
+                const pad = (n) => String(n).padStart(2, "0");
+                setSchedDate(`${dl.getFullYear()}-${pad(dl.getMonth() + 1)}-${pad(dl.getDate())}`);
+                setSchedTime(t.scheduledTime || "");
+                setEditingSchedule(true);
+              }}>Rediger</button>
+            )}
+          </div>
+          {!editingSchedule ? (
+            <div style={styles.cardMeta}>
+              {t.deadline ? `Senest ${(ALL_DAYS.find((x) => x.key === t.deadline)?.label || t.deadline).toLowerCase()} · uge ${t.week}` : "Ingen frist"}
+              {t.scheduledTime ? ` · ønsket kl. ${t.scheduledTime}` : ""}
+            </div>
+          ) : (
+            <div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <div style={{ flex: 1, minWidth: 150 }}>
+                  <div style={{ fontSize: 11, color: "#94A3B8", marginBottom: 3 }}>Senest udført dato</div>
+                  <input type="date" style={styles.input} value={schedDate} onChange={(e) => setSchedDate(e.target.value)} />
+                </div>
+                <div style={{ flex: 1, minWidth: 130 }}>
+                  <div style={{ fontSize: 11, color: "#94A3B8", marginBottom: 3 }}>Ønsket starttidspunkt</div>
+                  <input type="time" style={styles.input} value={schedTime} onChange={(e) => setSchedTime(e.target.value)} />
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+                <button style={{ ...styles.primaryBtn, padding: "7px 12px", fontSize: 12 }} disabled={!schedDate}
+                  onClick={() => { onUpdateSchedule(t.id, schedDate, schedTime || null); setEditingSchedule(false); }}>
+                  Gem og planlæg igen
+                </button>
+                <button style={{ ...styles.secondaryBtn, padding: "7px 12px", fontSize: 12 }} onClick={() => setEditingSchedule(false)}>Annuller</button>
+              </div>
+              <div style={{ fontSize: 11, color: "#94A3B8", marginTop: 6 }}>
+                Opgaven forsøges placeret på ny inden for den nye frist. Kan ingen nå det, lander den i "Ikke tildelt".
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Kunde — redigerbar indtil udført */}
       <div style={{ marginBottom: 12 }}>
