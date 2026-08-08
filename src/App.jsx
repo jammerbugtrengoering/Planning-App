@@ -63,6 +63,8 @@ function contractIconLabel(key) { const c = contractMeta(key); return c.icon + "
 // en rigtig rengøringsopgave — blokeringer skal ikke tælle med i fakturagrundlag,
 // rapportering osv., og skal forhindre auto-planlægning af den pågældende medarbejder.
 const BLOCK_TYPES = ["sygdom", "ferie"];
+// Planlaegningshorisont: hvor mange uger frem opgaverne altid materialiseres.
+const HORIZON_WEEKS = 4;
 
 // Bruger crypto.randomUUID når den er tilgængelig (alle moderne browsere).
 // Math.random gav kun ~36^7 kombinationer og var i praksis kollisionsfølsom,
@@ -584,7 +586,12 @@ function ensureWeekInstances(week, year, allInstances, templates, employees, are
       if (existingIdx === -1) {
         const newInst = {
           id: uid("i"), templateId: tpl.id, title: tpl.title, requiredSkills: tpl.requiredSkills,
-          duration: tpl.duration, type: "fixed", day, week, year, assignees: [], status: "unscheduled", timeLog: [],
+          duration: tpl.duration, type: "fixed", day, week, year,
+          // Har aftalen en fast medarbejder, foedes opgaven direkte med vedkommende.
+          // Auto-planlaegningen roerer aldrig en opgave der allerede har en medarbejder,
+          // saa tildelingen staar ved magt - og sygdom/ferie fjerner den igen som normalt.
+          assignees: tpl.preferredEmployeeId ? [tpl.preferredEmployeeId] : [],
+          status: tpl.preferredEmployeeId ? "planlagt" : "unscheduled", timeLog: [],
           checklist: instantiateChecklist(tpl.checklistItems || []),
           checklistTemplateIds: tpl.checklistTemplateIds || [], extraItems: tpl.extraItems || [],
           videoUrl: tpl.videoUrl || "",
@@ -957,6 +964,19 @@ function SetNewPasswordScreen({ onDone }) {
 // brugervejledning, men vises for det modul man faktisk står i.
 const MODULE_HELP = {
   uge: { title: "Ugeplan", intro: "Her planlægger du ugen. Hver medarbejder har en række, hver dag en kolonne.", blocks: [
+    { h: "Sådan planlægger systemet", p: [
+        "Opgaverne oprettes automatisk ud fra aftalerne, fire uger frem. Du kan altså bladre en måned frem og se planen.",
+        "Har aftalen en fast medarbejder, sættes vedkommende på med det samme, hver gang en ny opgave opstår.",
+        "Har den ikke det, finder Planlæg en medarbejder ud fra tre ting: de krævede kompetencer, om medarbejderen er tilknyttet kundens område, og om der er timer nok tilbage den dag.",
+        "Blandt dem der kan løse opgaven, vælges den med mest ledig tid, så arbejdet fordeler sig jævnt.",
+        "En opgave med fast klokkeslæt lægges aldrig oven i en anden opgave med fast klokkeslæt hos samme medarbejder.",
+        "Weekender planlægges kun for medarbejdere der har weekendarbejde sat på. For dem er der ingen timegrænse, da det altid er en aftale.",
+        "Sygdom og ferie fjerner automatisk medarbejderen fra opgaverne i perioden. Er der ingen tilbage, ryger opgaven i Ikke tildelt."] },
+    { h: "Fast medarbejder på en aftale", p: [
+        "Vælg medarbejderen under Ansvarlig medarbejder når du opretter aftalen, så følger han eller hun aftalen resten af perioden.",
+        "Du kan også gøre det fra en åben opgave: tildel medarbejderen, og tryk så «Gør fast på aftalen».",
+        "Det slår igennem på alle kommende opgaver på aftalen. Udførte opgaver røres ikke.",
+        "Tilføjer du derimod bare en medarbejder på en enkelt opgave, gælder det kun den ene opgave. Brug det til afløsning."] },
     { h: "Ikke tildelt", p: ["En opgave havner her hvis den er ny, hvis medarbejderen er blevet syg, eller hvis systemet ikke kunne finde nogen der passer.",
                              "Træk den over på en medarbejder, eller sæt Auto-planlæg og tryk Planlæg."] },
     { h: "Hvorfor bliver en opgave ikke planlagt?", p: [
@@ -1290,6 +1310,7 @@ function PlanningApp({ session, onSignOut }) {
             checklistItems: buildChecklistItems(t.checklist_template_ids || [], t.extra_items || [], clMapped, []),
             startDate: t.start_date || null,
             expiryDate: t.expiry_date || null,
+            preferredEmployeeId: t.preferred_employee_id || "",
             excludedDays: t.excluded_days ? JSON.parse(t.excluded_days) : [],
             requiredSkills: (tplSkillsData || [])
               .filter((s) => s.template_id === t.id)
@@ -1330,9 +1351,25 @@ function PlanningApp({ session, onSignOut }) {
             onSchedule: i.on_schedule ?? false,
           };
         });
-        const allInst = ensureWeekInstances(currentWeek, currentYear, existingInst, mapped, empMapped, areasData || [], empAreasData || []);
+        // Planlaegningshorisont: opgaverne materialiseres altid fire uger frem, saa
+        // planen kan overskues en maaned ud, og aftaler med fast medarbejder faar
+        // vedkommende paa med det samme i stedet for foerst naar ugen aabnes.
+        let allInst = existingInst;
+        const horizonAnchor = mondayOf(new Date());
+        for (let hw = 0; hw < HORIZON_WEEKS; hw++) {
+          const hd = new Date(horizonAnchor);
+          hd.setDate(hd.getDate() + hw * 7);
+          const hi = isoWeekInfo(hd);
+          allInst = ensureWeekInstances(hi.week, hi.year, allInst, mapped, empMapped, areasData || [], empAreasData || []);
+        }
+        // Den viste uge kan ligge uden for horisonten (hvis planlaeggeren har bladret).
+        allInst = ensureWeekInstances(currentWeek, currentYear, allInst, mapped, empMapped, areasData || [], empAreasData || []);
         setInstances(allInst);
         syncHealedAssignments(existingInst, allInst);
+        // Nye opgaver i horisonten skal gemmes med det samme. Ellers findes de kun
+        // i browseren, og medarbejder-appen ville aldrig faa dem at se.
+        const knownIds = new Set(existingInst.map((t) => t.id));
+        allInst.filter((t) => !knownIds.has(t.id)).forEach(syncInstance);
       } else if (instData?.length) {
         setInstances(instData.map((i) => ({
           ...i, timeLog: i.time_log ?? [], requiredSkills: i.required_skills ?? [],
@@ -1540,6 +1577,7 @@ function PlanningApp({ session, onSignOut }) {
     if ("accessInstructions" in fields) payload.access_instructions = fields.accessInstructions ?? "";
     if ("contractType" in fields) payload.contract_type = fields.contractType ?? "privat";
     if ("dineroSynced" in fields) payload.dinero_synced = !!fields.dineroSynced;
+    if ("preferredEmployeeId" in fields) payload.preferred_employee_id = fields.preferredEmployeeId || null;
     if (Object.keys(payload).length === 0) return;
     const { error } = await supabase.from("service_templates").update(payload).eq("id", tplId);
     if (error) console.error("syncTemplateFields error:", error.message);
@@ -1745,6 +1783,7 @@ function PlanningApp({ session, onSignOut }) {
         pricingType: payload.pricingType || "hourly", fixedPrice: payload.pricingType === "fixed" ? (Number(payload.fixedPrice) || 0) : null,
         planInterval: payload.planInterval || "uge",
         startDate: payload.startDate || null, dineroSynced: payload.dineroSynced || false,
+        preferredEmployeeId: payload.assigned_employee_id || "",
       };
       const { error: tplErr } = await supabase.from("service_templates").insert({
         id: tplId, title: tpl.title, duration: tpl.duration, days: tpl.days, day_times: tpl.dayTimes || {},
@@ -1758,6 +1797,7 @@ function PlanningApp({ session, onSignOut }) {
         extra_items: tpl.extraItems || [],
         start_date: payload.startDate || null,
         expiry_date: payload.expiryDate || null,
+        preferred_employee_id: tpl.preferredEmployeeId || null,
       });
       if (dbFail(tplErr, "oprette den faste aftale")) return;
       const { data: skillsDb } = await supabase.from("skills").select("id,name");
@@ -2100,6 +2140,31 @@ function PlanningApp({ session, onSignOut }) {
         ? { ...t, assignees: [], day: (t.type === "flexible" || t.type === "adhoc") ? null : t.day, status: "unscheduled" }
         : { ...t, assignees: nextAssignees };
     });
+  }
+  // Goer en medarbejder fast paa aftalen. Valget gemmes paa skabelonen, saa alle
+  // fremtidige opgaver foedes med vedkommende, og alle kommende ikke-udfoerte
+  // opgaver paa aftalen ombyttes med det samme. Udfoerte opgaver roeres aldrig.
+  function setPreferredEmployee(templateId, empId) {
+    if (!templateId || !empId) return;
+    const emp = employees.find((e) => e.id === empId);
+    const nowInfo = isoWeekInfo(new Date());
+    const isFromNowOn = (inst) =>
+      inst.year > nowInfo.year || (inst.year === nowInfo.year && inst.week >= nowInfo.week);
+    const targets = instances.filter((inst) =>
+      inst.templateId === templateId &&
+      inst.status !== "udført" &&
+      isFromNowOn(inst) &&
+      !((inst.assignees || []).length === 1 && inst.assignees[0] === empId));
+    setTemplates((prev) => prev.map((tp) => (tp.id === templateId ? { ...tp, preferredEmployeeId: empId } : tp)));
+    syncTemplateFields(templateId, { preferredEmployeeId: empId });
+    const targetIds = new Set(targets.map((t) => t.id));
+    setInstances((prev) => prev.map((inst) => {
+      if (!targetIds.has(inst.id)) return inst;
+      const updated = { ...inst, assignees: [empId], status: inst.day ? "planlagt" : inst.status };
+      syncInstance(updated);
+      return updated;
+    }));
+    notify(`${emp ? emp.name : "Medarbejderen"} er nu fast på aftalen — ${targets.length} kommende opgave${targets.length === 1 ? "" : "r"} opdateret`);
   }
   function unplace(taskId) {
     updateInstance(taskId, (t) => ({
@@ -2688,7 +2753,7 @@ function PlanningApp({ session, onSignOut }) {
       )}
 
       {view === "contracts" && (
-        <ContractsView templates={templates} instances={instances} pricing={pricing} />
+        <ContractsView templates={templates} instances={instances} pricing={pricing} employees={employees} />
       )}
 
       {view === "reports" && (
@@ -2717,6 +2782,8 @@ function PlanningApp({ session, onSignOut }) {
       )}
       {openTaskId && (
         <TaskDetailModal
+          templates={templates}
+          onSetPreferredEmployee={setPreferredEmployee}
           task={instances.find((t) => t.id === openTaskId)}
           employees={employees}
           checklistTemplates={checklistTemplates}
@@ -4962,6 +5029,10 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
         {employees?.map(emp => <option key={emp.id} value={emp.id}>{emp.name}</option>)}
       </select>
 
+      {type === "fixed" && (
+        <div style={styles.hint}>Vælges her, følger medarbejderen aftalen resten af perioden og sættes automatisk på alle kommende opgaver.</div>
+      )}
+
       {type === "adhoc" && assignedEmployeeId && (
         <>
           <label style={styles.label}>Ønsket dato (når medarbejder er valgt)</label>
@@ -5100,7 +5171,7 @@ function DayPills({ days }) {
   );
 }
 
-function ContractsView({ templates, instances, pricing }) {
+function ContractsView({ templates, instances, pricing, employees }) {
   // Find den reelle, aktuelle kontrakttype for en skabelon: den seneste værdi sat på
   // en tilknyttet opgave slår den statiske skabelonværdi, så redigering i ugeplanen
   // altid afspejles korrekt her.
@@ -5235,6 +5306,11 @@ function ContractsView({ templates, instances, pricing }) {
                 <div style={{ fontWeight: 700, fontSize: 15, color: "#111111", marginBottom: 3 }}>{t.title}</div>
                 <div style={{ fontSize: 12, color: "#64748B", display: "flex", gap: 12, flexWrap: "wrap" }}>
                   {t.customerName && <span>👤 {t.customerName}</span>}
+                    {t.preferredEmployeeId && (
+                      <span style={{ color: "#9C1B5D", fontWeight: 700 }}>
+                        Fast: {((employees || []).find((e) => e.id === t.preferredEmployeeId) || {}).name || "ukendt"}
+                      </span>
+                    )}
                   <DayPills days={t.days} />
                   {t.start && <span>Fra {t.start.toLocaleDateString("da-DK", { day: "numeric", month: "short", year: "numeric" })}</span>}
                   <span>Til {t.expiry.toLocaleDateString("da-DK", { day: "numeric", month: "short", year: "numeric" })}</span>
@@ -5266,6 +5342,11 @@ function ContractsView({ templates, instances, pricing }) {
                   <div style={{ fontWeight: 700, fontSize: 15, color: "#111111", marginBottom: 3 }}>{t.title}</div>
                   <div style={{ fontSize: 12, color: "#64748B", display: "flex", gap: 12, flexWrap: "wrap" }}>
                     {t.customerName && <span>👤 {t.customerName}</span>}
+                    {t.preferredEmployeeId && (
+                      <span style={{ color: "#9C1B5D", fontWeight: 700 }}>
+                        Fast: {((employees || []).find((e) => e.id === t.preferredEmployeeId) || {}).name || "ukendt"}
+                      </span>
+                    )}
                     <DayPills days={t.days} />
                     <span style={{ fontWeight: 600, color: "#9C1B5D" }}>{contractIconLabel(t.contractType)}</span>
                   </div>
@@ -6125,7 +6206,7 @@ function EmployeeModal({ emp, onClose, onSave, skills: skillList }) {
 }
 
 // ---------- Task / service order detail ----------
-function TaskDetailModal({ task, employees, checklistTemplates, skills, isAdminUser, areas, employeeAreas, onClose, onSetStatus, onToggleChecklistItem, onAddChecklistItem, onAddChecklistTemplate, onAddAssignee, onRemoveAssignee, onUnplace, onDelete, onUpdateCustomer, onUpdateCustomerInfo, onUpdateContractType, onRenameTask, onCopy, onUpdateSkills, onEndBlockEarly, onUpdateSchedule }) {
+function TaskDetailModal({ task, employees, templates, onSetPreferredEmployee, checklistTemplates, skills, isAdminUser, areas, employeeAreas, onClose, onSetStatus, onToggleChecklistItem, onAddChecklistItem, onAddChecklistTemplate, onAddAssignee, onRemoveAssignee, onUnplace, onDelete, onUpdateCustomer, onUpdateCustomerInfo, onUpdateContractType, onRenameTask, onCopy, onUpdateSkills, onEndBlockEarly, onUpdateSchedule }) {
   const [addOpen, setAddOpen] = useState(false);
   const [newItemText, setNewItemText] = useState("");
   const [showTemplates, setShowTemplates] = useState(false);
@@ -6629,6 +6710,18 @@ return (
           </div>
         ))}
         {assignedEmps.length === 0 && <div style={styles.cardMeta}>Ingen tildelt endnu</div>}
+        {t.templateId && assignedEmps.length === 1 && onSetPreferredEmployee && (() => {
+          const aftale = (templates || []).find((x) => x.id === t.templateId);
+          const erFast = aftale && aftale.preferredEmployeeId === assignedEmps[0].id;
+          if (erFast) return <div style={{ ...styles.cardMeta, color: "#16A34A", marginTop: 6 }}>Fast medarbejder på aftalen</div>;
+          return (
+            <button type="button" style={{ ...styles.addSkillBtn, marginTop: 6 }}
+              title="Gemmer medarbejderen på aftalen og ombytter på alle kommende opgaver"
+              onClick={() => onSetPreferredEmployee(t.templateId, assignedEmps[0].id)}>
+              Gør {assignedEmps[0].name} fast på aftalen
+            </button>
+          );
+        })()}
         {!t.day && <div style={styles.hint}>Træk opgaven til en dag i ugeplanen for at kunne tildele medarbejdere.</div>}
 
         {addable.length > 0 && t.day && (
