@@ -113,7 +113,7 @@ function fmtMin(min) {
   const h = Math.floor(min / 60), m = Math.round(min % 60);
   return h > 0 ? `${h}t${m > 0 ? " " + m + "m" : ""}` : `${m}m`;
 }
-function defaultCapacity() { return { Mon: 480, Tue: 480, Wed: 480, Thu: 480, Fri: 480 }; }
+function defaultCapacity() { return { Mon: 480, Tue: 480, Wed: 480, Thu: 480, Fri: 480, Sat: 0, Sun: 0 }; }
 function rs(skill, minLevel = 1) { return { skill, minLevel }; }
 
 // ---------- Week helpers ----------
@@ -167,7 +167,7 @@ function instanceMonthYear(t, fallbackYear) {
   const monday = mondayOfWeek(t.week, year);
   const date = new Date(monday);
   if (t.day) {
-    const dayIdx = DAYS.findIndex((d) => d.key === t.day);
+    const dayIdx = ALL_DAYS.findIndex((d) => d.key === t.day);
     if (dayIdx >= 0) date.setDate(monday.getDate() + dayIdx);
   }
   return { month: date.getMonth(), year: date.getFullYear() };
@@ -185,14 +185,14 @@ function weekMeta(weekNo, year) {
 // bruges til at fange forsinkede opgaver op fra i dag og frem i stedet for at
 // forsøge at placere dem på en dag der allerede er passeret. Ligger ugen helt
 // i fremtiden er hele ugen åben (index 0); er ugen allerede helt overstået,
-// returneres DAYS.length, så der ikke findes nogen gyldig dag tilbage.
+// returneres ALL_DAYS.length, så der ikke findes nogen gyldig dag tilbage.
 function earliestAllowedDayIndex(week, year) {
   const monday = mondayOfWeek(week, year);
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const diffDays = Math.round((today - monday) / 86400000);
   if (diffDays <= 0) return 0;
-  if (diffDays >= DAYS.length) return DAYS.length;
+  if (diffDays >= ALL_DAYS.length) return ALL_DAYS.length;
   return diffDays;
 }
 
@@ -357,12 +357,12 @@ function scheduleWeek(weekInstances, employees, autoOnly = false, areas = [], em
     // _forceWindow (array af dag-nøgler) styrer et forsinket-opgave-genoptag:
     // søg kun blandt de dage, der er angivet (typisk i dag og frem), i stedet
     // for det normale deadline-vindue for rigtige fleksible opgaver.
-    const deadlineIdx = DAYS.findIndex((d) => d.key === (t.deadline || "Fri"));
+    const deadlineIdx = ALL_DAYS.findIndex((d) => d.key === (t.deadline || "Fri"));
     // En opgave må aldrig auto-placeres på en dag der allerede er passeret —
     // vinduet starter derfor tidligst i dag (earliestAllowedDayIndex), ikke
     // altid mandag, når det er den viste/indeværende uge der planlægges i.
     const earliestIdx = earliestAllowedDayIndex(t.week, t.year);
-    const window = t._forceWindow ? DAYS.filter((d) => t._forceWindow.includes(d.key)) : DAYS.slice(earliestIdx, deadlineIdx + 1);
+    const window = t._forceWindow ? ALL_DAYS.filter((d) => t._forceWindow.includes(d.key)) : ALL_DAYS.slice(earliestIdx, deadlineIdx + 1);
     const { candidates, outsideArea } = candidatesFor(t, employees, areas, employeeAreas);
     if (candidates.length === 0) { t.warning = "no_skill"; return; }
     let best = null;
@@ -447,7 +447,7 @@ function ensureWeekInstances(week, year, allInstances, templates, employees) {
     }
     
     // Filter days to only those within start/expiry interval and not excluded
-    const DAY_STRING_TO_INDEX = { "Mon": 0, "Tue": 1, "Wed": 2, "Thu": 3, "Fri": 4 };
+    const DAY_STRING_TO_INDEX = { "Mon": 0, "Tue": 1, "Wed": 2, "Thu": 3, "Fri": 4, "Sat": 5, "Sun": 6 };
     
     // Convert day strings to numeric indices if needed
     const dayIndices = (tpl.days || []).map((d) => 
@@ -502,7 +502,7 @@ function ensureWeekInstances(week, year, allInstances, templates, employees) {
       }
     });
     
-    const DAY_INDEX_TO_STRING = ["Mon", "Tue", "Wed", "Thu", "Fri"];
+    const DAY_INDEX_TO_STRING = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
     daysToCreate.forEach((dayIdx) => {
       const day = DAY_INDEX_TO_STRING[dayIdx];
       const existingIdx = list.findIndex((i) => i.templateId === tpl.id && i.week === week && i.year === year && i.day === day);
@@ -1225,14 +1225,23 @@ function PlanningApp({ session, onSignOut }) {
       }).filter(Boolean);
     if (skillRows.length) await supabase.from("employee_skills").insert(skillRows);
     const capRows = Object.entries(emp.capacity || {}).map(([weekday, minutes]) => ({ employee_id: emp.id, weekday, minutes }));
-    if (capRows.length) await supabase.from("employee_capacity").upsert(capRows, { onConflict: "employee_id,weekday" });
-    // Also ensure capacity rows exist for all days
-    const missingDays = ["Mon","Tue","Wed","Thu","Fri"].filter(d => !(emp.capacity || {})[d]);
+    if (capRows.length) {
+      const { error: capErr } = await supabase.from("employee_capacity").upsert(capRows, { onConflict: "employee_id,weekday" });
+      if (capErr) dbFail(capErr, "gemme medarbejderens kapacitet");
+    }
+    // Sørg for at der findes en kapacitetsrække for alle syv dage. Weekend oprettes
+    // med 0 minutter: dagen findes, så planlæggeren kan hæve den for en enkelt
+    // medarbejder, men ingen bliver ledige i weekenden af sig selv.
+    const DEFAULT_CAP_MINUTES = { Mon: 480, Tue: 480, Wed: 480, Thu: 480, Fri: 480, Sat: 0, Sun: 0 };
+    // Bemærk: der tjekkes mod undefined og ikke falsy — ellers ville en bevidst sat
+    // kapacitet på 0 blive skrevet tilbage til standardværdien ved hver gemning.
+    const missingDays = Object.keys(DEFAULT_CAP_MINUTES).filter(dk => (emp.capacity || {})[dk] === undefined);
     if (missingDays.length) {
-      await supabase.from("employee_capacity").upsert(
-        missingDays.map(weekday => ({ employee_id: emp.id, weekday, minutes: 480 })),
+      const { error: seedErr } = await supabase.from("employee_capacity").upsert(
+        missingDays.map(weekday => ({ employee_id: emp.id, weekday, minutes: DEFAULT_CAP_MINUTES[weekday] })),
         { onConflict: "employee_id,weekday" }
       );
+      if (seedErr) dbFail(seedErr, "oprette manglende kapacitetsdage");
     }
   }, []);
 
@@ -1380,7 +1389,7 @@ function PlanningApp({ session, onSignOut }) {
         isPastWeek(t) && t.includeInAuto && !(t.assignees && t.assignees.length) && !BLOCK_TYPES.includes(t.type)
       );
       const overdueIds = new Set(overdueCandidates.map((t) => t.id));
-      const forceWindowKeys = DAYS.slice(earliestAllowedDayIndex(weekOffset, weekYear)).map((d) => d.key);
+      const forceWindowKeys = ALL_DAYS.slice(earliestAllowedDayIndex(weekOffset, weekYear)).map((d) => d.key);
       const overdueForRun = overdueCandidates.map((t) => ({ ...t, _forceWindow: forceWindowKeys }));
 
       const others = prev.filter((t) => !(t.week === weekOffset && t.year === weekYear) && !overdueIds.has(t.id));
@@ -1792,8 +1801,8 @@ function PlanningApp({ session, onSignOut }) {
     const isOffSchedule = task.type === "fixed" && agreedDays.length > 0 && !agreedDays.includes(day);
 
     if (isOffSchedule) {
-      const dayLabel = DAYS.find((d) => d.key === day)?.label || day;
-      const agreedLabels = agreedDays.map((k) => DAYS.find((d) => d.key === k)?.label || k).join(", ");
+      const dayLabel = ALL_DAYS.find((d) => d.key === day)?.label || day;
+      const agreedLabels = agreedDays.map((k) => ALL_DAYS.find((d) => d.key === k)?.label || k).join(", ");
       const confirmed = window.confirm(
         `Denne faste opgave er aftalt til: ${agreedLabels}.\n\nEr du sikker på at du vil planlægge den på ${dayLabel} — uden for aftalen?`
       );
@@ -1905,7 +1914,9 @@ function PlanningApp({ session, onSignOut }) {
       const cursor = new Date(start);
       while (cursor <= end) {
         const dow = cursor.getDay();
-        if (dow !== 0 && dow !== 6) {
+        // Sygdom/ferie skal ogsaa blokere i weekenden - der kan ligge loerdags- og
+        // soendagsopgaver, og en fravaerende medarbejder skal fjernes fra dem alle.
+        {
           const { week, year } = isoWeekInfo(cursor);
           const dayKey = DAY_KEYS_BY_DOW[dow];
           // Sørg for at ugen er materialiseret (faste opgaver oprettet), så vi kan
@@ -1964,7 +1975,7 @@ function PlanningApp({ session, onSignOut }) {
 
   function dateOfBlockInstance(t) {
     const monday = mondayOfWeek(t.week, t.year);
-    const dayIdx = DAYS.findIndex((d) => d.key === t.day);
+    const dayIdx = ALL_DAYS.findIndex((d) => d.key === t.day);
     const d = new Date(monday);
     d.setDate(d.getDate() + (dayIdx >= 0 ? dayIdx : 0));
     return d;
@@ -2075,7 +2086,7 @@ function PlanningApp({ session, onSignOut }) {
       const logged = tl.reduce((s, l) => s + (l.minutes || 0), 0);
       rows.push([
         `Uge ${t.week}`,
-        DAYS.find((d) => d.key === t.day)?.label || "—",
+        ALL_DAYS.find((d) => d.key === t.day)?.label || "—",
         t.title,
         t.customerName || "",
         t.address || "",
@@ -2155,7 +2166,7 @@ function PlanningApp({ session, onSignOut }) {
 
     if (!window.confirm(confirmMsg)) return;
 
-    const dayLabelOf = (t) => DAYS.find((d) => d.key === t.day)?.label || t.day || "—";
+    const dayLabelOf = (t) => ALL_DAYS.find((d) => d.key === t.day)?.label || t.day || "—";
     const today = new Date().toISOString().slice(0, 10);
 
     const results = { success: [], notFound: [], ambiguous: [], error: [] };
@@ -2270,8 +2281,8 @@ function PlanningApp({ session, onSignOut }) {
     .filter((t) => !(t.assignees && t.assignees.length))
     .sort((a, b) => {
       if (a.week !== b.week) return a.week - b.week;
-      const aDay = a.day ? DAYS.findIndex((d) => d.key === a.day) : 99;
-      const bDay = b.day ? DAYS.findIndex((d) => d.key === b.day) : 99;
+      const aDay = a.day ? ALL_DAYS.findIndex((d) => d.key === a.day) : 99;
+      const bDay = b.day ? ALL_DAYS.findIndex((d) => d.key === b.day) : 99;
       return aDay - bDay;
     });
   const totalLogged = useMemo(() => instances.reduce((s, t) => {
@@ -2504,13 +2515,13 @@ function EmployeeAppView({ employees, instances, onLogMinutes, onSetStatus, onTo
           <div style={styles.phoneSub}>{weekLabel}</div>
 
           <div style={styles.phoneDayRow}>
-            {DAYS.map((d) => (
+            {ALL_DAYS.map((d) => (
               <button key={d.key} style={d.key === day ? styles.phoneDayBtnActive : styles.phoneDayBtn} onClick={() => setDay(d.key)}>{d.label.slice(0, 3)}</button>
             ))}
           </div>
 
           <div style={styles.phoneList}>
-            {myTasks.length === 0 && <div style={styles.emptyCol}>{emp ? `${emp.name} har ingen opgaver ${DAYS.find((d) => d.key === day)?.label.toLowerCase()}` : "Vælg medarbejder"}</div>}
+            {myTasks.length === 0 && <div style={styles.emptyCol}>{emp ? `${emp.name} har ingen opgaver ${ALL_DAYS.find((d) => d.key === day)?.label.toLowerCase()}` : "Vælg medarbejder"}</div>}
             {schedule.map((seg) => {
               if (seg.type === "transport") {
                 return (
@@ -2658,7 +2669,10 @@ function WeekView({ employees, instances, unplaced, onAdd, onAuto, onScheduleWee
   const [selectedAreaId, setSelectedAreaId] = useState("all"); // "all" eller area.id
   const [printEmployeeId, setPrintEmployeeId] = useState("all");
   const [unassignedFilter, setUnassignedFilter] = useState("current"); // "current" eller "all"
-  const visibleDays = showWeekend ? ALL_DAYS : DAYS;
+  // Weekendkolonnerne vises automatisk saa snart der ligger en opgave der - ellers
+  // ville en loerdagsopgave vaere usynlig indtil man selv slog weekend til.
+  const hasWeekendTasks = instances.some((t) => t.day === "Sat" || t.day === "Sun");
+  const visibleDays = (showWeekend || hasWeekendTasks) ? ALL_DAYS : DAYS;
 
   // Filtrer medarbejdere baseret på valgt område
   const areaFilteredEmployees = selectedAreaId === "all"
@@ -2752,7 +2766,7 @@ function WeekView({ employees, instances, unplaced, onAdd, onAuto, onScheduleWee
                 <div style={styles.cardTitle}>{t.title}</div>
                 {t.customerName && <div style={styles.taskChipCustomer}>{t.customerName}</div>}
                 {t.address && <div style={styles.taskChipAddress}>📍 {t.address}</div>}
-                <div style={styles.cardMeta}>Uge {t.week}{t.day ? ` · ${DAYS.find((d) => d.key === t.day)?.label}` : ""} · {skillLabel(t)} · {fmtMin(t.duration)}{t.deadline ? ` · senest ${DAYS.find((d) => d.key === t.deadline)?.label}` : ""}{t.scheduledTime ? ` · ønsket kl. ${t.scheduledTime}` : ""}</div>
+                <div style={styles.cardMeta}>Uge {t.week}{t.day ? ` · ${ALL_DAYS.find((d) => d.key === t.day)?.label}` : ""} · {skillLabel(t)} · {fmtMin(t.duration)}{t.deadline ? ` · senest ${ALL_DAYS.find((d) => d.key === t.deadline)?.label}` : ""}{t.scheduledTime ? ` · ønsket kl. ${t.scheduledTime}` : ""}</div>
                 {liveNoSkill && <span style={styles.errorChip}><AlertTriangle size={12} /> Ingen har alle krævede kompetencer</span>}
                 {!liveNoSkill && t.warning === "overloaded" && <span style={styles.warnChip}><AlertTriangle size={12} /> Ingen ledig kapacitet</span>}
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 6 }} onClick={(e) => e.stopPropagation()}>
@@ -2812,8 +2826,8 @@ function WeekView({ employees, instances, unplaced, onAdd, onAuto, onScheduleWee
                             const agreedDays = dragged.templateDays || dragged.days || [];
                             const isOff = dragged.type === "fixed" && agreedDays.length > 0 && !agreedDays.includes(d.key);
                             if (isOff) {
-                              const dayLabel = DAYS.find((x) => x.key === d.key)?.label || d.key;
-                              const agreedLabels = agreedDays.map((k) => DAYS.find((x) => x.key === k)?.label || k).join(", ");
+                              const dayLabel = ALL_DAYS.find((x) => x.key === d.key)?.label || d.key;
+                              const agreedLabels = agreedDays.map((k) => ALL_DAYS.find((x) => x.key === k)?.label || k).join(", ");
                               const ok = window.confirm(`Denne faste opgave er aftalt til: ${agreedLabels}.\n\nEr du sikker på at du vil planlægge den på ${dayLabel} — uden for aftalen?`);
                               if (!ok) { setDragId(null); return; }
                             }
@@ -3148,8 +3162,8 @@ function EmployeesView({ employees, instances, onAdd, onEdit, onDelete, supabase
       )}
       <div style={styles.empGrid}>
         {employees.map((e) => {
-          const activeMin = DAYS.reduce((s, d) => s + usedMinutes(instances, e.id, d.key), 0);
-          const capMin = DAYS.reduce((s, d) => s + (e.capacity[d.key] || 0), 0);
+          const activeMin = ALL_DAYS.reduce((s, d) => s + usedMinutes(instances, e.id, d.key), 0);
+          const capMin = ALL_DAYS.reduce((s, d) => s + (e.capacity[d.key] || 0), 0);
           const status = inviteStatus[e.id];
           const hasUser = !!e.auth_user_id;
           return (
@@ -3170,7 +3184,7 @@ function EmployeesView({ employees, instances, onAdd, onEdit, onDelete, supabase
                 {Object.keys(e.skills).length === 0 && <span style={styles.cardMeta}>Ingen kompetencer angivet</span>}
               </div>
               <div style={styles.capRow}>
-                {DAYS.map((d) => (
+                {ALL_DAYS.map((d) => (
                   <div key={d.key} style={styles.capDayBox}>
                     <div style={styles.capDayLabel}>{d.label.slice(0, 3)}</div>
                     <div style={styles.capDayValue}>{(e.capacity[d.key] / 60).toFixed(1)}t</div>
@@ -3492,8 +3506,8 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
       const aEmp = (a.assignees || []).map((id) => employees.find((e) => e.id === id)?.name || "").sort().join(", ") || "\uffff";
       const bEmp = (b.assignees || []).map((id) => employees.find((e) => e.id === id)?.name || "").sort().join(", ") || "\uffff";
       if (aEmp !== bEmp) return aEmp.localeCompare(bEmp, "da");
-      const aDay = a.day ? DAYS.findIndex((d) => d.key === a.day) : 99;
-      const bDay = b.day ? DAYS.findIndex((d) => d.key === b.day) : 99;
+      const aDay = a.day ? ALL_DAYS.findIndex((d) => d.key === a.day) : 99;
+      const bDay = b.day ? ALL_DAYS.findIndex((d) => d.key === b.day) : 99;
       if (aDay !== bDay) return aDay - bDay;
       const aCust = a.customerName || "";
       const bCust = b.customerName || "";
@@ -3634,7 +3648,7 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
         {placed.map((t, idx) => {
           const emps = (t.assignees || []).map((id) => employees.find((e) => e.id === id)).filter(Boolean);
           const logged = (t.timeLog || t.time_log || []).reduce((s, l) => s + (l.minutes || 0), 0);
-          const dayLabel = DAYS.find((d) => d.key === t.day)?.label || t.day || "—";
+          const dayLabel = ALL_DAYS.find((d) => d.key === t.day)?.label || t.day || "—";
           const isLow = logged > 0 && logged < t.duration * 0.5;
           const isEditing = editMinutes[t.id] !== undefined;
           // Begrundelser medarbejderne har angivet ved overskridelse af planlagt tid.
@@ -3880,7 +3894,7 @@ function EmployeeExportView({ instances, employees }) {
           empName: emp.name,
           week: t.week,
           day: t.day,
-          dayLabel: DAYS.find((d) => d.key === t.day)?.label || t.day || "—",
+          dayLabel: ALL_DAYS.find((d) => d.key === t.day)?.label || t.day || "—",
           title: t.title,
           planned: t.duration,
           registered,
@@ -3892,8 +3906,8 @@ function EmployeeExportView({ instances, employees }) {
   rows.sort((a, b) => {
     if (a.empName !== b.empName) return a.empName.localeCompare(b.empName, "da");
     if (a.week !== b.week) return a.week - b.week;
-    const aDay = a.day ? DAYS.findIndex((d) => d.key === a.day) : 99;
-    const bDay = b.day ? DAYS.findIndex((d) => d.key === b.day) : 99;
+    const aDay = a.day ? ALL_DAYS.findIndex((d) => d.key === a.day) : 99;
+    const bDay = b.day ? ALL_DAYS.findIndex((d) => d.key === b.day) : 99;
     if (aDay !== bDay) return aDay - bDay;
     return (a.title || "").localeCompare(b.title || "", "da");
   });
@@ -4668,11 +4682,11 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
           </div>
           <label style={styles.label}>Ugedage (gentages hver uge)</label>
           <div style={styles.skillPicker}>
-            {DAYS.map((d) => <button key={d.key} type="button" onClick={() => toggleDay(d.key)} style={days.includes(d.key) ? styles.skillPickBtnActive : styles.skillPickBtn}>{d.label}</button>)}
+            {ALL_DAYS.map((d) => <button key={d.key} type="button" onClick={() => toggleDay(d.key)} style={days.includes(d.key) ? styles.skillPickBtnActive : styles.skillPickBtn}>{d.label}</button>)}
           </div>
           {days.length > 0 && (
             <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 4 }}>
-              {DAYS.filter((d) => days.includes(d.key)).map((d) => (
+              {ALL_DAYS.filter((d) => days.includes(d.key)).map((d) => (
                 <div key={d.key} style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <span style={{ width: 70, fontSize: 13, color: "#5B5B60" }}>{d.label}</span>
                   <input type="time" style={{ ...styles.input, width: 130 }} value={dayTimes[d.key] || ""} onChange={(e) => setDayTimes((prev) => ({ ...prev, [d.key]: e.target.value }))} />
@@ -5740,7 +5754,7 @@ function EmployeeModal({ emp, onClose, onSave, skills: skillList }) {
 
       <label style={styles.label}>Timer til rådighed pr. dag</label>
       <div style={styles.capEditRow}>
-        {DAYS.map((d) => (
+        {ALL_DAYS.map((d) => (
           <div key={d.key} style={styles.capEditBox}>
             <div style={styles.capDayLabel}>{d.label.slice(0, 3)}</div>
             <input type="number" min={0} step={0.5} style={styles.capInput} value={(capacity[d.key] / 60).toString()} onChange={(e) => setCap(d.key, e.target.value)} />
@@ -5877,7 +5891,7 @@ function TaskDetailModal({ task, employees, checklistTemplates, skills, isAdminU
 
   if (task.type === "aktivitet") {
     const emp = employees.find((e) => (task.assignees || []).includes(e.id));
-    const dayLabel = DAYS.find((d) => d.key === task.day)?.label || task.day;
+    const dayLabel = ALL_DAYS.find((d) => d.key === task.day)?.label || task.day;
     return (
       <Modal title="Anden aktivitet" onClose={onClose}>
         <div style={{ padding: "4px 0 16px" }}>
@@ -5904,7 +5918,7 @@ function TaskDetailModal({ task, employees, checklistTemplates, skills, isAdminU
   // tjekliste, kompetencer osv. giver ikke mening for en blokering).
   if (BLOCK_TYPES.includes(task.type)) {
     const emp = employees.find((e) => (task.assignees || []).includes(e.id));
-    const dayLabel = DAYS.find((d) => d.key === task.day)?.label || task.day;
+    const dayLabel = ALL_DAYS.find((d) => d.key === task.day)?.label || task.day;
     const meta = TYPE_META[task.type];
     return (
       <Modal title={meta?.label || task.type} onClose={onClose}>
@@ -5938,7 +5952,7 @@ function TaskDetailModal({ task, employees, checklistTemplates, skills, isAdminU
   const assignedEmps = (t.assignees || []).map((id) => employees.find((e) => e.id === id)).filter(Boolean);
   const addable = employees.filter((e) => !(t.assignees || []).includes(e.id));
   const prog = checklistProgress(t);
-  const dayLabel = t.day ? DAYS.find((d) => d.key === t.day)?.label : "Ikke planlagt endnu";
+  const dayLabel = t.day ? ALL_DAYS.find((d) => d.key === t.day)?.label : "Ikke planlagt endnu";
   const totalLogged = (t.timeLog || []).reduce((s, l) => s + l.minutes, 0);
   const byEmployee = {};
   (t.timeLog || []).forEach((l) => { if (!l.empId) return; byEmployee[l.empId] = (byEmployee[l.empId] || 0) + l.minutes; });
@@ -6026,7 +6040,7 @@ return (
         {t.onSchedule && !t.offSchedule && <span style={{ ...styles.typeChip, background: "#ECFDF5", color: "#16A34A" }}>✓ Aftalt dag</span>}
         {t.outsideArea && <span style={{ ...styles.typeChip, background: "#F5F3FF", color: "#7C3AED" }}>📍 Uden for område</span>}
       </div>
-      <div style={styles.cardMeta}>{dayLabel} · {fmtMin(t.duration)}{t.deadline ? ` · senest ${DAYS.find((d) => d.key === t.deadline)?.label}` : ""}{t.expiryDate ? ` · udløber ${t.expiryDate}` : ""}</div>
+      <div style={styles.cardMeta}>{dayLabel} · {fmtMin(t.duration)}{t.deadline ? ` · senest ${ALL_DAYS.find((d) => d.key === t.deadline)?.label}` : ""}{t.expiryDate ? ` · udløber ${t.expiryDate}` : ""}</div>
 
       {/* Kompetencer — redigerbare */}
       <div style={{ marginBottom: 12 }}>
