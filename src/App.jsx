@@ -333,7 +333,12 @@ function scheduleWeek(weekInstances, employees, autoOnly = false, areas = [], em
     const { candidates: allCandidates, outsideArea } = candidatesFor(t, employees, areas, employeeAreas);
     const candidates = allCandidates.filter((e) => !isBlocked(e.id, t.day));
     if (candidates.length === 0) { t.warning = "no_skill"; return; }
-    const ranked = [...candidates].sort((a, b) => {
+    // En opgave med fast klokkeslaet maa ikke laegges oven i en anden tidsfastsat
+    // opgave hos samme medarbejder. Tjekket fandtes kun i den fleksible gren, saa to
+    // opgaver med klokkeslaet paa samme dag kunne ende oven i hinanden.
+    const conflictFree = candidates.filter((e) => !hasTimeConflict(e.id, t.day, t));
+    const pool = conflictFree.length ? conflictFree : candidates;
+    const ranked = [...pool].sort((a, b) => {
       const diff = skillScore(b, t) - skillScore(a, t);
       if (diff !== 0) return diff;
       return remaining(employees, list, b.id, t.day) - remaining(employees, list, a.id, t.day);
@@ -342,7 +347,7 @@ function scheduleWeek(weekInstances, employees, autoOnly = false, areas = [], em
     const pick = withRoom || ranked[0];
     t.assignees = [pick.id];
     t.status = "planlagt";
-    t.warning = withRoom ? null : "overloaded";
+    t.warning = (withRoom && conflictFree.length) ? null : "overloaded";
     if (outsideArea) t.outsideArea = true; // Markér som planlagt uden for område
   });
 
@@ -416,7 +421,7 @@ function scheduleWeek(weekInstances, employees, autoOnly = false, areas = [], em
   return list;
 }
 
-function ensureWeekInstances(week, year, allInstances, templates, employees) {
+function ensureWeekInstances(week, year, allInstances, templates, employees, areas = [], employeeAreas = []) {
   let list = [...allInstances];
   const weekMonday = mondayOfWeek(week, year);
   const newlyCreatedIds = new Set();
@@ -438,12 +443,44 @@ function ensureWeekInstances(week, year, allInstances, templates, employees) {
     
     // Gentagelsesinterval (Plan parametre): spring uger over der ikke matcher
     // det valgte interval (uge/14 dage/måned/3 måned), talt fra startdatoen.
-    const PLAN_INTERVAL_WEEKS = { uge: 1, "14_dage": 2, maaned: 4, "3_maaned": 13 };
-    const planIntervalWeeks = PLAN_INTERVAL_WEEKS[tpl.planInterval] || 1;
-    if (planIntervalWeeks > 1) {
-      const anchorMonday = tpl.startDate ? mondayOf(new Date(tpl.startDate)) : weekMonday;
-      const weeksSinceAnchor = Math.round((weekMonday - anchorMonday) / (7 * 24 * 60 * 60 * 1000));
-      if (weeksSinceAnchor % planIntervalWeeks !== 0) return;
+    // Maanedlig og kvartalsvis planlaegges efter KALENDERMAANED, ikke efter 4 hhv. 13
+    // uger. Den gamle ugebaserede beregning gav 13 besoeg om aaret paa en maanedlig
+    // aftale og skred loebende i forhold til kalenderen.
+    const PLAN_INTERVAL_MONTHS = { maaned: 1, "3_maaned": 3 };
+    const PLAN_INTERVAL_WEEKS = { uge: 1, "14_dage": 2 };
+    const intervalMonths = PLAN_INTERVAL_MONTHS[tpl.planInterval];
+    if (intervalMonths) {
+      // Uden startdato findes der intet anker for kadencen.
+      if (!tpl.startDate) return;
+      const startDate = new Date(tpl.startDate);
+      const weekEnd = new Date(weekMonday);
+      weekEnd.setDate(weekEnd.getDate() + 6);
+      // Besoeget lander i den uge der indeholder samme dato i maaneden som startdatoen.
+      // Datoen klippes til maanedens sidste dag, saa fx den 31. ogsaa rammer februar.
+      // En uge kan straekke sig over to maaneder, saa begge proeves: ellers ville en
+      // ultimo-dato som den 31. blive sprunget over hver gang ugen laa hen over et
+      // maanedsskift. Datoen ligger i praecis een uge, saa der dannes aldrig dubletter.
+      const monthsToTry = [
+        { y: weekMonday.getFullYear(), m: weekMonday.getMonth() },
+        { y: weekEnd.getFullYear(), m: weekEnd.getMonth() },
+      ];
+      let matchesMonth = false;
+      for (const cand of monthsToTry) {
+        const monthsSinceStart =
+          (cand.y - startDate.getFullYear()) * 12 + (cand.m - startDate.getMonth());
+        if (monthsSinceStart < 0 || monthsSinceStart % intervalMonths !== 0) continue;
+        const daysInMonth = new Date(cand.y, cand.m + 1, 0).getDate();
+        const target = new Date(cand.y, cand.m, Math.min(startDate.getDate(), daysInMonth));
+        if (target >= weekMonday && target <= weekEnd) { matchesMonth = true; break; }
+      }
+      if (!matchesMonth) return;
+    } else {
+      const planIntervalWeeks = PLAN_INTERVAL_WEEKS[tpl.planInterval] || 1;
+      if (planIntervalWeeks > 1) {
+        const anchorMonday = tpl.startDate ? mondayOf(new Date(tpl.startDate)) : weekMonday;
+        const weeksSinceAnchor = Math.round((weekMonday - anchorMonday) / (7 * 24 * 60 * 60 * 1000));
+        if (weeksSinceAnchor % planIntervalWeeks !== 0) return;
+      }
     }
     
     // Filter days to only those within start/expiry interval and not excluded
@@ -556,7 +593,7 @@ function ensureWeekInstances(week, year, allInstances, templates, employees) {
   const thisWeek = list.filter((i) => i.week === week && i.year === year);
   const others = list.filter((i) => !(i.week === week && i.year === year));
   // Auto-planlæg kun instanser der er helt nyoprettede i dette kald.
-  return [...others, ...scheduleWeek(thisWeek, employees, false, [], [], newlyCreatedIds)];
+  return [...others, ...scheduleWeek(thisWeek, employees, false, areas, employeeAreas, newlyCreatedIds)];
 }
 
 function statusLabel(s) { return { unscheduled: "Ubemandet", planlagt: "Planlagt", udført: "Udført" }[s] || s; }
@@ -1121,7 +1158,7 @@ function PlanningApp({ session, onSignOut }) {
             onSchedule: i.on_schedule ?? false,
           };
         });
-        const allInst = ensureWeekInstances(currentWeek, currentYear, existingInst, mapped, empMapped);
+        const allInst = ensureWeekInstances(currentWeek, currentYear, existingInst, mapped, empMapped, areasData || [], empAreasData || []);
         setInstances(allInst);
         syncHealedAssignments(existingInst, allInst);
       } else if (instData?.length) {
@@ -1374,7 +1411,7 @@ function PlanningApp({ session, onSignOut }) {
     nextAnchor.setDate(nextAnchor.getDate() + delta * 7);
     const { week: nextWeek, year: nextYear } = isoWeekInfo(nextAnchor);
     setInstances((cur) => {
-      const next = ensureWeekInstances(nextWeek, nextYear, cur, templates, employees);
+      const next = ensureWeekInstances(nextWeek, nextYear, cur, templates, employees, areas, employeeAreas);
       syncHealedAssignments(cur, next);
       return next;
     });
@@ -1543,7 +1580,7 @@ function PlanningApp({ session, onSignOut }) {
           let next = [...cur];
           weeks.forEach(({ week: wk, year: wy }) => {
             const before = next;
-            const expanded = ensureWeekInstances(wk, wy, next, nextT, employees);
+            const expanded = ensureWeekInstances(wk, wy, next, nextT, employees, areas, employeeAreas);
             const newOnes = expanded.filter((i) => !next.find((c) => c.id === i.id));
             newOnes.forEach((inst) => syncInstance({ ...inst, contractType: payload.contractType, expiryDate: payload.expiryDate, pricingType: tpl.pricingType, fixedPrice: tpl.fixedPrice }));
             syncHealedAssignments(before, expanded);
@@ -1928,7 +1965,7 @@ function PlanningApp({ session, onSignOut }) {
           const dayKey = DAY_KEYS_BY_DOW[dow];
           // Sørg for at ugen er materialiseret (faste opgaver oprettet), så vi kan
           // fjerne medarbejderen fra evt. opgaver den allerede har den dag.
-          list = ensureWeekInstances(week, year, list, templates, employees);
+          list = ensureWeekInstances(week, year, list, templates, employees, areas, employeeAreas);
           list = list.map((t) => {
             if (BLOCK_TYPES.includes(t.type)) return t;
             if (t.week !== week || t.year !== year || t.day !== dayKey) return t;
