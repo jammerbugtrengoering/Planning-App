@@ -1126,12 +1126,15 @@ function PlanningApp({ session, onSignOut }) {
   const loadProductUsage = useCallback(async () => {
     const { data, error } = await supabase
       .from("inventory_transactions")
-      .select("*, inventory_items(name, item_number, price, unit, category_id, inventory_categories(type))")
+      .select("*, inventory_items(name, item_number, price, unit, category_id, inventory_categories(type, billable))")
       .eq("type", "out")
       .eq("status", "approved")
       .not("instance_id", "is", null);
     if (!error && data) {
-      setProductUsage(data.filter((tx) => tx.inventory_items?.inventory_categories?.type === "kunde"));
+      // Kun kategorier markeret som billable viderefaktureres. Rengoeringsmidler bruges
+      // ogsaa hos kunden, men er indeholdt i timeprisen - kun forbrugsartikler saettes
+      // paa fakturaen. Skal en anden kategori med, saettes billable paa den i databasen.
+      setProductUsage(data.filter((tx) => tx.inventory_items?.inventory_categories?.billable === true));
     }
   }, [supabase]);
 
