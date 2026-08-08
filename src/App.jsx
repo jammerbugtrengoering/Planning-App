@@ -1068,7 +1068,7 @@ function ModuleHelp({ view, onClose }) {
 function HelpButton({ onClick }) {
   return (
     <button onClick={onClick} title="Hjælp til dette modul"
-      style={{ position:"fixed", left:22, bottom:22, zIndex:150, width:54, height:54, borderRadius:"50%",
+      style={{ position:"fixed", right:22, bottom:22, zIndex:150, width:54, height:54, borderRadius:"50%",
                border:"none", background:"#D6247A", color:"#fff", fontSize:26, fontWeight:800, lineHeight:1,
                cursor:"pointer", boxShadow:"0 4px 16px rgba(214,36,122,0.45)" }}>?</button>
   );
