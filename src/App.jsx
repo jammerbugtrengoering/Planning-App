@@ -120,6 +120,11 @@ function weekdayKeyFor(date) {
   const dow = date.getDay();
   return dayKeys[dow];
 }
+function sortEmployeesByName(list) {
+  return [...(list || [])].sort((a, b) =>
+    (a.name || "").localeCompare(b.name || "", "da", { sensitivity: "base" })
+  );
+}
 function initials(name) { return name.split(" ").map((p) => p[0]).join("").slice(0, 2).toUpperCase(); }
 function fmtMin(min) {
   const h = Math.floor(min / 60), m = Math.round(min % 60);
@@ -1119,7 +1124,7 @@ function PlanningApp({ session, onSignOut }) {
               .map((c) => [c.weekday, c.minutes])
           ),
         }));
-        setEmployees(empMapped);
+        setEmployees(sortEmployeesByName(empMapped));
       }
 
       // Checklist-skabeloner – saml items ind
@@ -2187,8 +2192,10 @@ function PlanningApp({ session, onSignOut }) {
     setEmployees((prev) => {
       const exists = prev.some((e) => e.id === emp.id);
       const next = exists ? prev.map((e) => (e.id === emp.id ? { ...e, ...emp } : e)) : [...prev, emp];
-      // Ingen automatisk omfordeling ved ændring af medarbejder
-      return next;
+      // Ingen automatisk omfordeling ved ændring af medarbejder.
+      // Sorteres igen, saa en ny eller omdoebt medarbejder lander rigtigt med det samme
+      // i stedet for at havne nederst indtil naeste genindlaesning.
+      return sortEmployeesByName(next);
     });
     syncEmployee(emp);
     notify(`Medarbejder ${emp.name} gemt`);
