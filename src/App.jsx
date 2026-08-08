@@ -286,12 +286,28 @@ function itemText(x) { return typeof x === "string" ? x : x.text; }
 
 // ---------- Seed data ----------
 // ---------- Scheduling engine (operates on ONE week's instances) ----------
+const WEEKEND_DAYS = ["Sat", "Sun"];
+function isWeekendDay(day) { return WEEKEND_DAYS.includes(day); }
+// Maa medarbejderen overhovedet arbejde denne dag? Weekend kraever en aftale.
+function canWorkOn(emp, day) { return !isWeekendDay(day) || !!(emp && emp.weekendOk); }
 function usedMinutes(list, empId, day) {
   return list.filter((t) => t.assignees.includes(empId) && t.day === day).reduce((s, t) => s + t.duration, 0);
 }
 function remaining(employees, list, empId, day) {
   const emp = employees.find((e) => e.id === empId);
+  // Weekend: har medarbejderen aftalen, er der ingen oevre graense (arbejdet afregnes
+  // med tillaeg og planlaegges efter behov). Har hun den ikke, er der ingen tid at give af.
+  if (isWeekendDay(day)) return canWorkOn(emp, day) ? Infinity : 0;
   return (emp?.capacity?.[day] ?? 0) - usedMinutes(list, empId, day);
+}
+// remaining() giver Infinity i weekenden for dem med aftalen. Det kan ikke bruges til
+// rangering (Infinity - Infinity er NaN, og alle scorer ville vaere lige), saa til
+// sortering bruges en endelig vaerdi der falder med den tid der allerede ligger paa
+// dagen - saa weekendarbejdet stadig fordeles jaevnt i stedet for at hobe sig op.
+function remainingForScore(employees, list, empId, day) {
+  const r = remaining(employees, list, empId, day);
+  if (Number.isFinite(r)) return r;
+  return 100000 - usedMinutes(list, empId, day);
 }
 function scheduleWeek(weekInstances, employees, autoOnly = false, areas = [], employeeAreas = [], restrictToIds = null) {
   let list = weekInstances.map((t) => ({ ...t }));
@@ -331,7 +347,7 @@ function scheduleWeek(weekInstances, employees, autoOnly = false, areas = [], em
     // "ikke tildelt", bliver auto-tildelt igen ved næste visning af ugen.
     if (restrictToIds && !restrictToIds.has(t.id)) return;
     const { candidates: allCandidates, outsideArea } = candidatesFor(t, employees, areas, employeeAreas);
-    const candidates = allCandidates.filter((e) => !isBlocked(e.id, t.day));
+    const candidates = allCandidates.filter((e) => !isBlocked(e.id, t.day) && canWorkOn(e, t.day));
     if (candidates.length === 0) { t.warning = "no_skill"; return; }
     // En opgave med fast klokkeslaet maa ikke laegges oven i en anden tidsfastsat
     // opgave hos samme medarbejder. Tjekket fandtes kun i den fleksible gren, saa to
@@ -341,7 +357,7 @@ function scheduleWeek(weekInstances, employees, autoOnly = false, areas = [], em
     const ranked = [...pool].sort((a, b) => {
       const diff = skillScore(b, t) - skillScore(a, t);
       if (diff !== 0) return diff;
-      return remaining(employees, list, b.id, t.day) - remaining(employees, list, a.id, t.day);
+      return remainingForScore(employees, list, b.id, t.day) - remainingForScore(employees, list, a.id, t.day);
     });
     const withRoom = ranked.find((c) => remaining(employees, list, c.id, t.day) >= t.duration);
     const pick = withRoom || ranked[0];
@@ -374,8 +390,10 @@ function scheduleWeek(weekInstances, employees, autoOnly = false, areas = [], em
     window.forEach((d) => {
       candidates.forEach((e) => {
         if (isBlocked(e.id, d.key)) return;
+        if (!canWorkOn(e, d.key)) return;
         if (t.scheduledTime && hasTimeConflict(e.id, d.key, t)) return;
         const rem = remaining(employees, list, e.id, d.key);
+        const remScore = remainingForScore(employees, list, e.id, d.key);
         const fits = rem >= t.duration ? 1 : 0;
         // En opgave med et ønsket starttidspunkt bør helst placeres hos en
         // medarbejder/dag hvor det tidspunkt rent faktisk er nåeligt — dvs.
@@ -387,7 +405,7 @@ function scheduleWeek(weekInstances, employees, autoOnly = false, areas = [], em
           const estimatedArrival = parseTimeToMinutes(e.startTime || "07:00") + usedMinutes(list, e.id, d.key);
           timeScore = estimatedArrival <= desiredMin ? 2000 : -2000;
         }
-        const score = fits * 1_000_000 + timeScore + skillScore(e, t) * 1000 + rem;
+        const score = fits * 1_000_000 + timeScore + skillScore(e, t) * 1000 + remScore;
         if (!best || score > best.score) best = { day: d.key, empId: e.id, rem, score };
       });
     });
@@ -1072,6 +1090,7 @@ function PlanningApp({ session, onSignOut }) {
           auth_user_id: e.auth_user_id ?? null,
           app_email: e.app_email ?? null,
           isAdmin: e.is_admin ?? false,
+          weekendOk: e.weekend_ok ?? false,
           startTime: e.start_time || null,
           skills: Object.fromEntries(
             (empSkillsData || []).filter((s) => s.employee_id === e.id)
@@ -1265,7 +1284,7 @@ function PlanningApp({ session, onSignOut }) {
   // ── Supabase: sync-helpers ──
   const syncEmployee = useCallback(async (emp) => {
     const { data: skillRows_db } = await supabase.from("skills").select("id, name");
-    const { error: empErr } = await supabase.from("employees").upsert({ id: emp.id, name: emp.name, color: emp.color, is_admin: emp.isAdmin ?? false, start_time: emp.startTime || null }, { onConflict: "id" });
+    const { error: empErr } = await supabase.from("employees").upsert({ id: emp.id, name: emp.name, color: emp.color, is_admin: emp.isAdmin ?? false, weekend_ok: emp.weekendOk ?? false, start_time: emp.startTime || null }, { onConflict: "id" });
     if (dbFail(empErr, "gemme medarbejderen")) return;
     const skillRows = Object.entries(emp.skills || {})
       .map(([name, level]) => {
@@ -2876,9 +2895,13 @@ function WeekView({ employees, instances, unplaced, onAdd, onAuto, onScheduleWee
                   const schedule = computeDaySchedule(dayTasks, travelSettings, emp);
                   const transportMin = schedule.filter((s) => s.type === "transport").reduce((s2, seg) => s2 + seg.minutes, 0);
                   const used = dayTasks.reduce((s, t) => s + t.duration, 0) + transportMin;
+                  const weekendCell = isWeekendDay(d.key);
+                  const weekendAllowed = weekendCell && !!emp.weekendOk;
                   const cap = emp.capacity[d.key] || 0;
-                  const pct = cap ? Math.min((used / cap) * 100, 100) : 0;
-                  const over = used > cap;
+                  // Weekend har intet kapacitetsloft - procent og "ledig tid" giver
+                  // ingen mening der, saa baren fyldes ikke og teksten viser aftalen.
+                  const pct = weekendCell ? 0 : (cap ? Math.min((used / cap) * 100, 100) : 0);
+                  const over = weekendCell ? false : used > cap;
                   return (
                     <div key={d.key} style={{ ...styles.gridCell, borderRight: i < visibleDays.length - 1 ? "1px solid #CBD5E1" : "none", ...(["Sat","Sun"].includes(d.key) ? { background: "#FAFAFA" } : {}),
                       // Overbookede dage markeres tydeligt: en dag med mere arbejde end
@@ -2918,10 +2941,12 @@ function WeekView({ employees, instances, unplaced, onAdd, onAuto, onScheduleWee
                       </div>
                       <div style={{ fontSize: 10, margin: "3px 0 6px", display: "flex", gap: 6, flexWrap: "wrap" }}>
                         <span style={{ color: over ? "#DC2626" : pct > 80 ? "#D97706" : "#64748B", fontWeight: 600 }}>
-                          {Math.round(pct)}% belægt
+                          {weekendCell
+                            ? (weekendAllowed ? "Weekendaftale" : "Ingen weekendaftale")
+                            : `${Math.round(pct)}% belægt`}
                         </span>
                         <span style={{ color: over ? "#DC2626" : "#16A34A", fontWeight: 600 }}>
-                          {over ? `${fmtMin(used - cap)} over` : `${fmtMin(cap - used)} ledig`}
+                          {weekendCell ? (used > 0 ? fmtMin(used) : "—") : (over ? `${fmtMin(used - cap)} over` : `${fmtMin(cap - used)} ledig`)}
                         </span>
                       </div>
                       {schedule.map((seg) => {
@@ -3014,7 +3039,8 @@ function WeekView({ employees, instances, unplaced, onAdd, onAuto, onScheduleWee
                 const dayTasks = instances.filter((t) => (t.assignees || []).includes(emp.id) && t.day === d.key);
                 return s + dayTasks.reduce((s2, t) => s2 + t.duration, 0);
               }, 0);
-              const totalCap = visibleDays.reduce((s, d) => s + (emp.capacity[d.key] || 0), 0);
+              // Weekend indgaar ikke i kapacitetstotalen - der er intet loft at maale imod.
+  const totalCap = visibleDays.reduce((s, d) => s + (isWeekendDay(d.key) ? 0 : (emp.capacity[d.key] || 0)), 0);
               const pct = totalCap ? Math.round((totalUsed / totalCap) * 100) : 0;
               const over = totalUsed > totalCap;
               return (
@@ -3233,7 +3259,8 @@ function EmployeesView({ employees, instances, onAdd, onEdit, onDelete, supabase
       <div style={styles.empGrid}>
         {employees.map((e) => {
           const activeMin = ALL_DAYS.reduce((s, d) => s + usedMinutes(instances, e.id, d.key), 0);
-          const capMin = ALL_DAYS.reduce((s, d) => s + (e.capacity[d.key] || 0), 0);
+          // Weekend har intet kapacitetsloft, saa den taeller ikke med her.
+          const capMin = DAYS.reduce((s, d) => s + (e.capacity[d.key] || 0), 0);
           const status = inviteStatus[e.id];
           const hasUser = !!e.auth_user_id;
           return (
@@ -3254,12 +3281,18 @@ function EmployeesView({ employees, instances, onAdd, onEdit, onDelete, supabase
                 {Object.keys(e.skills).length === 0 && <span style={styles.cardMeta}>Ingen kompetencer angivet</span>}
               </div>
               <div style={styles.capRow}>
-                {ALL_DAYS.map((d) => (
+                {DAYS.map((d) => (
                   <div key={d.key} style={styles.capDayBox}>
                     <div style={styles.capDayLabel}>{d.label.slice(0, 3)}</div>
                     <div style={styles.capDayValue}>{(e.capacity[d.key] / 60).toFixed(1)}t</div>
                   </div>
                 ))}
+                <div style={styles.capDayBox}>
+                  <div style={styles.capDayLabel}>WEEKEND</div>
+                  <div style={{ ...styles.capDayValue, color: e.weekendOk ? "#16A34A" : "#CBD5E1" }}>
+                    {e.weekendOk ? "Ja" : "Nej"}
+                  </div>
+                </div>
               </div>
 
               {/* Brugeradgang */}
@@ -3967,6 +4000,7 @@ function EmployeeExportView({ instances, employees }) {
           week: t.week,
           day: t.day,
           dayLabel: ALL_DAYS.find((d) => d.key === t.day)?.label || t.day || "—",
+          isWeekend: isWeekendDay(t.day),
           title: t.title,
           planned: t.duration,
           registered,
@@ -3986,13 +4020,16 @@ function EmployeeExportView({ instances, employees }) {
 
   const totalPlanned = rows.reduce((s, r) => s + r.planned, 0);
   const totalRegistered = rows.reduce((s, r) => s + r.registered, 0);
+  // Weekendtimer opgoeres saerskilt, fordi de udloeser tillaeg.
+  const totalWeekend = rows.reduce((s, r) => s + (r.isWeekend ? r.registered : 0), 0);
 
   function exportRowsCSV() {
-    const header = ["Medarbejder", "Uge", "Dag", "Opgave", "Planlagt (min)", "Planlagt (timer)", "Registreret (min)", "Registreret (timer)", "Afvigelse"];
+    const header = ["Medarbejder", "Uge", "Dag", "Opgave", "Planlagt (min)", "Planlagt (timer)", "Registreret (min)", "Registreret (timer)", "Weekend", "Weekendtimer", "Afvigelse"];
     const data = rows.map((r) => [
       r.empName, `Uge ${r.week}`, r.dayLabel, r.title,
       r.planned, (r.planned / 60).toFixed(2),
       r.registered, (r.registered / 60).toFixed(2),
+      r.isWeekend ? "Ja" : "", r.isWeekend ? (r.registered / 60).toFixed(2) : "",
       r.deviationText || "",
     ]);
     const csv = [header, ...data].map((row) => row.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
@@ -4021,6 +4058,7 @@ function EmployeeExportView({ instances, employees }) {
         </div>
         <div style={{ ...styles.statBlock, borderLeft: "3px solid #16A34A" }}>
           <div><div style={{ ...styles.statValue, color: "#16A34A" }}>{fmtMin(totalRegistered)}</div><div style={styles.statLabel}>Registreret i alt</div></div>
+          <div style={styles.statBox}><div style={{ ...styles.statValue, color: "#B45309" }}>{fmtMin(totalWeekend)}</div><div style={styles.statLabel}>Heraf weekend (tillæg)</div></div>
         </div>
         <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
           <select style={{ ...styles.inputSm, fontSize: 13, fontWeight: 600 }} value={filterMonth} onChange={(e) => setFilterMonth(Number(e.target.value))}>
@@ -5795,6 +5833,7 @@ function TravelSettingsModal({ settings, onClose, onSave }) {
 function EmployeeModal({ emp, onClose, onSave, skills: skillList }) {
   const [name, setName] = useState(emp?.name || "");
   const [startTime, setStartTime] = useState(emp?.startTime || "");
+  const [weekendOk, setWeekendOk] = useState(emp?.weekendOk ?? false);
   const [empSkills, setEmpSkills] = useState(emp?.skills || {});
   const [capacity, setCapacity] = useState(emp?.capacity || defaultCapacity());
   const [isAdmin, setIsAdmin] = useState(emp?.isAdmin || false);
@@ -5834,12 +5873,22 @@ function EmployeeModal({ emp, onClose, onSave, skills: skillList }) {
 
       <label style={styles.label}>Timer til rådighed pr. dag</label>
       <div style={styles.capEditRow}>
-        {ALL_DAYS.map((d) => (
+        {DAYS.map((d) => (
           <div key={d.key} style={styles.capEditBox}>
             <div style={styles.capDayLabel}>{d.label.slice(0, 3)}</div>
             <input type="number" min={0} step={0.5} style={styles.capInput} value={(capacity[d.key] / 60).toString()} onChange={(e) => setCap(d.key, e.target.value)} />
           </div>
         ))}
+      </div>
+
+      <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", marginTop: 12 }} onClick={() => setWeekendOk((v) => !v)}>
+        <span style={{ width: 18, height: 18, borderRadius: 5, border: weekendOk ? "2px solid #16A34A" : "2px solid #CBD5E1", background: weekendOk ? "#16A34A" : "#fff", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+          {weekendOk && <Check size={11} color="#fff" strokeWidth={3} />}
+        </span>
+        <span style={{ fontSize: 13, fontWeight: 600, color: "#111111" }}>📅 Må arbejde i weekenden (aftalt — udløser tillæg)</span>
+      </label>
+      <div style={{ fontSize: 11, color: "#94A3B8", marginTop: 4, marginLeft: 26 }}>
+        Uden fluebenet kan medarbejderen slet ikke planlægges lørdag og søndag. Med fluebenet er der ingen øvre grænse på weekendtimer.
       </div>
 
       <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", marginTop: 12 }} onClick={() => setIsAdmin((v) => !v)}>
@@ -5851,7 +5900,7 @@ function EmployeeModal({ emp, onClose, onSave, skills: skillList }) {
 
       <div style={styles.modalActions}>
         <button style={styles.secondaryBtn} onClick={onClose}>Annuller</button>
-        <button style={styles.primaryBtn} disabled={!name.trim()} onClick={() => onSave({ id: emp?.id || uid("e"), name: name.trim(), skills: empSkills, color: emp?.color || color, capacity, isAdmin, startTime: startTime || null })}>Gem medarbejder</button>
+        <button style={styles.primaryBtn} disabled={!name.trim()} onClick={() => onSave({ id: emp?.id || uid("e"), name: name.trim(), skills: empSkills, color: emp?.color || color, capacity, isAdmin, weekendOk, startTime: startTime || null })}>Gem medarbejder</button>
       </div>
     </Modal>
   );
