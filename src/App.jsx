@@ -5546,7 +5546,6 @@ function InventoryView({ supabase, employees, currentUserName, onInventoryChange
   const [adjustReason, setAdjustReason] = useState("");
   const [adjustType, setAdjustType] = useState("in");
   const [filterCat, setFilterCat] = useState("all");
-  const [filterType, setFilterType] = useState("all");
 
   // New item form
   const [newName, setNewName] = useState("");
@@ -5673,7 +5672,6 @@ function InventoryView({ supabase, employees, currentUserName, onInventoryChange
 
   const filtered = items.filter((i) => {
     if (filterCat !== "all" && i.category_id !== filterCat) return false;
-    if (filterType !== "all" && i.inventory_categories?.type !== filterType) return false;
     return true;
   });
 
@@ -5683,16 +5681,24 @@ function InventoryView({ supabase, employees, currentUserName, onInventoryChange
     <div style={styles.page}>
       {/* Header */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16, flexWrap: "wrap", gap: 8 }}>
+        {/* Kategorifilter som knapper: Alle plus en pr. kategori. Erstatter de to
+            dropdowns - med kun fire kategorier er et klik hurtigere end at folde ud,
+            og man kan se hvad der er valgt uden at aabne noget. */}
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <select style={{ ...styles.inputSm, fontSize: 13 }} value={filterType} onChange={(e) => setFilterType(e.target.value)}>
-            <option value="all">Alle kategorier</option>
-            <option value="kunde">🧹 Kundeprodukter</option>
-            <option value="medarbejder">👕 Medarbejderprodukter</option>
-          </select>
-          <select style={{ ...styles.inputSm, fontSize: 13 }} value={filterCat} onChange={(e) => setFilterCat(e.target.value)}>
-            <option value="all">Alle underkategorier</option>
-            {categories.map((c) => <option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}
-          </select>
+          {[{ id: "all", icon: "", name: "Alle" }, ...categories].map((c) => {
+            const active = filterCat === c.id;
+            return (
+              <button key={c.id} onClick={() => setFilterCat(c.id)}
+                style={{
+                  padding: "7px 14px", borderRadius: 999, fontSize: 13, fontWeight: 700, cursor: "pointer",
+                  border: active ? "1px solid #9C1B5D" : "1px solid #E2E8F0",
+                  background: active ? "#9C1B5D" : "#fff",
+                  color: active ? "#fff" : "#5B5B60",
+                }}>
+                {c.icon ? c.icon + " " : ""}{c.name}
+              </button>
+            );
+          })}
         </div>
         <button style={styles.primaryBtn} onClick={() => setShowAddItem(true)}><Plus size={14} /> Nyt produkt</button>
       </div>
