@@ -4946,9 +4946,16 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
     const d = new Date(); d.setFullYear(d.getFullYear() + 1);
     return d.toISOString().slice(0, 10);
   });
-  const [checklistTemplateIds, setChecklistTemplateIds] = useState([]);
+  // En kopi skal have præcis samme indhold som originalen: de samme tjekliste-
+  // skabeloner, og de samme ekstra punkter. Tidligere blev hele tjeklisten fladet
+  // ud til løse punkter, saa skabelonerne blev koblet fra og punkterne laa dobbelt.
+  const [checklistTemplateIds, setChecklistTemplateIds] = useState(copyFrom?.checklistTemplateIds || []);
   const [extraItems, setExtraItems] = useState(
-    copyFrom?.checklist?.map((i) => i.text || i).filter(Boolean) || []
+    (copyFrom?.extraItems && copyFrom.extraItems.length)
+      ? copyFrom.extraItems.map((i) => (typeof i === "string" ? i : i.text)).filter(Boolean)
+      : (copyFrom && !(copyFrom.checklistTemplateIds || []).length
+          ? (copyFrom.checklist || []).map((i) => i.text || i).filter(Boolean)
+          : [])
   );
   const [newItemText, setNewItemText] = useState("");
   const [videoUrl, setVideoUrl] = useState(copyFrom?.videoUrl || "");
@@ -4964,7 +4971,14 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
   // eller netop oprettet der) — bruges til at undlade at foreslå "Send til Dinero"
   // for en kunde der allerede findes derinde.
   const [customerDineroSynced, setCustomerDineroSynced] = useState(!!copyFrom?.dineroSynced);
-  const [assignedEmployeeId, setAssignedEmployeeId] = useState(copyFrom?.assigned_employee_id || "");
+  // En kopieret opgave henter medarbejderen fra den opgave der kopieres
+  // (assignees), eller fra aftalens faste medarbejder hvis kopien kommer derfra.
+  const [assignedEmployeeId, setAssignedEmployeeId] = useState(
+    copyFrom?.assigned_employee_id
+    || (copyFrom?.assignees && copyFrom.assignees[0])
+    || copyFrom?.preferredEmployeeId
+    || ""
+  );
 
   const [dineroAvailable, setDineroAvailable] = useState(true);
 
@@ -7065,19 +7079,6 @@ return (
 
       <div style={styles.modalActions}>
         {onCopy && <button style={{ ...styles.secondaryBtn, color: "#9C1B5D", borderColor: "#FCE4EF" }} onClick={() => onCopy(t)}><Copy size={14} /> Kopiér</button>}
-        <button style={{ ...styles.secondaryBtn, color: "#B91C1C", borderColor: "#FEE2E2" }} onClick={() => onDelete(t.id)}><Trash2 size={14} /> Slet</button>
-        {t.assignees && t.assignees.length > 0 && (
-          <button style={{ ...styles.secondaryBtn, color: "#7C3AED", borderColor: "#EDE9FE" }} onClick={async () => {
-            const emp = employees.find(e => e.id === t.assignees[0]);
-            if (emp?.email) {
-              const dayName = ["Man", "Tir", "Ons", "Tor", "Fre"][t.day] || t.day;
-              await notifyEmployeeOfChanges(emp.email, emp.name, t.title, dayName);
-              alert(`✅ Email sendt til ${emp.name}`);
-            } else {
-              alert("❌ Medarbejder har ingen email");
-            }
-          }}><Mail size={14} /> Notificér</button>
-        )}
         <button style={{ ...styles.primaryBtn, marginLeft: "auto" }} onClick={onClose}>Luk</button>
       </div>
     </Modal>
