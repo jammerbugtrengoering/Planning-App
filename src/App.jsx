@@ -7079,6 +7079,15 @@ return (
 
       <div style={styles.modalActions}>
         {onCopy && <button style={{ ...styles.secondaryBtn, color: "#9C1B5D", borderColor: "#FCE4EF" }} onClick={() => onCopy(t)}><Copy size={14} /> Kopiér</button>}
+        {/* Sletning findes kun paa fleksible/adhoc-opgaver. Faste opgaver kommer fra en
+            aftale og skal fjernes ved at markere aftalen som udgaaet, saa planen ikke
+            bare genskaber dem. Udfoerte opgaver kan ikke slettes — de kan vaere faktureret. */}
+        {isAdminUser && t.type === "adhoc" && t.status !== "udført" && (
+          <button style={{ ...styles.secondaryBtn, color: "#B91C1C", borderColor: "#FEE2E2" }}
+            onClick={() => {
+              if (window.confirm(`Slet "${t.title}" helt? Det kan ikke fortrydes.`)) onDelete(t.id);
+            }}><Trash2 size={14} /> Slet</button>
+        )}
         <button style={{ ...styles.primaryBtn, marginLeft: "auto" }} onClick={onClose}>Luk</button>
       </div>
     </Modal>
