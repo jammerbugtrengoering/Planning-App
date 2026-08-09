@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useCallback } from "react";
+import React, { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { supabase } from "./supabaseClient";
 import {
   Plus, Download, X, Clock, AlertTriangle,
@@ -644,11 +644,14 @@ function ensureWeekInstances(week, year, allInstances, templates, employees, are
 function statusLabel(s) { return { unscheduled: "Ubemandet", planlagt: "Planlagt", udført: "Udført" }[s] || s; }
 
 // ---------- Transport / travel time between service orders ----------
-// NOTE: This is an estimate, not a real routing calculation. This prototype has no
-// live map/routing API access (that would need a backend + API key, e.g. Google
-// Distance Matrix or Mapbox), so travel time between two different addresses uses a
-// configurable default (or a manually entered override for a specific address pair)
-// rather than an actual driving-time lookup.
+// Koeretiden mellem to adresser er den faktiske rutetid: edge-funktionen
+// "travel-distance" slaar ruten op hos OpenRouteService og gemmer baade km og
+// minutter i tabellen travel_overrides, saa hvert adressepar kun koster ét opslag.
+// De gemte minutter indlaeses som overrides. Standardtiden fra transport-
+// indstillingerne bruges kun som fallback for par vi endnu ikke har en rute for
+// (fx hvis adressen ikke kunne geokodes).
+// Bemaerk: transporttid taeller bevidst IKKE med i medarbejderens kapacitet —
+// koersel afregnes med kilometerpenge, ikke som arbejdstid.
 function travelKey(a, b) { return [a, b].sort().join(" || "); }
 function getTravelMinutes(addrA, addrB, travelSettings) {
   if (!addrA || !addrB || addrA === addrB) return 0;
@@ -666,19 +669,26 @@ function fmtClock(minutesFromMidnight) {
 }
 // Builds an ordered timeline for one employee's tasks on one day, inserting a
 // "Transport" segment whenever consecutive tasks have different addresses.
-function computeDaySchedule(dayTasks, travelSettings, employee) {
-  // Opgaver med et fast klokkeslæt (scheduledTime — sat pr. ugedag på en fast
-  // aftale, eller som ønsket tidspunkt på en fleksibel opgave) skal altid ligge
-  // kronologisk først og bestemme rækkefølgen. Opgaver uden fast klokkeslæt
-  // lander derefter i den rækkefølge de kommer, på den ledige tid der er
-  // tilbage efter de faste opgaver.
-  const sorted = [...dayTasks].sort((a, b) => {
+// Raekkefoelgen paa dagen: opgaver med fast klokkeslaet foerst og kronologisk,
+// derefter resten i den raekkefoelge de kommer. Bruges baade naar dagen tegnes
+// og naar vi finder ud af hvilke adressepar der skal hentes koeretid for, saa
+// de to aldrig kan komme til at regne paa hver sin raekkefoelge.
+function sortDayTasks(dayTasks) {
+  return [...dayTasks].sort((a, b) => {
     const at = a.scheduledTime, bt = b.scheduledTime;
     if (at && bt) return parseTimeToMinutes(at) - parseTimeToMinutes(bt);
     if (at) return -1;
     if (bt) return 1;
     return 0;
   });
+}
+function computeDaySchedule(dayTasks, travelSettings, employee) {
+  // Opgaver med et fast klokkeslæt (scheduledTime — sat pr. ugedag på en fast
+  // aftale, eller som ønsket tidspunkt på en fleksibel opgave) skal altid ligge
+  // kronologisk først og bestemme rækkefølgen. Opgaver uden fast klokkeslæt
+  // lander derefter i den rækkefølge de kommer, på den ledige tid der er
+  // tilbage efter de faste opgaver.
+  const sorted = sortDayTasks(dayTasks);
   // Dagen starter ved medarbejderens mødetid hvis den er sat, ellers ved det
   // generelle standard-starttidspunkt fra transportindstillingerne.
   let cursor = parseTimeToMinutes((employee && employee.startTime) || travelSettings.dayStart);
@@ -971,6 +981,7 @@ const MODULE_HELP = {
         "Blandt dem der kan løse opgaven, vælges den med mest ledig tid, så arbejdet fordeler sig jævnt.",
         "En opgave med fast klokkeslæt lægges aldrig oven i en anden opgave med fast klokkeslæt hos samme medarbejder.",
         "Weekender planlægges kun for medarbejdere der har weekendarbejde sat på. For dem er der ingen timegrænse, da det altid er en aftale.",
+        "Kørslen mellem to opgaver beregnes som den faktiske rutetid mellem de to adresser og vises på tidslinjen. Den tæller ikke med i medarbejderens kapacitet, da kørsel afregnes med kilometerpenge og ikke som arbejdstid.",
         "Sygdom og ferie fjerner automatisk medarbejderen fra opgaverne i perioden. Er der ingen tilbage, ryger opgaven i Ikke tildelt."] },
     { h: "Fast medarbejder på en aftale", p: [
         "Vælg medarbejderen under Ansvarlig medarbejder når du opretter aftalen, så følger han eller hun aftalen resten af perioden.",
@@ -1404,6 +1415,68 @@ function PlanningApp({ session, onSignOut }) {
     }
     loadAll();
   }, []);
+
+  // Henter faktisk koeretid for de adressepar der optraeder i den viste uge, men
+  // som vi endnu ikke har en rute for. Edge-funktionen gemmer selv resultatet i
+  // travel_overrides, saa et par kun slaas op én gang — derefter ligger tiden klar
+  // ved naeste indlaesning. Par vi ikke faar svar paa, proeves ikke igen i denne
+  // session, saa en adresse der ikke kan geokodes ikke udloeser kald i en uendelighed.
+  const travelTried = useRef(new Set());
+  useEffect(() => {
+    if (loading) return;
+    const byEmpDay = {};
+    instances.forEach((t) => {
+      if (t.week !== weekOffset || t.year !== weekYear) return;
+      if (BLOCK_TYPES.includes(t.type) || !t.day || !t.address) return;
+      (t.assignees || []).forEach((empId) => {
+        const k = empId + "|" + t.day;
+        if (!byEmpDay[k]) byEmpDay[k] = [];
+        byEmpDay[k].push(t);
+      });
+    });
+    const missing = [];
+    const seen = new Set();
+    Object.values(byEmpDay).forEach((tasks) => {
+      const sorted = sortDayTasks(tasks);
+      for (let i = 0; i < sorted.length - 1; i++) {
+        const a = sorted[i].address, b = sorted[i + 1].address;
+        if (!a || !b || a === b) continue;
+        const key = travelKey(a, b);
+        if (travelSettings.overrides[key] !== undefined) continue;
+        if (seen.has(key) || travelTried.current.has(key)) continue;
+        seen.add(key);
+        missing.push({ a, b });
+      }
+    });
+    if (missing.length === 0) return;
+    missing.forEach((p) => travelTried.current.add(travelKey(p.a, p.b)));
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data, error } = await supabase.functions.invoke("travel-distance", {
+          body: { pairs: missing },
+        });
+        if (cancelled) return;
+        if (error) {
+          // Naeste genindlaesning maa gerne proeve igen — det kan vaere et midlertidigt udfald.
+          missing.forEach((p) => travelTried.current.delete(travelKey(p.a, p.b)));
+          console.error("travel-distance:", error.message);
+          return;
+        }
+        const results = (data && data.results) || [];
+        const next = {};
+        results.forEach((r) => {
+          if (r && r.a && r.b && typeof r.minutes === "number") next[travelKey(r.a, r.b)] = r.minutes;
+        });
+        if (Object.keys(next).length === 0) return;
+        setTravelSettings((prev) => ({ ...prev, overrides: { ...prev.overrides, ...next } }));
+      } catch (e) {
+        missing.forEach((p) => travelTried.current.delete(travelKey(p.a, p.b)));
+        console.error("travel-distance:", e);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [instances, weekOffset, weekYear, travelSettings.overrides, loading]);
 
   // ── Supabase Realtime: hold "instances" i sync på tværs af faner/apps ──
   // Uden dette abonnement indlæses instances kun én gang ved opstart (loadAll
