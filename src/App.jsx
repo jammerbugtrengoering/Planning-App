@@ -1009,7 +1009,11 @@ function SetNewPasswordScreen({ onDone }) {
 const MODULE_HELP = {
   uge: { title: "Ugeplan", intro: "Her planlægger du ugen. Hver medarbejder har en række, hver dag en kolonne.", blocks: [
     { h: "Sådan planlægger systemet", p: [
-        "Opgaverne oprettes automatisk ud fra aftalerne, fire uger frem. Du kan altså bladre en måned frem og se planen.",
+        "Opgaverne oprettes automatisk ud fra aftalerne, fire uger frem. Det sker når du åbner appen, og alt nyt gemmes med det samme.",
+        "Horisonten opretter opgaverne, men fordeler dem ikke. Aftaler med fast medarbejder får hende straks — alt andet ligger i Ikke tildelt indtil du trykker Planlæg.",
+        "Bladrer du længere frem end fire uger, oprettes ugen når du åbner den, men den gemmes først når du rører den. Tildel en medarbejder, flyt eller ret noget, ellers er den væk igen når du lukker appen.",
+        "Horisonten ruller med dagen, og der kommer aldrig dubletter — systemet tjekker på aftale, uge, år og dag.",
+        "Om en opgave overhovedet opstår afhænger af fem ting: dagen skal være valgt på aftalen, intervallet skal ramme, og dagen skal ligge efter startdatoen, før udløbsdatoen og ikke efter en eventuel ophørsdato. Mangler der opgaver, er det næsten altid startdatoen eller intervallet.",
         "Har aftalen en fast medarbejder, sættes vedkommende på med det samme, hver gang en ny opgave opstår.",
         "Har den ikke det, finder Planlæg en medarbejder ud fra tre ting: de krævede kompetencer, om medarbejderen er tilknyttet kundens område, og om der er timer nok tilbage den dag.",
         "Blandt dem der kan løse opgaven, vælges den med mest ledig tid, så arbejdet fordeler sig jævnt.",
