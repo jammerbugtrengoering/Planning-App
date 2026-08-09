@@ -49,6 +49,31 @@ const TYPE_META = {
 const CREATABLE_TYPES = ["fixed", "adhoc"];
 // Kontrakttyper samlet ét sted: etiket, ikon og farver. Skal der en ny til, tilfoejes
 // den her (plus en raekke i pricing-tabellen og i instances_contract_type_check).
+// Aarsager til at en aftale ophoerer. Vaerdierne matcher databasens check-constraint.
+const CANCEL_REASONS = [
+  { key: "kunde", label: "Opsagt af kunden" },
+  { key: "os", label: "Opsagt af Jammerbugt Rengøring" },
+  { key: "fejl", label: "Fejl" },
+];
+function cancelReasonLabel(key) {
+  const r = CANCEL_REASONS.find((x) => x.key === key);
+  return r ? r.label : "";
+}
+// Omregner en opgaves uge/aar/dag til en rigtig dato, saa den kan sammenlignes
+// med aftalens ophoersdato. Samme ISO-regel som resten af appen: uge 1 er den
+// uge der indeholder 4. januar.
+function instanceDateString(t) {
+  if (!t || !t.year || !t.week || !t.day) return "";
+  const order = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+  const jan4 = new Date(t.year, 0, 4);
+  const monday = new Date(jan4);
+  monday.setDate(jan4.getDate() - ((jan4.getDay() + 6) % 7) + (t.week - 1) * 7);
+  const idx = order.indexOf(t.day);
+  monday.setDate(monday.getDate() + (idx < 0 ? 0 : idx));
+  const mm = String(monday.getMonth() + 1).padStart(2, "0");
+  const dd = String(monday.getDate()).padStart(2, "0");
+  return monday.getFullYear() + "-" + mm + "-" + dd;
+}
 const CONTRACT_TYPES = [
   { key: "privat",    label: "Privat",   icon: "🏠", color: "#9C1B5D", bg: "#FFF6FA", chart: "#D6247A" },
   { key: "erhverv",   label: "Erhverv",  icon: "💼", color: "#0F766E", bg: "#F0FDFA", chart: "#0D9488" },
@@ -97,14 +122,16 @@ function dbFail(error, whatFailed) {
 // der kan variere fra indlaesning til indlaesning. Med 2500+ opgaver betoed det
 // at planlaeggeren kun saa ca. 40% af data - og ikke de samme 40% hver gang.
 // Vi henter derfor i sider indtil der ikke er flere, sorteret stabilt paa id.
-async function fetchAllRows(table, columns = "*") {
+async function fetchAllRows(table, columns = "*", filter = null) {
   const pageSize = 1000;
   let from = 0;
   const rows = [];
   for (;;) {
-    const { data, error } = await supabase
+    let query = supabase
       .from(table).select(columns).order("id", { ascending: true })
       .range(from, from + pageSize - 1);
+    if (filter) query = filter(query);
+    const { data, error } = await query;
     if (error) {
       console.error(`fetchAllRows(${table}) fejlede:`, error.message);
       break;
@@ -561,6 +588,13 @@ function ensureWeekInstances(week, year, allInstances, templates, employees, are
           }
         }
         
+        // En udgaaet aftale danner ingen opgaver efter ophoersdatoen. Opgaver til og
+        // med datoen bliver staaende og skal stadig koeres og faktureres.
+        if (tpl.status === "udgaaet" && tpl.cancelledEffectiveDate) {
+          const stopStr = String(tpl.cancelledEffectiveDate).slice(0, 10);
+          if (dayDateString > stopStr) return false;
+        }
+
         // Check if day is after expiryDate (compare as strings: YYYY-MM-DD)
         if (tpl.expiryDate) {
           const expiryDateStr = typeof tpl.expiryDate === 'string'
@@ -983,6 +1017,13 @@ const MODULE_HELP = {
         "Weekender planlægges kun for medarbejdere der har weekendarbejde sat på. For dem er der ingen timegrænse, da det altid er en aftale.",
         "Kørslen mellem to opgaver beregnes som den faktiske rutetid mellem de to adresser og vises på tidslinjen. Den tæller ikke med i medarbejderens kapacitet, da kørsel afregnes med kilometerpenge og ikke som arbejdstid.",
         "Sygdom og ferie fjerner automatisk medarbejderen fra opgaverne i perioden. Er der ingen tilbage, ryger opgaven i Ikke tildelt."] },
+    { h: "Når en kunde opsiger aftalen", p: [
+        "Gå ind på aftalen under Aftaler, eller åbn en hvilken som helst opgave på den, og vælg «Markér som udgået».",
+        "Vælg årsag — opsagt af kunden, opsagt af Jammerbugt Rengøring, eller fejl — og angiv sidste dag aftalen gælder.",
+        "Opgaver til og med den dato bliver stående og skal stadig køres og faktureres. Alt efter datoen fjernes fra ugeplan, fakturering, rapportering og medarbejdernes app.",
+        "Udførte opgaver røres aldrig, så alt der er kørt kan stadig faktureres og indgår i regnskabet.",
+        "Aftalen bliver stående på Aftaler-siden med kontraktsummen, markeret UDGÅET. Så kan du se hvad aftalen var værd, og hvad I nåede at realisere.",
+        "Det kan ikke fortrydes i appen, så du bliver bedt om at bekræfte."] },
     { h: "Fast medarbejder på en aftale", p: [
         "Vælg medarbejderen under Ansvarlig medarbejder når du opretter aftalen, så følger han eller hun aftalen resten af perioden.",
         "Du kan også gøre det fra en åben opgave: tildel medarbejderen, og tryk så «Gør fast på aftalen».",
@@ -1234,7 +1275,10 @@ function PlanningApp({ session, onSignOut }) {
         supabase.from("checklist_template_items").select("*").order("sort_order"),
         supabase.from("service_templates").select("*"),
         supabase.from("service_template_skills").select("*"),
-        fetchAllRows("instances").then((data) => ({ data })),
+        // Slettemarkerede opgaver (aftalen er sat som udgaaet) hentes aldrig ind.
+      // Dermed forsvinder de fra ugeplan, fakturering, rapportering og alt andet
+      // paa én gang, uden at hvert modul skal huske at filtrere.
+      fetchAllRows("instances", "*", (q) => q.is("deleted_at", null)).then((data) => ({ data })),
         supabase.from("travel_settings").select("*").eq("id","default").single(),
         supabase.from("travel_overrides").select("*"),
       ]);
@@ -1322,6 +1366,10 @@ function PlanningApp({ session, onSignOut }) {
             startDate: t.start_date || null,
             expiryDate: t.expiry_date || null,
             preferredEmployeeId: t.preferred_employee_id || "",
+            status: t.status || "aktiv",
+            cancelReason: t.cancel_reason || null,
+            cancelledAt: t.cancelled_at || null,
+            cancelledEffectiveDate: t.cancelled_effective_date || null,
             excludedDays: t.excluded_days ? JSON.parse(t.excluded_days) : [],
             requiredSkills: (tplSkillsData || [])
               .filter((s) => s.template_id === t.id)
@@ -1421,6 +1469,7 @@ function PlanningApp({ session, onSignOut }) {
   // travel_overrides, saa et par kun slaas op én gang — derefter ligger tiden klar
   // ved naeste indlaesning. Par vi ikke faar svar paa, proeves ikke igen i denne
   // session, saa en adresse der ikke kan geokodes ikke udloeser kald i en uendelighed.
+  const [cancelTarget, setCancelTarget] = useState(null);
   const travelTried = useRef(new Set());
   useEffect(() => {
     if (loading) return;
@@ -2239,6 +2288,34 @@ function PlanningApp({ session, onSignOut }) {
     }));
     notify(`${emp ? emp.name : "Medarbejderen"} er nu fast på aftalen — ${targets.length} kommende opgave${targets.length === 1 ? "" : "r"} opdateret`);
   }
+  // Markerer en aftale som udgaaet. Databasefunktionen goer det hele i én
+  // transaktion: saetter status og aarsag paa aftalen og slettemarkerer alle
+  // ikke-udfoerte opgaver efter ophoersdatoen. Udfoerte opgaver roeres aldrig,
+  // saa de kan stadig faktureres og indgaa i regnskabet.
+  async function cancelTemplate(templateId, reason, effectiveDate) {
+    const { data, error } = await supabase.rpc("cancel_service_template", {
+      p_template_id: templateId,
+      p_reason: reason,
+      p_effective_date: effectiveDate,
+    });
+    if (error) {
+      notify("Kunne ikke markere aftalen som udgået — " + error.message);
+      return false;
+    }
+    const slettet = (data && data.slettet) || 0;
+    setTemplates((prev) => prev.map((tp) => (tp.id === templateId
+      ? { ...tp, status: "udgaaet", cancelReason: reason, cancelledEffectiveDate: effectiveDate, cancelledAt: new Date().toISOString() }
+      : tp)));
+    const stop = String(effectiveDate).slice(0, 10);
+    setInstances((prev) => prev.filter((t) => {
+      if (t.templateId !== templateId) return true;
+      if (t.status === "udført") return true;
+      const ds = instanceDateString(t);
+      return !ds || ds <= stop;
+    }));
+    notify("Aftalen er markeret som udgået — " + slettet + " kommende opgave" + (slettet === 1 ? "" : "r") + " er fjernet");
+    return true;
+  }
   function unplace(taskId) {
     updateInstance(taskId, (t) => ({
       ...t,
@@ -2774,6 +2851,13 @@ function PlanningApp({ session, onSignOut }) {
       {/* Modulhjælp: knappen ligger i selve modulet og aabner hjaelp for netop det view man staar i. */}
       {MODULE_HELP[view] && <HelpButton onClick={() => setShowHelp(true)} />}
       {showHelp && <ModuleHelp view={view} onClose={() => setShowHelp(false)} />}
+      {cancelTarget && (
+        <CancelTemplateModal
+          template={templates.find((tp) => tp.id === cancelTarget)}
+          onClose={() => setCancelTarget(null)}
+          onConfirm={cancelTemplate}
+        />
+      )}
 
       {view === "uge" && (
         <WeekView
@@ -2826,7 +2910,8 @@ function PlanningApp({ session, onSignOut }) {
       )}
 
       {view === "contracts" && (
-        <ContractsView templates={templates} instances={instances} pricing={pricing} employees={employees} />
+        <ContractsView templates={templates} instances={instances} pricing={pricing} employees={employees}
+            isAdminUser={isAdminUser} onCancelTemplate={(tplId) => setCancelTarget(tplId)} />
       )}
 
       {view === "reports" && (
@@ -2857,6 +2942,7 @@ function PlanningApp({ session, onSignOut }) {
         <TaskDetailModal
           templates={templates}
           onSetPreferredEmployee={setPreferredEmployee}
+          onCancelTemplate={(tplId) => setCancelTarget(tplId)}
           task={instances.find((t) => t.id === openTaskId)}
           employees={employees}
           checklistTemplates={checklistTemplates}
@@ -5244,7 +5330,56 @@ function DayPills({ days }) {
   );
 }
 
-function ContractsView({ templates, instances, pricing, employees }) {
+// Dialogen der markerer en aftale som udgaaet. Kraever baade en aarsag, en
+// sidste gyldig dag og en udtrykkelig bekraeftelse, fordi handlingen ikke kan
+// fortrydes i appen.
+function CancelTemplateModal({ template, onClose, onConfirm }) {
+  const now = new Date();
+  const iso = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0") + "-" + String(now.getDate()).padStart(2, "0");
+  const [reason, setReason] = useState("kunde");
+  const [date, setDate] = useState(iso);
+  const [accepted, setAccepted] = useState(false);
+  const [busy, setBusy] = useState(false);
+  if (!template) return null;
+  const blocked = !accepted || !date || busy;
+  return (
+    <div style={styles.overlay} onClick={onClose}>
+      <div style={styles.modal} onClick={(e) => e.stopPropagation()}>
+        <div style={styles.modalTitle}>Markér aftalen som udgået</div>
+        <div style={styles.cardMeta}>{template.customerName || template.title}</div>
+        <label style={styles.label}>Årsag</label>
+        <select style={styles.input} value={reason} onChange={(e) => setReason(e.target.value)}>
+          {CANCEL_REASONS.map((r) => <option key={r.key} value={r.key}>{r.label}</option>)}
+        </select>
+        <label style={styles.label}>Sidste dag aftalen gælder</label>
+        <input type="date" style={styles.input} value={date} onChange={(e) => setDate(e.target.value)} />
+        <div style={styles.hint}>
+          Opgaver til og med denne dato bliver stående og skal stadig køres og faktureres.
+          Alt efter datoen fjernes fra ugeplan, fakturering, rapportering og medarbejdernes app.
+          Udførte opgaver røres aldrig.
+        </div>
+        <label style={{ display: "flex", gap: 8, alignItems: "flex-start", marginTop: 12, fontSize: 13, cursor: "pointer" }}>
+          <input type="checkbox" checked={accepted} onChange={(e) => setAccepted(e.target.checked)} />
+          <span>Jeg er klar over at det <b>ikke kan fortrydes</b> i appen.</span>
+        </label>
+        <div style={{ display: "flex", gap: 8, marginTop: 18, justifyContent: "flex-end" }}>
+          <button type="button" style={styles.secondaryBtn} onClick={onClose}>Annullér</button>
+          <button type="button" disabled={blocked}
+            style={{ ...styles.primaryBtn, background: blocked ? "#CBD5E1" : "#B91C1C", cursor: blocked ? "not-allowed" : "pointer" }}
+            onClick={async () => {
+              setBusy(true);
+              const ok = await onConfirm(template.id, reason, date);
+              setBusy(false);
+              if (ok) onClose();
+            }}>
+            {busy ? "Markerer…" : "Markér som udgået"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+function ContractsView({ templates, instances, pricing, employees, isAdminUser, onCancelTemplate }) {
   // Find den reelle, aktuelle kontrakttype for en skabelon: den seneste værdi sat på
   // en tilknyttet opgave slår den statiske skabelonværdi, så redigering i ugeplanen
   // altid afspejles korrekt her.
@@ -5379,6 +5514,18 @@ function ContractsView({ templates, instances, pricing, employees }) {
                 <div style={{ fontWeight: 700, fontSize: 15, color: "#111111", marginBottom: 3 }}>{t.title}</div>
                 <div style={{ fontSize: 12, color: "#64748B", display: "flex", gap: 12, flexWrap: "wrap" }}>
                   {t.customerName && <span>👤 {t.customerName}</span>}
+                    {t.status === "udgaaet" ? (
+                      <span style={{ color: "#B91C1C", fontWeight: 800 }}>
+                        UDGÅET · {cancelReasonLabel(t.cancelReason)}
+                        {t.cancelledEffectiveDate ? " · sidste dag " + String(t.cancelledEffectiveDate).slice(0, 10) : ""}
+                      </span>
+                    ) : isAdminUser && onCancelTemplate ? (
+                      <button type="button" onClick={() => onCancelTemplate(t.id)}
+                        style={{ padding: "2px 9px", borderRadius: 999, border: "1px solid #FCA5A5",
+                          background: "#FEF2F2", color: "#B91C1C", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                        Markér som udgået
+                      </button>
+                    ) : null}
                     {t.preferredEmployeeId && (
                       <span style={{ color: "#9C1B5D", fontWeight: 700 }}>
                         Fast: {((employees || []).find((e) => e.id === t.preferredEmployeeId) || {}).name || "ukendt"}
@@ -5415,6 +5562,18 @@ function ContractsView({ templates, instances, pricing, employees }) {
                   <div style={{ fontWeight: 700, fontSize: 15, color: "#111111", marginBottom: 3 }}>{t.title}</div>
                   <div style={{ fontSize: 12, color: "#64748B", display: "flex", gap: 12, flexWrap: "wrap" }}>
                     {t.customerName && <span>👤 {t.customerName}</span>}
+                    {t.status === "udgaaet" ? (
+                      <span style={{ color: "#B91C1C", fontWeight: 800 }}>
+                        UDGÅET · {cancelReasonLabel(t.cancelReason)}
+                        {t.cancelledEffectiveDate ? " · sidste dag " + String(t.cancelledEffectiveDate).slice(0, 10) : ""}
+                      </span>
+                    ) : isAdminUser && onCancelTemplate ? (
+                      <button type="button" onClick={() => onCancelTemplate(t.id)}
+                        style={{ padding: "2px 9px", borderRadius: 999, border: "1px solid #FCA5A5",
+                          background: "#FEF2F2", color: "#B91C1C", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                        Markér som udgået
+                      </button>
+                    ) : null}
                     {t.preferredEmployeeId && (
                       <span style={{ color: "#9C1B5D", fontWeight: 700 }}>
                         Fast: {((employees || []).find((e) => e.id === t.preferredEmployeeId) || {}).name || "ukendt"}
@@ -6279,7 +6438,7 @@ function EmployeeModal({ emp, onClose, onSave, skills: skillList }) {
 }
 
 // ---------- Task / service order detail ----------
-function TaskDetailModal({ task, employees, templates, onSetPreferredEmployee, checklistTemplates, skills, isAdminUser, areas, employeeAreas, onClose, onSetStatus, onToggleChecklistItem, onAddChecklistItem, onAddChecklistTemplate, onAddAssignee, onRemoveAssignee, onUnplace, onDelete, onUpdateCustomer, onUpdateCustomerInfo, onUpdateContractType, onRenameTask, onCopy, onUpdateSkills, onEndBlockEarly, onUpdateSchedule }) {
+function TaskDetailModal({ task, employees, templates, onSetPreferredEmployee, onCancelTemplate, checklistTemplates, skills, isAdminUser, areas, employeeAreas, onClose, onSetStatus, onToggleChecklistItem, onAddChecklistItem, onAddChecklistTemplate, onAddAssignee, onRemoveAssignee, onUnplace, onDelete, onUpdateCustomer, onUpdateCustomerInfo, onUpdateContractType, onRenameTask, onCopy, onUpdateSkills, onEndBlockEarly, onUpdateSchedule }) {
   const [addOpen, setAddOpen] = useState(false);
   const [newItemText, setNewItemText] = useState("");
   const [showTemplates, setShowTemplates] = useState(false);
@@ -6792,6 +6951,23 @@ return (
               title="Gemmer medarbejderen på aftalen og ombytter på alle kommende opgaver"
               onClick={() => onSetPreferredEmployee(t.templateId, assignedEmps[0].id)}>
               Gør {assignedEmps[0].name} fast på aftalen
+            </button>
+          );
+        })()}
+        {t.templateId && isAdminUser && onCancelTemplate && (() => {
+          const aftale = (templates || []).find((x) => x.id === t.templateId);
+          if (aftale && aftale.status === "udgaaet") {
+            return (
+              <div style={{ ...styles.cardMeta, color: "#B91C1C", fontWeight: 700, marginTop: 8 }}>
+                Aftalen er udgået · {cancelReasonLabel(aftale.cancelReason)}
+              </div>
+            );
+          }
+          return (
+            <button type="button" style={{ ...styles.addSkillBtn, marginTop: 8, borderColor: "#FCA5A5", color: "#B91C1C" }}
+              title="Markerer hele aftalen som udgået og fjerner alle kommende opgaver"
+              onClick={() => { onCancelTemplate(t.templateId); onClose(); }}>
+              Markér aftalen som udgået
             </button>
           );
         })()}
