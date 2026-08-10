@@ -741,6 +741,14 @@ function computeDaySchedule(dayTasks, travelSettings, employee) {
     if (t.scheduledTime) {
       cursor = Math.max(cursor, parseTimeToMinutes(t.scheduledTime));
     }
+    // Et aftalt klokkeslaet er en aftale med kunden og skal staa fast. Tidligere
+    // bestemte det kun raekkefoelgen, saa en opgave aftalt til kl. 11 blev tegnet
+    // fra arbejdsdagens start. Nu skubbes tidslinjen frem til det aftalte tidspunkt,
+    // og opgaver uden fast tid fylder hullerne ud omkring den.
+    if (t.scheduledTime) {
+      const fastTid = parseTimeToMinutes(t.scheduledTime);
+      if (fastTid > cursor) cursor = fastTid;
+    }
     segments.push({ type: "task", task: t, start: cursor, end: cursor + t.duration });
     cursor += t.duration;
   });
