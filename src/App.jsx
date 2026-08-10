@@ -745,11 +745,15 @@ function computeDaySchedule(dayTasks, travelSettings, employee) {
     // bestemte det kun raekkefoelgen, saa en opgave aftalt til kl. 11 blev tegnet
     // fra arbejdsdagens start. Nu skubbes tidslinjen frem til det aftalte tidspunkt,
     // og opgaver uden fast tid fylder hullerne ud omkring den.
+    // Kan opgaven ikke naa at begynde til aftalt tid, fordi dagen allerede er
+    // fyldt op foer den, er det en konflikt planlaeggeren skal kunne se og rette.
+    let lateBy = 0;
     if (t.scheduledTime) {
       const fastTid = parseTimeToMinutes(t.scheduledTime);
       if (fastTid > cursor) cursor = fastTid;
+      else if (cursor > fastTid) lateBy = cursor - fastTid;
     }
-    segments.push({ type: "task", task: t, start: cursor, end: cursor + t.duration });
+    segments.push({ type: "task", task: t, start: cursor, end: cursor + t.duration, lateBy });
     cursor += t.duration;
   });
   return segments;
@@ -3432,7 +3436,13 @@ function WeekView({ employees, instances, unplaced, onAdd, onAuto, onScheduleWee
                               <TypeBadge type={t.type} mini />
                               <span style={styles.taskChipTitle}>{seg.start != null ? `${fmtClock(seg.start)} · ` : ""}{t.title}</span>
                               {t.scheduledTime && (seg.start == null || fmtClock(seg.start) !== t.scheduledTime) && <span title={`Ønsket kl. ${t.scheduledTime}`} style={{ fontSize: 11, marginLeft: 2, color: "#D97706" }}>🎯{t.scheduledTime}</span>}
-                              {t.offSchedule && <span title="Planlagt uden for aftale" style={{ fontSize: 12, marginLeft: 2 }}>⚠️</span>}
+                              {(seg.lateBy || 0) > 0 && (
+                            <span title={`Konflikt: aftalt kl. ${t.scheduledTime}, men kan foerst begynde ${fmtMin(seg.lateBy)} senere. Flyt en af dagens opgaver.`}
+                              style={{ fontSize: 11, marginLeft: 3, fontWeight: 800, color: "#fff", background: "#DC2626", borderRadius: 4, padding: "1px 5px" }}>
+                              ⏱ {fmtMin(seg.lateBy)} for sent
+                            </span>
+                          )}
+                          {t.offSchedule && <span title="Planlagt uden for aftale" style={{ fontSize: 12, marginLeft: 2 }}>⚠️</span>}
                               {t.onSchedule && !t.offSchedule && <span title="Planlagt på aftalt dag" style={{ fontSize: 12, marginLeft: 2 }}>✓</span>}
                               {t.outsideArea && <span title="Planlagt uden for medarbejderens område" style={{ fontSize: 12, marginLeft: 2 }}>📍⚠️</span>}
                               {done
