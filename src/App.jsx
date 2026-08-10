@@ -2694,7 +2694,9 @@ function PlanningApp({ session, onSignOut }) {
         if (loggedMinutes <= 0) return productLines;
         const serviceLine = t.pricingType === "fixed"
           ? {
-              description: `${t.title} (Uge ${t.week}, ${dayLabelOf(t)})${t.poNumber ? ` — PO: ${t.poNumber}` : ""} — Fastpris`,
+              description: `${t.title} (Uge ${t.week}, ${dayLabelOf(t)}) — Fastpris`,
+          // PO-nummeret staar i linjens kommentarfelt i Dinero, ikke i beskrivelsen.
+          comments: t.poNumber ? `PO: ${t.poNumber}` : "",
               quantity: 1,
               unitPrice: Number(t.fixedPrice) || 0,
               unit: "fixed",
@@ -2703,7 +2705,8 @@ function PlanningApp({ session, onSignOut }) {
               const hours = Math.round((loggedMinutes / 60) * 100) / 100;
               const rate = pricing[t.contractType || "privat"] || 0;
               return {
-                description: `${t.title} (Uge ${t.week}, ${dayLabelOf(t)})${t.poNumber ? ` — PO: ${t.poNumber}` : ""}`,
+                description: `${t.title} (Uge ${t.week}, ${dayLabelOf(t)})`,
+            comments: t.poNumber ? `PO: ${t.poNumber}` : "",
                 quantity: hours,
                 unitPrice: rate,
                 unit: "hours",
