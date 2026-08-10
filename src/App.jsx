@@ -88,6 +88,8 @@ function contractIconLabel(key) { const c = contractMeta(key); return c.icon + "
 // en rigtig rengøringsopgave — blokeringer skal ikke tælle med i fakturagrundlag,
 // rapportering osv., og skal forhindre auto-planlægning af den pågældende medarbejder.
 const BLOCK_TYPES = ["sygdom", "ferie"];
+// Bruges kun hvis en kaldende funktion ikke har transportindstillingerne ved haanden.
+const DEFAULT_TRAVEL = { defaultMinutes: 20, dayStart: "07:00", overrides: {} };
 // Planlaegningshorisont: hvor mange uger frem opgaverne altid materialiseres.
 const HORIZON_WEEKS = 4;
 
@@ -355,7 +357,7 @@ function remainingForScore(employees, list, empId, day) {
   if (Number.isFinite(r)) return r;
   return 100000 - usedMinutes(list, empId, day);
 }
-function scheduleWeek(weekInstances, employees, autoOnly = false, areas = [], employeeAreas = [], restrictToIds = null) {
+function scheduleWeek(weekInstances, employees, autoOnly = false, areas = [], employeeAreas = [], restrictToIds = null, travelSettings = DEFAULT_TRAVEL) {
   let list = weekInstances.map((t) => ({ ...t }));
 
   // En medarbejder må aldrig auto-planlægges på en dag hvor de har en
@@ -368,17 +370,24 @@ function scheduleWeek(weekInstances, employees, autoOnly = false, areas = [], em
   // oven i en anden allerede tildelt opgave med et fast klokkeslæt samme dag
   // hos samme medarbejder — opgaver uden fast klokkeslæt er fleksible og
   // fortrænger ikke dette tjek, de lander bare i den ledige tid der er tilbage.
+  // Ville placeringen skubbe en aftale? Vi laegger opgaven ind i dagen og regner
+  // dagen igennem med praecis samme funktion som tidslinjen bruger — inklusive
+  // koeretiden mellem adresserne. Kan en opgave med aftalt klokkeslaet derefter
+  // ikke begynde til tiden, er placeringen ikke lovlig.
+  //
+  // Tidligere sammenlignede vi kun to faste klokkeslaet med hinanden. Det oversaa
+  // det almindelige tilfaelde: en opgave uden fast tid lagt tidligere paa dagen,
+  // som sammen med koerslen skubber en aftalt opgave for sent i gang.
   function hasTimeConflict(empId, day, task) {
-    if (!task.scheduledTime) return false;
-    const start = parseTimeToMinutes(task.scheduledTime);
-    const end = start + task.duration;
-    return list.some((t2) => {
-      if (t2.id === task.id || !t2.scheduledTime) return false;
-      if (!(t2.assignees || []).includes(empId) || t2.day !== day) return false;
-      const s2 = parseTimeToMinutes(t2.scheduledTime);
-      const e2 = s2 + t2.duration;
-      return start < e2 && s2 < end;
-    });
+    const dayTasks = list.filter(
+      (t2) => t2.id !== task.id && (t2.assignees || []).includes(empId)
+        && t2.day === day && !BLOCK_TYPES.includes(t2.type)
+    );
+    // Er der ingen aftalte klokkeslaet i spil, er der ikke noget at bryde.
+    if (!task.scheduledTime && !dayTasks.some((t2) => t2.scheduledTime)) return false;
+    const emp = employees.find((e) => e.id === empId);
+    const segs = computeDaySchedule([...dayTasks, task], travelSettings, emp);
+    return segs.some((s) => s.type === "task" && (s.lateBy || 0) > 0);
   }
 
   list.forEach((t) => {
@@ -437,7 +446,8 @@ function scheduleWeek(weekInstances, employees, autoOnly = false, areas = [], em
       candidates.forEach((e) => {
         if (isBlocked(e.id, d.key)) return;
         if (!canWorkOn(e, d.key)) return;
-        if (t.scheduledTime && hasTimeConflict(e.id, d.key, t)) return;
+        // Gaelder ogsaa opgaver uden fast tid: de maa ikke presse en aftalt opgave.
+        if (hasTimeConflict(e.id, d.key, t)) return;
         const rem = remaining(employees, list, e.id, d.key);
         const remScore = remainingForScore(employees, list, e.id, d.key);
         const fits = rem >= t.duration ? 1 : 0;
@@ -488,7 +498,7 @@ function scheduleWeek(weekInstances, employees, autoOnly = false, areas = [], em
   return list;
 }
 
-function ensureWeekInstances(week, year, allInstances, templates, employees, areas = [], employeeAreas = []) {
+function ensureWeekInstances(week, year, allInstances, templates, employees, areas = [], employeeAreas = [], travelSettings = DEFAULT_TRAVEL) {
   let list = [...allInstances];
   const weekMonday = mondayOfWeek(week, year);
   const newlyCreatedIds = new Set();
@@ -672,7 +682,7 @@ function ensureWeekInstances(week, year, allInstances, templates, employees, are
   const thisWeek = list.filter((i) => i.week === week && i.year === year);
   const others = list.filter((i) => !(i.week === week && i.year === year));
   // Auto-planlæg kun instanser der er helt nyoprettede i dette kald.
-  return [...others, ...scheduleWeek(thisWeek, employees, false, areas, employeeAreas, newlyCreatedIds)];
+  return [...others, ...scheduleWeek(thisWeek, employees, false, areas, employeeAreas, newlyCreatedIds, travelSettings)];
 }
 
 function statusLabel(s) { return { unscheduled: "Ubemandet", planlagt: "Planlagt", udført: "Udført" }[s] || s; }
@@ -1435,10 +1445,10 @@ function PlanningApp({ session, onSignOut }) {
           const hd = new Date(horizonAnchor);
           hd.setDate(hd.getDate() + hw * 7);
           const hi = isoWeekInfo(hd);
-          allInst = ensureWeekInstances(hi.week, hi.year, allInst, mapped, empMapped, areasData || [], empAreasData || []);
+          allInst = ensureWeekInstances(hi.week, hi.year, allInst, mapped, empMapped, areasData || [], empAreasData || [], travelSettings);
         }
         // Den viste uge kan ligge uden for horisonten (hvis planlaeggeren har bladret).
-        allInst = ensureWeekInstances(currentWeek, currentYear, allInst, mapped, empMapped, areasData || [], empAreasData || []);
+        allInst = ensureWeekInstances(currentWeek, currentYear, allInst, mapped, empMapped, areasData || [], empAreasData || [], travelSettings);
         setInstances(allInst);
         syncHealedAssignments(existingInst, allInst);
         // Nye opgaver i horisonten skal gemmes med det samme. Ellers findes de kun
@@ -1767,7 +1777,7 @@ function PlanningApp({ session, onSignOut }) {
     nextAnchor.setDate(nextAnchor.getDate() + delta * 7);
     const { week: nextWeek, year: nextYear } = isoWeekInfo(nextAnchor);
     setInstances((cur) => {
-      const next = ensureWeekInstances(nextWeek, nextYear, cur, templates, employees, areas, employeeAreas);
+      const next = ensureWeekInstances(nextWeek, nextYear, cur, templates, employees, areas, employeeAreas, travelSettings);
       syncHealedAssignments(cur, next);
       return next;
     });
@@ -1795,7 +1805,7 @@ function PlanningApp({ session, onSignOut }) {
       const others = prev.filter((t) => !(t.week === weekOffset && t.year === weekYear) && !overdueIds.has(t.id));
 
       const before = [...thisWeek, ...overdueForRun].filter((t) => !(t.assignees && t.assignees.length)).length;
-      const scheduledBatch = scheduleWeek([...thisWeek, ...overdueForRun], employees, true, areas, employeeAreas); // kun markerede
+      const scheduledBatch = scheduleWeek([...thisWeek, ...overdueForRun], employees, true, areas, employeeAreas, null, travelSettings); // kun markerede
       const still = scheduledBatch.filter((t) => !(t.assignees && t.assignees.length)).length;
 
       const after = scheduledBatch.map((t) => {
@@ -1832,7 +1842,7 @@ function PlanningApp({ session, onSignOut }) {
         notify("Ingen uplanlagte opgaver denne uge");
         return prev;
       }
-      const after = scheduleWeek(thisWeek, employees, false, areas, employeeAreas, unassignedIds);
+      const after = scheduleWeek(thisWeek, employees, false, areas, employeeAreas, unassignedIds, travelSettings);
       const newlyAssigned = after.filter((t) => unassignedIds.has(t.id) && t.assignees && t.assignees.length);
       newlyAssigned.forEach(syncInstance);
       newlyAssigned.forEach((t) => {
@@ -1860,7 +1870,7 @@ function PlanningApp({ session, onSignOut }) {
         const thisWeek = result.filter((t) => t.week === wk && t.year === wy);
         const others = result.filter((t) => !(t.week === wk && t.year === wy));
         const before = thisWeek.filter((t) => !(t.assignees && t.assignees.length)).length;
-        const after = scheduleWeek(thisWeek, employees, true, areas, employeeAreas);
+        const after = scheduleWeek(thisWeek, employees, true, areas, employeeAreas, null, travelSettings);
         const still = after.filter((t) => !(t.assignees && t.assignees.length)).length;
         totalBefore += before;
         totalStill += still;
@@ -1880,7 +1890,7 @@ function PlanningApp({ session, onSignOut }) {
       (t) => t.week === task.week && t.year === task.year && t.id !== task.id
     );
     const result = scheduleWeek(
-      [...weekList, task], employees, false, areas, employeeAreas, new Set([task.id])
+      [...weekList, task], employees, false, areas, employeeAreas, new Set([task.id]), travelSettings
     );
     return result.find((t) => t.id === task.id) || { ...task, warning: "no_slot" };
   }
@@ -1955,7 +1965,7 @@ function PlanningApp({ session, onSignOut }) {
           let next = [...cur];
           weeks.forEach(({ week: wk, year: wy }) => {
             const before = next;
-            const expanded = ensureWeekInstances(wk, wy, next, nextT, employees, areas, employeeAreas);
+            const expanded = ensureWeekInstances(wk, wy, next, nextT, employees, areas, employeeAreas, travelSettings);
             const newOnes = expanded.filter((i) => !next.find((c) => c.id === i.id));
             newOnes.forEach((inst) => syncInstance({ ...inst, contractType: payload.contractType, expiryDate: payload.expiryDate, pricingType: tpl.pricingType, fixedPrice: tpl.fixedPrice }));
             syncHealedAssignments(before, expanded);
@@ -2417,7 +2427,7 @@ function PlanningApp({ session, onSignOut }) {
           const dayKey = DAY_KEYS_BY_DOW[dow];
           // Sørg for at ugen er materialiseret (faste opgaver oprettet), så vi kan
           // fjerne medarbejderen fra evt. opgaver den allerede har den dag.
-          list = ensureWeekInstances(week, year, list, templates, employees, areas, employeeAreas);
+          list = ensureWeekInstances(week, year, list, templates, employees, areas, employeeAreas, travelSettings);
           list = list.map((t) => {
             if (BLOCK_TYPES.includes(t.type)) return t;
             if (t.week !== week || t.year !== year || t.day !== dayKey) return t;
