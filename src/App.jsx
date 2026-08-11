@@ -1937,6 +1937,7 @@ function PlanningApp({ session, onSignOut }) {
         planInterval: payload.planInterval || "uge",
         startDate: payload.startDate || null, dineroSynced: payload.dineroSynced || false,
         preferredEmployeeId: payload.assigned_employee_id || "",
+        dineroContactGuid: payload.dineroContactGuid || "",
       };
       const { error: tplErr } = await supabase.from("service_templates").insert({
         id: tplId, title: tpl.title, duration: tpl.duration, days: tpl.days, day_times: tpl.dayTimes || {},
@@ -1951,6 +1952,7 @@ function PlanningApp({ session, onSignOut }) {
         start_date: payload.startDate || null,
         expiry_date: payload.expiryDate || null,
         preferred_employee_id: tpl.preferredEmployeeId || null,
+        dinero_contact_guid: tpl.dineroContactGuid || null,
       });
       if (dbFail(tplErr, "oprette den faste aftale")) return;
       const { data: skillsDb } = await supabase.from("skills").select("id,name");
@@ -5014,6 +5016,8 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
   // eller netop oprettet der) — bruges til at undlade at foreslå "Send til Dinero"
   // for en kunde der allerede findes derinde.
   const [customerDineroSynced, setCustomerDineroSynced] = useState(!!copyFrom?.dineroSynced);
+  // Kundens unikke id i Dinero — saettes naar kunden vaelges i soegningen.
+  const [dineroContactGuid, setDineroContactGuid] = useState(copyFrom?.dineroContactGuid || "");
   // En kopieret opgave henter medarbejderen fra den opgave der kopieres
   // (assignees), eller fra aftalens faste medarbejder hvis kopien kommer derfra.
   const [assignedEmployeeId, setAssignedEmployeeId] = useState(
@@ -5049,6 +5053,7 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
 
   function selectDineroCustomer(c) {
     setCustomerName(c.Name);
+    setDineroContactGuid(c.ContactGuid || "");
     // Adressen her er Dineros fakturaadresse for virksomheden — IKKE adressen hvor
     // rengøringen skal udføres, så den skal ikke overskrive "Adresse for udførsel".
     setCustomerSelected(true);
@@ -5360,7 +5365,7 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
         <button
           style={styles.primaryBtn}
           disabled={!title.trim() || (type === "fixed" && days.length === 0) || requiredSkills.length === 0}
-          onClick={() => onSave({ type, contractType, pricingType, fixedPrice: pricingType === "fixed" ? (Number(fixedPrice) || 0) : null, planInterval, title: title.trim(), requiredSkills, duration, days, dayTimes, day, adhocDate, deadline, preferredTime, startDate, expiryDate, checklistTemplateIds, extraItems, videoUrl: videoUrl.trim(), customerName: customerName.trim(), address: address.trim(), poNumber: poNumber.trim(), accessInstructions: accessInstructions.trim(), dineroSynced: customerDineroSynced, assigned_employee_id: assignedEmployeeId })}
+          onClick={() => onSave({ type, contractType, pricingType, fixedPrice: pricingType === "fixed" ? (Number(fixedPrice) || 0) : null, planInterval, title: title.trim(), requiredSkills, duration, days, dayTimes, day, adhocDate, deadline, preferredTime, startDate, expiryDate, checklistTemplateIds, extraItems, videoUrl: videoUrl.trim(), customerName: customerName.trim(), address: address.trim(), poNumber: poNumber.trim(), accessInstructions: accessInstructions.trim(), dineroSynced: customerDineroSynced, dineroContactGuid, assigned_employee_id: assignedEmployeeId })}
         >
           Gem og planlæg
         </button>
