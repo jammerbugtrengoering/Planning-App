@@ -2598,7 +2598,7 @@ function PlanningApp({ session, onSignOut }) {
 
   function exportCSV(filteredInstances, label) {
     const toExport = (filteredInstances || instances.filter((t) => t.assignees && t.assignees.length)).filter((t) => t.invoiceReady);
-    const rows = [["Uge", "Dag", "Opgave", "Kunde", "Adresse", "PO-nummer", "Type", "Kontrakttype", "Medarbejdere", "Status", "Planlagt (min)", "Planlagt (timer)", "Registreret (min)", "Registreret (timer)"]];
+    const rows = [["Uge", "Dag", "Opgave", "Kunde", "Adresse", "Fakturabeskrivelse", "Type", "Kontrakttype", "Medarbejdere", "Status", "Planlagt (min)", "Planlagt (timer)", "Registreret (min)", "Registreret (timer)"]];
     toExport.forEach((t) => {
       const names = (t.assignees || []).map((id) => employees.find((e) => e.id === id)?.name).filter(Boolean);
       const tl = t.timeLog || t.time_log || [];
@@ -2724,8 +2724,11 @@ function PlanningApp({ session, onSignOut }) {
         const serviceLine = t.pricingType === "fixed"
           ? {
               description: `${t.title} (Uge ${t.week}, ${dayLabelOf(t)}) — Fastpris`,
-          // PO-nummeret staar i linjens kommentarfelt i Dinero, ikke i beskrivelsen.
-          comments: t.poNumber ? `PO: ${t.poNumber}` : "",
+          // Fakturabeskrivelsen staar i linjens kommentarfelt i Dinero, ikke i selve
+          // beskrivelsen. Teksten sendes som den er skrevet — feltet kan indeholde et
+          // PO-nummer, en attention-person eller noget helt tredje, saa vi maa ikke
+          // saette "PO:" foran af os selv.
+          comments: t.poNumber || "",
               quantity: 1,
               unitPrice: Number(t.fixedPrice) || 0,
               unit: "fixed",
@@ -2735,7 +2738,7 @@ function PlanningApp({ session, onSignOut }) {
               const rate = pricing[t.contractType || "privat"] || 0;
               return {
                 description: `${t.title} (Uge ${t.week}, ${dayLabelOf(t)})`,
-            comments: t.poNumber ? `PO: ${t.poNumber}` : "",
+            comments: t.poNumber || "",
                 quantity: hours,
                 unitPrice: rate,
                 unit: "hours",
@@ -5247,8 +5250,8 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
           <input style={styles.input} value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Vejnavn 1, 9000 Aalborg" />
         </div>
         <div>
-          <label style={styles.label}>PO-nummer til fakturering (valgfrit)</label>
-          <input style={styles.input} value={poNumber} onChange={(e) => setPoNumber(e.target.value)} placeholder="F.eks. PO-2026-0311" />
+          <label style={styles.label}>Fakturabeskrivelse (PO, navn m.v.)</label>
+          <input style={styles.input} value={poNumber} onChange={(e) => setPoNumber(e.target.value)} placeholder="F.eks. PO-2026-0311 eller Att. Hanne Nielsen" />
         </div>
       </div>
 
@@ -6947,7 +6950,7 @@ return (
               )}
             </div>
             <input style={styles.input} value={custAddress} onChange={(e) => setCustAddress(e.target.value)} placeholder="Adresse" />
-            <input style={styles.input} value={custPo} onChange={(e) => setCustPo(e.target.value)} placeholder="PO-nummer" />
+            <input style={styles.input} value={custPo} onChange={(e) => setCustPo(e.target.value)} placeholder="Fakturabeskrivelse (PO, navn m.v.)" />
             <textarea style={{ ...styles.input, minHeight: 60 }} value={custAccess} onChange={(e) => setCustAccess(e.target.value)} placeholder="Adgangsinstruktioner" />
             <div style={{ display: "flex", gap: 8 }}>
               <button style={styles.primaryBtn} onClick={saveCustomer}>Gem</button>
@@ -6969,7 +6972,7 @@ return (
                   )}
                 </div>
               )}
-              {custPo && <div style={styles.cardMeta}>PO-nummer: {custPo}</div>}
+              {custPo && <div style={styles.cardMeta}>Faktura: {custPo}</div>}
               {custAccess && (
                 <div style={{ ...styles.accessBox, marginTop: 8 }}>
                   <div style={styles.accessTitle}><Lock size={13} /> Adgang</div>
