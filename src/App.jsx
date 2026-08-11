@@ -640,6 +640,7 @@ function ensureWeekInstances(week, year, allInstances, templates, employees, are
           checklistTemplateIds: tpl.checklistTemplateIds || [], extraItems: tpl.extraItems || [],
           videoUrl: tpl.videoUrl || "",
           customerName: tpl.customerName || "", address: tpl.address || "", poNumber: tpl.poNumber || "",
+          dineroContactGuid: tpl.dineroContactGuid || "",
           accessInstructions: tpl.accessInstructions || "",
           templateDays: tpl.days, // for off-schedule detection
           scheduledTime: (tpl.dayTimes && tpl.dayTimes[day]) || null,
@@ -1392,6 +1393,7 @@ function PlanningApp({ session, onSignOut }) {
             startDate: t.start_date || null,
             expiryDate: t.expiry_date || null,
             preferredEmployeeId: t.preferred_employee_id || "",
+            dineroContactGuid: t.dinero_contact_guid || "",
             status: t.status || "aktiv",
             cancelReason: t.cancel_reason || null,
             cancelledAt: t.cancelled_at || null,
@@ -1568,6 +1570,7 @@ function PlanningApp({ session, onSignOut }) {
         timeLog: i.time_log ?? [],
         requiredSkills: i.required_skills ?? [],
         customerName: i.customer_name ?? i.customer_id ?? "",
+        dineroContactGuid: i.dinero_contact_guid || "",
         address: i.address_text ?? "",
         accessInstructions: i.access_instructions ?? "",
         contractType: i.contract_type || "privat",
@@ -1663,6 +1666,7 @@ function PlanningApp({ session, onSignOut }) {
       deadline: inst.deadline ?? null, duration: inst.duration,
       status: inst.status ?? "unscheduled", video_url: inst.videoUrl ?? "",
       customer_id: null, po_number: inst.poNumber ?? "",
+      dinero_contact_guid: inst.dineroContactGuid || null,
       warning: inst.warning ?? null,
       assignees: inst.assignees ?? [],
       checklist: inst.checklist ?? [],
@@ -1725,6 +1729,7 @@ function PlanningApp({ session, onSignOut }) {
     if ("accessInstructions" in fields) payload.access_instructions = fields.accessInstructions ?? "";
     if ("contractType" in fields) payload.contract_type = fields.contractType ?? "privat";
     if ("dineroSynced" in fields) payload.dinero_synced = !!fields.dineroSynced;
+    if ("dineroContactGuid" in fields) payload.dinero_contact_guid = fields.dineroContactGuid || null;
     if ("preferredEmployeeId" in fields) payload.preferred_employee_id = fields.preferredEmployeeId || null;
     if (Object.keys(payload).length === 0) return;
     const { error } = await supabase.from("service_templates").update(payload).eq("id", tplId);
@@ -2745,6 +2750,9 @@ function PlanningApp({ session, onSignOut }) {
             customerName,
             date: today,
             invoiceDescription: `Faktura ${label}`,
+          // Kundens unikke id i Dinero. Uden det maa funktionen slaa op paa navnet,
+          // og det fejler naar flere kontakter hedder det samme.
+          contactGuid: (tasks.find((t) => t.dineroContactGuid) || {}).dineroContactGuid || null,
             lines,
           },
         });
@@ -2757,7 +2765,7 @@ function PlanningApp({ session, onSignOut }) {
         } else if (data?.error === "ambiguous") {
           results.ambiguous.push({ customerName, matches: data.matches || [] });
         } else if (data?.error) {
-          results.error.push({ customerName, message: data.error });
+          results.error.push({ customerName, message: data.message || data.error });
         } else if (data?.Guid) {
           results.success.push({ customerName, guid: data.Guid });
           // Markér alle opgaver i denne gruppe som sendt til Dinero, så de ikke kan eksporteres igen.
@@ -6497,6 +6505,8 @@ function TaskDetailModal({ task, employees, templates, onSetPreferredEmployee, o
   const [schedDate, setSchedDate] = useState("");
   const [schedTime, setSchedTime] = useState("");
   const [custName, setCustName] = useState("");
+  // Kundens unikke id i Dinero. Saettes naar planlaeggeren vaelger kunden i soegningen.
+  const [custGuid, setCustGuid] = useState("");
   const [custAddress, setCustAddress] = useState("");
   const [custPo, setCustPo] = useState("");
   const [custAccess, setCustAccess] = useState("");
@@ -6521,6 +6531,7 @@ function TaskDetailModal({ task, employees, templates, onSetPreferredEmployee, o
   useEffect(() => {
     if (task) {
       setCustName(task.customerName || "");
+      setCustGuid(task.dineroContactGuid || "");
       setCustAddress(task.address || "");
       setCustPo(task.poNumber || "");
       setCustAccess(task.accessInstructions || "");
@@ -6534,6 +6545,8 @@ function TaskDetailModal({ task, employees, templates, onSetPreferredEmployee, o
 
   async function searchDineroForCustomer(q) {
     setCustName(q);
+    // Skrives navnet i haanden, passer et tidligere valgt kunde-id ikke laengere.
+    setCustGuid("");
     if (q.length < 2) { setDineroResults([]); return; }
     if (!dineroAvailable) return; // Dinero ikke tilgængelig — brug manuel indtastning
     setDineroSearching(true);
@@ -6556,6 +6569,7 @@ function TaskDetailModal({ task, employees, templates, onSetPreferredEmployee, o
 
   function selectDineroCustomerForEdit(c) {
     setCustName(c.Name);
+    setCustGuid(c.ContactGuid || "");
     // Adressen her er Dineros fakturaadresse for virksomheden — IKKE adressen hvor
     // rengøringen skal udføres, så den skal ikke overskrive "Adresse for udførsel".
     setCustomerSelected(true);
@@ -6576,6 +6590,7 @@ function TaskDetailModal({ task, employees, templates, onSetPreferredEmployee, o
         });
         if (!error && (data?.Name || data?.ContactGuid)) {
           if (data?.Name) setCustName(data.Name);
+          if (data?.ContactGuid) setCustGuid(data.ContactGuid);
           created = true;
           setCustomerDineroSynced(true);
         } else {
@@ -6671,7 +6686,7 @@ function TaskDetailModal({ task, employees, templates, onSetPreferredEmployee, o
   const existingTexts = new Set((t.checklist || []).map((i) => i.text));
 
   function saveCustomer() {
-    onUpdateCustomerInfo(t.id, { customerName: custName, address: custAddress, poNumber: custPo, accessInstructions: custAccess, dineroSynced: customerDineroSynced });
+    onUpdateCustomerInfo(t.id, { customerName: custName, address: custAddress, poNumber: custPo, accessInstructions: custAccess, dineroSynced: customerDineroSynced, dineroContactGuid: custGuid });
     setEditingCustomer(false);
     setDineroResults([]);
     setShowDineroCreate(false);
