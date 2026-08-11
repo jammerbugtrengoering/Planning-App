@@ -5200,6 +5200,13 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
                 onMouseDown={() => selectDineroCustomer(c)}>
                 <div style={{ fontWeight: 600, color: "#111111" }}>{c.Name}</div>
                 {(c.Street || c.City) && <div style={{ color: "#64748B", fontSize: 12 }}>{[c.Street, c.ZipCode, c.City].filter(Boolean).join(", ")}</div>}
+                {/* CVR og EAN skiller kontakter med samme navn ad — fx tre afdelinger
+                    i den samme kommune, som ellers ser fuldstaendig ens ud i listen. */}
+                {(c.VatNumber || c.EanNumber) && (
+                  <div style={{ color: "#94A3B8", fontSize: 11, marginTop: 1 }}>
+                    {[c.VatNumber ? "CVR " + c.VatNumber : null, c.EanNumber ? "EAN " + c.EanNumber : null].filter(Boolean).join(" · ")}
+                  </div>
+                )}
               </div>
             ))}
             <div
@@ -6899,6 +6906,13 @@ return (
                         onMouseDown={() => selectDineroCustomerForEdit(c)}>
                         <div style={{ fontWeight: 600, color: "#111111" }}>{c.Name}</div>
                         {(c.Street || c.City) && <div style={{ color: "#64748B", fontSize: 12 }}>{[c.Street, c.ZipCode, c.City].filter(Boolean).join(", ")}</div>}
+                {/* CVR og EAN skiller kontakter med samme navn ad — fx tre afdelinger
+                    i den samme kommune, som ellers ser fuldstaendig ens ud i listen. */}
+                {(c.VatNumber || c.EanNumber) && (
+                  <div style={{ color: "#94A3B8", fontSize: 11, marginTop: 1 }}>
+                    {[c.VatNumber ? "CVR " + c.VatNumber : null, c.EanNumber ? "EAN " + c.EanNumber : null].filter(Boolean).join(" · ")}
+                  </div>
+                )}
                       </div>
                     ))}
                     <div
