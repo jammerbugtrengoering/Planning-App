@@ -5034,13 +5034,15 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
   async function searchDinero(q) {
     setCustomerName(q);
     if (q.length < 2) { setDineroResults([]); return; }
-    if (!dineroAvailable) return; // Dinero ikke tilgængelig — brug manuel indtastning
     setDineroSearching(true);
     try {
       const { data, error } = await supabase.functions.invoke("dinero", {
         body: { action: "search", query: q },
       });
       if (!error && data?.Collection) {
+        // Virker opslaget, retter appen sig selv i stedet for at blive ved med at
+        // paastaa at Dinero er utilgaengelig.
+        setDineroAvailable(true);
         setDineroResults(data.Collection);
       } else {
         setDineroResults([]);
@@ -6555,13 +6557,15 @@ function TaskDetailModal({ task, employees, templates, onSetPreferredEmployee, o
     // Skrives navnet i haanden, passer et tidligere valgt kunde-id ikke laengere.
     setCustGuid("");
     if (q.length < 2) { setDineroResults([]); return; }
-    if (!dineroAvailable) return; // Dinero ikke tilgængelig — brug manuel indtastning
     setDineroSearching(true);
     try {
       const { data, error } = await supabase.functions.invoke("dinero", {
         body: { action: "search", query: q },
       });
       if (!error && data?.Collection) {
+        // Virker opslaget, retter appen sig selv i stedet for at blive ved med at
+        // paastaa at Dinero er utilgaengelig.
+        setDineroAvailable(true);
         setDineroResults(data.Collection);
       } else {
         setDineroResults([]);
