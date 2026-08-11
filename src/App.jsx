@@ -2763,9 +2763,9 @@ function PlanningApp({ session, onSignOut }) {
           continue;
         }
         if (data?.error === "not_found") {
-          results.notFound.push({ customerName });
+          results.notFound.push({ customerName, message: data.message });
         } else if (data?.error === "ambiguous") {
-          results.ambiguous.push({ customerName, matches: data.matches || [] });
+          results.ambiguous.push({ customerName, matches: data.matches || [], message: data.message });
         } else if (data?.error) {
           results.error.push({ customerName, message: data.message || data.error });
         } else if (data?.Guid) {
@@ -2784,8 +2784,10 @@ function PlanningApp({ session, onSignOut }) {
 
     const parts = [];
     if (results.success.length) parts.push(`✅ ${results.success.length} fakturakladde(r) oprettet: ${results.success.map((r) => r.customerName).join(", ")}`);
-    if (results.notFound.length) parts.push(`❌ Kunde ikke fundet i Dinero: ${results.notFound.map((r) => r.customerName).join(", ")}`);
-    if (results.ambiguous.length) parts.push(`⚠️ Flere match i Dinero (ret kundenavn): ${results.ambiguous.map((r) => `${r.customerName} (${r.matches.join(" / ")})`).join(", ")}`);
+    if (results.notFound.length) parts.push(`❌ ${results.notFound.map((r) => r.message || `Kunde ikke fundet i Dinero: ${r.customerName}`).join(" ")}`);
+    // Dineros egen forklaring er mere praecis end en generisk tekst — den fortaeller
+          // ogsaa hvad planlaeggeren skal goere ved det.
+          if (results.ambiguous.length) parts.push(`⚠️ ${results.ambiguous.map((r) => r.message || `Flere kunder i Dinero hedder "${r.customerName}"`).join(" ")}`);
     if (results.error.length) parts.push(`⚠️ Fejl: ${results.error.map((r) => `${r.customerName}: ${r.message}`).join("; ")}`);
 
     notify(results.success.length ? "Fakturakladder oprettet i Dinero" : "Eksport til Dinero afsluttet med fejl");
