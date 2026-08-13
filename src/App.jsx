@@ -6779,6 +6779,25 @@ function TaskDetailModal({ task, employees, templates, onSetPreferredEmployee, o
     );
 return (
     <Modal onClose={onClose} title={titleNode} persistent>
+      {/* Ligger oeverst og for sig selv. Stod den nede ved medarbejderne, var den
+          for let at ramme ved et uheld, naar man blot skulle tilfoeje en kollega. */}
+      {t.templateId && isAdminUser && onCancelTemplate && (() => {
+        const aftale = (templates || []).find((x) => x.id === t.templateId);
+        if (aftale && aftale.status === "udgaaet") {
+          return (
+            <div style={{ ...styles.cardMeta, color: "#B91C1C", fontWeight: 700, marginTop: 0, marginBottom: 10 }}>
+              Aftalen er udgået · {cancelReasonLabel(aftale.cancelReason)}
+            </div>
+          );
+        }
+        return (
+          <button type="button" style={{ ...styles.addSkillBtn, marginTop: 8, borderColor: "#FCA5A5", color: "#B91C1C" }}
+            title="Markerer hele aftalen som udgået og fjerner alle kommende opgaver"
+            onClick={() => { onCancelTemplate(t.templateId); onClose(); }}>
+            Markér aftalen som udgået
+          </button>
+        );
+      })()}
       <div style={styles.detailMetaRow}>
         {locked ? (
           <TypeBadge type={t.type} />
@@ -7063,23 +7082,6 @@ return (
               title="Gemmer medarbejderen på aftalen og ombytter på alle kommende opgaver"
               onClick={() => onSetPreferredEmployee(t.templateId, assignedEmps[0].id)}>
               Gør {assignedEmps[0].name} fast på aftalen
-            </button>
-          );
-        })()}
-        {t.templateId && isAdminUser && onCancelTemplate && (() => {
-          const aftale = (templates || []).find((x) => x.id === t.templateId);
-          if (aftale && aftale.status === "udgaaet") {
-            return (
-              <div style={{ ...styles.cardMeta, color: "#B91C1C", fontWeight: 700, marginTop: 8 }}>
-                Aftalen er udgået · {cancelReasonLabel(aftale.cancelReason)}
-              </div>
-            );
-          }
-          return (
-            <button type="button" style={{ ...styles.addSkillBtn, marginTop: 8, borderColor: "#FCA5A5", color: "#B91C1C" }}
-              title="Markerer hele aftalen som udgået og fjerner alle kommende opgaver"
-              onClick={() => { onCancelTemplate(t.templateId); onClose(); }}>
-              Markér aftalen som udgået
             </button>
           );
         })()}
