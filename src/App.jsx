@@ -6785,17 +6785,21 @@ return (
         const aftale = (templates || []).find((x) => x.id === t.templateId);
         if (aftale && aftale.status === "udgaaet") {
           return (
-            <div style={{ ...styles.cardMeta, color: "#B91C1C", fontWeight: 700, marginTop: 0, marginBottom: 10 }}>
+            <div style={{ ...styles.cardMeta, color: "#B91C1C", fontWeight: 700, textAlign: "center", margin: "6px 0 18px" }}>
               Aftalen er udgået · {cancelReasonLabel(aftale.cancelReason)}
             </div>
           );
         }
         return (
-          <button type="button" style={{ ...styles.addSkillBtn, marginTop: 8, borderColor: "#FCA5A5", color: "#B91C1C" }}
-            title="Markerer hele aftalen som udgået og fjerner alle kommende opgaver"
-            onClick={() => { onCancelTemplate(t.templateId); onClose(); }}>
-            Markér aftalen som udgået
-          </button>
+          // Centreret og med god luft til begge sider, saa den ikke klaeber til
+          // hverken overskriften eller opgavetypen nedenunder.
+          <div style={{ textAlign: "center", margin: "10px 0 20px" }}>
+            <button type="button" style={{ ...styles.addSkillBtn, borderColor: "#FCA5A5", color: "#B91C1C" }}
+              title="Markerer hele aftalen som udgået og fjerner alle kommende opgaver"
+              onClick={() => { onCancelTemplate(t.templateId); onClose(); }}>
+              Markér aftalen som udgået
+            </button>
+          </div>
         );
       })()}
       <div style={styles.detailMetaRow}>
