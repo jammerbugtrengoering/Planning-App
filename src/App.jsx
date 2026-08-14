@@ -1047,6 +1047,13 @@ const MODULE_HELP = {
         "Weekender planlægges kun for medarbejdere der har weekendarbejde sat på. For dem er der ingen timegrænse, da det altid er en aftale.",
         "Kørslen mellem to opgaver beregnes som den faktiske rutetid mellem de to adresser og vises på tidslinjen. Den tæller ikke med i medarbejderens kapacitet, da kørsel afregnes med kilometerpenge og ikke som arbejdstid.",
         "Sygdom og ferie fjerner automatisk medarbejderen fra opgaverne i perioden. Er der ingen tilbage, ryger opgaven i Ikke tildelt."] },
+    { h: "Ønsker om ny tid fra medarbejderne", p: [
+        "Aftaler en medarbejder en ny tid med kunden, flytter hun ikke selv opgaven. Hun sender et ønske, og du planlægger ændringen.",
+        "Ønskerne står øverst i Ugeplan i en gul boks, og du får samtidig en mail. Der står hvem der spørger, hvilken opgave og kunde, fra hvad til hvad, og hvorfor.",
+        "«Godkend og flyt» rykker opgaven til det aftalte tidspunkt og beholder medarbejderen — det er hende der har lavet aftalen med kunden.",
+        "Passer den nye tid ikke ind i hendes dag, dukker det op som en tidskonflikt på opgaven, og så kan du flytte videre derfra.",
+        "«Afvis» kræver en begrundelse, som sendes til medarbejderen på mail, så hun ved at hun skal kontakte kunden igen.",
+        "Alt gemmes: hvem, hvornår, hvad opgaven stod til før, hvad der blev ønsket, og hvad du svarede."] },
     { h: "Når en kunde opsiger aftalen", p: [
         "Gå ind på aftalen under Aftaler, eller åbn en hvilken som helst opgave på den, og vælg «Markér som udgået».",
         "Vælg årsag — opsagt af kunden, opsagt af Jammerbugt Rengøring, eller fejl — og angiv sidste dag aftalen gælder.",
