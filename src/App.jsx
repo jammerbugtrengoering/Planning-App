@@ -7469,7 +7469,7 @@ const styles = {
   modal: { background: "#fff", borderRadius: 14, width: 460, maxWidth: "100%", maxHeight: "90vh", overflowY: "auto", color: "#111111" },
   modalHeader: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 18px", borderBottom: "1px solid #FFF6FA" },
   modalTitle: { fontWeight: 700, fontSize: 15, fontFamily: "'Space Grotesk', sans-serif" },
-  modalBody: { padding: "16px 18px" }, formCol: { maxWidth: 720, margin: "0 auto", textAlign: "left" }, formSection: { border: "1px solid #E2E8F0", borderRadius: 10, overflow: "hidden", marginBottom: 14 }, formSectionHead: { padding: "9px 13px" }, formSectionTitle: { fontSize: 13.5, fontWeight: 700, display: "flex", alignItems: "center", gap: 7 }, formSectionHint: { fontSize: 11.5, marginTop: 2, opacity: 0.9 }, formSectionBody: { padding: 13, background: "#fff" },
+  modalBody: { padding: "16px 18px" }, formCol: { maxWidth: 720, margin: "0 auto", textAlign: "left" }, formSection: { border: "1px solid #E2E8F0", borderRadius: 10, overflow: "hidden", marginBottom: 14 }, formSectionHead: { padding: "9px 13px" }, formSectionTitle: { fontSize: 13.5, fontWeight: 700, display: "flex", alignItems: "center", gap: 7 }, formSectionHint: { fontSize: 11.5, marginTop: 2, opacity: 0.9 }, formSectionBody: { padding: 13, background: "#fff", textAlign: "left" },
   modalActions: { display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 14 },
   label: { display: "block", textAlign: "left", fontSize: 12, fontWeight: 600, color: "#475569", marginTop: 12, marginBottom: 5 },
   hint: { fontSize: 11.5, color: "#64748B", marginTop: 4 },
