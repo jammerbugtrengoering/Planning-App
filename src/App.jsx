@@ -2002,7 +2002,7 @@ function PlanningApp({ session, onSignOut }) {
         planInterval: payload.planInterval || "uge",
         startDate: payload.startDate || null, dineroSynced: payload.dineroSynced || false,
         preferredEmployeeId: payload.assigned_employee_id || "",
-        dineroContactGuid: payload.dineroContactGuid || "",
+        dineroContactGuid: payload.dineroContactGuid || "", status: payload.saveAsDraft ? "kladde" : "aktiv",
       };
       const { error: tplErr } = await supabase.from("service_templates").insert({
         id: tplId, title: tpl.title, duration: tpl.duration, days: tpl.days, day_times: tpl.dayTimes || {},
@@ -2018,7 +2018,7 @@ function PlanningApp({ session, onSignOut }) {
         start_date: payload.startDate || null,
         expiry_date: payload.expiryDate || null,
         preferred_employee_id: tpl.preferredEmployeeId || null,
-        dinero_contact_guid: tpl.dineroContactGuid || null,
+        dinero_contact_guid: tpl.dineroContactGuid || null, status: payload.saveAsDraft ? "kladde" : "aktiv",
       });
       if (dbFail(tplErr, "oprette den faste aftale")) return;
       const { data: skillsDb } = await supabase.from("skills").select("id,name");
@@ -2032,7 +2032,7 @@ function PlanningApp({ session, onSignOut }) {
       }
 
       setTemplates((prevT) => {
-        const nextT = [...prevT, tpl];
+        const nextT = [...prevT, tpl]; /* En kladde materialiseres ikke. Opgaverne dannes foerst naar aftalen godkendes under Aftaler. */ if (payload.saveAsDraft) return nextT;
         setInstances((cur) => {
           const weeks = weeksUntilExpiry(payload.expiryDate, payload.startDate);
           let next = [...cur];
@@ -5287,7 +5287,7 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
   function updateSkillRow(i, field, value) {
     setRequiredSkills((prev) => prev.map((r, idx) => (idx === i ? { ...r, [field]: field === "minLevel" ? Number(value) : value } : r)));
   }
-  function removeSkillRow(i) { setRequiredSkills((prev) => prev.filter((_, idx) => idx !== i)); }
+  function removeSkillRow(i) { setRequiredSkills((prev) => prev.filter((_, idx) => idx !== i)); } /* Begge knapper sender den samme nyttelast. Kladden adskiller sig kun ved saveAsDraft, saa de to veje aldrig kan naa at gemme forskellige felter. */ const buildPayload = (saveAsDraft) => ({ type, contractType, pricingType, fixedPrice: pricingType === "fixed" ? (Number(fixedPrice) || 0) : null, planInterval, title: title.trim(), requiredSkills, duration, days, dayTimes, dayDurations, day, adhocDate, deadline, preferredTime, startDate, expiryDate, checklistTemplateIds, extraItems, videoUrl: videoUrl.trim(), customerName: customerName.trim(), address: address.trim(), poNumber: poNumber.trim(), accessInstructions: accessInstructions.trim(), dineroSynced: customerDineroSynced, dineroContactGuid, assigned_employee_id: assignedEmployeeId, saveAsDraft });
 
   return (
     <Modal onClose={onClose} title={copyFrom ? `Kopiér: ${copyFrom.title}` : "Ny opgave"} persistent fullscreen><div style={styles.formCol}><div style={styles.formSection}><div style={{ ...styles.formSectionHead, background: "#FCE4EF" }}><div style={{ ...styles.formSectionTitle, color: "#9C1B5D" }}>Aftale og kunde</div><div style={{ ...styles.formSectionHint, color: "#B4436F" }}>Hvem der faktureres, hvad aftalen hedder, og hvor der arbejdes</div></div><div style={styles.formSectionBody}>
@@ -5546,10 +5546,7 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
         <button
           style={styles.primaryBtn}
           disabled={!title.trim() || (type === "fixed" && days.length === 0) || requiredSkills.length === 0 || (type === "fixed" && !!startDate && startDate < todayIso())}
-          onClick={() => onSave({ type, contractType, pricingType, fixedPrice: pricingType === "fixed" ? (Number(fixedPrice) || 0) : null, planInterval, title: title.trim(), requiredSkills, duration, days, dayTimes, dayDurations, day, adhocDate, deadline, preferredTime, startDate, expiryDate, checklistTemplateIds, extraItems, videoUrl: videoUrl.trim(), customerName: customerName.trim(), address: address.trim(), poNumber: poNumber.trim(), accessInstructions: accessInstructions.trim(), dineroSynced: customerDineroSynced, dineroContactGuid, assigned_employee_id: assignedEmployeeId })}
-        >
-          Gem og planlæg
-        </button>
+          onClick={() => onSave(buildPayload(false))}>Gem og planlæg</button>{type === "fixed" && (<button style={{ ...styles.secondaryBtn, color: "#9C1B5D", borderColor: "#F4C0D1" }} disabled={!title.trim() || (!!startDate && startDate < todayIso())} title="Gemmer aftalen uden at oprette opgaver. Du kan rette alle felter bagefter og godkende den under Aftaler." onClick={() => onSave(buildPayload(true))}>Gem som kladde</button>)}
       </div>
     </Modal>
   );
