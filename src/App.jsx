@@ -1293,6 +1293,7 @@ function PlanningApp({ session, onSignOut }) {
         { data: tplData },
         { data: tplSkillsData },
         { data: instData },
+      { data: onskerData },
         { data: travelData },
         { data: overridesData },
       ] = await Promise.all([
@@ -1309,6 +1310,7 @@ function PlanningApp({ session, onSignOut }) {
       // Dermed forsvinder de fra ugeplan, fakturering, rapportering og alt andet
       // paa én gang, uden at hvert modul skal huske at filtrere.
       fetchAllRows("instances", "*", (q) => q.is("deleted_at", null)).then((data) => ({ data })),
+      supabase.from("reschedule_requests").select("*").eq("status", "afventer").then(({ data }) => ({ data })),
         supabase.from("travel_settings").select("*").eq("id","default").single(),
         supabase.from("travel_overrides").select("*"),
       ]);
@@ -1454,6 +1456,7 @@ function PlanningApp({ session, onSignOut }) {
         }
         // Den viste uge kan ligge uden for horisonten (hvis planlaeggeren har bladret).
         allInst = ensureWeekInstances(currentWeek, currentYear, allInst, mapped, empMapped, areasData || [], empAreasData || [], travelSettings);
+        setNyTidOnsker(onskerData || []);
         setInstances(allInst);
         syncHealedAssignments(existingInst, allInst);
         // Nye opgaver i horisonten skal gemmes med det samme. Ellers findes de kun
@@ -1501,6 +1504,11 @@ function PlanningApp({ session, onSignOut }) {
   // ved naeste indlaesning. Par vi ikke faar svar paa, proeves ikke igen i denne
   // session, saa en adresse der ikke kan geokodes ikke udloeser kald i en uendelighed.
   const [cancelTarget, setCancelTarget] = useState(null);
+  // Oensker om ny tid fra medarbejderne. De aendrer ikke selv planen — de beder om
+  // en aendring, og backoffice afgoer og planlaegger den.
+  const [nyTidOnsker, setNyTidOnsker] = useState([]);
+  const [afvisId, setAfvisId] = useState(null);
+  const [afvisNote, setAfvisNote] = useState("");
   const travelTried = useRef(new Set());
   useEffect(() => {
     if (loading) return;
@@ -2354,6 +2362,50 @@ function PlanningApp({ session, onSignOut }) {
     notify("Aftalen er markeret som udgået — " + slettet + " kommende opgave" + (slettet === 1 ? "" : "r") + " er fjernet");
     return true;
   }
+  // Godkend: opgaven flyttes til det tidspunkt medarbejderen har aftalt med kunden.
+  // Medarbejderen bliver paa opgaven — det er hende der har lavet aftalen. Passer
+  // det nye tidspunkt ikke i hendes dag, dukker det op som en tidskonflikt i ugeplanen,
+  // og saa kan planlaeggeren flytte videre derfra.
+  async function godkendNyTid(onske) {
+    const t = instances.find((x) => x.id === onske.instance_id);
+    if (!t) { notify("Opgaven findes ikke længere"); return; }
+    const dato = new Date(onske.requested_date);
+    const { week, year } = isoWeekInfo(dato);
+    const opdateret = {
+      ...t, week, year, day: weekdayKeyFor(dato),
+      scheduledTime: onske.requested_time ? String(onske.requested_time).slice(0, 5) : t.scheduledTime,
+      warning: null,
+    };
+    setInstances((prev) => prev.map((x) => (x.id === t.id ? opdateret : x)));
+    syncInstance(opdateret);
+    const { error } = await supabase.from("reschedule_requests")
+      .update({ status: "godkendt", decided_at: new Date().toISOString() }).eq("id", onske.id);
+    if (error) { notify("Opgaven er flyttet, men ønsket kunne ikke lukkes: " + error.message); return; }
+    setNyTidOnsker((prev) => prev.filter((r) => r.id !== onske.id));
+    notify(`Flyttet til ${onske.requested_date}${onske.requested_time ? " kl. " + String(onske.requested_time).slice(0,5) : ""}`);
+  }
+  // Afvis: medarbejderen skal vide det, for hun har givet kunden et loefte.
+  async function afvisNyTid(onske, note) {
+    const { error } = await supabase.from("reschedule_requests")
+      .update({ status: "afvist", planner_note: note || null, decided_at: new Date().toISOString() })
+      .eq("id", onske.id);
+    if (error) { notify("Kunne ikke afvise ønsket: " + error.message); return; }
+    setNyTidOnsker((prev) => prev.filter((r) => r.id !== onske.id));
+    const emp = employees.find((e) => e.id === onske.employee_id);
+    const opgave = instances.find((x) => x.id === onske.instance_id);
+    const { data: rk } = await supabase.from("employees").select("app_email").eq("id", onske.employee_id).maybeSingle();
+    if (rk?.app_email) {
+      await supabase.functions.invoke("send-email", { body: {
+        email: rk.app_email, name: emp?.name || "",
+        subject: "Din ønskede tid kunne ikke lade sig gøre",
+        html: `<p>Kontoret har set på dit ønske om at flytte <b>${opgave?.title || "opgaven"}</b>` +
+              `${opgave?.customerName ? " hos " + opgave.customerName : ""}, men det kunne ikke lade sig gøre.</p>` +
+              `<p><b>Besked fra kontoret:</b><br/>${note || "Ingen begrundelse angivet."}</p>` +
+              `<p>Opgaven står stadig som planlagt. Kontakt kunden og aftal en ny tid.</p>`,
+      }});
+    }
+    notify("Ønsket er afvist" + (rk?.app_email ? " og medarbejderen har fået besked" : ""));
+  }
   function unplace(taskId) {
     updateInstance(taskId, (t) => ({
       ...t,
@@ -2906,6 +2958,53 @@ function PlanningApp({ session, onSignOut }) {
           onClose={() => setCancelTarget(null)}
           onConfirm={cancelTemplate}
         />
+      )}
+
+      {/* Oensker om ny tid fra medarbejderne. Ligger oeverst i ugeplanen, saa de
+          ikke kan overses — en medarbejder har givet kunden et loefte og venter paa svar. */}
+      {view === "uge" && nyTidOnsker.length > 0 && (
+        <div style={{ margin: "0 0 12px", border: "1px solid #FCD34D", background: "#FFFBEB", borderRadius: 12, overflow: "hidden" }}>
+          <div style={{ padding: "10px 14px", fontWeight: 800, color: "#92400E", fontSize: 14, borderBottom: "1px solid #FDE68A" }}>
+            {nyTidOnsker.length} ønske{nyTidOnsker.length === 1 ? "" : "r"} om ny tid
+          </div>
+          {nyTidOnsker.map((o) => {
+            const opgave = instances.find((x) => x.id === o.instance_id);
+            const medarb = employees.find((e) => e.id === o.employee_id);
+            const nyTid = o.requested_date + (o.requested_time ? " kl. " + String(o.requested_time).slice(0, 5) : "");
+            const gammelDag = (ALL_DAYS.find((x) => x.key === o.old_day) || {}).label || o.old_day || "";
+            const gammel = o.old_week ? `uge ${o.old_week}, ${gammelDag}` : "";
+            return (
+              <div key={o.id} style={{ padding: "12px 14px", borderBottom: "1px solid #FEF3C7" }}>
+                <div style={{ fontSize: 13, color: "#78350F" }}>
+                  <b>{medarb ? medarb.name : "Medarbejder"}</b> ønsker <b>{opgave ? opgave.title : "opgaven"}</b>
+                  {opgave && opgave.customerName ? ` hos ${opgave.customerName}` : ""}
+                  {gammel ? ` flyttet fra ${gammel}` : " flyttet"} til <b>{nyTid}</b>
+                </div>
+                <div style={{ fontSize: 13, color: "#92400E", margin: "6px 0 10px", fontStyle: "italic" }}>„{o.reason}"</div>
+                {afvisId === o.id ? (
+                  <div>
+                    <textarea rows={2} value={afvisNote} onChange={(e) => setAfvisNote(e.target.value)}
+                      placeholder="Hvorfor kan det ikke lade sig gøre? Medarbejderen får beskeden på mail."
+                      style={{ width: "100%", padding: "8px 10px", fontSize: 13, borderRadius: 8, border: "1px solid #FCD34D", fontFamily: "inherit" }} />
+                    <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                      <button style={styles.secondaryBtn} onClick={() => { setAfvisId(null); setAfvisNote(""); }}>Fortryd</button>
+                      <button disabled={!afvisNote.trim()}
+                        style={{ ...styles.secondaryBtn, color: "#B91C1C", borderColor: "#FCA5A5", opacity: afvisNote.trim() ? 1 : 0.5 }}
+                        onClick={async () => { await afvisNyTid(o, afvisNote.trim()); setAfvisId(null); setAfvisNote(""); }}>
+                        Send afvisning
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button style={{ ...styles.primaryBtn, background: "#16A34A" }} onClick={() => godkendNyTid(o)}>Godkend og flyt</button>
+                    <button style={{ ...styles.secondaryBtn, color: "#B91C1C", borderColor: "#FCA5A5" }} onClick={() => { setAfvisId(o.id); setAfvisNote(""); }}>Afvis</button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
       )}
 
       {view === "uge" && (
