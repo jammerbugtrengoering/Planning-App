@@ -335,7 +335,7 @@ function itemText(x) { return typeof x === "string" ? x : x.text; }
 // ---------- Seed data ----------
 // ---------- Scheduling engine (operates on ONE week's instances) ----------
 const WEEKEND_DAYS = ["Sat", "Sun"];
-function isWeekendDay(day) { return WEEKEND_DAYS.includes(day); }
+function isWeekendDay(day) { return WEEKEND_DAYS.includes(day); } /* Dags dato i lokal tid som YYYY-MM-DD. toISOString alene ville give UTC og dermed i gaar sent paa aftenen dansk tid - saa ville en aftale oprettet kl. 23 faa lov at starte "i gaar". */ function todayIso() { const d = new Date(); return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10); }
 // Maa medarbejderen overhovedet arbejde denne dag? Weekend kraever en aftale.
 function canWorkOn(emp, day) { return !isWeekendDay(day) || !!(emp && emp.weekendOk); }
 function usedMinutes(list, empId, day) {
@@ -504,7 +504,7 @@ function ensureWeekInstances(week, year, allInstances, templates, employees, are
   const newlyCreatedIds = new Set();
   
   templates.forEach((tpl) => {
-    if (!tpl.days || tpl.days.length === 0) return;
+    if (!tpl.days || tpl.days.length === 0) return; /* En kladde er under udarbejdelse og maa aldrig danne opgaver. Uden denne linje ville en halvfaerdig aftale materialisere op til 104 uger i det sekund nogen aabnede appen - og det er praecis det, kladden skal forhindre. */ if (tpl.status === "kladde") return;
     
     // Skip if past expiry date
     if (tpl.expiryDate) {
@@ -5478,7 +5478,7 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
       {type === "fixed" && (
         <>
           <label style={styles.label}>Startdato (første gang opgaven udføres)</label>
-          <input type="date" style={styles.input} value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+          <input type="date" min={todayIso()} style={styles.input} value={startDate} onChange={(e) => setStartDate(e.target.value)} />{startDate && startDate < todayIso() && (<div style={{ ...styles.hint, color: "#B91C1C" }}>Startdatoen kan ikke ligge i fortiden — vælg dags dato eller senere.</div>)}
           <label style={styles.label}>Udløbsdato (aftalen gælder til og med)</label>
           <input type="date" style={styles.input} value={expiryDate} onChange={(e) => setExpiryDate(e.target.value)} />
           <label style={styles.label}>Plan parametre</label>
@@ -5545,7 +5545,7 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
         <button style={styles.secondaryBtn} onClick={onClose}>Annuller</button>
         <button
           style={styles.primaryBtn}
-          disabled={!title.trim() || (type === "fixed" && days.length === 0) || requiredSkills.length === 0}
+          disabled={!title.trim() || (type === "fixed" && days.length === 0) || requiredSkills.length === 0 || (type === "fixed" && !!startDate && startDate < todayIso())}
           onClick={() => onSave({ type, contractType, pricingType, fixedPrice: pricingType === "fixed" ? (Number(fixedPrice) || 0) : null, planInterval, title: title.trim(), requiredSkills, duration, days, dayTimes, dayDurations, day, adhocDate, deadline, preferredTime, startDate, expiryDate, checklistTemplateIds, extraItems, videoUrl: videoUrl.trim(), customerName: customerName.trim(), address: address.trim(), poNumber: poNumber.trim(), accessInstructions: accessInstructions.trim(), dineroSynced: customerDineroSynced, dineroContactGuid, assigned_employee_id: assignedEmployeeId })}
         >
           Gem og planlæg
