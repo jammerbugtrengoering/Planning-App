@@ -5541,7 +5541,7 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
 
       </div></div></div>
 
-      <div style={{ ...styles.modalActions, position: "sticky", bottom: 0, zIndex: 5, background: "#F8FAFC", borderTop: "1px solid #E2E8F0", padding: "12px 18px", margin: "0 -18px -16px" }}>
+      <div style={{ ...styles.modalActions, position: "sticky", bottom: 0, zIndex: 5, background: "#F8FAFC", borderTop: "1px solid #E2E8F0", padding: "12px 84px 12px 18px", margin: "0 -18px -16px" }}>
         <button style={styles.secondaryBtn} onClick={onClose}>Annuller</button>
         <button
           style={styles.primaryBtn}
