@@ -6980,7 +6980,7 @@ return (
       </div>
       <div style={styles.cardMeta}>{dayLabel} · {fmtMin(t.duration)}{t.deadline ? ` · senest ${ALL_DAYS.find((d) => d.key === t.deadline)?.label}` : ""}{t.expiryDate ? ` · udløber ${t.expiryDate}` : ""}</div>
 
-      {/* Kompetencer — redigerbare */}
+      <div style={styles.formSection}><div style={{ ...styles.formSectionHead, background: "#F0FDFA" }}><div style={{ ...styles.formSectionTitle, color: "#0F766E" }}>Opgaven</div><div style={{ ...styles.formSectionHint, color: "#149285" }}>Hvad der skal laves, og hvornår den senest skal være udført</div></div><div style={styles.formSectionBody}>{/* Kompetencer — redigerbare */}
       <div style={{ marginBottom: 12 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
           <label style={styles.label}>Kompetencer</label>
@@ -7064,7 +7064,7 @@ return (
         </div>
       )}
 
-      {/* Kunde — redigerbar indtil udført */}
+      </div></div><div style={styles.formSection}><div style={{ ...styles.formSectionHead, background: "#FCE4EF" }}><div style={{ ...styles.formSectionTitle, color: "#9C1B5D" }}>Kunde</div><div style={{ ...styles.formSectionHint, color: "#B4436F" }}>Hvem der faktureres, og hvor der arbejdes</div></div><div style={styles.formSectionBody}>{/* Kunde — redigerbar indtil udført */}
       <div style={{ marginBottom: 12 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
           <label style={styles.label}>Kundeoplysninger</label>
@@ -7192,7 +7192,7 @@ return (
           )
         )}
       </div>
-      {candidatesFor(t, employees, areas, employeeAreas).candidates.length === 0 && <span style={styles.errorChip}><AlertTriangle size={12} /> Ingen har alle krævede kompetencer</span>}
+      </div></div><div style={styles.formSection}><div style={{ ...styles.formSectionHead, background: "#EEF2FF" }}><div style={{ ...styles.formSectionTitle, color: "#4F46E5" }}>Udførelse</div><div style={{ ...styles.formSectionHint, color: "#6B63EA" }}>Status, bemanding, tasks og registreret tid</div></div><div style={styles.formSectionBody}>{candidatesFor(t, employees, areas, employeeAreas).candidates.length === 0 && <span style={styles.errorChip}><AlertTriangle size={12} /> Ingen har alle krævede kompetencer</span>}
       {candidatesFor(t, employees, areas, employeeAreas).candidates.length > 0 && t.warning === "overloaded" && <span style={styles.warnChip}><AlertTriangle size={12} /> Ingen ledig kapacitet den dag</span>}
 
       <label style={styles.label}>Status</label>
@@ -7326,7 +7326,7 @@ return (
       )}
 
       <label style={styles.label}>Tidsregistrering</label>
-      <div style={styles.cardMeta}>{fmtMin(totalLogged)} registreret i alt af {fmtMin(t.duration)} planlagt</div>
+      <div style={styles.cardMeta}>{fmtMin(totalLogged)} registreret i alt af {fmtMin(t.duration)} planlagt</div></div></div>
 
       <div style={styles.modalActions}>
         {onCopy && <button style={{ ...styles.secondaryBtn, color: "#9C1B5D", borderColor: "#FCE4EF" }} onClick={() => onCopy(t)}><Copy size={14} /> Kopiér</button>}
