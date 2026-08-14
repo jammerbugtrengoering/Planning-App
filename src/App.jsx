@@ -1118,7 +1118,7 @@ const MODULE_HELP = {
   contracts: { title: "Aftaler", intro: "De faste kundeaftaler, sorteret så den der udløber først står øverst.", blocks: [
     { h: "Sådan læses den", p: ["Kontraktsum er forventet omsætning over hele perioden ud fra planlagte timer.",
         "Realiseret er hvad der faktisk er registreret.", "Dage tilbage viser hvor længe der er til aftalen udløber."] },
-    { h: "Gentagelse", p: ["En aftale kan gentages hver uge, hver 14. dag, hver måned eller hvert kvartal."] },
+    { h: "Gentagelse", p: ["En aftale kan gentages hver uge, hver 14. dag, hver måned eller hvert kvartal."] }, { h: "Under udarbejdelse", p: ["Er du ikke færdig med en ny aftale, så tryk «Gem som kladde» i stedet for «Gem og planlæg».", "En kladde opretter ingen opgaver. Den ligger og venter, og du kan rette alle felter i den så mange gange du vil.", "Find den igen med filteret «Under udarbejdelse» øverst her på siden. Tallet i knappen viser hvor mange der ligger.", "Tryk «Åbn og godkend» for at rette videre. Inde i aftalen vælger du så «Gem kladde» hvis du stadig ikke er færdig, eller «Godkend og planlæg» når den er klar.", "Først ved godkendelsen oprettes opgaverne — fra startdatoen og frem til udløbsdatoen. Det kan være mange på én gang, så tjek datoerne inden du godkender.", "Startdatoen kan ikke ligge i fortiden. Har en kladde ligget så længe at datoen er løbet fra dig, skal den rettes før du kan godkende."] }, { h: "Filtre", p: ["Den øverste række filtrerer på status, den nederste på kontrakttype. De virker sammen, så du kan fx se alle udgåede Nexus-aftaler."] },
   ], warn: "Måned betyder kalendermåned. En månedlig aftale lander i den uge der indeholder samme dato som startdatoen — altså 12 besøg om året. Er startdatoen den 31., rammes sidste dag i korte måneder, så ingen måned springes over." },
 
   reports: { title: "Rapportering", intro: "Budget mod faktisk omsætning, opdelt pr. kontrakttype.", blocks: [
@@ -3111,7 +3111,7 @@ function PlanningApp({ session, onSignOut }) {
       )}
 
       {view === "contracts" && (
-        <ContractsView templates={templates} instances={instances} pricing={pricing} employees={employees}
+        <ContractsView templates={templates} instances={instances} pricing={pricing} employees={employees} onEditDraft={(tpl) => { setCopyPayload({ ...tpl, type: "fixed", templateDays: tpl.days }); setEditTplId(tpl.id); setShowAddTask(true); }}
             isAdminUser={isAdminUser} onCancelTemplate={(tplId) => setCancelTarget(tplId)} />
       )}
 
@@ -5619,7 +5619,7 @@ function CancelTemplateModal({ template, onClose, onConfirm }) {
     </div>
   );
 }
-function ContractsView({ templates, instances, pricing, employees, isAdminUser, onCancelTemplate }) {
+function ContractsView({ templates: alleTemplates, instances, pricing, employees, isAdminUser, onCancelTemplate, onEditDraft }) { const [statusFilter, setStatusFilter] = useState("alle"); const [typeFilter, setTypeFilter] = useState("all"); /* Filtreres foer listen deles op i med og uden udloebsdato, saa begge dele foelger samme valg. Uden startdato regnes en aftale ikke med i kontraktsummen - derfor skal kladder ogsaa kunne findes i den liste, ikke kun i den med udloeb. */ const templates = alleTemplates.filter((t) => (statusFilter === "alle" ? true : (t.status || "aktiv") === statusFilter)).filter((t) => (typeFilter === "all" ? true : effectiveContractType(t) === typeFilter));
   // Find den reelle, aktuelle kontrakttype for en skabelon: den seneste værdi sat på
   // en tilknyttet opgave slår den statiske skabelonværdi, så redigering i ugeplanen
   // altid afspejles korrekt her.
@@ -5719,7 +5719,7 @@ function ContractsView({ templates, instances, pricing, employees, isAdminUser, 
   return (
     <div style={styles.page}>
       <div style={{ fontWeight: 700, fontSize: 18, color: "#111111", marginBottom: 4 }}>Aftaler</div>
-      <div style={{ fontSize: 13, color: "#64748B", marginBottom: 20 }}>Faste opgaver sorteret efter udløbsdato — nærmest udløbende øverst</div>
+      <div style={{ fontSize: 13, color: "#64748B", marginBottom: 20 }}>Faste opgaver sorteret efter udløbsdato — nærmest udløbende øverst</div><div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>{[["alle","Alle"],["kladde","Under udarbejdelse"],["aktiv","Aktive"],["udgaaet","Udgåede"]].map(([k,l]) => (<button key={k} type="button" onClick={() => setStatusFilter(k)} style={statusFilter === k ? { ...styles.typePickBtn, flex: "none", borderColor: "#D6247A", color: "#D6247A", background: "#FCE4EF" } : { ...styles.typePickBtn, flex: "none" }}>{l}{k === "kladde" && alleTemplates.filter((t) => t.status === "kladde").length > 0 ? ` (${alleTemplates.filter((t) => t.status === "kladde").length})` : ""}</button>))}</div><div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 20 }}><button type="button" onClick={() => setTypeFilter("all")} style={typeFilter === "all" ? { ...styles.typePickBtn, flex: "none", borderColor: "#4F46E5", color: "#4F46E5", background: "#EEF2FF" } : { ...styles.typePickBtn, flex: "none" }}>Alle kontrakttyper</button>{CONTRACT_TYPES.map((ct) => (<button key={ct.key} type="button" onClick={() => setTypeFilter(ct.key)} style={typeFilter === ct.key ? { ...styles.typePickBtn, flex: "none", borderColor: ct.color, color: ct.color, background: ct.bg } : { ...styles.typePickBtn, flex: "none" }}>{ct.icon} {ct.label}</button>))}</div>
 
       {(contracts.length > 0 || noExpiry.length > 0) && (
         <div style={{ display: "flex", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
@@ -5751,7 +5751,7 @@ function ContractsView({ templates, instances, pricing, employees, isAdminUser, 
           return (
             <div key={t.id} style={{ background: "#fff", borderRadius: 12, padding: "14px 16px", boxShadow: "0 1px 3px rgba(0,0,0,0.06)", borderLeft: `4px solid ${color}`, display: "flex", alignItems: "center", gap: 16 }}>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontWeight: 700, fontSize: 15, color: "#111111", marginBottom: 3 }}>{t.title}</div>
+                <div style={{ fontWeight: 700, fontSize: 15, color: "#111111", marginBottom: 3 }}>{t.title}{t.status === "kladde" && <span style={{ marginLeft: 8, padding: "2px 9px", borderRadius: 999, background: "#FEF3C7", color: "#B45309", fontSize: 11, fontWeight: 700 }}>Under udarbejdelse</span>}</div>{t.status === "kladde" && onEditDraft && (<div style={{ marginBottom: 6 }}><button type="button" onClick={() => onEditDraft(t)} style={{ ...styles.primaryBtn, fontSize: 12, padding: "5px 10px" }}>Åbn og godkend</button></div>)}
                 <div style={{ fontSize: 12, color: "#64748B", display: "flex", gap: 12, flexWrap: "wrap" }}>
                   {t.customerName && <span>👤 {t.customerName}</span>}
                     {t.status === "udgaaet" ? (
@@ -5799,7 +5799,7 @@ function ContractsView({ templates, instances, pricing, employees, isAdminUser, 
             {noExpiry.map((t) => (
               <div key={t.id} style={{ background: "#fff", borderRadius: 12, padding: "14px 16px", boxShadow: "0 1px 3px rgba(0,0,0,0.06)", borderLeft: "4px solid #CBD5E1", display: "flex", alignItems: "center", gap: 16 }}>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 700, fontSize: 15, color: "#111111", marginBottom: 3 }}>{t.title}</div>
+                  <div style={{ fontWeight: 700, fontSize: 15, color: "#111111", marginBottom: 3 }}>{t.title}{t.status === "kladde" && <span style={{ marginLeft: 8, padding: "2px 9px", borderRadius: 999, background: "#FEF3C7", color: "#B45309", fontSize: 11, fontWeight: 700 }}>Under udarbejdelse</span>}</div>{t.status === "kladde" && onEditDraft && (<div style={{ marginBottom: 6 }}><button type="button" onClick={() => onEditDraft(t)} style={{ ...styles.primaryBtn, fontSize: 12, padding: "5px 10px" }}>Åbn og godkend</button></div>)}
                   <div style={{ fontSize: 12, color: "#64748B", display: "flex", gap: 12, flexWrap: "wrap" }}>
                     {t.customerName && <span>👤 {t.customerName}</span>}
                     {t.status === "udgaaet" ? (
