@@ -5290,7 +5290,7 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
   function removeSkillRow(i) { setRequiredSkills((prev) => prev.filter((_, idx) => idx !== i)); }
 
   return (
-    <Modal onClose={onClose} title={copyFrom ? `Kopiér: ${copyFrom.title}` : "Ny opgave"} persistent fullscreen>
+    <Modal onClose={onClose} title={copyFrom ? `Kopiér: ${copyFrom.title}` : "Ny opgave"} persistent fullscreen><div style={styles.formCol}><div style={styles.formSection}><div style={{ ...styles.formSectionHead, background: "#FCE4EF" }}><div style={{ ...styles.formSectionTitle, color: "#9C1B5D" }}>Aftale og kunde</div><div style={{ ...styles.formSectionHint, color: "#B4436F" }}>Hvem der faktureres, hvad aftalen hedder, og hvor der arbejdes</div></div><div style={styles.formSectionBody}>
       {/* Kontrakttype */}
       <label style={styles.label}>Kontrakttype</label>
       <div style={styles.typePicker}>
@@ -5397,7 +5397,7 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
         </div>
       )}
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 12 }}>
+      <div style={{ marginBottom: 12 }}>
         <div>
           <label style={styles.label}>Adresse for udførsel</label>
           <input style={styles.input} value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Vejnavn 1, 9000 Aalborg" />
@@ -5411,7 +5411,7 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
       <label style={styles.label}>Adgang (nøgleboks, koder, kontaktperson m.v.)</label>
       <textarea style={styles.textarea} rows={2} value={accessInstructions} onChange={(e) => setAccessInstructions(e.target.value)} placeholder="F.eks. Nøgleboks ved hovedindgang, kode 4471" />
 
-      <label style={styles.label}>Ansvarlig Medarbejder (valgfrit)</label>
+      </div></div><div style={styles.formSection}><div style={{ ...styles.formSectionHead, background: "#F0FDFA" }}><div style={{ ...styles.formSectionTitle, color: "#0F766E" }}>Bemanding og krav</div><div style={{ ...styles.formSectionHint, color: "#149285" }}>Hvem der tager den, og hvad opgaven kræver</div></div><div style={styles.formSectionBody}><label style={styles.label}>Ansvarlig Medarbejder (valgfrit)</label>
       <select style={styles.input} value={assignedEmployeeId} onChange={(e) => setAssignedEmployeeId(e.target.value)}>
         <option value="">- Ingen (auto-matching) -</option>
         {employees?.map(emp => <option key={emp.id} value={emp.id}>{emp.name}</option>)}
@@ -5444,7 +5444,7 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
       <button type="button" style={styles.addSkillBtn} onClick={addSkillRow}><Plus size={13} /> Tilføj kompetencekrav</button>
 
       <label style={styles.label}>Varighed (minutter)</label>
-      <input type="number" min={5} step={5} style={styles.input} value={duration} onChange={(e) => setDuration(Number(e.target.value))} />
+      <input type="number" min={5} step={5} style={styles.input} value={duration} onChange={(e) => setDuration(Number(e.target.value))} /></div></div><div style={styles.formSection}><div style={{ ...styles.formSectionHead, background: "#EEF2FF" }}><div style={{ ...styles.formSectionTitle, color: "#4F46E5" }}>Plan og indhold</div><div style={{ ...styles.formSectionHint, color: "#6B63EA" }}>Hvornår og hvor ofte, og hvad der skal udføres</div></div><div style={styles.formSectionBody}>
 
       {type === "fixed" && (
         <>
@@ -5539,7 +5539,7 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
       )}
 
       <label style={styles.label}>Link til instruktionsvideo (valgfrit)</label>
-      <input style={styles.input} value={videoUrl} onChange={(e) => setVideoUrl(e.target.value)} placeholder="https://…" />
+      <input style={styles.input} value={videoUrl} onChange={(e) => setVideoUrl(e.target.value)} placeholder="https://…" /></div></div></div>
 
       <div style={styles.modalActions}>
         <button style={styles.secondaryBtn} onClick={onClose}>Annuller</button>
@@ -7469,9 +7469,9 @@ const styles = {
   modal: { background: "#fff", borderRadius: 14, width: 460, maxWidth: "100%", maxHeight: "90vh", overflowY: "auto", color: "#111111" },
   modalHeader: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 18px", borderBottom: "1px solid #FFF6FA" },
   modalTitle: { fontWeight: 700, fontSize: 15, fontFamily: "'Space Grotesk', sans-serif" },
-  modalBody: { padding: "16px 18px" },
+  modalBody: { padding: "16px 18px" }, formCol: { maxWidth: 720, margin: "0 auto" }, formSection: { border: "1px solid #E2E8F0", borderRadius: 10, overflow: "hidden", marginBottom: 14 }, formSectionHead: { padding: "9px 13px" }, formSectionTitle: { fontSize: 13.5, fontWeight: 700, display: "flex", alignItems: "center", gap: 7 }, formSectionHint: { fontSize: 11.5, marginTop: 2, opacity: 0.9 }, formSectionBody: { padding: 13, background: "#fff" },
   modalActions: { display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 14 },
-  label: { display: "block", fontSize: 12, fontWeight: 600, color: "#475569", marginTop: 12, marginBottom: 5 },
+  label: { display: "block", textAlign: "left", fontSize: 12, fontWeight: 600, color: "#475569", marginTop: 12, marginBottom: 5 },
   hint: { fontSize: 11.5, color: "#64748B", marginTop: 4 },
   input: { width: "100%", padding: "9px 10px", borderRadius: 8, border: "1px solid #E2E8F0", fontSize: 13.5, fontFamily: "inherit", background: "#fff", color: "#111111" },
   textarea: { width: "100%", padding: "9px 10px", borderRadius: 8, border: "1px solid #E2E8F0", fontSize: 13, fontFamily: "inherit", background: "#fff", color: "#111111", resize: "vertical" },
