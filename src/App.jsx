@@ -3618,12 +3618,7 @@ function WeekView({ employees, instances, unplaced, onAdd, onAuto, onScheduleWee
                               <TypeBadge type={t.type} mini />
                               <span style={styles.taskChipTitle}>{seg.start != null ? `${fmtClock(seg.start)} · ` : ""}{t.title}</span>
                               {t.scheduledTime && (seg.start == null || fmtClock(seg.start) !== t.scheduledTime) && <span title={`Ønsket kl. ${t.scheduledTime}`} style={{ fontSize: 11, marginLeft: 2, color: "#D97706" }}>🎯{t.scheduledTime}</span>}
-                              {(seg.lateBy || 0) > 0 && (
-                            <span title={`Konflikt: aftalt kl. ${t.scheduledTime}, men kan foerst begynde ${fmtMin(seg.lateBy)} senere. Flyt en af dagens opgaver.`}
-                              style={{ fontSize: 11, marginLeft: 3, fontWeight: 800, color: "#fff", background: "#DC2626", borderRadius: 4, padding: "1px 5px" }}>
-                              ⏱ {fmtMin(seg.lateBy)} for sent
-                            </span>
-                          )}
+                              
                           {t.offSchedule && <span title="Planlagt uden for aftale" style={{ fontSize: 12, marginLeft: 2 }}>⚠️</span>}
                               {t.onSchedule && !t.offSchedule && <span title="Planlagt på aftalt dag" style={{ fontSize: 12, marginLeft: 2 }}>✓</span>}
                               {t.outsideArea && <span title="Planlagt uden for medarbejderens område" style={{ fontSize: 12, marginLeft: 2 }}>📍⚠️</span>}
@@ -3635,7 +3630,7 @@ function WeekView({ employees, instances, unplaced, onAdd, onAuto, onScheduleWee
                             <div style={styles.chipSubRow}>
                               {t.customerName && <span style={styles.taskChipCustomer}>{t.customerName}</span>}
                               {prog.total > 0 && <span style={styles.taskChipDur}>{prog.done}/{prog.total}</span>}
-                              <span style={styles.taskChipDur}>{fmtMin(t.duration)}</span>
+                              <span style={styles.taskChipDur}>{fmtMin(t.duration)}</span>{/* Forsinkelsen står i anden række. I øverste række var den eneste plads at tage fra titlen, som derfor forsvandt helt — og så var opgaven umulig at få øje på i ugeplanen. */}{(seg.lateBy || 0) > 0 && <span title={"Konflikt: aftalt kl. " + (t.scheduledTime || "?") + ", men kan først begynde " + fmtMin(seg.lateBy) + " senere. Flyt en af dagens opgaver."} style={{ fontSize: 11, fontWeight: 800, color: "#fff", background: "#DC2626", borderRadius: 4, padding: "1px 5px" }}>{"⏱ " + fmtMin(seg.lateBy) + " for sent"}</span>}
                             </div>
                             {t.address && <div style={styles.taskChipAddress}>📍 {t.address}</div>}
                             {completion && (
