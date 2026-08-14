@@ -5302,17 +5302,7 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
         ))}
       </div>
 
-      <label style={styles.label}>Type</label>
-      <div style={styles.typePicker}>
-        {CREATABLE_TYPES.map((k) => {
-          const m = TYPE_META[k];
-          return (
-            <button key={k} type="button" onClick={() => setType(k)} style={type === k ? { ...styles.typePickBtn, borderColor: m.color, color: m.color, background: m.bg } : styles.typePickBtn}>{m.label}</button>
-          );
-        })}
-      </div>
-      {type === "fixed" && <div style={styles.hint}>Faste opgaver gentages automatisk hver uge på de valgte dage — frem til udløbsdatoen.</div>}
-      {type === "adhoc" && <div style={styles.hint}>Oprettes med dags dato og lander i "Ikke tildelt", klar til at blive planlagt.</div>}
+      
 
       <label style={styles.label}>Prismodel</label>
       <div style={styles.typePicker}>
@@ -5411,7 +5401,7 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
       <label style={styles.label}>Adgang (nøgleboks, koder, kontaktperson m.v.)</label>
       <textarea style={styles.textarea} rows={2} value={accessInstructions} onChange={(e) => setAccessInstructions(e.target.value)} placeholder="F.eks. Nøgleboks ved hovedindgang, kode 4471" />
 
-      </div></div><div style={styles.formSection}><div style={{ ...styles.formSectionHead, background: "#F0FDFA" }}><div style={{ ...styles.formSectionTitle, color: "#0F766E" }}>Bemanding og krav</div><div style={{ ...styles.formSectionHint, color: "#149285" }}>Hvem der tager den, og hvad opgaven kræver</div></div><div style={styles.formSectionBody}><label style={styles.label}>Ansvarlig Medarbejder (valgfrit)</label>
+      </div></div><div style={styles.formSection}><div style={{ ...styles.formSectionHead, background: "#F0FDFA" }}><div style={{ ...styles.formSectionTitle, color: "#0F766E" }}>Opgaven</div><div style={{ ...styles.formSectionHint, color: "#149285" }}>Hvem der tager den, hvad der kræves, og hvad der skal udføres</div></div><div style={styles.formSectionBody}><label style={styles.label}>Ansvarlig Medarbejder (valgfrit)</label>
       <select style={styles.input} value={assignedEmployeeId} onChange={(e) => setAssignedEmployeeId(e.target.value)}>
         <option value="">- Ingen (auto-matching) -</option>
         {employees?.map(emp => <option key={emp.id} value={emp.id}>{emp.name}</option>)}
@@ -5444,7 +5434,46 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
       <button type="button" style={styles.addSkillBtn} onClick={addSkillRow}><Plus size={13} /> Tilføj kompetencekrav</button>
 
       <label style={styles.label}>Varighed (minutter)</label>
-      <input type="number" min={5} step={5} style={styles.input} value={duration} onChange={(e) => setDuration(Number(e.target.value))} /></div></div><div style={styles.formSection}><div style={{ ...styles.formSectionHead, background: "#EEF2FF" }}><div style={{ ...styles.formSectionTitle, color: "#4F46E5" }}>Plan og indhold</div><div style={{ ...styles.formSectionHint, color: "#6B63EA" }}>Hvornår og hvor ofte, og hvad der skal udføres</div></div><div style={styles.formSectionBody}>
+      <input type="number" min={5} step={5} style={styles.input} value={duration} onChange={(e) => setDuration(Number(e.target.value))} /><label style={styles.label}>Tjeklister (tasks der skal udføres)</label>
+      <div style={styles.skillPicker}>
+        {checklistTemplates.map((c) => (
+          <button key={c.id} type="button" onClick={() => toggleTemplate(c.id)} style={checklistTemplateIds.includes(c.id) ? styles.skillPickBtnActive : styles.skillPickBtn}>
+            <ListChecks size={11} style={{ marginRight: 4, verticalAlign: "-2px" }} />{c.name} ({c.items.length})
+          </button>
+        ))}
+      </div>
+
+      <div style={styles.extraItemRow}>
+        <input style={styles.inputSm} value={newItemText} onChange={(e) => setNewItemText(e.target.value)} placeholder="Tilføj enkelt task…" onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addExtraItem(); } }} />
+        <button type="button" style={styles.addSkillBtn} onClick={addExtraItem}><Plus size={13} /> Tilføj</button>
+      </div>
+
+      {previewItems.length > 0 && (
+        <div style={styles.previewBox}>
+          <div style={styles.instructionsTitle}><ListChecks size={13} /> Tasks på serviceordren ({previewItems.length})</div>
+          {previewItems.map((it, i) => (
+            <div key={i} style={styles.previewItemRow}>
+              <span style={styles.previewItemText}>{i + 1}. {itemText(it)}</span>
+              {i >= previewItems.length - extraItems.length && (
+                <button type="button" style={styles.iconBtnGhostInline} onClick={() => removeExtraItem(i - (previewItems.length - extraItems.length))}><X size={12} /></button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      <label style={styles.label}>Link til instruktionsvideo (valgfrit)</label>
+      <input style={styles.input} value={videoUrl} onChange={(e) => setVideoUrl(e.target.value)} placeholder="https://…" /></div></div><div style={styles.formSection}><div style={{ ...styles.formSectionHead, background: "#EEF2FF" }}><div style={{ ...styles.formSectionTitle, color: "#4F46E5" }}>Planlægning</div><div style={{ ...styles.formSectionHint, color: "#6B63EA" }}>Hvornår og hvor ofte opgaven gentages</div></div><div style={styles.formSectionBody}><label style={styles.label}>Type</label>
+      <div style={styles.typePicker}>
+        {CREATABLE_TYPES.map((k) => {
+          const m = TYPE_META[k];
+          return (
+            <button key={k} type="button" onClick={() => setType(k)} style={type === k ? { ...styles.typePickBtn, borderColor: m.color, color: m.color, background: m.bg } : styles.typePickBtn}>{m.label}</button>
+          );
+        })}
+      </div>
+      {type === "fixed" && <div style={styles.hint}>Faste opgaver gentages automatisk hver uge på de valgte dage — frem til udløbsdatoen.</div>}
+      {type === "adhoc" && <div style={styles.hint}>Oprettes med dags dato og lander i "Ikke tildelt", klar til at blive planlagt.</div>}
 
       {type === "fixed" && (
         <>
@@ -5510,36 +5539,7 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
         </>
       )}
 
-      <label style={styles.label}>Tjeklister (tasks der skal udføres)</label>
-      <div style={styles.skillPicker}>
-        {checklistTemplates.map((c) => (
-          <button key={c.id} type="button" onClick={() => toggleTemplate(c.id)} style={checklistTemplateIds.includes(c.id) ? styles.skillPickBtnActive : styles.skillPickBtn}>
-            <ListChecks size={11} style={{ marginRight: 4, verticalAlign: "-2px" }} />{c.name} ({c.items.length})
-          </button>
-        ))}
-      </div>
-
-      <div style={styles.extraItemRow}>
-        <input style={styles.inputSm} value={newItemText} onChange={(e) => setNewItemText(e.target.value)} placeholder="Tilføj enkelt task…" onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addExtraItem(); } }} />
-        <button type="button" style={styles.addSkillBtn} onClick={addExtraItem}><Plus size={13} /> Tilføj</button>
-      </div>
-
-      {previewItems.length > 0 && (
-        <div style={styles.previewBox}>
-          <div style={styles.instructionsTitle}><ListChecks size={13} /> Tasks på serviceordren ({previewItems.length})</div>
-          {previewItems.map((it, i) => (
-            <div key={i} style={styles.previewItemRow}>
-              <span style={styles.previewItemText}>{i + 1}. {itemText(it)}</span>
-              {i >= previewItems.length - extraItems.length && (
-                <button type="button" style={styles.iconBtnGhostInline} onClick={() => removeExtraItem(i - (previewItems.length - extraItems.length))}><X size={12} /></button>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
-
-      <label style={styles.label}>Link til instruktionsvideo (valgfrit)</label>
-      <input style={styles.input} value={videoUrl} onChange={(e) => setVideoUrl(e.target.value)} placeholder="https://…" /></div></div></div>
+      </div></div></div>
 
       <div style={styles.modalActions}>
         <button style={styles.secondaryBtn} onClick={onClose}>Annuller</button>
@@ -7469,7 +7469,7 @@ const styles = {
   modal: { background: "#fff", borderRadius: 14, width: 460, maxWidth: "100%", maxHeight: "90vh", overflowY: "auto", color: "#111111" },
   modalHeader: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 18px", borderBottom: "1px solid #FFF6FA" },
   modalTitle: { fontWeight: 700, fontSize: 15, fontFamily: "'Space Grotesk', sans-serif" },
-  modalBody: { padding: "16px 18px" }, formCol: { maxWidth: 720, margin: "0 auto" }, formSection: { border: "1px solid #E2E8F0", borderRadius: 10, overflow: "hidden", marginBottom: 14 }, formSectionHead: { padding: "9px 13px" }, formSectionTitle: { fontSize: 13.5, fontWeight: 700, display: "flex", alignItems: "center", gap: 7 }, formSectionHint: { fontSize: 11.5, marginTop: 2, opacity: 0.9 }, formSectionBody: { padding: 13, background: "#fff" },
+  modalBody: { padding: "16px 18px" }, formCol: { maxWidth: 720, margin: "0 auto", textAlign: "left" }, formSection: { border: "1px solid #E2E8F0", borderRadius: 10, overflow: "hidden", marginBottom: 14 }, formSectionHead: { padding: "9px 13px" }, formSectionTitle: { fontSize: 13.5, fontWeight: 700, display: "flex", alignItems: "center", gap: 7 }, formSectionHint: { fontSize: 11.5, marginTop: 2, opacity: 0.9 }, formSectionBody: { padding: 13, background: "#fff" },
   modalActions: { display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 14 },
   label: { display: "block", textAlign: "left", fontSize: 12, fontWeight: 600, color: "#475569", marginTop: 12, marginBottom: 5 },
   hint: { fontSize: 11.5, color: "#64748B", marginTop: 4 },
