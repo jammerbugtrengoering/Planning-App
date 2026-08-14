@@ -3402,8 +3402,8 @@ function WeekView({ employees, instances, unplaced, onAdd, onAuto, onScheduleWee
   const [unassignedFilter, setUnassignedFilter] = useState("current"); // "current" eller "all"
   // Weekendkolonnerne vises automatisk saa snart der ligger en opgave der - ellers
   // ville en loerdagsopgave vaere usynlig indtil man selv slog weekend til.
-  const hasWeekendTasks = instances.some((t) => t.day === "Sat" || t.day === "Sun");
-  const visibleDays = (showWeekend || hasWeekendTasks) ? ALL_DAYS : DAYS;
+  const hasWeekendTasks = instances.some((t) => t.day === "Sat" || t.day === "Sun"); const weekendTaskCount = instances.filter((t) => t.day === "Sat" || t.day === "Sun").length; /* Aabner man en uge hvor der ligger opgaver i weekenden, slaas kolonnerne til af sig selv. Derefter bestemmer knappen alene. showWeekend staar med vilje IKKE i deps: ellers ville et fravalg blive slaaet til igen ved naeste render, og knappen ville vaere lige saa uvirksom som foer. */ useEffect(() => { setShowWeekend(hasWeekendTasks); }, [weekOffset, weekYear, hasWeekendTasks]);
+  const visibleDays = showWeekend ? ALL_DAYS : DAYS;
 
   // Filtrer medarbejdere baseret på valgt område
   const areaFilteredEmployees = selectedAreaId === "all"
@@ -3430,7 +3430,7 @@ function WeekView({ employees, instances, unplaced, onAdd, onAuto, onScheduleWee
           title="Vis/skjul weekend">
           {showWeekend ? "Man–Søn ✓" : "Man–Fre"}
         </button>
-        {areas && areas.length > 0 && (
+        {!showWeekend && weekendTaskCount > 0 && (<span style={{ ...styles.warnChip, marginLeft: 2 }} title="Slå Man–Søn til for at se dem">⚠️ {weekendTaskCount} opgave{weekendTaskCount === 1 ? "" : "r"} i weekenden er skjult</span>)}{areas && areas.length > 0 && (
           <select
             style={{ ...styles.inputSm, fontSize: 13, color: selectedAreaId !== "all" ? "#4F46E5" : "#111111", borderColor: selectedAreaId !== "all" ? "#4F46E5" : "#E2E8F0", background: selectedAreaId !== "all" ? "#EEF2FF" : "#fff", fontWeight: selectedAreaId !== "all" ? 700 : 400 }}
             value={selectedAreaId}
