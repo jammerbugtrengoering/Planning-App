@@ -1138,6 +1138,42 @@ const MODULE_HELP = {
   ], warn: "Kørsel beregnes automatisk hver nat ud fra opgaverne — men kun for opgaver med registreret tid. Derfor får medarbejderne en påmindelse på mail hver dag kl. 18." },
 };
 
+// Udskriver hjaelpen som den staar lige nu. Hjaelpeteksten er kilden — der findes
+// ikke en separat PDF der skal huskes opdateret. Browserens "Gem som PDF" i
+// udskriftsvinduet giver filen.
+function udskrivHjaelp(noegler) {
+  const dele = noegler.map((k) => ({ key: k, h: MODULE_HELP[k] })).filter((x) => x.h);
+  const esc = (s) => String(s == null ? "" : s)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const idag = new Date().toLocaleDateString("da-DK", { day: "numeric", month: "long", year: "numeric" });
+  const titel = dele.length === 1 ? dele[0].h.title : "Brugervejledning";
+  const krop = dele.map((x) => (
+    `<section><h2>${esc(x.h.title)}</h2><p class="intro">${esc(x.h.intro)}</p>` +
+    (x.h.blocks || []).map((b) =>
+      `<h3>${esc(b.h)}</h3>` + (b.p || []).map((l) => `<p>${esc(l)}</p>`).join("")
+    ).join("") +
+    (x.h.warn ? `<p class="warn">${esc(x.h.warn)}</p>` : "") + `</section>`
+  )).join("");
+  const w = window.open("", "_blank");
+  if (!w) { alert("Tillad pop op-vinduer for at kunne udskrive vejledningen."); return; }
+  w.document.write(
+    `<!doctype html><html lang="da"><head><meta charset="utf-8"><title>${esc(titel)}</title><style>` +
+    `body{font-family:Inter,-apple-system,system-ui,sans-serif;color:#111;line-height:1.55;max-width:760px;margin:0 auto;padding:28px 26px}` +
+    `h1{color:#9C1B5D;font-size:26px;margin:0 0 4px}` +
+    `.dato{color:#94A3B8;font-size:12px;margin:0 0 26px}` +
+    `h2{color:#9C1B5D;font-size:19px;margin:26px 0 4px;page-break-after:avoid}` +
+    `h3{font-size:14.5px;margin:16px 0 4px;page-break-after:avoid}` +
+    `p{font-size:13.5px;margin:4px 0}` +
+    `.intro{color:#475569;margin-bottom:8px}` +
+    `.warn{background:#FEF3C7;border-left:4px solid #D97706;padding:10px 12px;font-weight:600;border-radius:4px}` +
+    `section{page-break-inside:auto}` +
+    `@page{margin:16mm}` +
+    `</style></head><body><h1>Rengøringsplan</h1><p class="dato">${esc(titel)} · udskrevet ${esc(idag)}</p>${krop}</body></html>`
+  );
+  w.document.close();
+  w.focus();
+  setTimeout(() => w.print(), 400);
+}
 function ModuleHelp({ view, onClose }) {
   const h = MODULE_HELP[view];
   if (!h) return null;
@@ -1149,6 +1185,16 @@ function ModuleHelp({ view, onClose }) {
           <div>
             <div style={{ fontSize:11, letterSpacing:0.6, color:"#94A3B8", fontWeight:700 }}>HJÆLP</div>
             <div style={{ fontWeight:800, fontSize:17 }}>{h.title}</div>
+            <div style={{ display:"flex", gap:6, marginTop:8 }}>
+              <button onClick={() => udskrivHjaelp([view])}
+                style={{ border:"1px solid #555", background:"transparent", color:"#fff", borderRadius:8, padding:"4px 10px", fontSize:11.5, cursor:"pointer" }}>
+                Udskriv dette modul
+              </button>
+              <button onClick={() => udskrivHjaelp(Object.keys(MODULE_HELP))}
+                style={{ border:"1px solid #555", background:"transparent", color:"#fff", borderRadius:8, padding:"4px 10px", fontSize:11.5, cursor:"pointer" }}>
+                Hele vejledningen
+              </button>
+            </div>
           </div>
           <button onClick={onClose} style={{ border:"none", background:"#333", color:"#fff", borderRadius:8, width:34, height:34, fontSize:17, cursor:"pointer" }}>✕</button>
         </div>
