@@ -335,7 +335,34 @@ function itemText(x) { return typeof x === "string" ? x : x.text; }
 // ---------- Seed data ----------
 // ---------- Scheduling engine (operates on ONE week's instances) ----------
 const WEEKEND_DAYS = ["Sat", "Sun"];
-function isWeekendDay(day) { return WEEKEND_DAYS.includes(day); } /* Dags dato i lokal tid som YYYY-MM-DD. toISOString alene ville give UTC og dermed i gaar sent paa aftenen dansk tid - saa ville en aftale oprettet kl. 23 faa lov at starte "i gaar". */ function todayIso() { const d = new Date(); return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10); } /* Alle uger fra startdato til udloebsdato i rigtige 7-dages spring, saa aarsskifter haandteres korrekt. Samme regnestykke som i addTask, men paa modulniveau saa godkendelsen af en kladde ogsaa kan bruge det. Loftet paa 104 uger er en sikring mod en udloebsdato langt ude i fremtiden. */ function ugerFraStartTilUdloeb(startDateStr, expiryDateStr) { const startMonday = mondayOf(startDateStr ? new Date(startDateStr) : new Date()); if (!expiryDateStr) return [isoWeekInfo(startMonday)]; const expiryMonday = mondayOf(new Date(expiryDateStr)); const weeks = []; let cursor = new Date(startMonday); while (cursor <= expiryMonday && weeks.length < 104) { weeks.push(isoWeekInfo(cursor)); cursor.setDate(cursor.getDate() + 7); } return weeks.length ? weeks : [isoWeekInfo(startMonday)]; }
+function isWeekendDay(day) { return WEEKEND_DAYS.includes(day); }
+
+// Dags dato i lokal tid som YYYY-MM-DD. toISOString alene ville give UTC og dermed
+// i gaar sent paa aftenen dansk tid — saa ville en aftale oprettet kl. 23 faa lov
+// at starte "i gaar", stik imod reglen om at startdatoen ikke maa ligge i fortiden.
+function todayIso() {
+  const d = new Date();
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+}
+
+// Alle uger fra startdato til udloebsdato, i rigtige 7-dages spring saa aarsskifter
+// haandteres korrekt. Samme regnestykke som i addTask, men paa modulniveau saa
+// godkendelsen af en kladde bruger noejagtig samme uger som oprettelsen — ellers
+// kunne de to veje danne forskellige opgaver af den samme aftale.
+// Loftet paa 104 uger er en sikring mod en udloebsdato langt ude i fremtiden.
+function ugerFraStartTilUdloeb(startDateStr, expiryDateStr) {
+  const startMonday = mondayOf(startDateStr ? new Date(startDateStr) : new Date());
+  if (!expiryDateStr) return [isoWeekInfo(startMonday)];
+
+  const expiryMonday = mondayOf(new Date(expiryDateStr));
+  const weeks = [];
+  let cursor = new Date(startMonday);
+  while (cursor <= expiryMonday && weeks.length < 104) {
+    weeks.push(isoWeekInfo(cursor));
+    cursor.setDate(cursor.getDate() + 7);
+  }
+  return weeks.length ? weeks : [isoWeekInfo(startMonday)];
+}
 // Maa medarbejderen overhovedet arbejde denne dag? Weekend kraever en aftale.
 function canWorkOn(emp, day) { return !isWeekendDay(day) || !!(emp && emp.weekendOk); }
 function usedMinutes(list, empId, day) {
@@ -1964,7 +1991,118 @@ function PlanningApp({ session, onSignOut }) {
     return result.find((t) => t.id === task.id) || { ...task, warning: "no_slot" };
   }
 
-  /* Opdaterer en eksisterende aftale. Bruges kun paa kladder, hvor der endnu ikke findes opgaver - derfor kan alle felter aendres frit. Kompetencekravene ligger i en separat tabel og udskiftes helt, saa et fjernet krav ogsaa forsvinder. Er saveAsDraft falsk, er det en godkendelse: status saettes til aktiv, og opgaverne dannes fra startdatoen. */ async function updateTemplate(payload, tplId) { const checklistItemsCombined = [ ...payload.checklistTemplateIds.flatMap((id) => checklistTemplates.find((c) => c.id === id)?.items || []), ...payload.extraItems ]; const nyStatus = payload.saveAsDraft ? "kladde" : "aktiv"; const fastPris = payload.pricingType === "fixed" ? (Number(payload.fixedPrice) || 0) : null; const { error: updErr } = await supabase.from("service_templates").update({ title: payload.title, duration: payload.duration, days: payload.days, day_times: payload.dayTimes || {}, day_durations: payload.dayDurations || {}, video_url: payload.videoUrl || "", po_number: payload.poNumber || "", customer_name: payload.customerName || "", address_text: payload.address || "", access_instructions: payload.accessInstructions || "", contract_type: payload.contractType || "privat", pricing_type: payload.pricingType || "hourly", fixed_price: fastPris, plan_interval: payload.planInterval || "uge", dinero_synced: payload.dineroSynced || false, checklist_template_ids: payload.checklistTemplateIds || [], extra_items: payload.extraItems || [], start_date: payload.startDate || null, expiry_date: payload.expiryDate || null, preferred_employee_id: payload.assigned_employee_id || null, dinero_contact_guid: payload.dineroContactGuid || null, status: nyStatus }).eq("id", tplId); if (dbFail(updErr, "gemme aftalen")) return; const { data: skillsDb } = await supabase.from("skills").select("id,name"); const { error: delSkillErr } = await supabase.from("service_template_skills").delete().eq("template_id", tplId); if (dbFail(delSkillErr, "opdatere kompetencekravene")) return; const skillRows = (payload.requiredSkills || []).map((r) => { const sk = skillsDb?.find((s) => s.name === r.skill); return sk ? { template_id: tplId, skill_id: sk.id, min_level: r.minLevel } : null; }).filter(Boolean); if (skillRows.length) { const { error: insSkillErr } = await supabase.from("service_template_skills").insert(skillRows); if (insSkillErr) dbFail(insSkillErr, "gemme kompetencekravene"); } const opdateret = { id: tplId, title: payload.title, requiredSkills: payload.requiredSkills, duration: payload.duration, days: payload.days, dayTimes: payload.dayTimes || {}, dayDurations: payload.dayDurations || {}, checklistTemplateIds: payload.checklistTemplateIds || [], extraItems: payload.extraItems || [], checklistItems: checklistItemsCombined, videoUrl: payload.videoUrl, customerName: payload.customerName, address: payload.address, poNumber: payload.poNumber, accessInstructions: payload.accessInstructions, contractType: payload.contractType, expiryDate: payload.expiryDate, pricingType: payload.pricingType || "hourly", fixedPrice: fastPris, planInterval: payload.planInterval || "uge", startDate: payload.startDate || null, dineroSynced: payload.dineroSynced || false, preferredEmployeeId: payload.assigned_employee_id || "", dineroContactGuid: payload.dineroContactGuid || "", status: nyStatus }; setTemplates((prevT) => { const nextT = prevT.map((t) => (t.id === tplId ? opdateret : t)); if (payload.saveAsDraft) return nextT; setInstances((cur) => { let next = [...cur]; ugerFraStartTilUdloeb(payload.startDate, payload.expiryDate).forEach(({ week: wk, year: wy }) => { const before = next; const expanded = ensureWeekInstances(wk, wy, next, nextT, employees, areas, employeeAreas, travelSettings); const newOnes = expanded.filter((i) => !next.find((c) => c.id === i.id)); newOnes.forEach((inst) => syncInstance({ ...inst, contractType: payload.contractType, expiryDate: payload.expiryDate, pricingType: opdateret.pricingType, fixedPrice: opdateret.fixedPrice })); syncHealedAssignments(before, expanded); next = expanded; }); return next; }); return nextT; }); notify(payload.saveAsDraft ? "Kladden er gemt" : "Aftalen er godkendt og opgaverne er oprettet"); } async function addTask(payload) {
+  // Opdaterer en eksisterende aftale. Bruges kun paa kladder, hvor der endnu ikke
+  // findes opgaver — derfor kan alle felter aendres frit uden at roere ved historik.
+  //
+  // Er saveAsDraft sand, gemmes den bare videre som kladde. Er den falsk, er det en
+  // godkendelse: status saettes til aktiv, og opgaverne dannes fra startdatoen.
+  async function updateTemplate(payload, tplId) {
+    const checklistItemsCombined = [
+      ...payload.checklistTemplateIds.flatMap((id) => checklistTemplates.find((c) => c.id === id)?.items || []),
+      ...payload.extraItems,
+    ];
+    const nyStatus = payload.saveAsDraft ? "kladde" : "aktiv";
+    const fastPris = payload.pricingType === "fixed" ? (Number(payload.fixedPrice) || 0) : null;
+
+    const { error: updErr } = await supabase.from("service_templates").update({
+      title: payload.title,
+      duration: payload.duration,
+      days: payload.days,
+      day_times: payload.dayTimes || {},
+      day_durations: payload.dayDurations || {},
+      video_url: payload.videoUrl || "",
+      po_number: payload.poNumber || "",
+      customer_name: payload.customerName || "",
+      address_text: payload.address || "",
+      access_instructions: payload.accessInstructions || "",
+      contract_type: payload.contractType || "privat",
+      pricing_type: payload.pricingType || "hourly",
+      fixed_price: fastPris,
+      plan_interval: payload.planInterval || "uge",
+      dinero_synced: payload.dineroSynced || false,
+      checklist_template_ids: payload.checklistTemplateIds || [],
+      extra_items: payload.extraItems || [],
+      start_date: payload.startDate || null,
+      expiry_date: payload.expiryDate || null,
+      preferred_employee_id: payload.assigned_employee_id || null,
+      dinero_contact_guid: payload.dineroContactGuid || null,
+      status: nyStatus,
+    }).eq("id", tplId);
+    if (dbFail(updErr, "gemme aftalen")) return;
+
+    // Kompetencekravene ligger i en separat tabel og udskiftes helt i stedet for at
+    // blive flettet — ellers ville et krav man har fjernet i kladden blive staaende.
+    const { data: skillsDb } = await supabase.from("skills").select("id,name");
+    const { error: delSkillErr } = await supabase.from("service_template_skills").delete().eq("template_id", tplId);
+    if (dbFail(delSkillErr, "opdatere kompetencekravene")) return;
+
+    const skillRows = (payload.requiredSkills || []).map((r) => {
+      const sk = skillsDb?.find((s) => s.name === r.skill);
+      return sk ? { template_id: tplId, skill_id: sk.id, min_level: r.minLevel } : null;
+    }).filter(Boolean);
+    if (skillRows.length) {
+      const { error: insSkillErr } = await supabase.from("service_template_skills").insert(skillRows);
+      if (insSkillErr) dbFail(insSkillErr, "gemme kompetencekravene");
+    }
+
+    const opdateret = {
+      id: tplId,
+      title: payload.title,
+      requiredSkills: payload.requiredSkills,
+      duration: payload.duration,
+      days: payload.days,
+      dayTimes: payload.dayTimes || {},
+      dayDurations: payload.dayDurations || {},
+      checklistTemplateIds: payload.checklistTemplateIds || [],
+      extraItems: payload.extraItems || [],
+      checklistItems: checklistItemsCombined,
+      videoUrl: payload.videoUrl,
+      customerName: payload.customerName,
+      address: payload.address,
+      poNumber: payload.poNumber,
+      accessInstructions: payload.accessInstructions,
+      contractType: payload.contractType,
+      expiryDate: payload.expiryDate,
+      pricingType: payload.pricingType || "hourly",
+      fixedPrice: fastPris,
+      planInterval: payload.planInterval || "uge",
+      startDate: payload.startDate || null,
+      dineroSynced: payload.dineroSynced || false,
+      preferredEmployeeId: payload.assigned_employee_id || "",
+      dineroContactGuid: payload.dineroContactGuid || "",
+      status: nyStatus,
+    };
+
+    setTemplates((prevT) => {
+      const nextT = prevT.map((t) => (t.id === tplId ? opdateret : t));
+      // En kladde materialiseres ikke. Opgaverne dannes foerst ved godkendelsen.
+      if (payload.saveAsDraft) return nextT;
+
+      setInstances((cur) => {
+        let next = [...cur];
+        ugerFraStartTilUdloeb(payload.startDate, payload.expiryDate).forEach(({ week: wk, year: wy }) => {
+          const before = next;
+          const expanded = ensureWeekInstances(wk, wy, next, nextT, employees, areas, employeeAreas, travelSettings);
+          const newOnes = expanded.filter((i) => !next.find((c) => c.id === i.id));
+          newOnes.forEach((inst) => syncInstance({
+            ...inst,
+            contractType: payload.contractType,
+            expiryDate: payload.expiryDate,
+            pricingType: opdateret.pricingType,
+            fixedPrice: opdateret.fixedPrice,
+          }));
+          syncHealedAssignments(before, expanded);
+          next = expanded;
+        });
+        return next;
+      });
+      return nextT;
+    });
+
+    notify(payload.saveAsDraft ? "Kladden er gemt" : "Aftalen er godkendt og opgaverne er oprettet");
+  }
+
+  async function addTask(payload) {
     const checklistItemsCombined = [
       ...payload.checklistTemplateIds.flatMap((id) => checklistTemplates.find((c) => c.id === id)?.items || []),
       ...payload.extraItems,
@@ -3402,7 +3540,18 @@ function WeekView({ employees, instances, unplaced, onAdd, onAuto, onScheduleWee
   const [unassignedFilter, setUnassignedFilter] = useState("current"); // "current" eller "all"
   // Weekendkolonnerne vises automatisk saa snart der ligger en opgave der - ellers
   // ville en loerdagsopgave vaere usynlig indtil man selv slog weekend til.
-  const hasWeekendTasks = instances.some((t) => t.day === "Sat" || t.day === "Sun"); const weekendTaskCount = instances.filter((t) => t.day === "Sat" || t.day === "Sun").length; /* Aabner man en uge hvor der ligger opgaver i weekenden, slaas kolonnerne til af sig selv. Derefter bestemmer knappen alene. showWeekend staar med vilje IKKE i deps: ellers ville et fravalg blive slaaet til igen ved naeste render, og knappen ville vaere lige saa uvirksom som foer. */ useEffect(() => { setShowWeekend(hasWeekendTasks); }, [weekOffset, weekYear, hasWeekendTasks]);
+  const hasWeekendTasks = instances.some((t) => t.day === "Sat" || t.day === "Sun");
+  const weekendTaskCount = instances.filter((t) => t.day === "Sat" || t.day === "Sun").length;
+
+  // Aabner man en uge hvor der ligger opgaver i weekenden, slaas kolonnerne til af
+  // sig selv. Derefter bestemmer knappen alene.
+  //
+  // showWeekend staar med vilje IKKE i deps: ellers ville et fravalg blive slaaet
+  // til igen ved naeste render, og knappen ville vaere lige saa uvirksom som den var
+  // foer — den skiftede kun sin egen tekst uden at flytte en eneste kolonne.
+  useEffect(() => {
+    setShowWeekend(hasWeekendTasks);
+  }, [weekOffset, weekYear, hasWeekendTasks]);
   const visibleDays = showWeekend ? ALL_DAYS : DAYS;
 
   // Filtrer medarbejdere baseret på valgt område
@@ -3630,7 +3779,17 @@ function WeekView({ employees, instances, unplaced, onAdd, onAuto, onScheduleWee
                             <div style={styles.chipSubRow}>
                               {t.customerName && <span style={styles.taskChipCustomer}>{t.customerName}</span>}
                               {prog.total > 0 && <span style={styles.taskChipDur}>{prog.done}/{prog.total}</span>}
-                              <span style={styles.taskChipDur}>{fmtMin(t.duration)}</span>{/* Forsinkelsen står i anden række. I øverste række var den eneste plads at tage fra titlen, som derfor forsvandt helt — og så var opgaven umulig at få øje på i ugeplanen. */}{(seg.lateBy || 0) > 0 && <span title={"Konflikt: aftalt kl. " + (t.scheduledTime || "?") + ", men kan først begynde " + fmtMin(seg.lateBy) + " senere. Flyt en af dagens opgaver."} style={{ fontSize: 11, fontWeight: 800, color: "#fff", background: "#DC2626", borderRadius: 4, padding: "1px 5px" }}>{"⏱ " + fmtMin(seg.lateBy) + " for sent"}</span>}
+                              <span style={styles.taskChipDur}>{fmtMin(t.duration)}</span>
+                              {/* Forsinkelsen staar i anden raekke. I oeverste raekke var titlen det eneste
+                                  element der maatte skrumpe, saa den blev klemt helt vaek i smalle
+                                  dagkolonner — og saa var opgaven umulig at faa oeje paa i ugeplanen. */}
+                              {(seg.lateBy || 0) > 0 && (
+                                <span
+                                  title={"Konflikt: aftalt kl. " + (t.scheduledTime || "?") + ", men kan først begynde " + fmtMin(seg.lateBy) + " senere. Flyt en af dagens opgaver."}
+                                  style={{ fontSize: 11, fontWeight: 800, color: "#fff", background: "#DC2626", borderRadius: 4, padding: "1px 5px" }}>
+                                  {"⏱ " + fmtMin(seg.lateBy) + " for sent"}
+                                </span>
+                              )}
                             </div>
                             {t.address && <div style={styles.taskChipAddress}>📍 {t.address}</div>}
                             {completion && (
@@ -5287,10 +5446,58 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
   function updateSkillRow(i, field, value) {
     setRequiredSkills((prev) => prev.map((r, idx) => (idx === i ? { ...r, [field]: field === "minLevel" ? Number(value) : value } : r)));
   }
-  function removeSkillRow(i) { setRequiredSkills((prev) => prev.filter((_, idx) => idx !== i)); } /* Begge knapper sender den samme nyttelast. Kladden adskiller sig kun ved saveAsDraft, saa de to veje aldrig kan naa at gemme forskellige felter. */ const buildPayload = (saveAsDraft) => ({ type, contractType, pricingType, fixedPrice: pricingType === "fixed" ? (Number(fixedPrice) || 0) : null, planInterval, title: title.trim(), requiredSkills, duration, days, dayTimes, dayDurations, day, adhocDate, deadline, preferredTime, startDate, expiryDate, checklistTemplateIds, extraItems, videoUrl: videoUrl.trim(), customerName: customerName.trim(), address: address.trim(), poNumber: poNumber.trim(), accessInstructions: accessInstructions.trim(), dineroSynced: customerDineroSynced, dineroContactGuid, assigned_employee_id: assignedEmployeeId, saveAsDraft });
+  function removeSkillRow(i) { setRequiredSkills((prev) => prev.filter((_, idx) => idx !== i)); }
+
+  // Begge gemme-knapper bygger nyttelasten her. De adskiller sig kun ved saveAsDraft,
+  // saa de to veje aldrig kan naa at gemme forskellige felter — havde hver knap sin
+  // egen feltliste, ville de foer eller siden komme ud af trit.
+  const buildPayload = (saveAsDraft) => ({
+    type,
+    contractType,
+    pricingType,
+    fixedPrice: pricingType === "fixed" ? (Number(fixedPrice) || 0) : null,
+    planInterval,
+    title: title.trim(),
+    requiredSkills,
+    duration,
+    days,
+    dayTimes,
+    dayDurations,
+    day,
+    adhocDate,
+    deadline,
+    preferredTime,
+    startDate,
+    expiryDate,
+    checklistTemplateIds,
+    extraItems,
+    videoUrl: videoUrl.trim(),
+    customerName: customerName.trim(),
+    address: address.trim(),
+    poNumber: poNumber.trim(),
+    accessInstructions: accessInstructions.trim(),
+    dineroSynced: customerDineroSynced,
+    dineroContactGuid,
+    assigned_employee_id: assignedEmployeeId,
+    saveAsDraft,
+  });
 
   return (
-    <Modal onClose={onClose} title={editId ? `Rediger kladde: ${copyFrom?.title || ""}` : (copyFrom ? `Kopiér: ${copyFrom.title}` : "Ny opgave")} persistent fullscreen><div style={styles.formCol}><div style={styles.formSection}><div style={{ ...styles.formSectionHead, background: "#FCE4EF" }}><div style={{ ...styles.formSectionTitle, color: "#9C1B5D" }}>Aftale og kunde</div><div style={{ ...styles.formSectionHint, color: "#B4436F" }}>Hvem der faktureres, hvad aftalen hedder, og hvor der arbejdes</div></div><div style={styles.formSectionBody}>
+    <Modal
+      onClose={onClose}
+      title={editId ? `Rediger kladde: ${copyFrom?.title || ""}` : (copyFrom ? `Kopiér: ${copyFrom.title}` : "Ny opgave")}
+      persistent
+      fullscreen>
+      {/* Modalen er fullscreen, saa uden denne kolonne bliver hvert felt over 1500 px
+          bredt paa en almindelig skaerm. De tre farvede afsnit betyder det samme her
+          og i serviceordren: rosa = kunden, groen = opgaven, blaa = tid. */}
+      <div style={styles.formCol}>
+      <div style={styles.formSection}>
+        <div style={{ ...styles.formSectionHead, background: "#FCE4EF" }}>
+          <div style={{ ...styles.formSectionTitle, color: "#9C1B5D" }}>Aftale og kunde</div>
+          <div style={{ ...styles.formSectionHint, color: "#B4436F" }}>Hvem der faktureres, hvad aftalen hedder, og hvor der arbejdes</div>
+        </div>
+        <div style={styles.formSectionBody}>
       {/* Kontrakttype */}
       <label style={styles.label}>Kontrakttype</label>
       <div style={styles.typePicker}>
@@ -5546,7 +5753,20 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
         <button
           style={styles.primaryBtn}
           disabled={!title.trim() || (type === "fixed" && days.length === 0) || requiredSkills.length === 0 || (type === "fixed" && !!startDate && startDate < todayIso())}
-          onClick={() => onSave(buildPayload(false), editId)}>{editId ? "Godkend og planlæg" : "Gem og planlæg"}</button>{type === "fixed" && (<button style={{ ...styles.secondaryBtn, color: "#9C1B5D", borderColor: "#F4C0D1" }} disabled={!title.trim() || (!!startDate && startDate < todayIso())} title="Gemmer aftalen uden at oprette opgaver. Du kan rette alle felter bagefter og godkende den under Aftaler." onClick={() => onSave(buildPayload(true), editId)}>{editId ? "Gem kladde" : "Gem som kladde"}</button>)}
+          onClick={() => onSave(buildPayload(false), editId)}>
+          {editId ? "Godkend og planlæg" : "Gem og planlæg"}
+        </button>
+        {/* Kladde giver kun mening paa en fast aftale. En fleksibel opgave er en
+            enkeltstaaende opgave, ikke en aftale, og har intet at vaere kladde for. */}
+        {type === "fixed" && (
+          <button
+            style={{ ...styles.secondaryBtn, color: "#9C1B5D", borderColor: "#F4C0D1" }}
+            disabled={!title.trim() || (!!startDate && startDate < todayIso())}
+            title="Gemmer aftalen uden at oprette opgaver. Du kan rette alle felter bagefter og godkende den under Aftaler."
+            onClick={() => onSave(buildPayload(true), editId)}>
+            {editId ? "Gem kladde" : "Gem som kladde"}
+          </button>
+        )}
       </div>
     </Modal>
   );
@@ -5619,7 +5839,16 @@ function CancelTemplateModal({ template, onClose, onConfirm }) {
     </div>
   );
 }
-function ContractsView({ templates: alleTemplates, instances, pricing, employees, isAdminUser, onCancelTemplate, onEditDraft }) { const [statusFilter, setStatusFilter] = useState("alle"); const [typeFilter, setTypeFilter] = useState("all"); /* Filtreres foer listen deles op i med og uden udloebsdato, saa begge dele foelger samme valg. Uden startdato regnes en aftale ikke med i kontraktsummen - derfor skal kladder ogsaa kunne findes i den liste, ikke kun i den med udloeb. */ const templates = alleTemplates.filter((t) => (statusFilter === "alle" ? true : (t.status || "aktiv") === statusFilter)).filter((t) => (typeFilter === "all" ? true : effectiveContractType(t) === typeFilter));
+function ContractsView({ templates: alleTemplates, instances, pricing, employees, isAdminUser, onCancelTemplate, onEditDraft }) {
+  const [statusFilter, setStatusFilter] = useState("alle");
+  const [typeFilter, setTypeFilter] = useState("all");
+
+  // Der filtreres foer listen deles op i aftaler med og uden udloebsdato, saa begge
+  // dele foelger samme valg. En kladde uden udloebsdato havner i den anden liste, og
+  // skal kunne findes af filteret praecis som de oevrige.
+  const templates = alleTemplates
+    .filter((t) => (statusFilter === "alle" ? true : (t.status || "aktiv") === statusFilter))
+    .filter((t) => (typeFilter === "all" ? true : effectiveContractType(t) === typeFilter));
   // Find den reelle, aktuelle kontrakttype for en skabelon: den seneste værdi sat på
   // en tilknyttet opgave slår den statiske skabelonværdi, så redigering i ugeplanen
   // altid afspejles korrekt her.
@@ -5719,7 +5948,49 @@ function ContractsView({ templates: alleTemplates, instances, pricing, employees
   return (
     <div style={styles.page}>
       <div style={{ fontWeight: 700, fontSize: 18, color: "#111111", marginBottom: 4 }}>Aftaler</div>
-      <div style={{ fontSize: 13, color: "#64748B", marginBottom: 20 }}>Faste opgaver sorteret efter udløbsdato — nærmest udløbende øverst</div><div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>{[["alle","Alle"],["kladde","Under udarbejdelse"],["aktiv","Aktive"],["udgaaet","Udgåede"]].map(([k,l]) => (<button key={k} type="button" onClick={() => setStatusFilter(k)} style={statusFilter === k ? { ...styles.typePickBtn, flex: "none", borderColor: "#D6247A", color: "#D6247A", background: "#FCE4EF" } : { ...styles.typePickBtn, flex: "none" }}>{l}{k === "kladde" && alleTemplates.filter((t) => t.status === "kladde").length > 0 ? ` (${alleTemplates.filter((t) => t.status === "kladde").length})` : ""}</button>))}</div><div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 20 }}><button type="button" onClick={() => setTypeFilter("all")} style={typeFilter === "all" ? { ...styles.typePickBtn, flex: "none", borderColor: "#4F46E5", color: "#4F46E5", background: "#EEF2FF" } : { ...styles.typePickBtn, flex: "none" }}>Alle kontrakttyper</button>{CONTRACT_TYPES.map((ct) => (<button key={ct.key} type="button" onClick={() => setTypeFilter(ct.key)} style={typeFilter === ct.key ? { ...styles.typePickBtn, flex: "none", borderColor: ct.color, color: ct.color, background: ct.bg } : { ...styles.typePickBtn, flex: "none" }}>{ct.icon} {ct.label}</button>))}</div>
+      <div style={{ fontSize: 13, color: "#64748B", marginBottom: 20 }}>Faste opgaver sorteret efter udløbsdato — nærmest udløbende øverst</div>
+
+      {/* To uafhaengige raekker filtre: status og kontrakttype. De virker sammen, saa
+          man kan f.eks. se kun kladder af typen hovedrengoering. Antallet staar kun
+          paa kladde-knappen — det er den eneste bunke der skal tommes. */}
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
+        {[["alle", "Alle"], ["kladde", "Under udarbejdelse"], ["aktiv", "Aktive"], ["udgaaet", "Udgåede"]].map(([k, l]) => (
+          <button
+            key={k}
+            type="button"
+            onClick={() => setStatusFilter(k)}
+            style={statusFilter === k
+              ? { ...styles.typePickBtn, flex: "none", borderColor: "#D6247A", color: "#D6247A", background: "#FCE4EF" }
+              : { ...styles.typePickBtn, flex: "none" }}>
+            {l}
+            {k === "kladde" && alleTemplates.filter((t) => t.status === "kladde").length > 0
+              ? ` (${alleTemplates.filter((t) => t.status === "kladde").length})`
+              : ""}
+          </button>
+        ))}
+      </div>
+
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 20 }}>
+        <button
+          type="button"
+          onClick={() => setTypeFilter("all")}
+          style={typeFilter === "all"
+            ? { ...styles.typePickBtn, flex: "none", borderColor: "#4F46E5", color: "#4F46E5", background: "#EEF2FF" }
+            : { ...styles.typePickBtn, flex: "none" }}>
+          Alle kontrakttyper
+        </button>
+        {CONTRACT_TYPES.map((ct) => (
+          <button
+            key={ct.key}
+            type="button"
+            onClick={() => setTypeFilter(ct.key)}
+            style={typeFilter === ct.key
+              ? { ...styles.typePickBtn, flex: "none", borderColor: ct.color, color: ct.color, background: ct.bg }
+              : { ...styles.typePickBtn, flex: "none" }}>
+            {ct.icon} {ct.label}
+          </button>
+        ))}
+      </div>
 
       {(contracts.length > 0 || noExpiry.length > 0) && (
         <div style={{ display: "flex", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
@@ -5751,7 +6022,26 @@ function ContractsView({ templates: alleTemplates, instances, pricing, employees
           return (
             <div key={t.id} style={{ background: "#fff", borderRadius: 12, padding: "14px 16px", boxShadow: "0 1px 3px rgba(0,0,0,0.06)", borderLeft: `4px solid ${color}`, display: "flex", alignItems: "center", gap: 16 }}>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontWeight: 700, fontSize: 15, color: "#111111", marginBottom: 3 }}>{t.title}{t.status === "kladde" && <span style={{ marginLeft: 8, padding: "2px 9px", borderRadius: 999, background: "#FEF3C7", color: "#B45309", fontSize: 11, fontWeight: 700 }}>Under udarbejdelse</span>}</div>{t.status === "kladde" && onEditDraft && (<div style={{ marginBottom: 6 }}><button type="button" onClick={() => onEditDraft(t)} style={{ ...styles.primaryBtn, fontSize: 12, padding: "5px 10px" }}>Åbn og godkend</button></div>)}
+                <div style={{ fontWeight: 700, fontSize: 15, color: "#111111", marginBottom: 3 }}>
+                  {t.title}
+                  {t.status === "kladde" && (
+                    <span style={{ marginLeft: 8, padding: "2px 9px", borderRadius: 999, background: "#FEF3C7", color: "#B45309", fontSize: 11, fontWeight: 700 }}>
+                      Under udarbejdelse
+                    </span>
+                  )}
+                </div>
+                {/* Genvej direkte fra listen. Ellers skulle man vide at en kladde
+                    aabnes via Rediger, og det er ikke til at gaette. */}
+                {t.status === "kladde" && onEditDraft && (
+                  <div style={{ marginBottom: 6 }}>
+                    <button
+                      type="button"
+                      onClick={() => onEditDraft(t)}
+                      style={{ ...styles.primaryBtn, fontSize: 12, padding: "5px 10px" }}>
+                      Åbn og godkend
+                    </button>
+                  </div>
+                )}
                 <div style={{ fontSize: 12, color: "#64748B", display: "flex", gap: 12, flexWrap: "wrap" }}>
                   {t.customerName && <span>👤 {t.customerName}</span>}
                     {t.status === "udgaaet" ? (
@@ -5799,7 +6089,26 @@ function ContractsView({ templates: alleTemplates, instances, pricing, employees
             {noExpiry.map((t) => (
               <div key={t.id} style={{ background: "#fff", borderRadius: 12, padding: "14px 16px", boxShadow: "0 1px 3px rgba(0,0,0,0.06)", borderLeft: "4px solid #CBD5E1", display: "flex", alignItems: "center", gap: 16 }}>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 700, fontSize: 15, color: "#111111", marginBottom: 3 }}>{t.title}{t.status === "kladde" && <span style={{ marginLeft: 8, padding: "2px 9px", borderRadius: 999, background: "#FEF3C7", color: "#B45309", fontSize: 11, fontWeight: 700 }}>Under udarbejdelse</span>}</div>{t.status === "kladde" && onEditDraft && (<div style={{ marginBottom: 6 }}><button type="button" onClick={() => onEditDraft(t)} style={{ ...styles.primaryBtn, fontSize: 12, padding: "5px 10px" }}>Åbn og godkend</button></div>)}
+                  <div style={{ fontWeight: 700, fontSize: 15, color: "#111111", marginBottom: 3 }}>
+                    {t.title}
+                    {t.status === "kladde" && (
+                      <span style={{ marginLeft: 8, padding: "2px 9px", borderRadius: 999, background: "#FEF3C7", color: "#B45309", fontSize: 11, fontWeight: 700 }}>
+                        Under udarbejdelse
+                      </span>
+                    )}
+                  </div>
+                  {/* Samme genvej som i listen ovenfor. Aftaler uden udloebsdato staar
+                      i deres egen liste, saa markeringen skal findes to steder. */}
+                  {t.status === "kladde" && onEditDraft && (
+                    <div style={{ marginBottom: 6 }}>
+                      <button
+                        type="button"
+                        onClick={() => onEditDraft(t)}
+                        style={{ ...styles.primaryBtn, fontSize: 12, padding: "5px 10px" }}>
+                        Åbn og godkend
+                      </button>
+                    </div>
+                  )}
                   <div style={{ fontSize: 12, color: "#64748B", display: "flex", gap: 12, flexWrap: "wrap" }}>
                     {t.customerName && <span>👤 {t.customerName}</span>}
                     {t.status === "udgaaet" ? (
