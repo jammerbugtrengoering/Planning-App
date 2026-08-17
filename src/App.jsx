@@ -7,6 +7,91 @@ import {
   Thermometer, Palmtree, Mail,
 } from "lucide-react";
 
+// ---------- Opgavenoter og billeder ----------
+// Medarbejderne kan skrive kommentarer og tage billeder ude hos kunden. Noterne
+// hentes samlet ved indlaesning og grupperes pr. opgave, saa hverken ugeplanen
+// eller faktureringen skal slaa op i databasen for hver eneste linje.
+function grupperNoter(raekker) {
+  const kort = {};
+  (raekker || []).forEach((n) => {
+    if (!kort[n.instance_id]) kort[n.instance_id] = [];
+    kort[n.instance_id].push(n);
+  });
+  return kort;
+}
+
+// Bucket'en er privat, fordi billederne er fra kundernes hjem. Der findes derfor
+// ingen fast URL — den skal signeres og udloeber af sig selv efter en time.
+async function signeredeFotoUrls(stier) {
+  if (!stier || stier.length === 0) return {};
+  const { data, error } = await supabase.storage.from("opgavefotos").createSignedUrls(stier, 3600);
+  if (error) return {};
+  const kort = {};
+  (data || []).forEach((d, i) => { if (d?.signedUrl) kort[stier[i]] = d.signedUrl; });
+  return kort;
+}
+
+// Viser medarbejdernes kommentarer og billeder. Bruges baade i banneret i ugeplanen
+// og under fakturering, hvor beslutningen om at fakturere faktisk traeffes.
+function OpgaveNoter({ noter, employees, tom }) {
+  const [urls, setUrls] = React.useState({});
+  const stier = React.useMemo(
+    () => (noter || []).flatMap((n) => n.photos || []),
+    [noter],
+  );
+  React.useEffect(() => {
+    let afbrudt = false;
+    if (stier.length === 0) { setUrls({}); return; }
+    signeredeFotoUrls(stier).then((kort) => { if (!afbrudt) setUrls(kort); });
+    return () => { afbrudt = true; };
+    // Sammensat noegle frem for selve listen: ellers ville en ny array-reference ved
+    // hver render starte en ny signering, og billederne ville blinke.
+  }, [stier.join("|")]);
+
+  if (!noter || noter.length === 0) {
+    return tom ? <div style={{ fontSize: 12, color: "#94A3B8", fontStyle: "italic" }}>{tom}</div> : null;
+  }
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      {noter.map((n) => {
+        const hvem = (employees || []).find((e) => e.id === n.employee_id)?.name || "Medarbejder";
+        const tid = new Date(n.created_at).toLocaleString("da-DK", {
+          day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit",
+        });
+        return (
+          <div key={n.id} style={{ background: "#F8FAFC", border: "1px solid #F1F5F9", borderRadius: 8, padding: "8px 10px" }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "#94A3B8", display: "flex", alignItems: "center", gap: 6, marginBottom: 3 }}>
+              {hvem} · {tid}
+              {n.kind === "forgaeves" && (
+                <span style={{ background: "#FEE2E2", color: "#B91C1C", borderRadius: 999, padding: "1px 7px", fontSize: 10, fontWeight: 800 }}>
+                  Kom ikke ind
+                </span>
+              )}
+            </div>
+            {n.text && <div style={{ fontSize: 13, color: "#111111", lineHeight: 1.45, whiteSpace: "pre-wrap" }}>{n.text}</div>}
+            {(n.photos || []).length > 0 && (
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
+                {(n.photos || []).map((sti) => (
+                  urls[sti]
+                    ? <a key={sti} href={urls[sti]} target="_blank" rel="noreferrer">
+                        <img src={urls[sti]} alt="" style={{ width: 64, height: 64, objectFit: "cover", borderRadius: 6, border: "1px solid #E2E8F0", display: "block" }} />
+                      </a>
+                    : <div key={sti} style={{ width: 64, height: 64, borderRadius: 6, background: "#F1F5F9" }} />
+                ))}
+              </div>
+            )}
+            {n.photos_deleted_at && (
+              <div style={{ fontSize: 11, color: "#94A3B8", fontStyle: "italic", marginTop: 5 }}>
+                Billederne er slettet efter 12 måneder. Teksten står tilbage.
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // ---------- Constants ----------
 // SKILLS og customers hentes fra Supabase – se loadAll() i App-komponenten.
 // Fallback bruges kun hvis databasen ikke svarer ved første render.
@@ -1102,6 +1187,19 @@ const MODULE_HELP = {
     { h: "Ret dato og tidspunkt", p: ["Klik på opgaven, find «Frist og tidspunkt» og tryk Rediger.",
         "Sæt ny dato og evt. ønsket starttidspunkt, og tryk «Gem og planlæg igen». Opgaven flytter til den rigtige uge og får en medarbejder, hvis nogen kan nå det."] },
     { h: "Weekend", p: ["Knappen Man–Fre / Man–Søn bestemmer om lørdag og søndag vises.", "Åbner du en uge hvor der allerede ligger opgaver i weekenden, slås kolonnerne til af sig selv.", "Slår du dem fra igen, står der ved siden af knappen hvor mange weekendopgaver der er skjult — så du ikke overser dem."] }, { h: "Sådan er «Ny opgave» og serviceordren bygget op", p: ["Begge skærme er delt i tre farvede afsnit, så det er tydeligt hvad der hører sammen. Farverne betyder det samme begge steder.", "Rosa er kunden: kontrakttype, prismodel, titel, fakturakunde, adresse, fakturabeskrivelse og adgangsforhold. Det er det der ender på fakturaen.", "Grønt er selve opgaven: krævede kompetencer, varighed, tjeklister og instruktionsvideo.", "Blåt er tid: i «Ny opgave» hedder det Planlægning og rummer fast interval eller fleksibel, ansvarlig medarbejder, start- og udløbsdato, interval og ugedage.", "Klikker du på en opgave i ugeplanen, åbner serviceordren med de samme tre farver. Der hedder det blå afsnit Udførelse og rummer status, medarbejdere på opgaven, tasks og tidsregistrering.", "I «Ny opgave» bliver Annuller og Gem og planlæg stående nederst, uanset hvor langt du har scrollet."] },
+    { h: "Beskeder fra medarbejderne", p: [
+        "Øverst i ugeplanen kommer et banner, når en medarbejder har meldt noget ind. Der er to slags.",
+        "«Ønske om ny tid» betyder at medarbejderen har aftalt et nyt tidspunkt med kunden. Tryk «Godkend og flyt», så rykkes opgaven — eller «Afvis» og skriv hvorfor, så får hun en mail.",
+        "«Forgæves besøg» betyder at medarbejderen ikke kunne komme ind, og at opgaven ikke blev udført. Banneret bliver rødt.",
+        "Her er der ingen tid registreret, og opgaven ville derfor stå til 0 kr. Det er dig der afgør om kunden skal betale alligevel.",
+        "Tryk «Sæt til udført og fakturér», så registreres antallet af minutter i feltet ved siden af, og opgaven kommer med på fakturaen. Feltet starter på opgavens planlagte varighed — sæt det ned hvis kun turen skal faktureres.",
+        "Har medarbejderen samtidig foreslået en ny dato, kan du i stedet trykke «Flyt til …».",
+        "Skal kunden ikke betale, tryk «Fakturér ikke». Opgaven bliver stående uden registreret tid og falder dermed selv ud af fakturagrundlaget."] },
+    { h: "Kommentarer og billeder", p: [
+        "Medarbejderne kan skrive en kommentar og tage billeder på enhver opgave — også dem der gik som de skulle.",
+        "Er der en kommentar på en opgave, står der 💬 på den i ugeplanen. Er der billeder med, står der 📷 i stedet.",
+        "Selve kommentaren og billederne ser du under Fakturering, lige under opgavens linje. Det er dér du skal bruge dem.",
+        "Billederne slettes automatisk efter 12 måneder, fordi billeder fra kundernes hjem er personoplysninger. Teksten bliver stående."] },
   ], warn: "En fleksibel opgave har en «senest udført»-dato. Er fristen passeret, planlægges opgaven ikke — den rulles ikke videre af sig selv. Ret fristen, så placeres den med det samme." },
 
   employees: { title: "Medarbejdere", intro: "Her styrer du hvem der kan hvad, hvor meget tid de har, og hvilke områder de dækker.", blocks: [
@@ -1131,6 +1229,11 @@ const MODULE_HELP = {
         "Hver produktlinje har sit eget flueben, men kræver at selve opgaven også er fakturagrundlag."] },
     { h: "Timepriser", p: ["Tryk «Timepriser» for at rette satsen pr. kontrakttype. Satsen bruges i fakturering, ugebelægning og rapportering.",
         "Opgaver med fastpris bruger deres egen pris i stedet."] },
+    { h: "Kommentarer og billeder fra medarbejderen", p: [
+        "Har medarbejderen skrevet en kommentar eller taget billeder ude hos kunden, står de direkte under opgavens linje.",
+        "Brug dem når du skal afgøre beløbet — et billede af et usædvanligt beskidt køkken er det argument du skal bruge over for kunden bagefter.",
+        "Er kommentaren mærket «Kom ikke ind», blev opgaven ikke udført. Er der alligevel registreret tid på den, er det fordi du selv har besluttet i ugeplanen at den skal faktureres.",
+        "Billederne slettes automatisk efter 12 måneder. Står der at de er slettet, er teksten stadig gyldig dokumentation for hvad der skete."] },
   ], warn: "Der faktureres kun registreret tid. Er der ikke logget tid, springes selve arbejdet over — også selvom opgaven er markeret som fakturagrundlag. Bekræftelsen fortæller hvor mange det gælder. Forbrugte produkter kommer stadig med." },
 
   inventory: { title: "Lager", intro: "Både det medarbejderne bruger hos kunderne, og arbejdstøj de kan bestille.", blocks: [
@@ -1374,6 +1477,7 @@ function PlanningApp({ session, onSignOut }) {
         { data: tplSkillsData },
         { data: instData },
       { data: onskerData },
+      { data: noterData },
         { data: travelData },
         { data: overridesData },
       ] = await Promise.all([
@@ -1391,6 +1495,7 @@ function PlanningApp({ session, onSignOut }) {
       // paa én gang, uden at hvert modul skal huske at filtrere.
       fetchAllRows("instances", "*", (q) => q.is("deleted_at", null)).then((data) => ({ data })),
       supabase.from("reschedule_requests").select("*").eq("status", "afventer").then(({ data }) => ({ data })),
+      supabase.from("task_notes").select("*").order("created_at", { ascending: false }).then(({ data }) => ({ data })),
         supabase.from("travel_settings").select("*").eq("id","default").single(),
         supabase.from("travel_overrides").select("*"),
       ]);
@@ -1537,6 +1642,7 @@ function PlanningApp({ session, onSignOut }) {
         // Den viste uge kan ligge uden for horisonten (hvis planlaeggeren har bladret).
         allInst = ensureWeekInstances(currentWeek, currentYear, allInst, mapped, empMapped, areasData || [], empAreasData || [], travelSettings);
         setNyTidOnsker(onskerData || []);
+        setOpgaveNoter(grupperNoter(noterData));
         setInstances(allInst);
         syncHealedAssignments(existingInst, allInst);
         // Nye opgaver i horisonten skal gemmes med det samme. Ellers findes de kun
@@ -1563,6 +1669,8 @@ function PlanningApp({ session, onSignOut }) {
           offSchedule: i.off_schedule ?? false, completedBy: i.completed_by ?? null, completedAt: i.completed_at ?? null,
           onSchedule: i.on_schedule ?? false,
         })));
+        setNyTidOnsker(onskerData || []);
+        setOpgaveNoter(grupperNoter(noterData));
       }
 
       // Transport
@@ -1587,8 +1695,14 @@ function PlanningApp({ session, onSignOut }) {
   // Oensker om ny tid fra medarbejderne. De aendrer ikke selv planen — de beder om
   // en aendring, og backoffice afgoer og planlaegger den.
   const [nyTidOnsker, setNyTidOnsker] = useState([]);
+  // Medarbejdernes kommentarer og billeder. Hentes samlet og lægges i et opslag pr.
+  // opgave, saa hverken ugeplanen eller faktureringen skal spoerge databasen pr. linje.
+  const [opgaveNoter, setOpgaveNoter] = useState({});
   const [afvisId, setAfvisId] = useState(null);
   const [afvisNote, setAfvisNote] = useState("");
+  // Minutter kontoret vil fakturere for et forgaeves besoeg, pr. melding. Starter
+  // paa opgavens planlagte varighed, men kan saettes ned hvis kun turen faktureres.
+  const [forgaevesMin, setForgaevesMin] = useState({});
   const travelTried = useRef(new Set());
   useEffect(() => {
     if (loading) return;
@@ -2553,6 +2667,44 @@ function PlanningApp({ session, onSignOut }) {
     notify("Aftalen er markeret som udgået — " + slettet + " kommende opgave" + (slettet === 1 ? "" : "r") + " er fjernet");
     return true;
   }
+  // Forgaeves besoeg: medarbejderen kom ikke ind, saa der er ingen registreret tid,
+  // og fakturagrundlaget ville derfor vaere nul. Kontoret afgoer om kunden skal betale
+  // alligevel — og goer det ved at registrere tiden og saette opgaven til udfoert,
+  // praecis som ved enhver anden opgave. Reglen om at der kun faktureres for
+  // registreret tid staar dermed uroert; det er kontoret der registrerer tiden.
+  async function fakturerForgaeves(onske, minutter) {
+    const t = instances.find((x) => x.id === onske.instance_id);
+    if (!t) { notify("Opgaven findes ikke længere"); return; }
+    const m = Number(minutter);
+    if (!m || m <= 0) { notify("Angiv hvor mange minutter der skal faktureres"); return; }
+    // empId "planner" bruges allerede i faktureringen til at skelne kontorets egne
+    // registreringer fra medarbejdernes. Noten forklarer hvorfor der er tid paa en
+    // opgave ingen har udfoert — ellers ville det ligne en fejl om et halvt aar.
+    const nyLog = [...(t.timeLog || t.time_log || []), {
+      minutes: m, empId: "planner",
+      note: "Forgæves besøg — fakturérbart efter kontorets beslutning",
+    }];
+    const opdateret = { ...t, timeLog: nyLog, time_log: nyLog, status: "udført", completedAt: new Date().toISOString() };
+    setInstances((prev) => prev.map((x) => (x.id === t.id ? opdateret : x)));
+    syncInstance(opdateret);
+    const { error } = await supabase.from("reschedule_requests")
+      .update({ status: "udfoert", decided_at: new Date().toISOString() }).eq("id", onske.id);
+    if (error) { notify("Opgaven er sat til udført, men meldingen kunne ikke lukkes: " + error.message); return; }
+    setNyTidOnsker((prev) => prev.filter((r) => r.id !== onske.id));
+    notify(`${t.title || "Opgaven"} er sat til udført med ${fmtMin(m)} — den kommer med på fakturaen`);
+  }
+
+  // Kunden skal ikke betale. Opgaven bliver staaende uden registreret tid og falder
+  // dermed af sig selv ud af fakturagrundlaget. Meldingen lukkes, saa banneret toemmes.
+  async function henlaegForgaeves(onske, note) {
+    const { error } = await supabase.from("reschedule_requests")
+      .update({ status: "afvist", planner_note: note || "Ikke faktureret", decided_at: new Date().toISOString() })
+      .eq("id", onske.id);
+    if (error) { notify("Kunne ikke lukke meldingen: " + error.message); return; }
+    setNyTidOnsker((prev) => prev.filter((r) => r.id !== onske.id));
+    notify("Meldingen er lukket — opgaven faktureres ikke");
+  }
+
   // Godkend: opgaven flyttes til det tidspunkt medarbejderen har aftalt med kunden.
   // Medarbejderen bliver paa opgaven — det er hende der har lavet aftalen. Passer
   // det nye tidspunkt ikke i hendes dag, dukker det op som en tidskonflikt i ugeplanen,
@@ -3153,38 +3305,100 @@ function PlanningApp({ session, onSignOut }) {
 
       {/* Oensker om ny tid fra medarbejderne. Ligger oeverst i ugeplanen, saa de
           ikke kan overses — en medarbejder har givet kunden et loefte og venter paa svar. */}
-      {view === "uge" && nyTidOnsker.length > 0 && (
-        <div style={{ margin: "0 0 12px", border: "1px solid #FCD34D", background: "#FFFBEB", borderRadius: 12, overflow: "hidden" }}>
-          <div style={{ padding: "10px 14px", fontWeight: 800, color: "#92400E", fontSize: 14, borderBottom: "1px solid #FDE68A" }}>
-            {nyTidOnsker.length} ønske{nyTidOnsker.length === 1 ? "" : "r"} om ny tid
+      {view === "uge" && nyTidOnsker.length > 0 && (() => {
+        const antalForgaeves = nyTidOnsker.filter((o) => o.kind === "forgaeves").length;
+        const antalNyTid = nyTidOnsker.length - antalForgaeves;
+        const overskrift = [
+          antalForgaeves > 0 ? `${antalForgaeves} forgæves besøg` : null,
+          antalNyTid > 0 ? `${antalNyTid} ønske${antalNyTid === 1 ? "" : "r"} om ny tid` : null,
+        ].filter(Boolean).join(" · ");
+        // Et forgaeves besoeg er dyrere at overse end et oenske om ny tid, saa
+        // banneret farves roedt saa snart der er mindst ét af dem.
+        const roedt = antalForgaeves > 0;
+        return (
+        <div style={{ margin: "0 0 12px", border: `1px solid ${roedt ? "#FCA5A5" : "#FCD34D"}`, background: roedt ? "#FEF2F2" : "#FFFBEB", borderRadius: 12, overflow: "hidden" }}>
+          <div style={{ padding: "10px 14px", fontWeight: 800, color: roedt ? "#991B1B" : "#92400E", fontSize: 14, borderBottom: `1px solid ${roedt ? "#FECACA" : "#FDE68A"}` }}>
+            {overskrift}
           </div>
           {nyTidOnsker.map((o) => {
             const opgave = instances.find((x) => x.id === o.instance_id);
             const medarb = employees.find((e) => e.id === o.employee_id);
-            const nyTid = o.requested_date + (o.requested_time ? " kl. " + String(o.requested_time).slice(0, 5) : "");
+            const forgaeves = o.kind === "forgaeves";
+            const nyTid = o.requested_date
+              ? o.requested_date + (o.requested_time ? " kl. " + String(o.requested_time).slice(0, 5) : "")
+              : "";
             const gammelDag = (ALL_DAYS.find((x) => x.key === o.old_day) || {}).label || o.old_day || "";
             const gammel = o.old_week ? `uge ${o.old_week}, ${gammelDag}` : "";
+            // Kun noten der hoerer til meldingen. Opgavens oevrige kommentarer staar
+            // paa opgaven selv og ville goere banneret uoverskueligt.
+            const meldingensNoter = (opgaveNoter[o.instance_id] || []).filter((n) => n.id === o.note_id);
             return (
-              <div key={o.id} style={{ padding: "12px 14px", borderBottom: "1px solid #FEF3C7" }}>
-                <div style={{ fontSize: 13, color: "#78350F" }}>
-                  <b>{medarb ? medarb.name : "Medarbejder"}</b> ønsker <b>{opgave ? opgave.title : "opgaven"}</b>
-                  {opgave && opgave.customerName ? ` hos ${opgave.customerName}` : ""}
-                  {gammel ? ` flyttet fra ${gammel}` : " flyttet"} til <b>{nyTid}</b>
+              <div key={o.id} style={{ padding: "12px 14px", borderBottom: `1px solid ${forgaeves ? "#FEE2E2" : "#FEF3C7"}` }}>
+                <div style={{ fontSize: 13, color: forgaeves ? "#7F1D1D" : "#78350F" }}>
+                  {forgaeves ? (
+                    <>
+                      <b>{medarb ? medarb.name : "Medarbejder"}</b> kunne ikke komme ind hos{" "}
+                      <b>{opgave && opgave.customerName ? opgave.customerName : "kunden"}</b>
+                      {opgave ? ` — ${opgave.title}` : ""}
+                      {gammel ? ` (${gammel})` : ""}. Opgaven blev ikke udført.
+                      {nyTid ? <> Foreslået ny tid: <b>{nyTid}</b>.</> : null}
+                    </>
+                  ) : (
+                    <>
+                      <b>{medarb ? medarb.name : "Medarbejder"}</b> ønsker <b>{opgave ? opgave.title : "opgaven"}</b>
+                      {opgave && opgave.customerName ? ` hos ${opgave.customerName}` : ""}
+                      {gammel ? ` flyttet fra ${gammel}` : " flyttet"} til <b>{nyTid}</b>
+                    </>
+                  )}
                 </div>
-                <div style={{ fontSize: 13, color: "#92400E", margin: "6px 0 10px", fontStyle: "italic" }}>„{o.reason}"</div>
+                <div style={{ fontSize: 13, color: forgaeves ? "#991B1B" : "#92400E", margin: "6px 0 10px", fontStyle: "italic" }}>„{o.reason}"</div>
+                {meldingensNoter.length > 0 && (
+                  <div style={{ marginBottom: 10 }}>
+                    <OpgaveNoter noter={meldingensNoter} employees={employees} />
+                  </div>
+                )}
                 {afvisId === o.id ? (
                   <div>
                     <textarea rows={2} value={afvisNote} onChange={(e) => setAfvisNote(e.target.value)}
-                      placeholder="Hvorfor kan det ikke lade sig gøre? Medarbejderen får beskeden på mail."
+                      placeholder={forgaeves
+                        ? "Notat til dig selv om hvorfor der ikke faktureres. Gemmes på meldingen."
+                        : "Hvorfor kan det ikke lade sig gøre? Medarbejderen får beskeden på mail."}
                       style={{ width: "100%", padding: "8px 10px", fontSize: 13, borderRadius: 8, border: "1px solid #FCD34D", fontFamily: "inherit" }} />
                     <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
                       <button style={styles.secondaryBtn} onClick={() => { setAfvisId(null); setAfvisNote(""); }}>Fortryd</button>
                       <button disabled={!afvisNote.trim()}
                         style={{ ...styles.secondaryBtn, color: "#B91C1C", borderColor: "#FCA5A5", opacity: afvisNote.trim() ? 1 : 0.5 }}
-                        onClick={async () => { await afvisNyTid(o, afvisNote.trim()); setAfvisId(null); setAfvisNote(""); }}>
-                        Send afvisning
+                        onClick={async () => {
+                          if (forgaeves) await henlaegForgaeves(o, afvisNote.trim());
+                          else await afvisNyTid(o, afvisNote.trim());
+                          setAfvisId(null); setAfvisNote("");
+                        }}>
+                        {forgaeves ? "Luk uden fakturering" : "Send afvisning"}
                       </button>
                     </div>
+                  </div>
+                ) : forgaeves ? (
+                  <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                    {/* Minutterne staar aabent frem for at vaere gemt bag en dialog.
+                        Kontoret skal kunne se hvad de fakturerer, foer de trykker. */}
+                    <label style={{ fontSize: 12, fontWeight: 700, color: "#7F1D1D" }}>Fakturér</label>
+                    <input
+                      type="number" min="0" step="5"
+                      value={forgaevesMin[o.id] ?? (opgave ? opgave.duration : 0)}
+                      onChange={(e) => setForgaevesMin((prev) => ({ ...prev, [o.id]: e.target.value }))}
+                      style={{ width: 80, padding: "7px 9px", fontSize: 13, borderRadius: 8, border: "1px solid #FCA5A5" }} />
+                    <span style={{ fontSize: 12, color: "#7F1D1D" }}>min.</span>
+                    <button style={{ ...styles.primaryBtn, background: "#16A34A" }}
+                      onClick={() => fakturerForgaeves(o, forgaevesMin[o.id] ?? (opgave ? opgave.duration : 0))}>
+                      Sæt til udført og fakturér
+                    </button>
+                    {o.requested_date && (
+                      <button style={styles.secondaryBtn} onClick={() => godkendNyTid(o)}>Flyt til {o.requested_date}</button>
+                    )}
+                    <button style={{ ...styles.secondaryBtn, color: "#B91C1C", borderColor: "#FCA5A5" }}
+                      onClick={() => { setAfvisId(o.id); setAfvisNote(""); }}>
+                      Fakturér ikke
+                    </button>
                   </div>
                 ) : (
                   <div style={{ display: "flex", gap: 8 }}>
@@ -3196,11 +3410,12 @@ function PlanningApp({ session, onSignOut }) {
             );
           })}
         </div>
-      )}
+        );
+      })()}
 
       {view === "uge" && (
         <WeekView
-          employees={employees} instances={weekInstancesList} unplaced={unplaced}
+          employees={employees} instances={weekInstancesList} unplaced={unplaced} opgaveNoter={opgaveNoter}
           onAdd={() => setShowAddTask(true)} onAuto={runAuto} onScheduleWeek={runScheduleWeek} onAutoAllWeeks={runAutoAllWeeks}
           onPlace={manualPlace} onUnplace={unplace} onRemoveAssignee={removeAssignee} onDelete={deleteTask}
           onToggleInclude={(taskId) => updateInstance(taskId, (t) => ({ ...t, includeInAuto: !t.includeInAuto }))}
@@ -3234,7 +3449,7 @@ function PlanningApp({ session, onSignOut }) {
         <ChecklistsView checklistTemplates={checklistTemplates} onSave={saveChecklistTemplate} onDelete={deleteChecklistTemplate} />
       )}
       {view === "time" && (
-        <TimeView instances={instances} employees={employees}
+        <TimeView instances={instances} employees={employees} opgaveNoter={opgaveNoter}
           onExportToDinero={exportToDinero} totalLogged={totalLogged} weekLabel={wk.label}
           isAdminUser={isAdminUser} productUsage={productUsage} onToggleProductInvoice={toggleProductInvoiceReady} onToggleProductDinero={toggleProductDineroExported}
           pricing={pricing} onPricingChange={async (newPricing) => {
@@ -3532,7 +3747,7 @@ function scheduleWeekSimple(instances, employees, weekOffset, weekYear) {
   return { count: updates.length, employees: Array.from(assignedEmployees), updates };
 }
 
-function WeekView({ employees, instances, unplaced, onAdd, onAuto, onScheduleWeek, onAutoAllWeeks, onPlace, onUnplace, onRemoveAssignee, onDelete, onOpenTask, onToggleInclude, onEditEmp, dragId, setDragId, weekLabel, weekNo, weekOffset, weekYear, onPrevWeek, onNextWeek, onTodayWeek, travelSettings, onOpenTravelSettings, currentIsoWeek, areas, employeeAreas, onOpenAddBlock, onOpenAddActivity }) {
+function WeekView({ employees, instances, unplaced, onAdd, onAuto, onScheduleWeek, onAutoAllWeeks, onPlace, onUnplace, onRemoveAssignee, onDelete, onOpenTask, onToggleInclude, onEditEmp, dragId, setDragId, weekLabel, weekNo, weekOffset, weekYear, onPrevWeek, onNextWeek, onTodayWeek, travelSettings, onOpenTravelSettings, currentIsoWeek, areas, employeeAreas, onOpenAddBlock, onOpenAddActivity, opgaveNoter }) {
   const [addMenuTaskId, setAddMenuTaskId] = useState(null);
   const [showWeekend, setShowWeekend] = useState(false);
   const [selectedAreaId, setSelectedAreaId] = useState("all"); // "all" eller area.id
@@ -3771,6 +3986,18 @@ function WeekView({ employees, instances, unplaced, onAdd, onAuto, onScheduleWee
                           {t.offSchedule && <span title="Planlagt uden for aftale" style={{ fontSize: 12, marginLeft: 2 }}>⚠️</span>}
                               {t.onSchedule && !t.offSchedule && <span title="Planlagt på aftalt dag" style={{ fontSize: 12, marginLeft: 2 }}>✓</span>}
                               {t.outsideArea && <span title="Planlagt uden for medarbejderens område" style={{ fontSize: 12, marginLeft: 2 }}>📍⚠️</span>}
+                              {/* Markering af at medarbejderen har skrevet eller fotograferet noget.
+                                  Uden den ville dokumentationen kun blive opdaget af den der tilfaeldigvis
+                                  aabnede opgaven — og saa var der ingen grund til at tage billedet. */}
+                              {(opgaveNoter?.[t.id]?.length > 0) && (
+                                <span
+                                  title={opgaveNoter[t.id].some((n) => (n.photos || []).length > 0)
+                                    ? "Medarbejderen har skrevet en kommentar og vedhæftet billeder"
+                                    : "Medarbejderen har skrevet en kommentar"}
+                                  style={{ fontSize: 12, marginLeft: 2 }}>
+                                  {opgaveNoter[t.id].some((n) => (n.photos || []).length > 0) ? "📷" : "💬"}
+                                </span>
+                              )}
                               {done
                                 ? <span style={styles.doneCheck} title={completion?.label}>✓</span>
                                 : <span style={{ ...styles.statusDot, background: statusColor(t.status) }} />}
@@ -4309,7 +4536,7 @@ function ChecklistModal({ checklist, onClose, onSave }) {
 }
 
 // ---------- Time & Export ----------
-function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLabel, onUpdateInstance, pricing: pricingProp, onPricingChange, isAdminUser, onOpenTask, productUsage, onToggleProductInvoice, onToggleProductDinero }) {
+function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLabel, onUpdateInstance, pricing: pricingProp, onPricingChange, isAdminUser, onOpenTask, productUsage, onToggleProductInvoice, onToggleProductDinero, opgaveNoter }) {
   const productLinesByTask = useMemo(() => {
     const map = {};
     (productUsage || []).forEach((tx) => {
@@ -4573,6 +4800,10 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
           const diffKr = registeredKr - plannedKr;
 
           const taskProductLines = productLinesByTask[t.id] || [];
+          // Medarbejderens dokumentation staar direkte under linjen. Det er her
+          // beslutningen om beloebet traeffes, og et billede af et beskidt koekken
+          // er praecis det argument man skal bruge over for kunden bagefter.
+          const taskNoter = (opgaveNoter || {})[t.id] || [];
           return (
             <React.Fragment key={t.id}>
             <div style={{ display: "grid", gridTemplateColumns: "50px 140px 120px 160px 1fr 70px 80px 100px 100px 100px 90px 70px 28px", gap: 0, padding: "10px 14px", borderBottom: (idx < placed.length - 1 || taskProductLines.length > 0) ? "1px solid #F1F5F9" : "none", alignItems: "center", background: t.dineroExported ? "#EEF2FF" : t.invoiceReady ? "#F0FDF4" : "transparent" }}>
@@ -4675,6 +4906,11 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
                 </span>
               </div>
             </div>
+            {taskNoter.length > 0 && (
+              <div style={{ padding: "8px 14px 10px 34px", background: "#FCFCFD", borderBottom: "1px solid #F1F5F9" }}>
+                <OpgaveNoter noter={taskNoter} employees={employees} />
+              </div>
+            )}
             {taskProductLines.map((pl, plIdx) => (
               <div key={pl.id} style={{ display: "grid", gridTemplateColumns: "50px 140px 120px 160px 1fr 70px 80px 100px 100px 100px 90px 70px 28px", gap: 0, padding: "4px 14px", alignItems: "center", background: pl.dineroExported ? "#EEF2FF" : pl.invoiceReady ? "#FFFBEB" : "#F8F8F8", borderBottom: (idx < placed.length - 1 || plIdx < taskProductLines.length - 1) ? "1px solid #F1F5F9" : "none" }}>
                 <div style={{ gridColumn: "5", display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: pl.invoiceReady ? "#92600A" : "#B0B0B0", textDecoration: pl.invoiceReady ? "none" : "line-through", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", paddingLeft: 20 }}>
