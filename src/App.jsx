@@ -33,7 +33,7 @@ async function signeredeFotoUrls(stier) {
 
 // Viser medarbejdernes kommentarer og billeder. Bruges baade i banneret i ugeplanen
 // og under fakturering, hvor beslutningen om at fakturere faktisk traeffes.
-function OpgaveNoter({ noter, employees, tom }) {
+function OpgaveNoter({ noter, employees, tom, kompakt }) {
   const [urls, setUrls] = React.useState({});
   const stier = React.useMemo(
     () => (noter || []).flatMap((n) => n.photos || []),
@@ -51,6 +51,48 @@ function OpgaveNoter({ noter, employees, tom }) {
   if (!noter || noter.length === 0) {
     return tom ? <div style={{ fontSize: 12, color: "#94A3B8", fontStyle: "italic" }}>{tom}</div> : null;
   }
+
+  const hvemNaar = (n) => {
+    const hvem = (employees || []).find((e) => e.id === n.employee_id)?.name || "Medarbejder";
+    const naar = new Date(n.created_at).toLocaleString("da-DK", {
+      day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit",
+    });
+    return `${hvem} · ${naar}`;
+  };
+
+  // I faktureringen ligger noterne inde i en tabel. Ét kort pr. notat gjorde raekken
+  // fire gange saa hoej som selve fakturalinjen, og overblikket forsvandt. Kompakt
+  // laegger derfor alt paa én linje der ombryder: tekster foerst, billeder til hoejre.
+  if (kompakt) {
+    const tekster = noter.filter((n) => n.text);
+    const billeder = noter.flatMap((n) => (n.photos || []).map((sti) => ({ sti, n })));
+    const slettede = noter.filter((n) => n.photos_deleted_at).length;
+    return (
+      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+        {tekster.map((n) => (
+          <span key={n.id} title={hvemNaar(n)}
+            style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12, color: "#334155",
+                     background: "#fff", border: "1px solid #E2E8F0", borderRadius: 999, padding: "3px 10px", cursor: "help" }}>
+            <span style={{ opacity: 0.6 }}>{n.kind === "forgaeves" ? "🚫" : "💬"}</span>
+            {n.text}
+          </span>
+        ))}
+        {billeder.map(({ sti, n }) => (
+          urls[sti]
+            ? <a key={sti} href={urls[sti]} target="_blank" rel="noreferrer" title={hvemNaar(n)}>
+                <img src={urls[sti]} alt="" style={{ width: 40, height: 40, objectFit: "cover", borderRadius: 5, border: "1px solid #E2E8F0", display: "block" }} />
+              </a>
+            : <div key={sti} style={{ width: 40, height: 40, borderRadius: 5, background: "#F1F5F9" }} />
+        ))}
+        {slettede > 0 && (
+          <span style={{ fontSize: 11, color: "#94A3B8", fontStyle: "italic" }}>
+            Billeder slettet efter 12 måneder
+          </span>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
       {noter.map((n) => {
@@ -4907,8 +4949,8 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
               </div>
             </div>
             {taskNoter.length > 0 && (
-              <div style={{ padding: "8px 14px 10px 34px", background: "#FCFCFD", borderBottom: "1px solid #F1F5F9" }}>
-                <OpgaveNoter noter={taskNoter} employees={employees} />
+              <div style={{ padding: "6px 14px 7px 34px", background: "#FCFCFD", borderBottom: "1px solid #F1F5F9" }}>
+                <OpgaveNoter noter={taskNoter} employees={employees} kompakt />
               </div>
             )}
             {taskProductLines.map((pl, plIdx) => (
