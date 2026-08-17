@@ -1242,6 +1242,11 @@ const MODULE_HELP = {
         "Er der en kommentar på en opgave, står der 💬 på den i ugeplanen. Er der billeder med, står der 📷 i stedet.",
         "Selve kommentaren og billederne ser du under Fakturering, lige under opgavens linje. Det er dér du skal bruge dem.",
         "Billederne slettes automatisk efter 12 måneder, fordi billeder fra kundernes hjem er personoplysninger. Teksten bliver stående."] },
+    { h: "Nexus-kvittering", p: [
+        "På en Nexus-opgave bliver medarbejderen ved afslutningen mindet om at kvittere i KMD Nexus, og sætter et flueben når hun har gjort det.",
+        "Fluebenet spærrer ikke — hun kan afslutte uden. Til gengæld markeres opgaven med «Nexus!» i ugeplanen og «Ikke kvitteret i Nexus» på fakturalinjen.",
+        "Kommunen betaler efter det der står i Nexus, så en manglende kvittering er noget du skal følge op på med medarbejderen — ikke noget du kan rette her.",
+        "Er der intet mærke, er der kvitteret, eller opgaven er ikke en Nexus-opgave."] },
   ], warn: "En fleksibel opgave har en «senest udført»-dato. Er fristen passeret, planlægges opgaven ikke — den rulles ikke videre af sig selv. Ret fristen, så placeres den med det samme." },
 
   employees: { title: "Medarbejdere", intro: "Her styrer du hvem der kan hvad, hvor meget tid de har, og hvilke områder de dækker.", blocks: [
@@ -1275,7 +1280,8 @@ const MODULE_HELP = {
         "Har medarbejderen skrevet en kommentar eller taget billeder ude hos kunden, står de direkte under opgavens linje.",
         "Brug dem når du skal afgøre beløbet — et billede af et usædvanligt beskidt køkken er det argument du skal bruge over for kunden bagefter.",
         "Er kommentaren mærket «Kom ikke ind», blev opgaven ikke udført. Er der alligevel registreret tid på den, er det fordi du selv har besluttet i ugeplanen at den skal faktureres.",
-        "Billederne slettes automatisk efter 12 måneder. Står der at de er slettet, er teksten stadig gyldig dokumentation for hvad der skete."] },
+        "Billederne slettes automatisk efter 12 måneder. Står der at de er slettet, er teksten stadig gyldig dokumentation for hvad der skete.",
+        "Står der «Ikke kvitteret i Nexus» på linjen, har medarbejderen afsluttet uden at kvittere i KMD Nexus. Tjek det før du fakturerer — kommunen betaler efter Nexus."] },
   ], warn: "Der faktureres kun registreret tid. Er der ikke logget tid, springes selve arbejdet over — også selvom opgaven er markeret som fakturagrundlag. Bekræftelsen fortæller hvor mange det gælder. Forbrugte produkter kommer stadig med." },
 
   inventory: { title: "Lager", intro: "Både det medarbejderne bruger hos kunderne, og arbejdstøj de kan bestille.", blocks: [
@@ -1667,6 +1673,7 @@ function PlanningApp({ session, onSignOut }) {
             dineroSynced: i.dinero_synced ?? false,
             includeInAuto: i.include_in_auto ?? false,
             offSchedule: i.off_schedule ?? false, completedBy: i.completed_by ?? null, completedAt: i.completed_at ?? null,
+          nexusConfirmed: i.nexus_confirmed ?? null,
             onSchedule: i.on_schedule ?? false,
           };
         });
@@ -1709,6 +1716,7 @@ function PlanningApp({ session, onSignOut }) {
           dineroSynced: i.dinero_synced ?? false,
           includeInAuto: i.include_in_auto ?? false,
           offSchedule: i.off_schedule ?? false, completedBy: i.completed_by ?? null, completedAt: i.completed_at ?? null,
+          nexusConfirmed: i.nexus_confirmed ?? null,
           onSchedule: i.on_schedule ?? false,
         })));
         setNyTidOnsker(onskerData || []);
@@ -1836,6 +1844,7 @@ function PlanningApp({ session, onSignOut }) {
         offSchedule: i.off_schedule ?? false,
         completedBy: i.completed_by ?? null,
         completedAt: i.completed_at ?? null,
+        nexusConfirmed: i.nexus_confirmed ?? null,
         onSchedule: i.on_schedule ?? false,
       };
     }
@@ -1936,6 +1945,9 @@ function PlanningApp({ session, onSignOut }) {
       on_schedule: inst.onSchedule ?? false,
       completed_by: inst.completedBy ?? null,
       completed_at: inst.completedAt ?? null,
+      // Skal med i skrivningen, ellers ville planlaeggerens egne rettelser paa en
+      // opgave nulstille medarbejderens nexus-kvittering til null.
+      nexus_confirmed: inst.nexusConfirmed ?? null,
       scheduled_time: inst.scheduledTime || null,
       checklist_template_ids: inst.checklistTemplateIds || [],
       extra_items: inst.extraItems || [],
@@ -4031,6 +4043,15 @@ function WeekView({ employees, instances, unplaced, onAdd, onAuto, onScheduleWee
                               {/* Markering af at medarbejderen har skrevet eller fotograferet noget.
                                   Uden den ville dokumentationen kun blive opdaget af den der tilfaeldigvis
                                   aabnede opgaven — og saa var der ingen grund til at tage billedet. */}
+                              {/* Nexus-opgave afsluttet uden kvittering. Kommunen betaler efter
+                                  det der staar i Nexus, saa den mangler skal opdages samme dag
+                                  — ikke foerst naar der faktureres om tre uger. */}
+                              {t.nexusConfirmed === false && (
+                                <span title="Afsluttet uden kvittering i KMD Nexus — følg op med medarbejderen"
+                                  style={{ fontSize: 10, fontWeight: 800, color: "#fff", background: "#4F46E5", borderRadius: 4, padding: "1px 4px", marginLeft: 2 }}>
+                                  Nexus!
+                                </span>
+                              )}
                               {(opgaveNoter?.[t.id]?.length > 0) && (
                                 <span
                                   title={opgaveNoter[t.id].some((n) => (n.photos || []).length > 0)
@@ -4948,8 +4969,14 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
                 </span>
               </div>
             </div>
-            {taskNoter.length > 0 && (
-              <div style={{ padding: "6px 14px 7px 34px", background: "#FCFCFD", borderBottom: "1px solid #F1F5F9" }}>
+            {(taskNoter.length > 0 || t.nexusConfirmed === false) && (
+              <div style={{ padding: "6px 14px 7px 34px", background: "#FCFCFD", borderBottom: "1px solid #F1F5F9", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                {t.nexusConfirmed === false && (
+                  <span title="Medarbejderen afsluttede uden at kvittere i KMD Nexus. Kommunen betaler efter Nexus, så tjek det før du fakturerer."
+                    style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12, fontWeight: 600, color: "#312E81", background: "#EEF2FF", border: "1px solid #C7D2FE", borderRadius: 999, padding: "3px 10px", cursor: "help" }}>
+                    Ikke kvitteret i Nexus
+                  </span>
+                )}
                 <OpgaveNoter noter={taskNoter} employees={employees} kompakt />
               </div>
             )}
