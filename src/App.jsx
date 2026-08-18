@@ -5178,33 +5178,37 @@ function EmployeeExportView({ instances, employees }) {
   // gitre, saa hvis de ikke faar praecis samme definition, staar tallene forskudt
   // for deres egen overskrift — og det opdager man foerst naar nogen brokker sig.
   const kolonner = harLoen
-    ? "150px 50px 80px 1fr 90px 95px 105px 115px 1fr"
+    ? "150px 50px 80px 1fr 90px 105px 95px 115px 1fr"
     : "160px 60px 90px 1fr 100px 100px 1fr";
 
   function exportRowsCSV() {
     // Loenkolonnerne kommer kun med naar satserne faktisk kunne laeses. Ellers ville
     // filen have tomme loenkolonner, og nogen ville tro at loennen var nul.
-    const header = ["Medarbejder", "Uge", "Dag", "Opgave", "Planlagt (min)", "Planlagt (timer)", "Registreret (min)", "Registreret (timer)",
-      ...(harLoen ? ["Timeløn", "Planlagt løn", "Registreret løn"] : []),
+    // Samme parvise raekkefoelge som paa skaermen: timeloen, saa planlagt tid og
+    // planlagt loen, saa registreret tid og registreret loen.
+    const header = ["Medarbejder", "Uge", "Dag", "Opgave",
+      ...(harLoen ? ["Timeløn"] : []),
+      "Planlagt (min)", "Planlagt (timer)", ...(harLoen ? ["Planlagt løn"] : []),
+      "Registreret (min)", "Registreret (timer)", ...(harLoen ? ["Registreret løn"] : []),
       "Weekend", "Weekendtimer", "Afvigelse"];
     const data = rows.map((r) => [
       r.empName, `Uge ${r.week}`, r.dayLabel, r.title,
+      ...(harLoen ? [r.hourlyWage ?? ""] : []),
       r.planned, (r.planned / 60).toFixed(2),
+      ...(harLoen ? [r.plannedWage == null ? "" : r.plannedWage.toFixed(2)] : []),
       r.registered, (r.registered / 60).toFixed(2),
-      ...(harLoen ? [
-        r.hourlyWage ?? "",
-        r.plannedWage == null ? "" : r.plannedWage.toFixed(2),
-        r.registeredWage == null ? "" : r.registeredWage.toFixed(2),
-      ] : []),
+      ...(harLoen ? [r.registeredWage == null ? "" : r.registeredWage.toFixed(2)] : []),
       r.isWeekend ? "Ja" : "", r.isWeekend ? (r.registered / 60).toFixed(2) : "",
       r.deviationText || "",
     ]);
     // Sumlinje nederst, saa den der modtager filen ikke skal regne selv.
-    if (harLoen && rows.length > 0) {
+    if (rows.length > 0) {
       data.push(["I alt", "", "", "",
+        ...(harLoen ? [""] : []),
         totalPlanned, (totalPlanned / 60).toFixed(2),
+        ...(harLoen ? [totalPlannedWage.toFixed(2)] : []),
         totalRegistered, (totalRegistered / 60).toFixed(2),
-        "", totalPlannedWage.toFixed(2), totalRegisteredWage.toFixed(2),
+        ...(harLoen ? [totalRegisteredWage.toFixed(2)] : []),
         "", (totalWeekend / 60).toFixed(2), ""]);
     }
     const csv = [header, ...data].map((row) => row.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
@@ -5255,9 +5259,13 @@ function EmployeeExportView({ instances, employees }) {
 
       <div style={{ display: "grid", gridTemplateColumns: kolonner, gap: 0, background: "#F8FAFC", borderRadius: "10px 10px 0 0", padding: "8px 14px", fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.04em" }}>
         <span>Medarbejder</span><span>Uge</span><span>Dag</span><span>Opgave</span>
+        {/* Timer og kroner staar parvis: planlagt tid ved siden af planlagt loen,
+            registreret tid ved siden af registreret loen. Med alle fire tal i
+            raekkefoelgen tid-tid-kr-kr skulle oejet hoppe frem og tilbage for at
+            sammenholde det der hoerer sammen. */}
         <span style={{ textAlign: "right" }}>Planlagt</span>
-        <span style={{ textAlign: "right" }}>Registreret</span>
         {harLoen && <span style={{ textAlign: "right" }}>Planlagt løn</span>}
+        <span style={{ textAlign: "right" }}>Registreret</span>
         {harLoen && <span style={{ textAlign: "right" }}>Registreret løn</span>}
         <span>Afvigelse</span>
       </div>
@@ -5269,12 +5277,12 @@ function EmployeeExportView({ instances, employees }) {
             <span style={{ fontSize: 12, color: "#64748B" }}>{r.dayLabel}</span>
             <span style={{ fontSize: 13, color: "#111111", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.title}</span>
             <span style={{ fontSize: 13, fontWeight: 500, color: "#111111", textAlign: "right" }}>{fmtMin(r.planned)}</span>
-            <span style={{ fontSize: 13, fontWeight: 700, color: r.registered === 0 ? "#94A3B8" : "#16A34A", textAlign: "right" }}>{fmtMin(r.registered)}</span>
             {harLoen && (
               <span style={{ fontSize: 13, color: "#64748B", textAlign: "right" }} title={r.hourlyWage != null ? `${r.hourlyWage} kr/time` : ""}>
                 {r.plannedWage == null ? "—" : kr(r.plannedWage)}
               </span>
             )}
+            <span style={{ fontSize: 13, fontWeight: 700, color: r.registered === 0 ? "#94A3B8" : "#16A34A", textAlign: "right" }}>{fmtMin(r.registered)}</span>
             {harLoen && (
               <span style={{ fontSize: 13, fontWeight: 600, color: r.registered === 0 ? "#94A3B8" : "#4F46E5", textAlign: "right" }}>
                 {r.registeredWage == null ? "—" : kr(r.registeredWage)}
