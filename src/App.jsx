@@ -4861,9 +4861,11 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
 
       <div style={{ display: "grid", gridTemplateColumns: "50px 140px 120px 160px 1fr 70px 80px 100px 100px 100px 90px 70px 28px", gap: 0, background: "#F8FAFC", borderRadius: "10px 10px 0 0", padding: "8px 14px", fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.04em", marginTop: 8 }}>
         <span>Uge</span><span>Medarbejder</span><span>Kunde</span><span>Adresse</span><span>Opgave</span><span>Dag</span>
+        {/* Tid og kroner parvis, som i Medarbejder-eksport: planlagt tid ved siden af
+            planlagt beloeb, registreret tid ved siden af registreret beloeb. */}
         <span style={{ textAlign: "right" }}>Planlagt</span>
-        <span style={{ textAlign: "right" }}>Registreret</span>
         <span style={{ textAlign: "right" }}>Planlagt kr.</span>
+        <span style={{ textAlign: "right" }}>Registreret</span>
         <span style={{ textAlign: "right" }}>Registreret kr.</span>
         <span style={{ textAlign: "right" }}>Difference</span>
         <span style={{ textAlign: "center" }}>Dinero</span>
@@ -4926,6 +4928,10 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
               </div>
               <div style={{ fontSize: 12, color: "#64748B" }}>{dayLabel}</div>
               <div style={{ fontSize: 13, fontWeight: 500, color: "#111111", textAlign: "right" }}>{fmtMin(t.duration)}</div>
+              {/* Beløb planlagt */}
+              <div style={{ fontSize: 13, fontWeight: 500, color: "#64748B", textAlign: "right" }}>
+                {(isFixedPrice || rate > 0) ? `${isFixedPrice ? "💰 " : ""}${plannedKr.toLocaleString("da-DK")} kr` : "—"}
+              </div>
               <div style={{ textAlign: "right" }}>
                 {isEditing ? (
                   <div style={{ display: "flex", alignItems: "center", gap: 4, justifyContent: "flex-end" }}>
@@ -4956,10 +4962,6 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
                     </span>
                   </span>
                 )}
-              </div>
-              {/* Beløb planlagt */}
-              <div style={{ fontSize: 13, fontWeight: 500, color: "#64748B", textAlign: "right" }}>
-                {(isFixedPrice || rate > 0) ? `${isFixedPrice ? "💰 " : ""}${plannedKr.toLocaleString("da-DK")} kr` : "—"}
               </div>
               {/* Beløb registreret */}
               <div style={{ fontSize: 13, fontWeight: 600, color: logged > 0 ? "#16A34A" : "#94A3B8", textAlign: "right" }}>
@@ -5016,7 +5018,10 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
                   📦 {pl.label}
                   {pl.dineroExported && <span style={{ textDecoration: "none", fontSize: 9, fontWeight: 700, color: "#4F46E5", background: "#E0E7FF", borderRadius: 4, padding: "1px 5px", flexShrink: 0 }}>Sendt til Dinero</span>}
                 </div>
-                <div style={{ gridColumn: "8", textAlign: "right", fontSize: 11, color: pl.invoiceReady ? "#B45309" : "#B0B0B0" }}>{pl.qty} {pl.unit}</div>
+                {/* Kolonnenumrene skal foelge overskrifterne. Da beloebskolonnerne
+                    flyttede ind mellem tiderne, rykkede "Registreret" fra 8 til 9 —
+                    antallet ville ellers staa under "Planlagt kr.". */}
+                <div style={{ gridColumn: "9", textAlign: "right", fontSize: 11, color: pl.invoiceReady ? "#B45309" : "#B0B0B0" }}>{pl.qty} {pl.unit}</div>
                 <div style={{ gridColumn: "10", textAlign: "right", fontSize: 11, fontWeight: 600, color: pl.invoiceReady ? "#92600A" : "#B0B0B0" }}>{Math.round(pl.amount)} kr</div>
                 <div style={{ gridColumn: "12", display: "flex", justifyContent: "center" }}>
                   {isAdminUser && (
