@@ -215,6 +215,9 @@ function contractIconLabel(key) { const c = contractMeta(key); return c.icon + "
 // en rigtig rengøringsopgave — blokeringer skal ikke tælle med i fakturagrundlag,
 // rapportering osv., og skal forhindre auto-planlægning af den pågældende medarbejder.
 const BLOCK_TYPES = ["sygdom", "ferie"];
+// Timeloen bruges kun til loensummerne i Medarbejder-eksport. Satsen ligger i sin
+// egen tabel med adgang kun for administratorer — se kommentaren paa employee_wages.
+const STANDARD_TIMELOEN = 170;
 // Bruges kun hvis en kaldende funktion ikke har transportindstillingerne ved haanden.
 const DEFAULT_TRAVEL = { defaultMinutes: 20, dayStart: "07:00", overrides: {} };
 // Planlaegningshorisont: hvor mange uger frem opgaverne altid materialiseres.
@@ -1252,8 +1255,13 @@ const MODULE_HELP = {
   employees: { title: "Medarbejdere", intro: "Her styrer du hvem der kan hvad, hvor meget tid de har, og hvilke områder de dækker.", blocks: [
     { h: "Opret og redigér", p: ["Tryk «Ny medarbejder», eller blyanten på et kort.",
         "Mødetid bruges til at beregne hvornår dagens første opgave kan starte.",
+        "Timeløn bruges til lønsummerne i Medarbejder-eksport. Nye medarbejdere starter på 170 kr.",
         "Sæt kompetenceniveau: Nybegynder, Øvet eller Ekspert.",
         "Sæt timer til rådighed for mandag til fredag."] },
+    { h: "Hvem kan se lønnen", p: [
+        "Timelønnen ligger i sin egen tabel, som kun administratorer har adgang til. Det er håndhævet i databasen, ikke kun i skærmbilledet.",
+        "Er du ikke administrator, står feltet tomt, og lønkolonnerne i Medarbejder-eksport vises slet ikke — heller ikke i CSV-filen.",
+        "Medarbejder-appen henter aldrig lønnen. En medarbejder kan altså ikke se hverken sin egen eller kollegernes sats der."] },
     { h: "Kompetencer", p: ["Ligger under knappen «Kompetencer» øverst på siden. Her opretter, omdøber og sletter du de færdigheder du kan kræve på en opgave.", "En kompetence er et krav, ikke et ønske: kan medarbejderen den ikke på det krævede niveau, kommer hun slet ikke i betragtning til opgaven.", "Selve niveauet sættes pr. medarbejder på hendes eget kort — Nybegynder, Øvet eller Ekspert. Kræver opgaven Øvet, er Nybegynder ikke nok.", "Blandt dem der lever op til kravene, vælges den med det højeste samlede niveau. Står to lige, vælges den med mest ledig tid den dag.", "Sletter du en kompetence, fjernes den fra alle medarbejdere og fra alle opgaver.", "Omdøber du en kompetence, følger medarbejderne og aftalerne med. Men opgaver der allerede ligger i kalenderen, husker det gamle navn og viser derefter «Ingen har alle krævede kompetencer» — så ret kompetencen på de opgaver, eller lad være med at omdøbe når der er oprettet opgaver."] },
         { h: "Områder", p: ["Ligger under knappen «Områder». Et område er et navn og en række postnumre, og du klikker de medarbejdere til der dækker det.", "Ved planlægning aflæses postnummeret i opgavens adresse. Findes der et område med det postnummer, søges der kun blandt de medarbejdere der er knyttet til området.", "Har adressen intet postnummer, eller er postnummeret ikke lagt ind på noget område, planlægges der frit blandt alle med kompetencerne.", "Er der ikke klikket en eneste medarbejder på et område, springes området over. Et tomt område spærrer altså ikke — det gør ingenting.", "Kan ingen i området løse opgaven, planlægges den alligevel hos en der kan, og opgaven mærkes «Planlagt uden for medarbejderens område». En opgave bliver aldrig liggende alene fordi den falder uden for et område.", "Sletter du et område, forsvinder tilknytningerne med det samme. Opgaverne røres ikke."] },
     { h: "Adgang til Worklist", p: ["Skriv medarbejderens e-mail nederst på kortet og tryk Opret. Hun får en mail og kan logge ind i medarbejder-appen."] },
@@ -1309,7 +1317,13 @@ const MODULE_HELP = {
   medExport: { title: "Medarbejder-eksport", intro: "Grundlaget for løn: timer og kørsel pr. medarbejder.", blocks: [
     { h: "Sådan gør du", p: ["Vælg måned og år.", "«Afvigelse» viser hvor medarbejderen har skrevet en begrundelse.",
         "«Heraf weekend» er timer der udløser tillæg.",
-        "Tryk «Eksportér CSV» og send til lønsystemet. Filen har egne kolonner for weekend og weekendtimer."] },
+        "Tryk «Eksportér CSV» og send til lønsystemet. Filen har egne kolonner for weekend og weekendtimer, og en sumlinje nederst."] },
+    { h: "Løn", p: [
+        "Hver medarbejder har en timeløn på sit kort under Medarbejdere. Nye medarbejdere starter på 170 kr.",
+        "«Planlagt løn» er den afsatte tid gange medarbejderens sats. «Registreret løn» er den tid hun faktisk har registreret.",
+        "Øverst står de to summer for hele måneden: planlagt lønsum og registreret lønsum.",
+        "Er registreret lønsum meget lavere end planlagt, er det som regel manglende tidsregistrering — ikke sparede lønkroner. Kig i kolonnen «Registreret» først.",
+        "Satsen bruges kun her. Den indgår ikke i fakturering eller rapportering, som regner med timepriser over for kunden."] },
     { h: "Hvis tallene ikke passer", p: ["Timer mangler — medarbejderen har ikke registreret.",
         "Kørsel mangler — der er ikke registreret tid, eller adresserne mangler.",
         "Weekendtimer er 0 — tjek weekendaftalen, og at opgaven lå lørdag eller søndag."] },
@@ -1526,6 +1540,7 @@ function PlanningApp({ session, onSignOut }) {
         { data: instData },
       { data: onskerData },
       { data: noterData },
+      { data: wageData },
         { data: travelData },
         { data: overridesData },
       ] = await Promise.all([
@@ -1544,6 +1559,9 @@ function PlanningApp({ session, onSignOut }) {
       fetchAllRows("instances", "*", (q) => q.is("deleted_at", null)).then((data) => ({ data })),
       supabase.from("reschedule_requests").select("*").eq("status", "afventer").then(({ data }) => ({ data })),
       supabase.from("task_notes").select("*").order("created_at", { ascending: false }).then(({ data }) => ({ data })),
+      // Timeloen. Politikken slipper kun administratorer ind, saa for alle andre
+      // kommer der en tom liste tilbage — helt uden fejl, og uden at loennen laekker.
+      supabase.from("employee_wages").select("*").then(({ data }) => ({ data })),
         supabase.from("travel_settings").select("*").eq("id","default").single(),
         supabase.from("travel_overrides").select("*"),
       ]);
@@ -1579,6 +1597,10 @@ function PlanningApp({ session, onSignOut }) {
           isAdmin: e.is_admin ?? false,
           weekendOk: e.weekend_ok ?? false,
           startTime: e.start_time || null,
+          // Er man ikke administrator, giver politikken paa employee_wages ingen
+          // raekker, og satsen bliver null. Eksporten viser da en streg i stedet for
+          // et forkert beloeb — den maa ikke gaette paa standardsatsen.
+          hourlyWage: (wageData || []).find((w) => w.employee_id === e.id)?.hourly_wage ?? null,
           skills: Object.fromEntries(
             (empSkillsData || []).filter((s) => s.employee_id === e.id)
               .map((s) => {
@@ -1877,6 +1899,14 @@ function PlanningApp({ session, onSignOut }) {
     const { data: skillRows_db } = await supabase.from("skills").select("id, name");
     const { error: empErr } = await supabase.from("employees").upsert({ id: emp.id, name: emp.name, color: emp.color, is_admin: emp.isAdmin ?? false, weekend_ok: emp.weekendOk ?? false, start_time: emp.startTime || null }, { onConflict: "id" });
     if (dbFail(empErr, "gemme medarbejderen")) return;
+    // Timeloennen skrives kun hvis den er sat. Er man ikke administrator, kunne den
+    // ikke laeses ved indlaesningen, og et blindt gem ville overskrive den rigtige
+    // sats med standardsatsen — politikken afviser det, men vi undlader helt at spoerge.
+    if (emp.hourlyWage != null) {
+      const { error: wageErr } = await supabase.from("employee_wages")
+        .upsert({ employee_id: emp.id, hourly_wage: emp.hourlyWage, updated_at: new Date().toISOString() }, { onConflict: "employee_id" });
+      if (dbFail(wageErr, "gemme timelønnen")) return;
+    }
     const skillRows = Object.entries(emp.skills || {})
       .map(([name, level]) => {
         const match = skillRows_db?.find((s) => s.name === name);
@@ -5099,6 +5129,10 @@ function EmployeeExportView({ instances, employees }) {
         if (!emp) return;
         const myLogs = tl.filter((l) => l.empId === empId);
         const registered = myLogs.reduce((s, l) => s + (l.minutes || 0), 0);
+        // Satsen tages fra medarbejderen, ikke fra en fast sats: to personer paa
+        // samme opgave kan koste hver sit. Er satsen ikke laest ind (man er ikke
+        // administrator), regnes der ikke — der vises en streg i stedet.
+        const wage = emp.hourlyWage;
         const deviationText = myLogs
           .filter((l) => l.note && String(l.note).trim() && l.empId !== "planner")
           .map((l) => l.note.trim())
@@ -5112,6 +5146,9 @@ function EmployeeExportView({ instances, employees }) {
           title: t.title,
           planned: t.duration,
           registered,
+          hourlyWage: wage,
+          plannedWage: wage == null ? null : (t.duration / 60) * wage,
+          registeredWage: wage == null ? null : (registered / 60) * wage,
           deviationText,
         });
       });
@@ -5131,15 +5168,45 @@ function EmployeeExportView({ instances, employees }) {
   // Weekendtimer opgoeres saerskilt, fordi de udloeser tillaeg.
   const totalWeekend = rows.reduce((s, r) => s + (r.isWeekend ? r.registered : 0), 0);
 
+  // Loensummerne. Kun tilgaengelige for administratorer — for alle andre er
+  // hourlyWage null hele vejen igennem, og saa vises summerne slet ikke.
+  const harLoen = rows.some((r) => r.hourlyWage != null);
+  const totalPlannedWage = rows.reduce((s, r) => s + (r.plannedWage || 0), 0);
+  const totalRegisteredWage = rows.reduce((s, r) => s + (r.registeredWage || 0), 0);
+  const kr = (v) => Math.round(v).toLocaleString("da-DK") + " kr";
+  // Ét sted for kolonnebredderne. Overskriften og raekkerne er to selvstaendige
+  // gitre, saa hvis de ikke faar praecis samme definition, staar tallene forskudt
+  // for deres egen overskrift — og det opdager man foerst naar nogen brokker sig.
+  const kolonner = harLoen
+    ? "150px 50px 80px 1fr 90px 95px 105px 115px 1fr"
+    : "160px 60px 90px 1fr 100px 100px 1fr";
+
   function exportRowsCSV() {
-    const header = ["Medarbejder", "Uge", "Dag", "Opgave", "Planlagt (min)", "Planlagt (timer)", "Registreret (min)", "Registreret (timer)", "Weekend", "Weekendtimer", "Afvigelse"];
+    // Loenkolonnerne kommer kun med naar satserne faktisk kunne laeses. Ellers ville
+    // filen have tomme loenkolonner, og nogen ville tro at loennen var nul.
+    const header = ["Medarbejder", "Uge", "Dag", "Opgave", "Planlagt (min)", "Planlagt (timer)", "Registreret (min)", "Registreret (timer)",
+      ...(harLoen ? ["Timeløn", "Planlagt løn", "Registreret løn"] : []),
+      "Weekend", "Weekendtimer", "Afvigelse"];
     const data = rows.map((r) => [
       r.empName, `Uge ${r.week}`, r.dayLabel, r.title,
       r.planned, (r.planned / 60).toFixed(2),
       r.registered, (r.registered / 60).toFixed(2),
+      ...(harLoen ? [
+        r.hourlyWage ?? "",
+        r.plannedWage == null ? "" : r.plannedWage.toFixed(2),
+        r.registeredWage == null ? "" : r.registeredWage.toFixed(2),
+      ] : []),
       r.isWeekend ? "Ja" : "", r.isWeekend ? (r.registered / 60).toFixed(2) : "",
       r.deviationText || "",
     ]);
+    // Sumlinje nederst, saa den der modtager filen ikke skal regne selv.
+    if (harLoen && rows.length > 0) {
+      data.push(["I alt", "", "", "",
+        totalPlanned, (totalPlanned / 60).toFixed(2),
+        totalRegistered, (totalRegistered / 60).toFixed(2),
+        "", totalPlannedWage.toFixed(2), totalRegisteredWage.toFixed(2),
+        "", (totalWeekend / 60).toFixed(2), ""]);
+    }
     const csv = [header, ...data].map((row) => row.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
     const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
@@ -5168,6 +5235,12 @@ function EmployeeExportView({ instances, employees }) {
           <div><div style={{ ...styles.statValue, color: "#16A34A" }}>{fmtMin(totalRegistered)}</div><div style={styles.statLabel}>Registreret i alt</div></div>
           <div style={styles.statBox}><div style={{ ...styles.statValue, color: "#B45309" }}>{fmtMin(totalWeekend)}</div><div style={styles.statLabel}>Heraf weekend (tillæg)</div></div>
         </div>
+        {harLoen && (
+          <div style={{ ...styles.statBlock, borderLeft: "3px solid #4F46E5" }}>
+            <div><div style={{ ...styles.statValue, color: "#64748B" }}>{kr(totalPlannedWage)}</div><div style={styles.statLabel}>Planlagt lønsum</div></div>
+            <div style={styles.statBox}><div style={{ ...styles.statValue, color: "#4F46E5" }}>{kr(totalRegisteredWage)}</div><div style={styles.statLabel}>Registreret lønsum</div></div>
+          </div>
+        )}
         <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
           <select style={{ ...styles.inputSm, fontSize: 13, fontWeight: 600 }} value={filterMonth} onChange={(e) => setFilterMonth(Number(e.target.value))}>
             {MONTHS.map((m, i) => <option key={i} value={i}>{m}</option>)}
@@ -5180,21 +5253,33 @@ function EmployeeExportView({ instances, employees }) {
         <button style={styles.primaryBtn} onClick={exportRowsCSV}><Download size={16} /> Eksporter CSV</button>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "160px 60px 90px 1fr 100px 100px 1fr", gap: 0, background: "#F8FAFC", borderRadius: "10px 10px 0 0", padding: "8px 14px", fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+      <div style={{ display: "grid", gridTemplateColumns: kolonner, gap: 0, background: "#F8FAFC", borderRadius: "10px 10px 0 0", padding: "8px 14px", fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.04em" }}>
         <span>Medarbejder</span><span>Uge</span><span>Dag</span><span>Opgave</span>
         <span style={{ textAlign: "right" }}>Planlagt</span>
         <span style={{ textAlign: "right" }}>Registreret</span>
+        {harLoen && <span style={{ textAlign: "right" }}>Planlagt løn</span>}
+        {harLoen && <span style={{ textAlign: "right" }}>Registreret løn</span>}
         <span>Afvigelse</span>
       </div>
       <div style={{ background: "#fff", borderRadius: "0 0 10px 10px", boxShadow: "0 1px 3px rgba(0,0,0,0.06)", overflow: "hidden" }}>
         {rows.map((r, idx) => (
-          <div key={idx} style={{ display: "grid", gridTemplateColumns: "160px 60px 90px 1fr 100px 100px 1fr", gap: 0, padding: "10px 14px", borderBottom: idx < rows.length - 1 ? "1px solid #F1F5F9" : "none", alignItems: "center" }}>
+          <div key={idx} style={{ display: "grid", gridTemplateColumns: kolonner, gap: 0, padding: "10px 14px", borderBottom: idx < rows.length - 1 ? "1px solid #F1F5F9" : "none", alignItems: "center" }}>
             <span style={{ fontSize: 13, fontWeight: 600, color: "#111111" }}>{r.empName}</span>
             <span style={{ fontSize: 12, color: "#94A3B8" }}>{r.week}</span>
             <span style={{ fontSize: 12, color: "#64748B" }}>{r.dayLabel}</span>
             <span style={{ fontSize: 13, color: "#111111", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.title}</span>
             <span style={{ fontSize: 13, fontWeight: 500, color: "#111111", textAlign: "right" }}>{fmtMin(r.planned)}</span>
             <span style={{ fontSize: 13, fontWeight: 700, color: r.registered === 0 ? "#94A3B8" : "#16A34A", textAlign: "right" }}>{fmtMin(r.registered)}</span>
+            {harLoen && (
+              <span style={{ fontSize: 13, color: "#64748B", textAlign: "right" }} title={r.hourlyWage != null ? `${r.hourlyWage} kr/time` : ""}>
+                {r.plannedWage == null ? "—" : kr(r.plannedWage)}
+              </span>
+            )}
+            {harLoen && (
+              <span style={{ fontSize: 13, fontWeight: 600, color: r.registered === 0 ? "#94A3B8" : "#4F46E5", textAlign: "right" }}>
+                {r.registeredWage == null ? "—" : kr(r.registeredWage)}
+              </span>
+            )}
             <span style={{ fontSize: 12, color: r.deviationText ? "#D97706" : "#CBD5E1" }}>{r.deviationText || "—"}</span>
           </div>
         ))}
@@ -7218,6 +7303,11 @@ function TravelSettingsModal({ settings, onClose, onSave }) {
 function EmployeeModal({ emp, onClose, onSave, skills: skillList }) {
   const [name, setName] = useState(emp?.name || "");
   const [startTime, setStartTime] = useState(emp?.startTime || "");
+  // Standardsatsen bruges paa nye medarbejdere, saa loensummen i eksporten aldrig
+  // staar tom fordi nogen glemte at udfylde et felt.
+  const [hourlyWage, setHourlyWage] = useState(
+    emp?.hourlyWage != null ? String(emp.hourlyWage) : String(STANDARD_TIMELOEN),
+  );
   const [weekendOk, setWeekendOk] = useState(emp?.weekendOk ?? false);
   const [empSkills, setEmpSkills] = useState(emp?.skills || {});
   const [capacity, setCapacity] = useState(emp?.capacity || defaultCapacity());
@@ -7237,6 +7327,13 @@ function EmployeeModal({ emp, onClose, onSave, skills: skillList }) {
 
       <label style={styles.label}>Mødetid (bruges til at planlægge dagens første opgave)</label>
       <input style={styles.input} type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} />
+
+      <label style={styles.label}>Timeløn (kr.)</label>
+      <input style={styles.input} type="number" min="0" step="1" value={hourlyWage}
+        onChange={(e) => setHourlyWage(e.target.value)} placeholder={String(STANDARD_TIMELOEN)} />
+      <div style={styles.hint}>
+        Bruges til lønsummerne i Medarbejder-eksport. Satsen kan kun ses og rettes af administratorer.
+      </div>
 
       <label style={styles.label}>Kompetenceniveau pr. kompetence</label>
       <div style={styles.skillLevelGrid}>
@@ -7285,7 +7382,7 @@ function EmployeeModal({ emp, onClose, onSave, skills: skillList }) {
 
       <div style={styles.modalActions}>
         <button style={styles.secondaryBtn} onClick={onClose}>Annuller</button>
-        <button style={styles.primaryBtn} disabled={!name.trim()} onClick={() => onSave({ id: emp?.id || uid("e"), name: name.trim(), skills: empSkills, color: emp?.color || color, capacity, isAdmin, weekendOk, startTime: startTime || null })}>Gem medarbejder</button>
+        <button style={styles.primaryBtn} disabled={!name.trim()} onClick={() => onSave({ id: emp?.id || uid("e"), name: name.trim(), skills: empSkills, color: emp?.color || color, capacity, isAdmin, weekendOk, startTime: startTime || null, hourlyWage: hourlyWage === "" ? STANDARD_TIMELOEN : Math.max(0, Number(hourlyWage)) })}>Gem medarbejder</button>
       </div>
     </Modal>
   );
