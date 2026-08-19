@@ -3823,6 +3823,13 @@ function PlanningApp({ session, onSignOut }) {
           })}
           onUpdateCustomer={(taskId, fields) => updateInstance(taskId, (t) => ({ ...t, ...fields }))}
           onUpdateCustomerInfo={updateCustomerInfo}
+          // To veje med vilje: hele aftalen bruger samme funktion som de oevrige
+          // kundefelter og skriver ogsaa paa skabelonen, saa kommende uger arver det.
+          // Kun denne opgave roerer én raekke og lader aftalen staa.
+          onUpdateKeyPickup={(taskId, vaerdi, heleAftalen) => {
+            if (heleAftalen) updateCustomerInfo(taskId, { needsKeyPickup: vaerdi });
+            else updateInstance(taskId, (t) => ({ ...t, needsKeyPickup: vaerdi }));
+          }}
           onUpdateContractType={updateContractType}
           onRenameTask={renameTask}
           onUpdateSkills={(taskId, newSkills) => updateInstance(taskId, (t) => ({ ...t, requiredSkills: newSkills }))}
@@ -7700,7 +7707,7 @@ function EmployeeModal({ emp, onClose, onSave, skills: skillList }) {
 }
 
 // ---------- Task / service order detail ----------
-function TaskDetailModal({ task, employees, templates, onSetPreferredEmployee, onCancelTemplate, checklistTemplates, skills, isAdminUser, areas, employeeAreas, onClose, onSetStatus, onToggleChecklistItem, onAddChecklistItem, onAddChecklistTemplate, onAddAssignee, onRemoveAssignee, onUnplace, onDelete, onUpdateCustomer, onUpdateCustomerInfo, onUpdateContractType, onRenameTask, onCopy, onUpdateSkills, onEndBlockEarly, onUpdateSchedule }) {
+function TaskDetailModal({ task, employees, templates, onSetPreferredEmployee, onCancelTemplate, checklistTemplates, skills, isAdminUser, areas, employeeAreas, onClose, onSetStatus, onToggleChecklistItem, onAddChecklistItem, onAddChecklistTemplate, onAddAssignee, onRemoveAssignee, onUnplace, onDelete, onUpdateCustomer, onUpdateCustomerInfo, onUpdateContractType, onRenameTask, onCopy, onUpdateSkills, onEndBlockEarly, onUpdateSchedule, onUpdateKeyPickup }) {
   // Disse to laa efter det tidlige return for blokeringer (sygdom/ferie) laengere nede.
   // Hooks skal kaldes i samme raekkefoelge hver render: aabnede man en blokering og
   // derefter en almindelig opgave i samme modal, ville React se to hooks mere end sidst
@@ -7745,6 +7752,10 @@ function TaskDetailModal({ task, employees, templates, onSetPreferredEmployee, o
   const [adgangLog, setAdgangLog] = useState(null);
   const [logHenter, setLogHenter] = useState(false);
   const [logFejl, setLogFejl] = useState("");
+  // Skal noeglefluebenet gaelde hele aftalen eller kun denne dag? Starter paa "kun
+  // denne", fordi et enkeltstaaende noejleudlaan er det almindelige tilfaelde — og
+  // fordi det er den harmloese af de to, hvis man trykker forkert.
+  const [keyHeleAftalen, setKeyHeleAftalen] = useState(false);
 
   async function hentAdgangLog() {
     if (!task) return;
@@ -7771,6 +7782,7 @@ function TaskDetailModal({ task, employees, templates, onSetPreferredEmployee, o
       // staa og lyse paa den nye — og det er en alvorlig forveksling netop her.
       setAdgangLog(null);
       setLogFejl("");
+      setKeyHeleAftalen(false);
       setTaskSkills(task.requiredSkills || []);
       setDineroResults([]);
       setShowDineroCreate(false);
@@ -8211,11 +8223,36 @@ return (
                 </div>
               )}
               {custPo && <div style={styles.cardMeta}>Faktura: {custPo}</div>}
-              {t.needsKeyPickup && (
-                <div style={{ background: "#FFFBEB", border: "1px solid #FDE68A", borderRadius: 8, padding: "6px 10px", marginTop: 8, fontSize: 12, fontWeight: 600, color: "#92400E" }}>
-                  🔑 Nøglen hentes på kontoret først
+              {/* Noeglefluebenet kan saettes her, paa den eksisterende opgave. Det laa
+                  foer kun i "Ny opgave", og der kommer man ikke tilbage til naar opgaven
+                  er oprettet — saa var funktionen i praksis utilgaengelig. */}
+              <div style={{ marginTop: 8 }}>
+                <button type="button" disabled={locked}
+                  style={{ display: "flex", alignItems: "center", gap: 9, width: "100%", textAlign: "left",
+                           padding: "9px 11px", borderRadius: 8, cursor: locked ? "default" : "pointer",
+                           border: t.needsKeyPickup ? "2px solid #B45309" : "1.5px solid #E2E8F0",
+                           background: t.needsKeyPickup ? "#FFFBEB" : "#fff", opacity: locked ? 0.6 : 1 }}
+                  onClick={() => { if (!locked) onUpdateKeyPickup(t.id, !t.needsKeyPickup, keyHeleAftalen); }}>
+                  <span style={{ width: 18, height: 18, borderRadius: 5, flexShrink: 0,
+                                 border: t.needsKeyPickup ? "2px solid #B45309" : "2px solid #CBD5E1",
+                                 background: t.needsKeyPickup ? "#B45309" : "#fff",
+                                 display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    {t.needsKeyPickup && <Check size={11} color="#fff" strokeWidth={3} />}
+                  </span>
+                  <span style={{ fontSize: 13, color: "#111111" }}>🔑 Nøglen hentes på kontoret først</span>
+                </button>
+                {!locked && t.type === "fixed" && (
+                  <label style={{ display: "flex", alignItems: "center", gap: 7, marginTop: 6, fontSize: 12, color: "#64748B", cursor: "pointer" }}>
+                    <input type="checkbox" checked={keyHeleAftalen} onChange={(e) => setKeyHeleAftalen(e.target.checked)} />
+                    Gælder alle opgaver på aftalen, også de kommende
+                  </label>
+                )}
+                <div style={styles.hint}>
+                  {keyHeleAftalen && t.type === "fixed"
+                    ? "Ændringen slår igennem på hele aftalen."
+                    : "Ændringen gælder kun denne ene opgave."}
                 </div>
-              )}
+              </div>
               {custAccess && (
                 <div style={{ ...styles.accessBox, marginTop: 8 }}>
                   <div style={styles.accessTitle}><Lock size={13} /> Adgang</div>
