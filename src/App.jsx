@@ -216,8 +216,29 @@ function contractIconLabel(key) { const c = contractMeta(key); return c.icon + "
 // rapportering osv., og skal forhindre auto-planlægning af den pågældende medarbejder.
 const BLOCK_TYPES = ["sygdom", "ferie"];
 // Timeloen bruges kun til loensummerne i Medarbejder-eksport. Satsen ligger i sin
-// egen tabel med adgang kun for administratorer — se kommentaren paa employee_wages.
+// egen tabel med adgang kun for administratorer — se employee_wage_history.
 const STANDARD_TIMELOEN = 170;
+
+// Den timeloen der gjaldt for en medarbejder paa en bestemt dato: raekken med den
+// seneste gyldig_fra som ikke ligger efter datoen.
+//
+// Historikken er sorteret faldende ved indlaesningen, saa den foerste der passer, er
+// den rigtige. Findes ingen — fordi datoen ligger foer den foerste sats — returneres
+// null, og loensummen viser en streg i stedet for at gaette paa et beloeb.
+function satsPaaDato(historik, empId, datoStr) {
+  if (!historik || !empId || !datoStr) return null;
+  const raekker = historik[empId];
+  if (!raekker || raekker.length === 0) return null;
+  const fundet = raekker.find((r) => r.gyldig_fra <= datoStr);
+  return fundet ? Number(fundet.hourly_wage) : null;
+}
+
+// Den sats der gaelder i dag — det er den man ser og retter paa medarbejderkortet.
+function aktuelSats(historik, empId) {
+  const idag = new Date();
+  const iso = new Date(idag.getTime() - idag.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+  return satsPaaDato(historik, empId, iso);
+}
 // Bruges kun hvis en kaldende funktion ikke har transportindstillingerne ved haanden.
 const DEFAULT_TRAVEL = { defaultMinutes: 20, dayStart: "07:00", overrides: {} };
 // Planlaegningshorisont: hvor mange uger frem opgaverne altid materialiseres.
@@ -1352,7 +1373,7 @@ const MODULE_HELP = {
         "«Mangler app-adgang først» er en hurtig vej til dem du skal oprette et login til."] },
     { h: "Opret og redigér", p: ["Tryk «Ny medarbejder», eller «Redigér» når du har foldet en linje ud.",
         "Mødetid bruges til at beregne hvornår dagens første opgave kan starte.",
-        "Timeløn bruges til lønsummerne i Medarbejder-eksport. Nye medarbejdere starter på 170 kr.",
+        "Timeløn bruges til lønsummerne i Medarbejder-eksport. Nye medarbejdere starter på 170 kr. Ændrer du satsen, skal du angive hvornår den gælder fra — tidligere satser står nedenunder, så du kan se historikken.",
         "Dialogen er delt i fire afsnit: Personen, Kan, Tid, og Løn og transport bag hængelås.",
         "Under Kan vises kun de kompetencer hun har. Tryk «Tilføj kompetence» for at se resten.",
         "Under Tid kan du sætte mandagens timetal på alle dage med ét tryk, og du kan se ugens sum — så du kan tjekke at det passer med hendes ansættelse.",
@@ -1439,6 +1460,9 @@ const MODULE_HELP = {
         "Tryk «Eksportér CSV» og send til lønsystemet. Filen har egne kolonner for weekend og weekendtimer, og en sumlinje nederst."] },
     { h: "Løn", p: [
         "Hver medarbejder har en timeløn på sit kort under Medarbejdere. Nye medarbejdere starter på 170 kr.",
+        "Satsen har en gyldighedsdato. Lønsummen slår op hvad der gjaldt den dag opgaven blev udført — så en lønstigning ændrer ikke de måneder der allerede er afregnet.",
+        "Ændrer du en sats, bliver du spurgt hvornår den gælder fra. Skal stigningen gælde bagud, sætter du bare datoen tilbage, og de berørte måneder regner om af sig selv.",
+        "Står der en streg i stedet for et beløb, fandtes der ingen sats den dag. Det sker kun hvis opgaven ligger før medarbejderens første sats.",
         "«Planlagt løn» er den afsatte tid gange medarbejderens sats. «Registreret løn» er den tid hun faktisk har registreret.",
         "Øverst står de to summer for hele måneden: planlagt lønsum og registreret lønsum.",
         "Er registreret lønsum meget lavere end planlagt, er det som regel manglende tidsregistrering — ikke sparede lønkroner. Kig i kolonnen «Registreret» først.",
@@ -1707,7 +1731,7 @@ function PlanningApp({ session, onSignOut }) {
       hentMedFornyelse("kommentarer og billeder", () => supabase.from("task_notes").select("*").order("created_at", { ascending: false })),
       // Timeloen. Politikken slipper kun administratorer ind, saa for alle andre
       // kommer der en tom liste tilbage — helt uden fejl, og uden at loennen laekker.
-      hentMedFornyelse("timelønninger", () => supabase.from("employee_wages").select("*")),
+      hentMedFornyelse("timelønninger", () => supabase.from("employee_wage_history").select("*").order("gyldig_fra", { ascending: false })),
       // Hjemmeadresse og transportordning. Samme historie som loennen: er man ikke
       // administrator, kommer der en tom liste tilbage, og ordningen slaar ikke til.
       hentMedFornyelse("transportordninger", () => supabase.from("employee_home").select("*")),
@@ -1750,10 +1774,10 @@ function PlanningApp({ session, onSignOut }) {
           isAdmin: e.is_admin ?? false,
           weekendOk: e.weekend_ok ?? false,
           startTime: e.start_time || null,
-          // Er man ikke administrator, giver politikken paa employee_wages ingen
+          // Er man ikke administrator, giver politikken paa satshistorikken ingen
           // raekker, og satsen bliver null. Eksporten viser da en streg i stedet for
           // et forkert beloeb — den maa ikke gaette paa standardsatsen.
-          hourlyWage: (wageData || []).find((w) => w.employee_id === e.id)?.hourly_wage ?? null,
+          hourlyWage: aktuelSats(satsHistorik, e.id),
           homeAddress: (homeData || []).find((h) => h.employee_id === e.id)?.home_address ?? null,
           travelInWorktime: (homeData || []).find((h) => h.employee_id === e.id)?.travel_in_worktime ?? false,
           skills: Object.fromEntries(
@@ -1789,6 +1813,16 @@ function PlanningApp({ session, onSignOut }) {
       const custAccess = Object.fromEntries((custAccessData || []).map((r) => [r.customer_id, r.adgangstekst]));
       instAccessRef.current = instAccess;
       custAccessRef.current = custAccess;
+
+      // Satshistorikken grupperes pr. medarbejder, nyeste gyldighedsdato foerst — saa
+      // kan opslaget noejes med at tage den foerste raekke der ikke ligger efter datoen.
+      const satsHistorik = {};
+      (wageData || []).forEach((r) => {
+        if (!satsHistorik[r.employee_id]) satsHistorik[r.employee_id] = [];
+        satsHistorik[r.employee_id].push({ hourly_wage: r.hourly_wage, gyldig_fra: r.gyldig_fra });
+      });
+      Object.values(satsHistorik).forEach((liste) => liste.sort((a, b) => (a.gyldig_fra < b.gyldig_fra ? 1 : -1)));
+      setSatsHistorik(satsHistorik);
 
       // Serviceordre-skabeloner – saml skills op + hent kundedata
       if (tplData?.length) {
@@ -1942,6 +1976,9 @@ function PlanningApp({ session, onSignOut }) {
   // Medarbejdernes kommentarer og billeder. Hentes samlet og lægges i et opslag pr.
   // opgave, saa hverken ugeplanen eller faktureringen skal spoerge databasen pr. linje.
   const [opgaveNoter, setOpgaveNoter] = useState({});
+  // Timeløn med gyldighedsdato, grupperet pr. medarbejder. Tom for alle andre end
+  // administratorer, fordi politikken ikke slipper dem ind i tabellen.
+  const [satsHistorik, setSatsHistorik] = useState({});
   const [afvisId, setAfvisId] = useState(null);
   const [afvisNote, setAfvisNote] = useState("");
   // Minutter kontoret vil fakturere for et forgaeves besoeg, pr. melding. Starter
@@ -2137,9 +2174,16 @@ function PlanningApp({ session, onSignOut }) {
     // formularen udfylder altid begge felter, saa betingelserne var altid sande.
     // Politikken afviste skrivningen, men brugeren fik en fejlbesked oven i hovedet.
     if (isAdminRef.current) {
-      const { error: wageErr } = await supabase.from("employee_wages")
-        .upsert({ employee_id: emp.id, hourly_wage: emp.hourlyWage ?? STANDARD_TIMELOEN, updated_at: new Date().toISOString() }, { onConflict: "employee_id" });
-      if (dbFail(wageErr, "gemme timelønnen")) return;
+      // Satsen gemmes som en ny linje i historikken, ikke som en overskrivning. En
+      // loenstigning maa ikke aendre de maaneder der allerede er afregnet.
+      // Samme sats samme dato er ikke en aendring — derfor upsert paa (medarbejder, dato):
+      // retter man en tastefejl samme dag, opdateres linjen i stedet for at der laves to.
+      if (emp.hourlyWage != null && emp.wageFrom) {
+        const { error: wageErr } = await supabase.from("employee_wage_history")
+          .upsert({ employee_id: emp.id, hourly_wage: emp.hourlyWage, gyldig_fra: emp.wageFrom },
+                  { onConflict: "employee_id,gyldig_fra" });
+        if (dbFail(wageErr, "gemme timelønnen")) return;
+      }
 
       const { error: homeErr } = await supabase.from("employee_home")
         .upsert({ employee_id: emp.id, home_address: emp.homeAddress || null, travel_in_worktime: !!emp.travelInWorktime, updated_at: new Date().toISOString() }, { onConflict: "employee_id" });
@@ -3846,7 +3890,7 @@ function PlanningApp({ session, onSignOut }) {
         <ReportsView instances={instances} pricing={pricing} budgets={budgets} onSaveBudget={saveBudget} isAdminUser={isAdminUser} />
       )}
 
-      {view === "medExport" && (<EmployeeExportView instances={instances} employees={employees} />)}
+      {view === "medExport" && (<EmployeeExportView instances={instances} employees={employees} satsHistorik={satsHistorik} />)}
       {view === "inventory" && (
         <InventoryView supabase={supabase} employees={employees} currentUserName={currentEmployeeForAuth?.name || null} onInventoryChanged={loadProductUsage} />
       )}
@@ -3856,7 +3900,7 @@ function PlanningApp({ session, onSignOut }) {
       )}
 
       {showAddTask && <TaskModal onClose={() => { setShowAddTask(false); setCopyPayload(null); setEditTplId(null); }} onSave={(p, editId) => (editId ? updateTemplate(p, editId) : addTask(p))} editId={editTplId} checklistTemplates={checklistTemplates} skills={skills} copyFrom={copyPayload} employees={employees} />}
-      {showAddEmp && <EmployeeModal emp={editEmp} onClose={() => { setShowAddEmp(false); setEditEmp(null); }} onSave={saveEmployee} skills={skills} />}
+      {showAddEmp && <EmployeeModal emp={editEmp} onClose={() => { setShowAddEmp(false); setEditEmp(null); }} onSave={saveEmployee} skills={skills} satsHistorik={editEmp ? satsHistorik[editEmp.id] : null} />}
       {showAddBlock && <BlockModal employees={employees} onClose={() => setShowAddBlock(false)} onSave={addBlock} />}
       {showAddActivity && <ActivityModal employees={employees} onClose={() => setShowAddActivity(false)} onSave={addActivity} />}
       {showTravelSettings && (
@@ -5520,7 +5564,7 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
   );
 }
 
-function EmployeeExportView({ instances, employees }) {
+function EmployeeExportView({ instances, employees, satsHistorik }) {
   const now = new Date();
   const [filterMonth, setFilterMonth] = useState(now.getMonth());
   const [filterYear, setFilterYear] = useState(now.getFullYear());
@@ -5546,10 +5590,11 @@ function EmployeeExportView({ instances, employees }) {
         if (!emp) return;
         const myLogs = tl.filter((l) => l.empId === empId);
         const registered = myLogs.reduce((s, l) => s + (l.minutes || 0), 0);
-        // Satsen tages fra medarbejderen, ikke fra en fast sats: to personer paa
-        // samme opgave kan koste hver sit. Er satsen ikke laest ind (man er ikke
-        // administrator), regnes der ikke — der vises en streg i stedet.
-        const wage = emp.hourlyWage;
+        // Satsen slaas op paa den dag opgaven blev udfoert, ikke paa dagens sats.
+        // Ellers ville en loenstigning aendre alle tidligere maaneder — ogsaa dem der
+        // allerede var afregnet. To personer paa samme opgave kan have hver sin sats.
+        // Er historikken ikke laest ind (man er ikke administrator), regnes der ikke.
+        const wage = satsPaaDato(satsHistorik, empId, instanceDateString(t));
         const deviationText = myLogs
           .filter((l) => l.note && String(l.note).trim() && l.empId !== "planner")
           .map((l) => l.note.trim())
@@ -7821,7 +7866,7 @@ function TravelSettingsModal({ settings, onClose, onSave }) {
   );
 }
 
-function EmployeeModal({ emp, onClose, onSave, skills: skillList }) {
+function EmployeeModal({ emp, onClose, onSave, skills: skillList, satsHistorik }) {
   const [name, setName] = useState(emp?.name || "");
   const [startTime, setStartTime] = useState(emp?.startTime || "");
   // Standardsatsen bruges paa nye medarbejdere, saa loensummen i eksporten aldrig
@@ -7829,6 +7874,11 @@ function EmployeeModal({ emp, onClose, onSave, skills: skillList }) {
   const [hourlyWage, setHourlyWage] = useState(
     emp?.hourlyWage != null ? String(emp.hourlyWage) : String(STANDARD_TIMELOEN),
   );
+  // Datoen den nye sats gaelder fra. Starter paa i dag: en loenaendring gaelder
+  // normalt fremad, og skal den gaelde bagud, er det et bevidst valg.
+  const [wageFrom, setWageFrom] = useState(todayIso());
+  const nuvaerendeSats = emp?.hourlyWage != null ? Number(emp.hourlyWage) : null;
+  const satsErAendret = Number(hourlyWage) !== nuvaerendeSats && hourlyWage !== "";
   const [homeAddress, setHomeAddress] = useState(emp?.homeAddress || "");
   const [travelInWorktime, setTravelInWorktime] = useState(emp?.travelInWorktime ?? false);
   const [weekendOk, setWeekendOk] = useState(emp?.weekendOk ?? false);
@@ -7972,6 +8022,32 @@ function EmployeeModal({ emp, onClose, onSave, skills: skillList }) {
             onChange={(e) => setHourlyWage(e.target.value)} placeholder={String(STANDARD_TIMELOEN)} />
           <div style={styles.hint}>Bruges kun til lønsummerne i Medarbejder-eksport, ikke til priser over for kunden.</div>
 
+          {/* Gyldighedsdatoen dukker foerst op naar satsen faktisk aendres. Ellers ville
+              man skulle forholde sig til en dato hver gang man rettede et navn. */}
+          {satsErAendret && (
+            <div style={{ background: "#FFFBEB", border: "1px solid #FDE68A", borderRadius: 10, padding: 12, marginTop: 10 }}>
+              <label style={{ ...styles.label, marginTop: 0 }}>Den nye sats gælder fra</label>
+              <input style={{ ...styles.input, maxWidth: 200 }} type="date" value={wageFrom}
+                onChange={(e) => setWageFrom(e.target.value)} />
+              <div style={styles.hint}>
+                Opgaver udført før denne dato beholder den gamle sats, så afregnede måneder
+                ikke ændrer sig. Skal stigningen gælde bagud, så sæt datoen tilbage.
+              </div>
+            </div>
+          )}
+
+          {(satsHistorik || []).length > 1 && (
+            <div style={{ marginTop: 10 }}>
+              <div style={{ fontSize: 11.5, fontWeight: 700, color: "#475569", marginBottom: 4 }}>Tidligere satser</div>
+              {(satsHistorik || []).map((r) => (
+                <div key={r.gyldig_fra} style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5, color: "#64748B", padding: "3px 0" }}>
+                  <span>Fra {r.gyldig_fra}</span>
+                  <span style={{ fontWeight: 600, color: "#111111" }}>{Number(r.hourly_wage).toLocaleString("da-DK")} kr</span>
+                </div>
+              ))}
+            </div>
+          )}
+
           <button type="button" style={travelInWorktime ? styles.empTjekAktivGroen : styles.empTjek}
             onClick={() => setTravelInWorktime((v) => !v)}>
             <span style={travelInWorktime ? styles.empTjekFirkantGroen : styles.empTjekFirkant}>
@@ -8020,7 +8096,7 @@ function EmployeeModal({ emp, onClose, onSave, skills: skillList }) {
 
       <div style={styles.modalActions}>
         <button style={styles.secondaryBtn} onClick={onClose}>Annuller</button>
-        <button style={styles.primaryBtn} disabled={!name.trim()} onClick={() => onSave({ id: emp?.id || uid("e"), name: name.trim(), skills: empSkills, color: emp?.color || color, capacity, isAdmin, weekendOk, startTime: startTime || null, hourlyWage: hourlyWage === "" ? STANDARD_TIMELOEN : Math.max(0, Number(hourlyWage)), homeAddress: homeAddress.trim() || null, travelInWorktime })}>Gem medarbejder</button>
+        <button style={styles.primaryBtn} disabled={!name.trim()} onClick={() => onSave({ id: emp?.id || uid("e"), name: name.trim(), skills: empSkills, color: emp?.color || color, capacity, isAdmin, weekendOk, startTime: startTime || null, hourlyWage: hourlyWage === "" ? STANDARD_TIMELOEN : Math.max(0, Number(hourlyWage)), wageFrom: satsErAendret || !emp ? wageFrom : null, homeAddress: homeAddress.trim() || null, travelInWorktime })}>Gem medarbejder</button>
       </div>
     </Modal>
   );
