@@ -6569,8 +6569,12 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
       ))}
       <button type="button" style={styles.addSkillBtn} onClick={addSkillRow}><Plus size={13} /> Tilføj kompetencekrav</button>
 
-      <label style={styles.label}>Varighed (minutter)</label>
-      <input type="number" min={5} step={5} style={styles.input} value={duration} onChange={(e) => setDuration(Number(e.target.value))} /><label style={styles.label}>Tjeklister (tasks der skal udføres)</label>
+      <label style={styles.label}>Varighed pr. medarbejder (minutter)</label>
+      <input type="number" min={5} step={5} style={styles.input} value={duration} onChange={(e) => setDuration(Number(e.target.value))} />
+      <div style={styles.hint}>
+        Hvor længe <strong>én</strong> medarbejder bruger på opgaven. Sætter du senere to på,
+        er der afsat {fmtMin((Number(duration) || 0) * 2)} arbejde i alt — ikke {fmtMin(Number(duration) || 0)} delt mellem dem.
+      </div><label style={styles.label}>Tjeklister (tasks der skal udføres)</label>
       <div style={styles.skillPicker}>
         {checklistTemplates.map((c) => (
           <button key={c.id} type="button" onClick={() => toggleTemplate(c.id)} style={checklistTemplateIds.includes(c.id) ? styles.skillPickBtnActive : styles.skillPickBtn}>
@@ -7821,8 +7825,9 @@ function ActivityModal({ employees, onClose, onSave }) {
       <label style={styles.label}>Tidspunkt</label>
       <input type="time" style={styles.input} value={time} onChange={(e) => setTime(e.target.value)} />
 
-      <label style={styles.label}>Varighed (minutter)</label>
+      <label style={styles.label}>Varighed pr. medarbejder (minutter)</label>
       <input type="number" min="5" step="5" style={styles.input} value={duration} onChange={(e) => setDuration(e.target.value)} />
+      <div style={styles.hint}>Hvor længe én medarbejder bruger på opgaven.</div>
 
       <label style={styles.label}>Beskrivelse</label>
       <textarea style={{ ...styles.input, minHeight: 70 }} value={description} onChange={(e) => setDescription(e.target.value)} />
@@ -8176,6 +8181,9 @@ function TaskDetailModal({ task, employees, templates, onSetPreferredEmployee, o
   // fordi det er den harmloese af de to, hvis man trykker forkert.
   const [keyHeleAftalen, setKeyHeleAftalen] = useState(false);
   const [produktHeleAftalen, setProduktHeleAftalen] = useState(false);
+  // Medarbejderen der er ved at blive tilfoejet som nummer to eller flere. Tilfoejelsen
+  // sker foerst naar planlaeggeren har set hvad det goer ved den samlede tid.
+  const [bekraeftTilfoej, setBekraeftTilfoej] = useState(null);
   // Skal tiden gemmes paa aftalen? Starter slaaet TIL: paa en fast aftale er et
   // klokkeslaet normalt en aftale med kunden, ikke en undtagelse for én uge.
   const [tidHeleAftalen, setTidHeleAftalen] = useState(true);
@@ -8207,6 +8215,9 @@ function TaskDetailModal({ task, employees, templates, onSetPreferredEmployee, o
       setLogFejl("");
       setKeyHeleAftalen(false);
       setProduktHeleAftalen(false);
+      // Ellers ville spørgsmålet om at sætte en kollega på hænge ved over på næste
+      // opgave — og et tryk på "Sæt på" ville ramme den forkerte.
+      setBekraeftTilfoej(null);
       setTidHeleAftalen(true);
       setEditingSchedule(false);
       setTaskSkills(task.requiredSkills || []);
@@ -8831,6 +8842,34 @@ return (
 
       <label style={styles.label}>Medarbejdere på opgaven</label>
 
+      {/* Bekraeftelse foer nummer to saettes paa. Den viser regnestykket med det nye
+          antal, saa planlaeggeren kan naa at rette varigheden i stedet for at opdage
+          det naar medarbejderne begynder at registrere. */}
+      {bekraeftTilfoej && (
+        <div style={styles.flerePersonerBoks}>
+          <div style={{ fontWeight: 700, marginBottom: 3 }}>
+            Du er ved at sætte {bekraeftTilfoej.name} på som nummer {assignedEmps.length + 1}
+          </div>
+          <div>
+            Varigheden er tiden <strong>pr. person</strong>. Med {assignedEmps.length + 1} bliver det{" "}
+            {assignedEmps.length + 1} × {fmtMin(t.duration)} = <strong>{fmtMin(t.duration * (assignedEmps.length + 1))} samlet arbejde</strong>{" "}
+            — mod {fmtMin(t.duration * assignedEmps.length)} nu.
+          </div>
+          <div style={{ marginTop: 4 }}>
+            Skal opgaven laves hurtigere af to, og ikke tage dobbelt så mange timer, så sæt
+            varigheden ned bagefter. Ellers får medarbejderne besked om en overskridelse der ikke findes.
+          </div>
+          <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+            <button type="button" style={{ ...styles.secondaryBtn, padding: "6px 12px", fontSize: 12 }}
+              onClick={() => setBekraeftTilfoej(null)}>Fortryd</button>
+            <button type="button" style={{ ...styles.primaryBtn, padding: "6px 12px", fontSize: 12 }}
+              onClick={() => { onAddAssignee(t.id, bekraeftTilfoej.id); setBekraeftTilfoej(null); }}>
+              Sæt {bekraeftTilfoej.name.split(" ")[0]} på
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Paamindelse naar der er mere end én paa. Varigheden er tiden PR. PERSON, saa
           det samlede arbejde — og dermed fakturagrundlaget — vokser med hver person
           der saettes paa. Uden regnestykket i klartekst er det let at saette varigheden
@@ -8881,7 +8920,16 @@ return (
             {addOpen && (
               <div style={styles.chipAddMenu}>
                 {addable.map((e) => (
-                  <button key={e.id} type="button" style={styles.chipAddMenuItem} onClick={() => { onAddAssignee(t.id, e.id); setAddOpen(false); }}>
+                  <button key={e.id} type="button" style={styles.chipAddMenuItem}
+                    onClick={() => {
+                      // Bliver hun nummer to eller flere, skal planlaeggeren se hvad det
+                      // goer ved regnestykket FOER hun er sat paa — bagefter er skaden
+                      // sket, og medarbejderne faar besked om en overskridelse der ikke
+                      // findes. Er hun den foerste, er der intet at advare om.
+                      if (assignedEmps.length >= 1) { setBekraeftTilfoej(e); setAddOpen(false); return; }
+                      onAddAssignee(t.id, e.id);
+                      setAddOpen(false);
+                    }}>
                     <span style={{ ...styles.chipAvatar, background: e.color }}>{initials(e.name)}</span> {e.name}
                   </button>
                 ))}
