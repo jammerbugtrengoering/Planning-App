@@ -1315,9 +1315,9 @@ const MODULE_HELP = {
         "Uden fluebenet springes spørgsmålet helt over i medarbejder-appen. Hun får ét trin mindre, og tælleren siger fx «1 af 2».",
         "Sat på aftalen gentager det sig på alle kommende opgaver. Du kan slå det til eller fra på en enkelt opgave i serviceordren, hvor det står lige under nøglefluebenet.",
         "Alle aftaler starter med det slået fra. Der var ikke registreret en eneste udlevering i systemet, da fluebenet blev indført, så det er sat op til at du selv vælger hvor det hører til."] },
-    { h: "Nøgle på kontoret", p: [
-        "Skal medarbejderen forbi kontoret efter en nøgle, sæt fluebenet «Nøglen skal hentes på kontoret først» under Adgang.",
-        "Sættes det på aftalen, gentager det sig på alle kommende opgaver. Er nøglen allerede udleveret en enkelt uge, kan du slå det fra på den ene opgave uden at røre aftalen.",
+    { h: "Nøgle eller adgangskort på kontoret", p: [
+        "Skal medarbejderen forbi kontoret efter en nøgle eller et adgangskort, sæt fluebenet «Nøgle/adgangskort skal hentes på kontoret først» under Adgang.",
+        "Sættes det på aftalen, gentager det sig på alle kommende opgaver. Er nøglen eller kortet allerede udleveret en enkelt uge, kan du slå det fra på den ene opgave uden at røre aftalen.",
         "Medarbejderen ser det på selve opgavekortet i dagslisten — altså inden hun kører — og ikke først når hun åbner opgaven."] },
     { h: "Adgangsoplysninger og logning", p: [
         "Nøgleboks- og alarmkoder ligger nu i en beskyttet tabel. De sendes ikke længere ud til medarbejder-appen sammen med opgaven.",
@@ -4034,7 +4034,7 @@ function EmployeeAppView({ employees, instances, onLogMinutes, onSetStatus, onTo
                     <div style={styles.phoneCardBody}>
                       {t.needsKeyPickup && (
                         <div style={{ background: "#FFFBEB", border: "1px solid #FDE68A", borderRadius: 8, padding: "7px 10px", marginBottom: 8, fontSize: 12.5, fontWeight: 600, color: "#92400E" }}>
-                          🔑 Nøglen hentes på kontoret først
+                          🔑 Nøgle/adgangskort hentes på kontoret først
                         </div>
                       )}
                       {t.accessInstructions && (
@@ -4522,7 +4522,7 @@ function WeekView({ employees, instances, unplaced, onAdd, onAuto, onScheduleWee
                           <div style={{ fontWeight: 700, fontSize: 14 }}>{fmtClock(seg.start)} · {t.title} ({t.duration} min)</div>
                           {t.customerName ? <div style={{ fontSize: 13 }}>Kunde: {t.customerName}</div> : null}
                           {t.address ? <div style={{ fontSize: 13 }}>Adresse: {t.address}</div> : null}
-                          {t.needsKeyPickup ? <div style={{ fontSize: 13, fontWeight: 700 }}>🔑 Nøgle hentes på kontoret</div> : null}
+                          {t.needsKeyPickup ? <div style={{ fontSize: 13, fontWeight: 700 }}>🔑 Nøgle/adgangskort hentes på kontoret</div> : null}
                           {t.accessInstructions ? <div style={{ fontSize: 13 }}>Adgang: {t.accessInstructions}</div> : null}
                           {(t.checklist || []).length > 0 ? (
                             <ul style={{ margin: "6px 0 0", paddingLeft: 18, fontSize: 13 }}>
@@ -6414,7 +6414,7 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
                        display: "flex", alignItems: "center", justifyContent: "center" }}>
           {needsKeyPickup && <Check size={12} color="#fff" strokeWidth={3} />}
         </span>
-        <span style={{ fontSize: 14, color: "#111111" }}>🔑 Nøglen skal hentes på kontoret først</span>
+        <span style={{ fontSize: 14, color: "#111111" }}>🔑 Nøgle/adgangskort skal hentes på kontoret først</span>
       </button>
 
       </div></div><div style={styles.formSection}><div style={{ ...styles.formSectionHead, background: "#F0FDFA" }}><div style={{ ...styles.formSectionTitle, color: "#0F766E" }}>Opgaven</div><div style={{ ...styles.formSectionHint, color: "#149285" }}>Hvem der tager den, hvad der kræves, og hvad der skal udføres</div></div><div style={styles.formSectionBody}><label style={styles.label}>Ansvarlig Medarbejder (valgfrit)</label>
@@ -8531,7 +8531,7 @@ return (
                                  display: "flex", alignItems: "center", justifyContent: "center" }}>
                     {t.needsKeyPickup && <Check size={11} color="#fff" strokeWidth={3} />}
                   </span>
-                  <span style={{ fontSize: 13, color: "#111111" }}>🔑 Nøglen hentes på kontoret først</span>
+                  <span style={{ fontSize: 13, color: "#111111" }}>🔑 Nøgle/adgangskort hentes på kontoret først</span>
                 </button>
                 {!locked && t.type === "fixed" && (
                   <label style={{ display: "flex", alignItems: "center", gap: 7, marginTop: 6, fontSize: 12, color: "#64748B", cursor: "pointer" }}>
