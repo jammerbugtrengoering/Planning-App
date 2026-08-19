@@ -1298,8 +1298,11 @@ const MODULE_HELP = {
         "«Ingen har alle krævede kompetencer» — ingen har kompetencerne på det krævede niveau. Sænk kravet, eller giv kompetencen under Medarbejdere.",
         "«Ingen ledig dag inden fristen» — fristen er passeret, eller alle dage er optaget eller blokeret. Ret fristen på opgaven.",
         "«Overbelastet» — opgaven er lagt på alligevel, men medarbejderen har ikke timer nok den dag."] },
-    { h: "Ret dato og tidspunkt", p: ["Klik på opgaven, find «Frist og tidspunkt» og tryk Rediger.",
-        "Sæt ny dato og evt. ønsket starttidspunkt, og tryk «Gem og planlæg igen». Opgaven flytter til den rigtige uge og får en medarbejder, hvis nogen kan nå det."] },
+    { h: "Ret dato og tidspunkt", p: [
+        "På en fleksibel opgave: klik på opgaven, find «Frist og tidspunkt» og tryk Rediger. Sæt ny dato og evt. ønsket starttidspunkt, og tryk «Gem og planlæg igen». Opgaven flytter til den rigtige uge og får en medarbejder, hvis nogen kan nå det.",
+        "På en fast aftale: klik på opgaven og find «Aftalt tidspunkt». Klokkeslættet står nu også øverst ved siden af ugedagen.",
+        "Vælger du «Gælder alle mandage på aftalen», gemmes tiden på selve aftalen, og alle kommende mandage rettes med. Uden fluebenet ændres kun den ene opgave — og næste uge får aftalens hidtidige tid igen.",
+        "Udførte opgaver og opgaver sendt til Dinero røres aldrig. Historikken skal matche det der faktisk blev leveret."] },
     { h: "Weekend", p: ["Knappen Man–Fre / Man–Søn bestemmer om lørdag og søndag vises.", "Åbner du en uge hvor der allerede ligger opgaver i weekenden, slås kolonnerne til af sig selv.", "Slår du dem fra igen, står der ved siden af knappen hvor mange weekendopgaver der er skjult — så du ikke overser dem."] }, { h: "Sådan er «Ny opgave» og serviceordren bygget op", p: ["Begge skærme er delt i tre farvede afsnit, så det er tydeligt hvad der hører sammen. Farverne betyder det samme begge steder.", "Rosa er kunden: kontrakttype, prismodel, titel, fakturakunde, adresse, fakturabeskrivelse og adgangsforhold. Det er det der ender på fakturaen.", "Grønt er selve opgaven: krævede kompetencer, varighed, tjeklister og instruktionsvideo.", "Blåt er tid: i «Ny opgave» hedder det Planlægning og rummer fast interval eller fleksibel, ansvarlig medarbejder, start- og udløbsdato, interval og ugedage.", "Klikker du på en opgave i ugeplanen, åbner serviceordren med de samme tre farver. Der hedder det blå afsnit Udførelse og rummer status, medarbejdere på opgaven, tasks og tidsregistrering.", "I «Ny opgave» bliver Annuller og Gem og planlæg stående nederst, uanset hvor langt du har scrollet."] },
     { h: "Beskeder fra medarbejderne", p: [
         "Øverst i ugeplanen kommer et banner, når en medarbejder har meldt noget ind. Der er to slags.",
@@ -2278,6 +2281,7 @@ function PlanningApp({ session, onSignOut }) {
     if ("accessInstructions" in fields) payload.access_instructions = fields.accessInstructions ?? "";
     if ("needsKeyPickup" in fields) payload.needs_key_pickup = !!fields.needsKeyPickup;
     if ("deliversProducts" in fields) payload.delivers_products = !!fields.deliversProducts;
+    if ("dayTimes" in fields) payload.day_times = fields.dayTimes || {};
     if ("contractType" in fields) payload.contract_type = fields.contractType ?? "privat";
     if ("dineroSynced" in fields) payload.dinero_synced = !!fields.dineroSynced;
     if ("dineroContactGuid" in fields) payload.dinero_contact_guid = fields.dineroContactGuid || null;
@@ -3901,6 +3905,32 @@ function PlanningApp({ session, onSignOut }) {
           onUpdateKeyPickup={(taskId, vaerdi, heleAftalen) => {
             if (heleAftalen) updateCustomerInfo(taskId, { needsKeyPickup: vaerdi });
             else updateInstance(taskId, (t) => ({ ...t, needsKeyPickup: vaerdi }));
+          }}
+          // Tidspunktet paa en fast aftale. Kun opgaven: én raekke rettes, og naeste uge
+          // faar aftalens hidtidige tid igen. Hele aftalen: tiden gemmes i aftalens
+          // ugedagstider, og de kommende opgaver paa samme ugedag rettes med — ellers
+          // ville aftalen og de allerede dannede uger sige to forskellige ting.
+          onUpdateScheduledTime={(taskId, tid, heleAftalen) => {
+            const opgave = instances.find((x) => x.id === taskId);
+            if (!opgave) return;
+            if (!heleAftalen || !opgave.templateId) {
+              updateInstance(taskId, (x) => ({ ...x, scheduledTime: tid }));
+              return;
+            }
+            const tpl = templates.find((x) => x.id === opgave.templateId);
+            const nyeDagstider = { ...(tpl?.dayTimes || {}), [opgave.day]: tid || null };
+            setTemplates((prev) => prev.map((x) => (x.id === opgave.templateId ? { ...x, dayTimes: nyeDagstider } : x)));
+            syncTemplateFields(opgave.templateId, { dayTimes: nyeDagstider });
+            // Kun opgaver der ikke er udfoert. Historikken skal matche det der faktisk
+            // blev leveret, saa en aendret aftale maa ikke skrive bagud.
+            setInstances((prev) => prev.map((x) => {
+              if (x.templateId !== opgave.templateId || x.day !== opgave.day) return x;
+              if (x.status === "udført" || x.dineroExported) return x;
+              const opdateret = { ...x, scheduledTime: tid };
+              syncInstance(opdateret);
+              return opdateret;
+            }));
+            notify(tid ? `Tidspunktet er sat til kl. ${tid} på alle kommende ${(ALL_DAYS.find((d) => d.key === opgave.day)?.label || "").toLowerCase()}e` : "Det faste tidspunkt er fjernet");
           }}
           onUpdateDeliversProducts={(taskId, vaerdi, heleAftalen) => {
             if (heleAftalen) updateCustomerInfo(taskId, { deliversProducts: vaerdi });
@@ -7997,7 +8027,7 @@ function EmployeeModal({ emp, onClose, onSave, skills: skillList }) {
 }
 
 // ---------- Task / service order detail ----------
-function TaskDetailModal({ task, employees, templates, onSetPreferredEmployee, onCancelTemplate, checklistTemplates, skills, isAdminUser, areas, employeeAreas, onClose, onSetStatus, onToggleChecklistItem, onAddChecklistItem, onAddChecklistTemplate, onAddAssignee, onRemoveAssignee, onUnplace, onDelete, onUpdateCustomer, onUpdateCustomerInfo, onUpdateContractType, onRenameTask, onCopy, onUpdateSkills, onEndBlockEarly, onUpdateSchedule, onUpdateKeyPickup, onUpdateDeliversProducts }) {
+function TaskDetailModal({ task, employees, templates, onSetPreferredEmployee, onCancelTemplate, checklistTemplates, skills, isAdminUser, areas, employeeAreas, onClose, onSetStatus, onToggleChecklistItem, onAddChecklistItem, onAddChecklistTemplate, onAddAssignee, onRemoveAssignee, onUnplace, onDelete, onUpdateCustomer, onUpdateCustomerInfo, onUpdateContractType, onRenameTask, onCopy, onUpdateSkills, onEndBlockEarly, onUpdateSchedule, onUpdateKeyPickup, onUpdateDeliversProducts, onUpdateScheduledTime }) {
   // Disse to laa efter det tidlige return for blokeringer (sygdom/ferie) laengere nede.
   // Hooks skal kaldes i samme raekkefoelge hver render: aabnede man en blokering og
   // derefter en almindelig opgave i samme modal, ville React se to hooks mere end sidst
@@ -8047,6 +8077,9 @@ function TaskDetailModal({ task, employees, templates, onSetPreferredEmployee, o
   // fordi det er den harmloese af de to, hvis man trykker forkert.
   const [keyHeleAftalen, setKeyHeleAftalen] = useState(false);
   const [produktHeleAftalen, setProduktHeleAftalen] = useState(false);
+  // Skal tiden gemmes paa aftalen? Starter slaaet TIL: paa en fast aftale er et
+  // klokkeslaet normalt en aftale med kunden, ikke en undtagelse for én uge.
+  const [tidHeleAftalen, setTidHeleAftalen] = useState(true);
 
   async function hentAdgangLog() {
     if (!task) return;
@@ -8075,6 +8108,8 @@ function TaskDetailModal({ task, employees, templates, onSetPreferredEmployee, o
       setLogFejl("");
       setKeyHeleAftalen(false);
       setProduktHeleAftalen(false);
+      setTidHeleAftalen(true);
+      setEditingSchedule(false);
       setTaskSkills(task.requiredSkills || []);
       setDineroResults([]);
       setShowDineroCreate(false);
@@ -8330,7 +8365,9 @@ return (
         {t.onSchedule && !t.offSchedule && <span style={{ ...styles.typeChip, background: "#ECFDF5", color: "#16A34A" }}>✓ Aftalt dag</span>}
         {t.outsideArea && <span style={{ ...styles.typeChip, background: "#F5F3FF", color: "#7C3AED" }}>📍 Uden for område</span>}
       </div>
-      <div style={styles.cardMeta}>{dayLabel} · {fmtMin(t.duration)}{t.deadline ? ` · senest ${ALL_DAYS.find((d) => d.key === t.deadline)?.label}` : ""}{t.expiryDate ? ` · udløber ${t.expiryDate}` : ""}</div>
+      {/* Klokkeslaettet stod ikke her foer, selvom 2.628 af 2.682 faste opgaver har et.
+          Det er en aftale med kunden, saa det skal kunne laeses uden at aabne noget. */}
+      <div style={styles.cardMeta}>{dayLabel}{t.scheduledTime ? ` kl. ${t.scheduledTime}` : ""} · {fmtMin(t.duration)}{t.deadline ? ` · senest ${ALL_DAYS.find((d) => d.key === t.deadline)?.label}` : ""}{t.expiryDate ? ` · udløber ${t.expiryDate}` : ""}</div>
 
       <div style={styles.formSection}><div style={{ ...styles.formSectionHead, background: "#F0FDFA" }}><div style={{ ...styles.formSectionTitle, color: "#0F766E" }}>Opgaven</div><div style={{ ...styles.formSectionHint, color: "#149285" }}>Hvad der skal laves, og hvornår den senest skal være udført</div></div><div style={styles.formSectionBody}>{/* Kompetencer — redigerbare */}
       <div style={{ marginBottom: 12 }}>
@@ -8363,6 +8400,52 @@ return (
           <div style={styles.cardMeta}>{skillLabel(t)}</div>
         )}
       </div>
+
+      {/* Tidspunkt paa en fast aftale. Blokken nedenfor gaelder kun fleksible opgaver,
+          saa paa en fast aftale kunne klokkeslaettet hverken ses eller rettes — det
+          kom fra aftalens ugedagstider og var derefter usynligt.
+          Retter man det kun paa opgaven, kommer den gamle tid tilbage naar naeste uge
+          dannes; derfor valget om at rette hele aftalen. */}
+      {t.type === "fixed" && !isDone && (
+        <div style={{ marginBottom: 12 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+            <label style={styles.label}>Aftalt tidspunkt</label>
+            {!locked && !editingSchedule && (
+              <button style={{ ...styles.addSkillBtn, fontSize: 11 }}
+                onClick={() => { setSchedTime(t.scheduledTime || ""); setEditingSchedule(true); }}>Rediger</button>
+            )}
+          </div>
+          {!editingSchedule ? (
+            <div style={styles.cardMeta}>
+              {t.scheduledTime ? `${dayLabel} kl. ${t.scheduledTime}` : `${dayLabel} — intet fast klokkeslæt`}
+            </div>
+          ) : (
+            <div>
+              <div style={{ maxWidth: 180 }}>
+                <div style={{ fontSize: 11, color: "#94A3B8", marginBottom: 3 }}>Klokkeslæt {dayLabel.toLowerCase()}</div>
+                <input type="time" style={styles.input} value={schedTime} onChange={(e) => setSchedTime(e.target.value)} />
+              </div>
+              <label style={{ display: "flex", alignItems: "center", gap: 7, marginTop: 8, fontSize: 12, color: "#64748B", cursor: "pointer" }}>
+                <input type="checkbox" checked={tidHeleAftalen} onChange={(e) => setTidHeleAftalen(e.target.checked)} />
+                Gælder alle {dayLabel.toLowerCase()}e på aftalen, også de kommende
+              </label>
+              <div style={styles.hint}>
+                {tidHeleAftalen
+                  ? "Tiden gemmes på aftalen, så kommende uger også får den."
+                  : "Kun denne ene opgave ændres. Næste uge får aftalens hidtidige tid igen."}
+              </div>
+              <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                <button style={{ ...styles.secondaryBtn, padding: "7px 12px", fontSize: 12 }}
+                  onClick={() => setEditingSchedule(false)}>Annullér</button>
+                <button style={{ ...styles.primaryBtn, padding: "7px 12px", fontSize: 12 }}
+                  onClick={() => { onUpdateScheduledTime(t.id, schedTime || null, tidHeleAftalen); setEditingSchedule(false); }}>
+                  Gem tidspunkt
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Frist og tidspunkt — kan rettes paa fleksible opgaver indtil de er udfoert.
           Aendres datoen til en anden uge, flytter opgaven med, og placeringen
