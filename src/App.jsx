@@ -498,21 +498,54 @@ function canWorkOn(emp, day) { return !isWeekendDay(day) || !!(emp && emp.weeken
 function usedMinutes(list, empId, day) {
   return list.filter((t) => t.assignees.includes(empId) && t.day === day).reduce((s, t) => s + t.duration, 0);
 }
-function remaining(employees, list, empId, day) {
+
+// Dagens samlede transporttid for en medarbejder hvis koersel er en del af hendes
+// arbejdstid: hjemmefra til foerste opgave, mellem hver opgave, og fra sidste opgave
+// hjem. Returnerer 0 for alle andre, saa de planlaegges praecis som foer.
+//
+// Hovedparten er IKKE paa ordningen: deres transport afregnes med kilometerpenge og
+// taeller derfor ikke i kapaciteten. Derfor er nul-tilfaeldet det foerste der tjekkes,
+// og hele regnestykket springes over.
+function dagensTransport(list, emp, day, travelSettings = DEFAULT_TRAVEL) {
+  if (!emp || !emp.travelInWorktime || !emp.homeAddress) return 0;
+  // Blokeringer (sygdom, ferie) og opgaver uden adresse skal ud FOER raekkefoelgen
+  // laegges. Ellers kunne en ferieblokering ligge foerst paa dagen, og turen hjemmefra
+  // ville blive regnet til en adresse der ikke findes — altsaa nul, lydloest.
+  // Samme filter som der bruges naar rutetiderne hentes, ellers passer de to ikke.
+  const opgaver = sortDayTasks(list.filter((t) =>
+    (t.assignees || []).includes(emp.id) && t.day === day
+    && !BLOCK_TYPES.includes(t.type) && !!t.address));
+  if (opgaver.length === 0) return 0;
+  let minutter = getHomeTravelMinutes(emp, opgaver[0].address, travelSettings);
+  for (let i = 0; i < opgaver.length - 1; i++) {
+    minutter += getTravelMinutes(opgaver[i].address, opgaver[i + 1].address, travelSettings);
+  }
+  minutter += getHomeTravelMinutes(emp, opgaver[opgaver.length - 1].address, travelSettings);
+  return minutter;
+}
+
+// Det dagen faktisk er belagt med. For de fleste er det summen af opgavernes
+// varighed; for dem paa transportordningen er koerslen lagt til.
+function belastning(employees, list, empId, day, travelSettings = DEFAULT_TRAVEL) {
+  const emp = employees.find((e) => e.id === empId);
+  return usedMinutes(list, empId, day) + dagensTransport(list, emp, day, travelSettings);
+}
+
+function remaining(employees, list, empId, day, travelSettings = DEFAULT_TRAVEL) {
   const emp = employees.find((e) => e.id === empId);
   // Weekend: har medarbejderen aftalen, er der ingen oevre graense (arbejdet afregnes
   // med tillaeg og planlaegges efter behov). Har hun den ikke, er der ingen tid at give af.
   if (isWeekendDay(day)) return canWorkOn(emp, day) ? Infinity : 0;
-  return (emp?.capacity?.[day] ?? 0) - usedMinutes(list, empId, day);
+  return (emp?.capacity?.[day] ?? 0) - belastning(employees, list, empId, day, travelSettings);
 }
 // remaining() giver Infinity i weekenden for dem med aftalen. Det kan ikke bruges til
 // rangering (Infinity - Infinity er NaN, og alle scorer ville vaere lige), saa til
 // sortering bruges en endelig vaerdi der falder med den tid der allerede ligger paa
 // dagen - saa weekendarbejdet stadig fordeles jaevnt i stedet for at hobe sig op.
-function remainingForScore(employees, list, empId, day) {
-  const r = remaining(employees, list, empId, day);
+function remainingForScore(employees, list, empId, day, travelSettings = DEFAULT_TRAVEL) {
+  const r = remaining(employees, list, empId, day, travelSettings);
   if (Number.isFinite(r)) return r;
-  return 100000 - usedMinutes(list, empId, day);
+  return 100000 - belastning(employees, list, empId, day, travelSettings);
 }
 function scheduleWeek(weekInstances, employees, autoOnly = false, areas = [], employeeAreas = [], restrictToIds = null, travelSettings = DEFAULT_TRAVEL) {
   let list = weekInstances.map((t) => ({ ...t }));
@@ -569,9 +602,9 @@ function scheduleWeek(weekInstances, employees, autoOnly = false, areas = [], em
     const ranked = [...pool].sort((a, b) => {
       const diff = skillScore(b, t) - skillScore(a, t);
       if (diff !== 0) return diff;
-      return remainingForScore(employees, list, b.id, t.day) - remainingForScore(employees, list, a.id, t.day);
+      return remainingForScore(employees, list, b.id, t.day, travelSettings) - remainingForScore(employees, list, a.id, t.day, travelSettings);
     });
-    const withRoom = ranked.find((c) => remaining(employees, list, c.id, t.day) >= t.duration);
+    const withRoom = ranked.find((c) => remaining(employees, list, c.id, t.day, travelSettings) >= t.duration);
     const pick = withRoom || ranked[0];
     t.assignees = [pick.id];
     t.status = "planlagt";
@@ -605,8 +638,8 @@ function scheduleWeek(weekInstances, employees, autoOnly = false, areas = [], em
         if (!canWorkOn(e, d.key)) return;
         // Gaelder ogsaa opgaver uden fast tid: de maa ikke presse en aftalt opgave.
         if (hasTimeConflict(e.id, d.key, t)) return;
-        const rem = remaining(employees, list, e.id, d.key);
-        const remScore = remainingForScore(employees, list, e.id, d.key);
+        const rem = remaining(employees, list, e.id, d.key, travelSettings);
+        const remScore = remainingForScore(employees, list, e.id, d.key, travelSettings);
         const fits = rem >= t.duration ? 1 : 0;
         // En opgave med et ønsket starttidspunkt bør helst placeres hos en
         // medarbejder/dag hvor det tidspunkt rent faktisk er nåeligt — dvs.
@@ -615,7 +648,9 @@ function scheduleWeek(weekInstances, employees, autoOnly = false, areas = [], em
         let timeScore = 0;
         if (t.scheduledTime) {
           const desiredMin = parseTimeToMinutes(t.scheduledTime);
-          const estimatedArrival = parseTimeToMinutes(e.startTime || "07:00") + usedMinutes(list, e.id, d.key);
+          // Belastning frem for varighed: er koerslen en del af arbejdstiden, skubber
+          // turen hjemmefra ogsaa ankomsten til dagens senere opgaver.
+          const estimatedArrival = parseTimeToMinutes(e.startTime || "07:00") + belastning(employees, list, e.id, d.key, travelSettings);
           timeScore = estimatedArrival <= desiredMin ? 2000 : -2000;
         }
         const score = fits * 1_000_000 + timeScore + skillScore(e, t) * 1000 + remScore;
@@ -855,9 +890,21 @@ function statusLabel(s) { return { unscheduled: "Ubemandet", planlagt: "Planlagt
 // De gemte minutter indlaeses som overrides. Standardtiden fra transport-
 // indstillingerne bruges kun som fallback for par vi endnu ikke har en rute for
 // (fx hvis adressen ikke kunne geokodes).
-// Bemaerk: transporttid taeller bevidst IKKE med i medarbejderens kapacitet —
-// koersel afregnes med kilometerpenge, ikke som arbejdstid.
+// Bemaerk: for hovedparten taeller transporttid bevidst IKKE med i kapaciteten —
+// koersel afregnes med kilometerpenge, ikke som arbejdstid. Undtagelsen er de
+// medarbejdere der har travelInWorktime sat; for dem laegger dagensTransport()
+// koerslen til belastningen, og de faar ogsaa et ben hjemmefra og hjem.
 function travelKey(a, b) { return [a, b].sort().join(" || "); }
+// Hjemmebenene har deres EGET opslag, noeglet paa medarbejder-id og kundens adresse.
+// De maa ikke ligge i den almindelige overrides-liste: den vises i klartekst under
+// Transporttid, og saa kunne enhver planlaegger laese medarbejdernes privatadresser
+// ud af listen — stik imod hele grunden til at adressen ligger i en beskyttet tabel.
+function hjemKey(empId, adresse) { return empId + " || " + adresse; }
+function getHomeTravelMinutes(emp, adresse, travelSettings) {
+  if (!emp || !emp.homeAddress || !adresse || emp.homeAddress === adresse) return 0;
+  const gemt = (travelSettings.hjemOverrides || {})[hjemKey(emp.id, adresse)];
+  return gemt ?? travelSettings.defaultMinutes;
+}
 function getTravelMinutes(addrA, addrB, travelSettings) {
   if (!addrA || !addrB || addrA === addrB) return 0;
   const key = travelKey(addrA, addrB);
@@ -898,6 +945,17 @@ function computeDaySchedule(dayTasks, travelSettings, employee) {
   // generelle standard-starttidspunkt fra transportindstillingerne.
   let cursor = parseTimeToMinutes((employee && employee.startTime) || travelSettings.dayStart);
   const segments = [];
+  // Er koerslen en del af arbejdstiden, begynder dagen hjemme. Turen ud til foerste
+  // opgave laegges derfor foerst paa tidslinjen, og moedetiden er tidspunktet hvor
+  // hun tager hjemmefra — ikke hvor hun staar hos den foerste kunde.
+  const hjemTaeller = !!(employee && employee.travelInWorktime && employee.homeAddress);
+  if (hjemTaeller && sorted.length > 0) {
+    const ud = getHomeTravelMinutes(employee, sorted[0].address, travelSettings);
+    if (ud > 0) {
+      segments.push({ type: "transport", hjem: true, minutes: ud, start: cursor, end: cursor + ud, key: `hjem->${sorted[0].id}` });
+      cursor += ud;
+    }
+  }
   sorted.forEach((t, idx) => {
     if (idx > 0) {
       const prev = sorted[idx - 1];
@@ -927,10 +985,15 @@ function computeDaySchedule(dayTasks, travelSettings, employee) {
     segments.push({ type: "task", task: t, start: cursor, end: cursor + t.duration, lateBy });
     cursor += t.duration;
   });
+  // Turen hjem efter sidste opgave. Den staar til sidst, saa tidslinjen viser hvornaar
+  // arbejdsdagen faktisk slutter for hende — det er dét tidspunkt der taeller i lønnen.
+  if (hjemTaeller && sorted.length > 0) {
+    const hjem = getHomeTravelMinutes(employee, sorted[sorted.length - 1].address, travelSettings);
+    if (hjem > 0) {
+      segments.push({ type: "transport", hjem: true, minutes: hjem, start: cursor, end: cursor + hjem, key: `${sorted[sorted.length - 1].id}->hjem` });
+    }
+  }
   return segments;
-}
-function dayTransportMinutes(dayTasks, travelSettings) {
-  return computeDaySchedule(dayTasks, travelSettings).filter((s) => s.type === "transport").reduce((sum, s) => sum + s.minutes, 0);
 }
 function cycleStatus(s) { return { planlagt: "udført", udført: "planlagt", unscheduled: "planlagt" }[s] || "planlagt"; }
 // Hvem afsluttede opgaven, og hvornår — vist på kortene i ugeplanen.
@@ -1258,6 +1321,17 @@ const MODULE_HELP = {
         "Timeløn bruges til lønsummerne i Medarbejder-eksport. Nye medarbejdere starter på 170 kr.",
         "Sæt kompetenceniveau: Nybegynder, Øvet eller Ekspert.",
         "Sæt timer til rådighed for mandag til fredag."] },
+    { h: "Kørsel som arbejdstid", p: [
+        "Nogle medarbejdere har kørsel med i arbejdstiden. Sæt fluebenet «Kørsel er en del af arbejdstiden» på hendes kort og skriv hjemmeadressen.",
+        "Så tæller dagens kørsel i hendes kapacitet: hjemmefra til første opgave, mellem opgaverne, og fra sidste opgave hjem. På kortet står hvor meget af ugen der går til kørsel.",
+        "Uden fluebenet planlægges hun præcis som hidtil. Transporten vises stadig på tidslinjen, men optager ingen kapacitet, og kørslen afregnes med kilometerpenge.",
+        "Mødetiden bliver tidspunktet hvor hun tager hjemmefra — ikke hvor hun står hos den første kunde.",
+        "Kan dagen ikke holde når kørslen tælles med, lægges opgaven på alligevel og dagen markeres «Overbelastet». Så forsvinder ingenting ud af syne, men du kan se at der skal flyttes noget.",
+        "Uden hjemmeadresse slår ordningen ikke til, uanset fluebenet. Der er ingen adresse at regne fra."] },
+    { h: "Hvem kan se hjemmeadressen", p: [
+        "Adressen ligger i sin egen tabel med adgang for administratorer og for medarbejderen selv. Kollegerne kan ikke se den, heller ikke gennem medarbejder-appen.",
+        "Adressen sendes til rutetjenesten for at beregne køretiden, på samme måde som kundernes adresser. Det er en databehandling af personoplysninger, og den bør stå i jeres dokumentation.",
+        "Kilometerpengene røres ikke af ordningen. De beregnes stadig kun mellem opgaver med registreret tid — kørsel mellem hjem og arbejde indgår ikke."] },
     { h: "Hvem kan se lønnen", p: [
         "Timelønnen ligger i sin egen tabel, som kun administratorer har adgang til. Det er håndhævet i databasen, ikke kun i skærmbilledet.",
         "Er du ikke administrator, står feltet tomt, og lønkolonnerne i Medarbejder-eksport vises slet ikke — heller ikke i CSV-filen.",
@@ -1541,6 +1615,7 @@ function PlanningApp({ session, onSignOut }) {
       { data: onskerData },
       { data: noterData },
       { data: wageData },
+      { data: homeData },
         { data: travelData },
         { data: overridesData },
       ] = await Promise.all([
@@ -1562,6 +1637,9 @@ function PlanningApp({ session, onSignOut }) {
       // Timeloen. Politikken slipper kun administratorer ind, saa for alle andre
       // kommer der en tom liste tilbage — helt uden fejl, og uden at loennen laekker.
       supabase.from("employee_wages").select("*").then(({ data }) => ({ data })),
+      // Hjemmeadresse og transportordning. Samme historie som loennen: er man ikke
+      // administrator, kommer der en tom liste tilbage, og ordningen slaar ikke til.
+      supabase.from("employee_home").select("*").then(({ data }) => ({ data })),
         supabase.from("travel_settings").select("*").eq("id","default").single(),
         supabase.from("travel_overrides").select("*"),
       ]);
@@ -1601,6 +1679,8 @@ function PlanningApp({ session, onSignOut }) {
           // raekker, og satsen bliver null. Eksporten viser da en streg i stedet for
           // et forkert beloeb — den maa ikke gaette paa standardsatsen.
           hourlyWage: (wageData || []).find((w) => w.employee_id === e.id)?.hourly_wage ?? null,
+          homeAddress: (homeData || []).find((h) => h.employee_id === e.id)?.home_address ?? null,
+          travelInWorktime: (homeData || []).find((h) => h.employee_id === e.id)?.travel_in_worktime ?? false,
           skills: Object.fromEntries(
             (empSkillsData || []).filter((s) => s.employee_id === e.id)
               .map((s) => {
@@ -1790,47 +1870,92 @@ function PlanningApp({ session, onSignOut }) {
     });
     const missing = [];
     const seen = new Set();
-    Object.values(byEmpDay).forEach((tasks) => {
+    const hjemMangler = [];
+    const hjemSeen = new Set();
+    function maaskeHent(a, b) {
+      if (!a || !b || a === b) return;
+      const key = travelKey(a, b);
+      if (travelSettings.overrides[key] !== undefined) return;
+      if (seen.has(key) || travelTried.current.has(key)) return;
+      seen.add(key);
+      missing.push({ a, b });
+    }
+    Object.entries(byEmpDay).forEach(([noegle, tasks]) => {
       const sorted = sortDayTasks(tasks);
       for (let i = 0; i < sorted.length - 1; i++) {
-        const a = sorted[i].address, b = sorted[i + 1].address;
-        if (!a || !b || a === b) continue;
-        const key = travelKey(a, b);
-        if (travelSettings.overrides[key] !== undefined) continue;
-        if (seen.has(key) || travelTried.current.has(key)) continue;
-        seen.add(key);
-        missing.push({ a, b });
+        maaskeHent(sorted[i].address, sorted[i + 1].address);
       }
+      // Hjemmebenene skal ogsaa have en rigtig rutetid, ellers ville de tælle med
+      // standardsatsen paa 20 minutter og give et forkert billede af hendes dag.
+      // Kun for dem paa ordningen — andres privatadresser sendes ikke til rutetjenesten.
+      if (sorted.length === 0) return;
+      const empId = noegle.split("|")[0];
+      const emp = employees.find((e) => e.id === empId);
+      if (!emp || !emp.travelInWorktime || !emp.homeAddress) return;
+      // Resultatet gemmes under medarbejder-id, ikke under adresseparret, saa
+      // privatadressen aldrig havner i den liste der vises under Transporttid.
+      [sorted[0].address, sorted[sorted.length - 1].address].forEach((adresse) => {
+        if (!adresse || adresse === emp.homeAddress) return;
+        const hk = hjemKey(emp.id, adresse);
+        if ((travelSettings.hjemOverrides || {})[hk] !== undefined) return;
+        if (hjemSeen.has(hk) || travelTried.current.has(hk)) return;
+        hjemSeen.add(hk);
+        hjemMangler.push({ empId: emp.id, hjem: emp.homeAddress, adresse });
+      });
     });
-    if (missing.length === 0) return;
+    if (missing.length === 0 && hjemMangler.length === 0) return;
+    // Alle par sendes i ét kald. Hjemmebenene ligger til sidst, saa svarene kan
+    // fordeles: de foerste i den almindelige liste, resten i det beskyttede opslag.
+    const alle = [...missing.map((p) => ({ a: p.a, b: p.b })),
+                  ...hjemMangler.map((h) => ({ a: h.hjem, b: h.adresse }))];
     missing.forEach((p) => travelTried.current.add(travelKey(p.a, p.b)));
+    hjemMangler.forEach((h) => travelTried.current.add(hjemKey(h.empId, h.adresse)));
+    const glemProevet = () => {
+      missing.forEach((p) => travelTried.current.delete(travelKey(p.a, p.b)));
+      hjemMangler.forEach((h) => travelTried.current.delete(hjemKey(h.empId, h.adresse)));
+    };
     let cancelled = false;
     (async () => {
       try {
         const { data, error } = await supabase.functions.invoke("travel-distance", {
-          body: { pairs: missing },
+          body: { pairs: alle },
         });
         if (cancelled) return;
         if (error) {
           // Naeste genindlaesning maa gerne proeve igen — det kan vaere et midlertidigt udfald.
-          missing.forEach((p) => travelTried.current.delete(travelKey(p.a, p.b)));
+          glemProevet();
           console.error("travel-distance:", error.message);
           return;
         }
         const results = (data && data.results) || [];
         const next = {};
-        results.forEach((r) => {
-          if (r && r.a && r.b && typeof r.minutes === "number") next[travelKey(r.a, r.b)] = r.minutes;
+        const nextHjem = {};
+        results.forEach((r, i) => {
+          if (!r || typeof r.minutes !== "number") return;
+          // Positionen afgoer hvor svaret hoerer til. Adresseparret duer ikke som
+          // noegle for hjemmebenene — det er praecis det vi vil undgaa at gemme.
+          if (i < missing.length) {
+            if (r.a && r.b) next[travelKey(r.a, r.b)] = r.minutes;
+          } else {
+            const h = hjemMangler[i - missing.length];
+            if (h) nextHjem[hjemKey(h.empId, h.adresse)] = r.minutes;
+          }
         });
-        if (Object.keys(next).length === 0) return;
-        setTravelSettings((prev) => ({ ...prev, overrides: { ...prev.overrides, ...next } }));
+        if (Object.keys(next).length === 0 && Object.keys(nextHjem).length === 0) return;
+        setTravelSettings((prev) => ({
+          ...prev,
+          overrides: { ...prev.overrides, ...next },
+          hjemOverrides: { ...(prev.hjemOverrides || {}), ...nextHjem },
+        }));
       } catch (e) {
-        missing.forEach((p) => travelTried.current.delete(travelKey(p.a, p.b)));
+        glemProevet();
         console.error("travel-distance:", e);
       }
     })();
     return () => { cancelled = true; };
-  }, [instances, weekOffset, weekYear, travelSettings.overrides, loading]);
+    // employees skal med i deps: uden den ville en nyligt indtastet hjemmeadresse
+    // ikke udloese et opslag, og hjemmebenene ville blive staaende paa standardsatsen.
+  }, [instances, employees, weekOffset, weekYear, travelSettings.overrides, loading]);
 
   // ── Supabase Realtime: hold "instances" i sync på tværs af faner/apps ──
   // Uden dette abonnement indlæses instances kun én gang ved opstart (loadAll
@@ -1895,6 +2020,8 @@ function PlanningApp({ session, onSignOut }) {
   }, []);
 
   // ── Supabase: sync-helpers ──
+  // Saettes laengere nede i render, hvor isAdminUser er regnet ud.
+  const isAdminRef = useRef(false);
   const syncEmployee = useCallback(async (emp) => {
     const { data: skillRows_db } = await supabase.from("skills").select("id, name");
     const { error: empErr } = await supabase.from("employees").upsert({ id: emp.id, name: emp.name, color: emp.color, is_admin: emp.isAdmin ?? false, weekend_ok: emp.weekendOk ?? false, start_time: emp.startTime || null }, { onConflict: "id" });
@@ -1902,10 +2029,22 @@ function PlanningApp({ session, onSignOut }) {
     // Timeloennen skrives kun hvis den er sat. Er man ikke administrator, kunne den
     // ikke laeses ved indlaesningen, og et blindt gem ville overskrive den rigtige
     // sats med standardsatsen — politikken afviser det, men vi undlader helt at spoerge.
-    if (emp.hourlyWage != null) {
+    // Timeloen og transportordning skrives KUN af en administrator. Begge tabeller kan
+    // kun laeses af administratorer, saa for alle andre er vaerdierne i formularen
+    // standardvaerdier og ikke det der staar i databasen — et gem ville saette
+    // timeloennen til 170 og slaa transportordningen fra.
+    //
+    // Tidligere stod her "if (emp.hourlyWage != null)" og "!== undefined", men
+    // formularen udfylder altid begge felter, saa betingelserne var altid sande.
+    // Politikken afviste skrivningen, men brugeren fik en fejlbesked oven i hovedet.
+    if (isAdminRef.current) {
       const { error: wageErr } = await supabase.from("employee_wages")
-        .upsert({ employee_id: emp.id, hourly_wage: emp.hourlyWage, updated_at: new Date().toISOString() }, { onConflict: "employee_id" });
+        .upsert({ employee_id: emp.id, hourly_wage: emp.hourlyWage ?? STANDARD_TIMELOEN, updated_at: new Date().toISOString() }, { onConflict: "employee_id" });
       if (dbFail(wageErr, "gemme timelønnen")) return;
+
+      const { error: homeErr } = await supabase.from("employee_home")
+        .upsert({ employee_id: emp.id, home_address: emp.homeAddress || null, travel_in_worktime: !!emp.travelInWorktime, updated_at: new Date().toISOString() }, { onConflict: "employee_id" });
+      if (dbFail(homeErr, "gemme transportordningen")) return;
     }
     const skillRows = Object.entries(emp.skills || {})
       .map(([name, level]) => {
@@ -3294,6 +3433,11 @@ function PlanningApp({ session, onSignOut }) {
   // medarbejder automatisk administratorrettigheder i brugerfladen — den slags
   // skal fejle lukket, ikke åbent.
   const isAdminUser = !!currentEmployeeForAuth?.isAdmin;
+  // syncEmployee er en useCallback med tomme deps og bliver defineret laenge foer
+  // isAdminUser findes. Den kan derfor ikke laese variablen direkte — en closure med
+  // tomme deps ville fastholde vaerdien fra foerste render, hvor medarbejderen endnu
+  // ikke er hentet og svaret altid er "nej". Derfor en ref der opdateres hver render.
+  isAdminRef.current = isAdminUser;
 
   const currentIsoWeek = isoWeekInfo(new Date());
   const weekInstancesList = instances.filter((t) => t.week === weekOffset && t.year === weekYear);
@@ -3517,7 +3661,7 @@ function PlanningApp({ session, onSignOut }) {
         />
       )}
       {view === "employees" && (
-        <EmployeesView employees={employees} instances={weekInstancesList}
+        <EmployeesView employees={employees} instances={weekInstancesList} travelSettings={travelSettings}
           onAdd={() => { setEditEmp(null); setShowAddEmp(true); }}
           onEdit={(e) => { setEditEmp(e); setShowAddEmp(true); }}
           onDelete={deleteEmployee}
@@ -3573,7 +3717,10 @@ function PlanningApp({ session, onSignOut }) {
         <TravelSettingsModal
           settings={travelSettings}
           onClose={() => setShowTravelSettings(false)}
-          onSave={(s) => { setTravelSettings(s); setShowTravelSettings(false); }}
+          // Flettes ind i det nuvaerende, ikke sat i stedet: modalen kender ikke
+          // hjemOverrides, saa en ren erstatning ville smide hjemmebenenes rutetider
+          // vaek hver gang nogen aabnede og gemte transportindstillingerne.
+          onSave={(s) => { setTravelSettings((prev) => ({ ...prev, ...s })); setShowTravelSettings(false); }}
         />
       )}
       {openTaskId && (
@@ -3983,9 +4130,11 @@ function WeekView({ employees, instances, unplaced, onAdd, onAuto, onScheduleWee
                 </div>
                 {visibleDays.map((d, i) => {
                   const dayTasks = instances.filter((t) => (t.assignees || []).includes(emp.id) && t.day === d.key);
-                  const schedule = computeDaySchedule(dayTasks, travelSettings, emp);
-                  const transportMin = schedule.filter((s) => s.type === "transport").reduce((s2, seg) => s2 + seg.minutes, 0);
-                  const used = dayTasks.reduce((s, t) => s + t.duration, 0) + transportMin;
+                  // Samme regnestykke som planlaeggeren bruger. Foer taltes transporten
+                  // med for ALLE, mens planlaegningen kun taeller den for dem paa
+                  // ordningen — saa en dag kunne staa roed "overbooket" samtidig med at
+                  // systemet mente der var plads, og blev ved med at laegge opgaver paa.
+                  const used = belastning([emp], instances, emp.id, d.key, travelSettings);
                   const weekendCell = isWeekendDay(d.key);
                   const weekendAllowed = weekendCell && !!emp.weekendOk;
                   const cap = emp.capacity[d.key] || 0;
@@ -4158,10 +4307,11 @@ function WeekView({ employees, instances, unplaced, onAdd, onAuto, onScheduleWee
           <div style={{ fontSize: 12, fontWeight: 700, color: "#475569", marginBottom: 8 }}>📊 Ugebelægning{selectedAreaId !== "all" && areas ? ` — ${areas.find((a) => a.id === selectedAreaId)?.name}` : " — alle medarbejdere"}</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             {visibleEmployees.map((emp) => {
-              const totalUsed = visibleDays.reduce((s, d) => {
-                const dayTasks = instances.filter((t) => (t.assignees || []).includes(emp.id) && t.day === d.key);
-                return s + dayTasks.reduce((s2, t) => s2 + t.duration, 0);
-              }, 0);
+              // Samme regnestykke som dagcellerne og som planlaeggeren. Foer lagde
+              // totalen kun varigheder sammen, saa ugebjaelken kunne staa paa 80 % mens
+              // flere af de dage den opsummerer var roede af overbelastning.
+              const totalUsed = visibleDays.reduce(
+                (s, d) => s + belastning([emp], instances, emp.id, d.key, travelSettings), 0);
               // Weekend indgaar ikke i kapacitetstotalen - der er intet loft at maale imod.
   const totalCap = visibleDays.reduce((s, d) => s + (isWeekendDay(d.key) ? 0 : (emp.capacity[d.key] || 0)), 0);
               const pct = totalCap ? Math.round((totalUsed / totalCap) * 100) : 0;
@@ -4241,7 +4391,7 @@ function TypeBadge({ type, mini }) {
 }
 
 // ---------- Employees ----------
-function EmployeesView({ employees, instances, onAdd, onEdit, onDelete, supabase, skills, onSkillsChange, areas, employeeAreas, onAreasChange, onEmployeeAreasChange }) {
+function EmployeesView({ employees, instances, onAdd, onEdit, onDelete, supabase, skills, onSkillsChange, areas, employeeAreas, onAreasChange, onEmployeeAreasChange, travelSettings = DEFAULT_TRAVEL }) {
   const [showSkillsPanel, setShowSkillsPanel] = useState(false);
   const [showAreasPanel, setShowAreasPanel] = useState(false);
   const [inviteEmail, setInviteEmail] = useState({});
@@ -4384,6 +4534,10 @@ function EmployeesView({ employees, instances, onAdd, onEdit, onDelete, supabase
           const activeMin = ALL_DAYS.reduce((s, d) => s + usedMinutes(instances, e.id, d.key), 0);
           // Weekend har intet kapacitetsloft, saa den taeller ikke med her.
           const capMin = DAYS.reduce((s, d) => s + (e.capacity[d.key] || 0), 0);
+          // Transporten vises for sig, saa planlaeggeren kan se hvad ordningen koster i
+          // kapacitet. Uden ordningen er tallet nul og linjen vises slet ikke.
+          const transportMin = ALL_DAYS.reduce(
+            (s, d) => s + dagensTransport(instances, e, d.key, travelSettings), 0);
           const status = inviteStatus[e.id];
           const hasUser = !!e.auth_user_id;
           return (
@@ -4392,7 +4546,12 @@ function EmployeesView({ employees, instances, onAdd, onEdit, onDelete, supabase
                 <span style={{ ...styles.avatar, background: e.color, width: 40, height: 40, fontSize: 15 }}>{initials(e.name)}</span>
                 <div style={{ flex: 1 }}>
                   <div style={styles.empName}>{e.name}</div>
-                  <div style={styles.empLoad}>{fmtMin(activeMin)} af {fmtMin(capMin)} planlagt denne uge</div>
+                  <div style={styles.empLoad}>
+                    {fmtMin(activeMin + transportMin)} af {fmtMin(capMin)} planlagt denne uge
+                    {transportMin > 0 && (
+                      <span style={{ color: "#4F46E5", fontWeight: 600 }}> · heraf {fmtMin(transportMin)} kørsel</span>
+                    )}
+                  </div>
                 </div>
                 <button style={styles.iconBtnGhostInline} onClick={() => onEdit(e)} title="Rediger medarbejder"><Pencil size={14} /></button>
                 <button style={styles.iconBtnGhostInline} onClick={() => onDelete(e.id)} title="Slet medarbejder"><Trash2 size={14} /></button>
@@ -7321,6 +7480,8 @@ function EmployeeModal({ emp, onClose, onSave, skills: skillList }) {
   const [hourlyWage, setHourlyWage] = useState(
     emp?.hourlyWage != null ? String(emp.hourlyWage) : String(STANDARD_TIMELOEN),
   );
+  const [homeAddress, setHomeAddress] = useState(emp?.homeAddress || "");
+  const [travelInWorktime, setTravelInWorktime] = useState(emp?.travelInWorktime ?? false);
   const [weekendOk, setWeekendOk] = useState(emp?.weekendOk ?? false);
   const [empSkills, setEmpSkills] = useState(emp?.skills || {});
   const [capacity, setCapacity] = useState(emp?.capacity || defaultCapacity());
@@ -7347,6 +7508,41 @@ function EmployeeModal({ emp, onClose, onSave, skills: skillList }) {
       <div style={styles.hint}>
         Bruges til lønsummerne i Medarbejder-eksport. Satsen kan kun ses og rettes af administratorer.
       </div>
+
+      <label style={styles.label}>Transport</label>
+      <button type="button"
+        style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left",
+                 padding: "11px 12px", borderRadius: 10, cursor: "pointer",
+                 border: travelInWorktime ? "2px solid #16A34A" : "1.5px solid #E2E8F0",
+                 background: travelInWorktime ? "#F0FDF4" : "#fff" }}
+        onClick={() => setTravelInWorktime((v) => !v)}>
+        <span style={{ width: 20, height: 20, borderRadius: 5, flexShrink: 0,
+                       border: travelInWorktime ? "2px solid #16A34A" : "2px solid #CBD5E1",
+                       background: travelInWorktime ? "#16A34A" : "#fff",
+                       display: "flex", alignItems: "center", justifyContent: "center" }}>
+          {travelInWorktime && <Check size={12} color="#fff" strokeWidth={3} />}
+        </span>
+        <span style={{ fontSize: 14, color: "#111111" }}>Kørsel er en del af arbejdstiden</span>
+      </button>
+      <div style={styles.hint}>
+        Med fluebenet tæller dagens kørsel i hendes kapacitet — hjemmefra til første opgave,
+        mellem opgaverne, og fra sidste opgave hjem. Uden fluebenet planlægges hun som hidtil,
+        og kørslen afregnes med kilometerpenge.
+      </div>
+
+      {travelInWorktime && (
+        <>
+          <label style={styles.label}>Hjemmeadresse</label>
+          <input style={styles.input} value={homeAddress} onChange={(e) => setHomeAddress(e.target.value)}
+            placeholder="Vejnavn 1, 9490 Pandrup" />
+          <div style={styles.hint}>
+            Bruges kun til at beregne turen til dagens første og fra dagens sidste opgave.
+            Adressen kan kun ses af administratorer og af medarbejderen selv, og sendes til
+            rutetjenesten på samme måde som kundernes adresser.
+            {!homeAddress.trim() && <strong style={{ color: "#B45309" }}> Uden adresse slår ordningen ikke til.</strong>}
+          </div>
+        </>
+      )}
 
       <label style={styles.label}>Kompetenceniveau pr. kompetence</label>
       <div style={styles.skillLevelGrid}>
@@ -7395,7 +7591,7 @@ function EmployeeModal({ emp, onClose, onSave, skills: skillList }) {
 
       <div style={styles.modalActions}>
         <button style={styles.secondaryBtn} onClick={onClose}>Annuller</button>
-        <button style={styles.primaryBtn} disabled={!name.trim()} onClick={() => onSave({ id: emp?.id || uid("e"), name: name.trim(), skills: empSkills, color: emp?.color || color, capacity, isAdmin, weekendOk, startTime: startTime || null, hourlyWage: hourlyWage === "" ? STANDARD_TIMELOEN : Math.max(0, Number(hourlyWage)) })}>Gem medarbejder</button>
+        <button style={styles.primaryBtn} disabled={!name.trim()} onClick={() => onSave({ id: emp?.id || uid("e"), name: name.trim(), skills: empSkills, color: emp?.color || color, capacity, isAdmin, weekendOk, startTime: startTime || null, hourlyWage: hourlyWage === "" ? STANDARD_TIMELOEN : Math.max(0, Number(hourlyWage)), homeAddress: homeAddress.trim() || null, travelInWorktime })}>Gem medarbejder</button>
       </div>
     </Modal>
   );
