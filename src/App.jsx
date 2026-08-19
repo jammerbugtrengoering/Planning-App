@@ -1316,7 +1316,9 @@ const MODULE_HELP = {
         "I appen er teksten skjult bag knappen «Vis adgangsoplysninger». Trykker hun, tjekker databasen at hun er på opgaven, skriver en linje i loggen med navn og tidspunkt, og svarer så med teksten.",
         "Det betyder at loggen er fuldstændig: der findes ingen anden vej til koden. Tidligere lå koden i det svar appen fik, uanset om den blev vist — og så kunne man læse den uden at det blev registreret.",
         "Du redigerer teksten som hidtil under Adgang på opgaven eller aftalen. Kun administratorer kan se og rette den.",
-        "Loggen ligger i tabellen access_log. Den kan læses i Supabase, og kun af administratorer."] },
+        "Åbn en opgave og tryk «Vis hvem der har åbnet adgangen» under kundeoplysningerne. Så står navn og tidspunkt for hver åbning, nyeste først.",
+        "Loggen hentes først når du trykker — den vokser med hver åbning, og de fleste opgaver skal ikke slæbe den med hver gang de åbnes.",
+        "Er der ingen linjer, har ingen åbnet adgangsoplysningerne på den opgave. Bemærk at der også logges når en medarbejder åbner en opgave uden adgangsoplysninger; ellers ville sporet have huller."] },
     { h: "Kommentarer og billeder", p: [
         "Medarbejderne kan skrive en kommentar og tage billeder på enhver opgave — også dem der gik som de skulle.",
         "Er der en kommentar på en opgave, står der 💬 på den i ugeplanen. Er der billeder med, står der 📷 i stedet.",
@@ -4203,10 +4205,14 @@ function WeekView({ employees, instances, unplaced, onAdd, onAuto, onScheduleWee
                 </div>
                 {visibleDays.map((d, i) => {
                   const dayTasks = instances.filter((t) => (t.assignees || []).includes(emp.id) && t.day === d.key);
-                  // Samme regnestykke som planlaeggeren bruger. Foer taltes transporten
-                  // med for ALLE, mens planlaegningen kun taeller den for dem paa
-                  // ordningen — saa en dag kunne staa roed "overbooket" samtidig med at
-                  // systemet mente der var plads, og blev ved med at laegge opgaver paa.
+                  // Tidslinjen i cellen. Transportsegmenterne tegnes for alle, ogsaa dem
+                  // uden ordningen — planlaeggeren skal kunne se hvor koerslen ligger,
+                  // selv om den ikke optager kapacitet for dem.
+                  const schedule = computeDaySchedule(dayTasks, travelSettings, emp);
+                  // Belaegningen regnes derimod som planlaeggeren gør. Foer taltes
+                  // transporten med for ALLE, mens planlaegningen kun taeller den for dem
+                  // paa ordningen — saa en dag kunne staa roed "overbooket" samtidig med
+                  // at systemet mente der var plads og blev ved med at laegge opgaver paa.
                   const used = belastning([emp], instances, emp.id, d.key, travelSettings);
                   const weekendCell = isWeekendDay(d.key);
                   const weekendAllowed = weekendCell && !!emp.weekendOk;
@@ -7726,6 +7732,26 @@ function TaskDetailModal({ task, employees, templates, onSetPreferredEmployee, o
   // Sand når kunden vides at være en rigtig Dinero-kontakt (gemt persistent på
   // opgaven/skabelonen) — styrer om "Send til Dinero"-knappen vises i det hele taget.
   const [customerDineroSynced, setCustomerDineroSynced] = useState(false);
+  // Loggen hentes paa forespoergsel og ikke ved indlaesning: den vokser med hver
+  // aabning, og de fleste opgaver aabnes uden at nogen har brug for at se sporet.
+  // null = ikke hentet endnu, [] = hentet og tom.
+  const [adgangLog, setAdgangLog] = useState(null);
+  const [logHenter, setLogHenter] = useState(false);
+  const [logFejl, setLogFejl] = useState("");
+
+  async function hentAdgangLog() {
+    if (!task) return;
+    setLogHenter(true);
+    setLogFejl("");
+    const { data, error } = await supabase.from("access_log")
+      .select("id, employee_id, opened_at")
+      .eq("instance_id", task.id)
+      .order("opened_at", { ascending: false })
+      .limit(200);
+    if (error) setLogFejl("Kunne ikke hente loggen: " + error.message);
+    else setAdgangLog(data || []);
+    setLogHenter(false);
+  }
 
   useEffect(() => {
     if (task) {
@@ -7734,6 +7760,10 @@ function TaskDetailModal({ task, employees, templates, onSetPreferredEmployee, o
       setCustAddress(task.address || "");
       setCustPo(task.poNumber || "");
       setCustAccess(task.accessInstructions || "");
+      // Nulstilles naar en anden opgave aabnes, ellers ville forrige opgaves log
+      // staa og lyse paa den nye — og det er en alvorlig forveksling netop her.
+      setAdgangLog(null);
+      setLogFejl("");
       setTaskSkills(task.requiredSkills || []);
       setDineroResults([]);
       setShowDineroCreate(false);
@@ -8176,12 +8206,45 @@ return (
                 </div>
               )}
               {custPo && <div style={styles.cardMeta}>Faktura: {custPo}</div>}
+              {t.needsKeyPickup && (
+                <div style={{ background: "#FFFBEB", border: "1px solid #FDE68A", borderRadius: 8, padding: "6px 10px", marginTop: 8, fontSize: 12, fontWeight: 600, color: "#92400E" }}>
+                  🔑 Nøglen hentes på kontoret først
+                </div>
+              )}
               {custAccess && (
                 <div style={{ ...styles.accessBox, marginTop: 8 }}>
                   <div style={styles.accessTitle}><Lock size={13} /> Adgang</div>
                   <div style={styles.checklistItemDescription}>{custAccess}</div>
                 </div>
               )}
+
+              {/* Hvem har set adgangsoplysningerne. Staar her ved siden af selve teksten,
+                  saa spoergsmaalet "hvem kender koden til den her adresse" kan besvares
+                  paa stedet — det er hele grunden til at der logges. */}
+              <div style={{ marginTop: 8 }}>
+                {adgangLog === null ? (
+                  <button type="button" style={{ ...styles.addSkillBtn, fontSize: 12 }} onClick={hentAdgangLog}>
+                    {logHenter ? "Henter…" : "🔍 Vis hvem der har åbnet adgangen"}
+                  </button>
+                ) : adgangLog.length === 0 ? (
+                  <div style={styles.cardMeta}>Ingen har åbnet adgangsoplysningerne på denne opgave.</div>
+                ) : (
+                  <div style={{ background: "#F8FAFC", borderRadius: 8, padding: "8px 10px" }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 6 }}>
+                      Adgang åbnet {adgangLog.length} {adgangLog.length === 1 ? "gang" : "gange"}
+                    </div>
+                    {adgangLog.map((l) => (
+                      <div key={l.id} style={{ display: "flex", justifyContent: "space-between", gap: 10, fontSize: 12, color: "#111111", padding: "3px 0" }}>
+                        <span>{employees.find((e) => e.id === l.employee_id)?.name || "Ukendt"}</span>
+                        <span style={{ color: "#64748B", flexShrink: 0 }}>
+                          {new Date(l.opened_at).toLocaleString("da-DK", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {logFejl && <div style={{ ...styles.cardMeta, color: "#DC2626" }}>{logFejl}</div>}
+              </div>
               {/* Dinero sync-knap — vises kun hvis kunden IKKE allerede vides at
                   findes i Dinero (valgt fra søgning, eller tidligere oprettet der).
                   Er kunden allerede kendt, vises i stedet en simpel bekræftelse. */}
