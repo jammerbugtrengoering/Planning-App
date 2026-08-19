@@ -840,6 +840,7 @@ function ensureWeekInstances(week, year, allInstances, templates, employees, are
           // Arves fra aftalen. Kan slaas fra paa den enkelte dag hvor noeglen
           // allerede er udleveret, uden at aftalen aendres.
           needsKeyPickup: !!tpl.needsKeyPickup,
+          deliversProducts: !!tpl.deliversProducts,
           templateDays: tpl.days, // for off-schedule detection
           scheduledTime: (tpl.dayTimes && tpl.dayTimes[day]) || null,
           contractType: tpl.contractType || "privat",
@@ -870,6 +871,7 @@ function ensureWeekInstances(week, year, allInstances, templates, employees, are
             poNumber: tpl.poNumber || "",
             accessInstructions: tpl.accessInstructions || "",
             needsKeyPickup: !!tpl.needsKeyPickup,
+            deliversProducts: !!tpl.deliversProducts,
             contractType: tpl.contractType || "privat",
             pricingType: tpl.pricingType || "hourly",
             fixedPrice: tpl.fixedPrice ?? null,
@@ -1307,6 +1309,12 @@ const MODULE_HELP = {
         "Tryk «Sæt til udført og fakturér», så registreres antallet af minutter i feltet ved siden af, og opgaven kommer med på fakturaen. Feltet starter på opgavens planlagte varighed — sæt det ned hvis kun turen skal faktureres.",
         "Har medarbejderen samtidig foreslået en ny dato, kan du i stedet trykke «Flyt til …».",
         "Skal kunden ikke betale, tryk «Fakturér ikke». Opgaven bliver stående uden registreret tid og falder dermed selv ud af fakturagrundlaget."] },
+    { h: "Udlevering af produkter", p: [
+        "Sæt fluebenet «Der udleveres produkter til kunden» under Opgaven, hvis der bruges rengøringsmidler eller andet hos kunden.",
+        "Med fluebenet bliver medarbejderen spurgt om produktforbrug når hun afslutter opgaven, og forbruget trækkes fra lageret og kommer med på fakturaen.",
+        "Uden fluebenet springes spørgsmålet helt over i medarbejder-appen. Hun får ét trin mindre, og tælleren siger fx «1 af 2».",
+        "Sat på aftalen gentager det sig på alle kommende opgaver. Du kan slå det til eller fra på en enkelt opgave i serviceordren, hvor det står lige under nøglefluebenet.",
+        "Alle aftaler starter med det slået fra. Der var ikke registreret en eneste udlevering i systemet, da fluebenet blev indført, så det er sat op til at du selv vælger hvor det hører til."] },
     { h: "Nøgle på kontoret", p: [
         "Skal medarbejderen forbi kontoret efter en nøgle, sæt fluebenet «Nøglen skal hentes på kontoret først» under Adgang.",
         "Sættes det på aftalen, gentager det sig på alle kommende opgaver. Er nøglen allerede udleveret en enkelt uge, kan du slå det fra på den ene opgave uden at røre aftalen.",
@@ -1796,6 +1804,7 @@ function PlanningApp({ session, onSignOut }) {
             // slet ikke laeses af medarbejdere, saa den behoevede ikke flyttes.
             accessInstructions: t.access_instructions || custAccess[t.customer_id] || "",
             needsKeyPickup: t.needs_key_pickup ?? false,
+            deliversProducts: t.delivers_products ?? false,
             contractType: t.contract_type || "privat",
             pricingType: t.pricing_type || "hourly",
             fixedPrice: t.fixed_price,
@@ -1836,6 +1845,7 @@ function PlanningApp({ session, onSignOut }) {
             address: (i.address_text || cust?.address) ?? "",
             accessInstructions: instAccess[i.id] || custAccess[i.customer_id] || "",
             needsKeyPickup: i.needs_key_pickup ?? false,
+            deliversProducts: i.delivers_products ?? false,
             contractType: i.contract_type || "privat",
             pricingType: i.pricing_type || "hourly",
             fixedPrice: i.fixed_price,
@@ -2055,6 +2065,7 @@ function PlanningApp({ session, onSignOut }) {
         // Kolonnen paa instances staar tom nu. Teksten slaas op i det beskyttede opslag.
         accessInstructions: instAccessRef.current[i.id] || custAccessRef.current[i.customer_id] || "",
         needsKeyPickup: i.needs_key_pickup ?? false,
+        deliversProducts: i.delivers_products ?? false,
         contractType: i.contract_type || "privat",
         pricingType: i.pricing_type || "hourly",
         fixedPrice: i.fixed_price,
@@ -2187,6 +2198,7 @@ function PlanningApp({ session, onSignOut }) {
       // den sendes med i ethvert svar til medarbejderen, og saa kunne adgangskoden
       // laeses uden om det loggede opslag. Teksten gemmes i instance_access nedenfor.
       needs_key_pickup: !!inst.needsKeyPickup,
+      delivers_products: !!inst.deliversProducts,
       contract_type: inst.contractType ?? "privat",
       pricing_type: inst.pricingType || "hourly",
       fixed_price: inst.fixedPrice ?? null,
@@ -2264,6 +2276,7 @@ function PlanningApp({ session, onSignOut }) {
     // adgangsteksten kan blive staaende her. Det er kopien paa opgaven der var problemet.
     if ("accessInstructions" in fields) payload.access_instructions = fields.accessInstructions ?? "";
     if ("needsKeyPickup" in fields) payload.needs_key_pickup = !!fields.needsKeyPickup;
+    if ("deliversProducts" in fields) payload.delivers_products = !!fields.deliversProducts;
     if ("contractType" in fields) payload.contract_type = fields.contractType ?? "privat";
     if ("dineroSynced" in fields) payload.dinero_synced = !!fields.dineroSynced;
     if ("dineroContactGuid" in fields) payload.dinero_contact_guid = fields.dineroContactGuid || null;
@@ -2462,6 +2475,7 @@ function PlanningApp({ session, onSignOut }) {
       address_text: payload.address || "",
       access_instructions: payload.accessInstructions || "",
       needs_key_pickup: !!payload.needsKeyPickup,
+      delivers_products: !!payload.deliversProducts,
       contract_type: payload.contractType || "privat",
       pricing_type: payload.pricingType || "hourly",
       fixed_price: fastPris,
@@ -2509,6 +2523,7 @@ function PlanningApp({ session, onSignOut }) {
       poNumber: payload.poNumber,
       accessInstructions: payload.accessInstructions,
       needsKeyPickup: !!payload.needsKeyPickup,
+      deliversProducts: !!payload.deliversProducts,
       contractType: payload.contractType,
       expiryDate: payload.expiryDate,
       pricingType: payload.pricingType || "hourly",
@@ -2584,6 +2599,7 @@ function PlanningApp({ session, onSignOut }) {
         videoUrl: payload.videoUrl, customerName: payload.customerName, address: payload.address,
         poNumber: payload.poNumber, accessInstructions: payload.accessInstructions,
         needsKeyPickup: !!payload.needsKeyPickup,
+        deliversProducts: !!payload.deliversProducts,
         contractType: payload.contractType, expiryDate: payload.expiryDate,
         pricingType: payload.pricingType || "hourly", fixedPrice: payload.pricingType === "fixed" ? (Number(payload.fixedPrice) || 0) : null,
         planInterval: payload.planInterval || "uge",
@@ -2597,6 +2613,7 @@ function PlanningApp({ session, onSignOut }) {
         video_url: tpl.videoUrl || "", po_number: tpl.poNumber || "",
         customer_name: tpl.customerName || "", address_text: tpl.address || "",
         access_instructions: tpl.accessInstructions || "", needs_key_pickup: !!tpl.needsKeyPickup,
+        delivers_products: !!tpl.deliversProducts,
         contract_type: tpl.contractType || "privat",
         pricing_type: tpl.pricingType || "hourly", fixed_price: tpl.fixedPrice,
         plan_interval: tpl.planInterval || "uge",
@@ -2669,6 +2686,7 @@ function PlanningApp({ session, onSignOut }) {
         videoUrl: payload.videoUrl, customerName: payload.customerName,
         address: payload.address, poNumber: payload.poNumber, accessInstructions: payload.accessInstructions,
         needsKeyPickup: !!payload.needsKeyPickup,
+        deliversProducts: !!payload.deliversProducts,
         contractType: payload.contractType, dineroSynced: payload.dineroSynced || false,
         pricingType: payload.pricingType || "hourly",
         fixedPrice: payload.pricingType === "fixed" ? (Number(payload.fixedPrice) || 0) : null,
@@ -3882,6 +3900,10 @@ function PlanningApp({ session, onSignOut }) {
           onUpdateKeyPickup={(taskId, vaerdi, heleAftalen) => {
             if (heleAftalen) updateCustomerInfo(taskId, { needsKeyPickup: vaerdi });
             else updateInstance(taskId, (t) => ({ ...t, needsKeyPickup: vaerdi }));
+          }}
+          onUpdateDeliversProducts={(taskId, vaerdi, heleAftalen) => {
+            if (heleAftalen) updateCustomerInfo(taskId, { deliversProducts: vaerdi });
+            else updateInstance(taskId, (t) => ({ ...t, deliversProducts: vaerdi }));
           }}
           onUpdateContractType={updateContractType}
           onRenameTask={renameTask}
@@ -6217,6 +6239,7 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
   const [poNumber, setPoNumber] = useState(copyFrom?.poNumber || "");
   const [accessInstructions, setAccessInstructions] = useState(copyFrom?.accessInstructions || "");
   const [needsKeyPickup, setNeedsKeyPickup] = useState(copyFrom?.needsKeyPickup ?? false);
+  const [deliversProducts, setDeliversProducts] = useState(copyFrom?.deliversProducts ?? false);
 
   function toggleTemplate(id) { setChecklistTemplateIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id])); }
   function addExtraItem() { if (!newItemText.trim()) return; setExtraItems((prev) => [...prev, newItemText.trim()]); setNewItemText(""); }
@@ -6266,6 +6289,7 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
     poNumber: poNumber.trim(),
     accessInstructions: accessInstructions.trim(),
     needsKeyPickup,
+    deliversProducts,
     dineroSynced: customerDineroSynced,
     dineroContactGuid,
     assigned_employee_id: assignedEmployeeId,
@@ -6427,6 +6451,28 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
       {type === "fixed" && (
         <div style={styles.hint}>Vælges her, følger medarbejderen aftalen resten af perioden og sættes automatisk på alle kommende opgaver.</div>
       )}
+
+      {/* Styrer om medarbejderen bliver spurgt om produktforbrug naar hun afslutter.
+          Uden fluebenet springes trinnet helt over — det har vaeret vist paa hver
+          eneste opgave uden at der nogensinde er registreret en udlevering. */}
+      <button type="button"
+        style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left",
+                 padding: "11px 12px", borderRadius: 10, cursor: "pointer", marginTop: 12,
+                 border: deliversProducts ? "2px solid #0F766E" : "1.5px solid #E2E8F0",
+                 background: deliversProducts ? "#F0FDFA" : "#fff" }}
+        onClick={() => setDeliversProducts((v) => !v)}>
+        <span style={{ width: 20, height: 20, borderRadius: 5, flexShrink: 0,
+                       border: deliversProducts ? "2px solid #0F766E" : "2px solid #CBD5E1",
+                       background: deliversProducts ? "#0F766E" : "#fff",
+                       display: "flex", alignItems: "center", justifyContent: "center" }}>
+          {deliversProducts && <Check size={12} color="#fff" strokeWidth={3} />}
+        </span>
+        <span style={{ fontSize: 14, color: "#111111" }}>📦 Der udleveres produkter til kunden</span>
+      </button>
+      <div style={styles.hint}>
+        Med fluebenet bliver medarbejderen spurgt om produktforbrug når hun afslutter opgaven,
+        og forbruget trækkes fra lageret og kommer med på fakturaen. Uden det springes spørgsmålet over.
+      </div>
 
       {type === "adhoc" && assignedEmployeeId && (
         <>
@@ -7976,7 +8022,7 @@ function EmployeeModal({ emp, onClose, onSave, skills: skillList }) {
 }
 
 // ---------- Task / service order detail ----------
-function TaskDetailModal({ task, employees, templates, onSetPreferredEmployee, onCancelTemplate, checklistTemplates, skills, isAdminUser, areas, employeeAreas, onClose, onSetStatus, onToggleChecklistItem, onAddChecklistItem, onAddChecklistTemplate, onAddAssignee, onRemoveAssignee, onUnplace, onDelete, onUpdateCustomer, onUpdateCustomerInfo, onUpdateContractType, onRenameTask, onCopy, onUpdateSkills, onEndBlockEarly, onUpdateSchedule, onUpdateKeyPickup }) {
+function TaskDetailModal({ task, employees, templates, onSetPreferredEmployee, onCancelTemplate, checklistTemplates, skills, isAdminUser, areas, employeeAreas, onClose, onSetStatus, onToggleChecklistItem, onAddChecklistItem, onAddChecklistTemplate, onAddAssignee, onRemoveAssignee, onUnplace, onDelete, onUpdateCustomer, onUpdateCustomerInfo, onUpdateContractType, onRenameTask, onCopy, onUpdateSkills, onEndBlockEarly, onUpdateSchedule, onUpdateKeyPickup, onUpdateDeliversProducts }) {
   // Disse to laa efter det tidlige return for blokeringer (sygdom/ferie) laengere nede.
   // Hooks skal kaldes i samme raekkefoelge hver render: aabnede man en blokering og
   // derefter en almindelig opgave i samme modal, ville React se to hooks mere end sidst
@@ -8025,6 +8071,7 @@ function TaskDetailModal({ task, employees, templates, onSetPreferredEmployee, o
   // denne", fordi et enkeltstaaende noejleudlaan er det almindelige tilfaelde — og
   // fordi det er den harmloese af de to, hvis man trykker forkert.
   const [keyHeleAftalen, setKeyHeleAftalen] = useState(false);
+  const [produktHeleAftalen, setProduktHeleAftalen] = useState(false);
 
   async function hentAdgangLog() {
     if (!task) return;
@@ -8052,6 +8099,7 @@ function TaskDetailModal({ task, employees, templates, onSetPreferredEmployee, o
       setAdgangLog(null);
       setLogFejl("");
       setKeyHeleAftalen(false);
+      setProduktHeleAftalen(false);
       setTaskSkills(task.requiredSkills || []);
       setDineroResults([]);
       setShowDineroCreate(false);
@@ -8520,6 +8568,35 @@ return (
                   {keyHeleAftalen && t.type === "fixed"
                     ? "Ændringen slår igennem på hele aftalen."
                     : "Ændringen gælder kun denne ene opgave."}
+                </div>
+
+                {/* Samme mekanik som noeglen: styrer om medarbejderen bliver spurgt om
+                    produktforbrug naar hun afslutter opgaven. */}
+                <button type="button" disabled={locked}
+                  style={{ display: "flex", alignItems: "center", gap: 9, width: "100%", textAlign: "left",
+                           padding: "9px 11px", borderRadius: 8, cursor: locked ? "default" : "pointer", marginTop: 10,
+                           border: t.deliversProducts ? "2px solid #0F766E" : "1.5px solid #E2E8F0",
+                           background: t.deliversProducts ? "#F0FDFA" : "#fff", opacity: locked ? 0.6 : 1 }}
+                  onClick={() => { if (!locked) onUpdateDeliversProducts(t.id, !t.deliversProducts, produktHeleAftalen); }}>
+                  <span style={{ width: 18, height: 18, borderRadius: 5, flexShrink: 0,
+                                 border: t.deliversProducts ? "2px solid #0F766E" : "2px solid #CBD5E1",
+                                 background: t.deliversProducts ? "#0F766E" : "#fff",
+                                 display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    {t.deliversProducts && <Check size={11} color="#fff" strokeWidth={3} />}
+                  </span>
+                  <span style={{ fontSize: 13, color: "#111111" }}>📦 Der udleveres produkter til kunden</span>
+                </button>
+                {!locked && t.type === "fixed" && (
+                  <label style={{ display: "flex", alignItems: "center", gap: 7, marginTop: 6, fontSize: 12, color: "#64748B", cursor: "pointer" }}>
+                    <input type="checkbox" checked={produktHeleAftalen} onChange={(e) => setProduktHeleAftalen(e.target.checked)} />
+                    Gælder alle opgaver på aftalen, også de kommende
+                  </label>
+                )}
+                <div style={styles.hint}>
+                  Uden fluebenet bliver medarbejderen ikke spurgt om produktforbrug ved afslutning.
+                  {produktHeleAftalen && t.type === "fixed"
+                    ? " Ændringen slår igennem på hele aftalen."
+                    : " Ændringen gælder kun denne ene opgave."}
                 </div>
               </div>
               {custAccess && (
