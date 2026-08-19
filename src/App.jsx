@@ -219,6 +219,24 @@ const BLOCK_TYPES = ["sygdom", "ferie"];
 // egen tabel med adgang kun for administratorer — se employee_wage_history.
 const STANDARD_TIMELOEN = 170;
 
+// Antal medarbejdere paa opgaven, mindst 1. En opgave uden nogen paa er endnu ikke
+// fordelt, men skal stadig kunne prissaettes ud fra det ene saet varighed.
+function antalPaaOpgaven(t) {
+  return Math.max(1, ((t && t.assignees) || []).length);
+}
+
+// Det samlede arbejde paa en opgave, i minutter.
+//
+// duration er tiden PR. PERSON — det er den betydning kapaciteten og tidslinjen altid
+// har brugt: to personer paa en times opgave er begge optaget en time. Faktureringen
+// og overskridelsestjekket laeste den derimod som opgavens samlede tid, og de to
+// laesninger var uenige med en faktor to saa snart der var mere end én paa.
+// Konkret: en opgave paa 120 minutter med to personer, hvor begge registrerede 120,
+// blev meldt som 100 % overskridelse selvom alt gik som planlagt.
+function samletArbejde(t) {
+  return (t?.duration || 0) * antalPaaOpgaven(t);
+}
+
 // Den timeloen der gjaldt for en medarbejder paa en bestemt dato: raekken med den
 // seneste gyldig_fra som ikke ligger efter datoen.
 //
@@ -1308,6 +1326,11 @@ const MODULE_HELP = {
         "Udførte opgaver røres aldrig, så alt der er kørt kan stadig faktureres og indgår i regnskabet.",
         "Aftalen bliver stående på Aftaler-siden med kontraktsummen, markeret UDGÅET. Så kan du se hvad aftalen var værd, og hvad I nåede at realisere.",
         "Det kan ikke fortrydes i appen, så du bliver bedt om at bekræfte."] },
+    { h: "Flere medarbejdere på samme opgave", p: [
+        "Varigheden på en opgave er tiden PR. PERSON. Sætter du to på en opgave til 1 time, er der afsat 2 timers arbejde i alt — og begge er optaget en time i deres dag.",
+        "Sætter du flere på, kommer der en påmindelse med regnestykket: «2 × 1t = 2t samlet arbejde». Tjek at det passer med opgaven.",
+        "Det tal er både det medarbejderne måles på, og det der ligger til grund for «Planlagt kr.» i Fakturering. Sætter du varigheden som om det var den samlede tid, får medarbejderne besked om at de har overskredet noget de ikke har.",
+        "Faktureringen bygger stadig på registreret tid, ikke på det planlagte — det er kun forventningen der ændrer sig når du sætter flere på."] },
     { h: "Fast medarbejder på en aftale", p: [
         "Vælg medarbejderen under Ansvarlig medarbejder når du opretter aftalen, så følger han eller hun aftalen resten af perioden.",
         "Du kan også gøre det fra en åben opgave: tildel medarbejderen, og tryk så «Gør fast på aftalen».",
@@ -5197,7 +5220,7 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
       return (a.title || "").localeCompare(b.title || "", "da");
     });
 
-  const totalPlanned = placed.reduce((s, t) => s + t.duration, 0);
+  const totalPlanned = placed.reduce((s, t) => s + samletArbejde(t), 0);
   const totalRegistered = placed.reduce((s, t) => s + (t.timeLog || t.time_log || []).reduce((s2, l) => s2 + (l.minutes || 0), 0), 0);
 
   // Forventet omsætning baseret på registreret tid og timepriser
@@ -5346,7 +5369,7 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
             });
           const rate = localPricing[t.contractType || "privat"] || 0;
           const isFixedPrice = t.pricingType === "fixed";
-          const plannedKr = isFixedPrice ? Math.round(Number(t.fixedPrice) || 0) : Math.round((t.duration / 60) * rate);
+          const plannedKr = isFixedPrice ? Math.round(Number(t.fixedPrice) || 0) : Math.round((samletArbejde(t) / 60) * rate);
           const registeredKr = isFixedPrice ? (logged > 0 ? plannedKr : 0) : Math.round((logged / 60) * rate);
           const diffKr = registeredKr - plannedKr;
 
@@ -5511,7 +5534,7 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
         const totalPlannedKr = placed.reduce((s, t) => {
           if (t.pricingType === "fixed") return s + Math.round(Number(t.fixedPrice) || 0);
           const rate = localPricing[t.contractType || "privat"] || 0;
-          return s + Math.round((t.duration / 60) * rate);
+          return s + Math.round((samletArbejde(t) / 60) * rate);
         }, 0);
         const totalRegisteredKr = Math.round(expectedRevenue);
         const totalDiff = totalRegisteredKr - totalPlannedKr;
@@ -5947,7 +5970,7 @@ function ReportsView({ instances, pricing, budgets, onSaveBudget, isAdminUser })
           const my = instanceMonthYear(t, selectedYear);
           return my.month === idx && my.year === selectedYear;
         });
-        plannedKr += tasksInMonth.reduce((s, t) => s + (t.pricingType === "fixed" ? (Number(t.fixedPrice) || 0) : (t.duration / 60) * rate), 0);
+        plannedKr += tasksInMonth.reduce((s, t) => s + (t.pricingType === "fixed" ? (Number(t.fixedPrice) || 0) : (samletArbejde(t) / 60) * rate), 0);
         registeredKr += tasksInMonth.reduce((s, t) => {
           if (t.pricingType === "fixed") {
             const hasLog = (t.timeLog || t.time_log || []).length > 0 || t.status === "udført";
@@ -8807,6 +8830,22 @@ return (
       </div>
 
       <label style={styles.label}>Medarbejdere på opgaven</label>
+
+      {/* Paamindelse naar der er mere end én paa. Varigheden er tiden PR. PERSON, saa
+          det samlede arbejde — og dermed fakturagrundlaget — vokser med hver person
+          der saettes paa. Uden regnestykket i klartekst er det let at saette varigheden
+          som om det var den samlede tid, og saa faar medarbejderne besked om at de har
+          overskredet noget de ikke har. */}
+      {assignedEmps.length > 1 && (
+        <div style={styles.flerePersonerBoks}>
+          <div style={{ fontWeight: 700, marginBottom: 3 }}>{assignedEmps.length} medarbejdere på opgaven</div>
+          <div>
+            Varigheden er pr. person: {assignedEmps.length} × {fmtMin(t.duration)} = <strong>{fmtMin(samletArbejde(t))} samlet arbejde</strong>.
+            Sikr dig at det passer med opgaven — det er det tal medarbejderne måles på, og det der faktureres.
+          </div>
+        </div>
+      )}
+
       <div style={styles.detailAssigneeList}>
         {assignedEmps.map((e) => (
           <div key={e.id} style={styles.detailAssigneeRow}>
@@ -9102,6 +9141,8 @@ const styles = {
   // Detaljerne rykkes ind under navnet, saa det er tydeligt hvem de hoerer til.
   empDetaljer: { padding: "0 14px 14px 60px", background: "#F8FAFC" },
   empUnderNavn: { fontSize: 12, color: "#64748B", marginTop: 3 },
+  flerePersonerBoks: { background: "#FFFBEB", border: "1px solid #FDE68A", borderRadius: 10,
+    padding: "10px 12px", marginBottom: 8, fontSize: 12.5, color: "#92400E", lineHeight: 1.5 },
 
   // Redigering af medarbejder, opdelt i afsnit
   empSection: { border: "1px solid #E2E8F0", borderRadius: 12, overflow: "hidden", marginBottom: 14 },
