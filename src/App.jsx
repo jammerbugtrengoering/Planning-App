@@ -1446,6 +1446,11 @@ const MODULE_HELP = {
   ], warn: "Retter du i en tjekliste, slår ændringen igennem med det samme på alle opgaver der endnu ikke er udført — også dem der allerede ligger i kalenderen. Punkter medarbejderen har sat flueben ved bevares. Udførte opgaver røres ikke, så det står fast hvad der faktisk blev gjort." },
 
   time: { title: "Fakturering", intro: "Her omsætter du udført arbejde til fakturakladder i Dinero.", blocks: [
+    { h: "Kunder oprettes i Dinero", p: [
+        "Kunder oprettes altid i Dinero, aldrig herfra. I feltet «Fakturakunde» søger du i Dinero mens du skriver, og vælger kunden i listen.",
+        "Når du vælger kunden, gemmes hendes unikke kundenummer på opgaven og på aftalen. Det er det nummer eksporten bruger — så to kunder med samme navn ikke kan forveksles.",
+        "Finder søgningen ingen, skal kunden oprettes i Dinero først. Så kan du finde den her bagefter.",
+        "Svarer Dinero ikke, så vent lidt og prøv igen. Du kan ikke oprette kunden midlertidigt i systemet — en kunde uden Dinero-nummer kan ikke faktureres."] },
     { h: "Kolonnerne", p: ["Planlagt er den tid der er sat af. Registreret er den tid medarbejderen har logget.",
         "Dinero (blå) markerer at linjen er sendt. Det grønne flueben er fakturagrundlag."] },
     { h: "Sådan fakturerer du", p: ["Vælg måned og år.", "Gennemgå listen og ret manglende registreringer med medarbejderen.",
@@ -6244,7 +6249,6 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
   const [customerName, setCustomerName] = useState(copyFrom?.customerName || "");
   const [dineroResults, setDineroResults] = useState([]);
   const [dineroSearching, setDineroSearching] = useState(false);
-  const [showDineroCreate, setShowDineroCreate] = useState(false);
   // Sand når kunden er en kendt/valgt kunde (fra Dinero-søgning eller kopieret fra en
   // eksisterende opgave) — forhindrer at "Opret i Dinero"-knappen dukker op lige
   // efter man har valgt en eksisterende kunde fra søgeresultaterne.
@@ -6300,51 +6304,6 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
     setDineroResults([]);
   }
 
-  async function createDineroCustomer() {
-    setDineroSearching(true);
-    const parts = address.split(",").map((s) => s.trim());
-    let created = false;
-
-    // Forsøg Dinero først
-    if (dineroAvailable) {
-      try {
-        const { data, error } = await supabase.functions.invoke("dinero", {
-          body: { action: "create", contact: { name: customerName, address: parts[0] || "", zipCode: parts[1] || "", city: parts[2] || "" } },
-        });
-        if (!error && (data?.Name || data?.ContactGuid)) {
-          if (data?.Name) setCustomerName(data.Name);
-          created = true;
-          setCustomerDineroSynced(true);
-        } else {
-          setDineroAvailable(false);
-        }
-      } catch {
-        setDineroAvailable(false);
-      }
-    }
-
-    // Fallback: gem direkte i Supabase customers-tabel (dette er IKKE en Dinero-
-    // kontakt, så customerDineroSynced skal forblive false, ellers vil "Send til
-    // Dinero" fejlagtigt aldrig blive tilbudt for denne kunde senere).
-    if (!created) {
-      const newId = uid("cust");
-      const { error: dbErr } = await supabase.from("customers").insert({
-        id: newId,
-        name: customerName,
-        address: address,
-        access_instructions: "",
-      });
-      if (!dbErr) {
-        created = true;
-        // Opdatér lokal customers state
-        const newCustomer = { id: newId, name: customerName, address, access_instructions: "" };
-        // customers state er ikke tilgængelig her, men vi gemmer i DB — det hentes ved næste load
-      }
-    }
-
-    setDineroSearching(false);
-    setShowDineroCreate(false);
-  }
   const [address, setAddress] = useState(copyFrom?.address || "");
   const [poNumber, setPoNumber] = useState(copyFrom?.poNumber || "");
   const [accessInstructions, setAccessInstructions] = useState(copyFrom?.accessInstructions || "");
@@ -6458,7 +6417,7 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
         Fakturakunde
         {dineroAvailable
           ? <span style={{ fontSize: 11, color: "#94A3B8", marginLeft: 6 }}>— søger i Dinero</span>
-          : <span style={{ fontSize: 11, color: "#D97706", marginLeft: 6 }}>— Dinero ikke tilgængelig, indtast manuelt</span>
+          : <span style={{ fontSize: 11, color: "#D97706", marginLeft: 6 }}>— Dinero svarer ikke, prøv igen om lidt</span>
         }
       </label>
       <div style={{ position: "relative" }}>
@@ -6466,7 +6425,7 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
           style={styles.input}
           value={customerName}
           onChange={(e) => { setCustomerSelected(false); setCustomerDineroSynced(false); searchDinero(e.target.value); }}
-          placeholder={dineroAvailable ? "Skriv kundenavn for at søge i Dinero…" : "Kundenavn…"}
+          placeholder="Skriv kundenavn for at søge i Dinero…"
         />
         {dineroSearching && <span style={{ position: "absolute", right: 10, top: 10, fontSize: 11, color: "#94A3B8" }}>Søger…</span>}
         {dineroResults.length > 0 && (
@@ -6486,38 +6445,18 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
                 )}
               </div>
             ))}
-            <div
-              style={{ padding: "10px 14px", cursor: "pointer", fontSize: 13, color: "#D6247A", fontWeight: 600, background: "#FFF6FA" }}
-              onMouseDown={() => { setDineroResults([]); setShowDineroCreate(true); }}>
-              + Opret "{customerName}" som ny kunde
-            </div>
           </div>
         )}
-        {/* Vis opret-knap når ingen resultater og tekst er indtastet */}
-        {!dineroSearching && !customerSelected && customerName.length >= 2 && dineroResults.length === 0 && !showDineroCreate && (
-          <div style={{ marginTop: 4 }}>
-            <button type="button"
-              style={{ ...styles.addSkillBtn, fontSize: 12 }}
-              onClick={() => setShowDineroCreate(true)}>
-              + Opret "{customerName}" som ny kunde {dineroAvailable ? "i Dinero" : "i systemet"}
-            </button>
+        {/* Kunder oprettes altid i Dinero, aldrig herfra. Der laa foer en knap der
+            oprettede kunden — og faldt Dinero ud, oprettede den i stedet en lokal kunde
+            uden Dinero-id, som saa ikke kunne faktureres. Nu siger vi bare hvor kunden
+            skal oprettes, saa den kan findes i soegningen bagefter. */}
+        {!dineroSearching && !customerSelected && customerName.length >= 2 && dineroResults.length === 0 && (
+          <div style={styles.hint}>
+            Ingen kunde i Dinero hedder det. Opret kunden i Dinero først — så kan du finde den her.
           </div>
         )}
       </div>
-      {showDineroCreate && (
-        <div style={{ background: "#FFF6FA", borderRadius: 10, padding: 10, marginTop: 6 }}>
-          <div style={{ fontSize: 12, color: "#9C1B5D", marginBottom: 6 }}>
-            {dineroAvailable
-              ? "Kunden oprettes i Dinero og i systemet med navn og adresse nedenfor"
-              : "Dinero er ikke tilgængelig — kunden oprettes direkte i systemets kundedatabase"}
-          </div>
-          <button style={{ ...styles.primaryBtn, fontSize: 12 }} onClick={createDineroCustomer} disabled={dineroSearching}>
-            {dineroSearching ? "Opretter…" : `Opret "${customerName}" ${dineroAvailable ? "i Dinero" : "i systemet"}`}
-          </button>
-          <button style={{ ...styles.secondaryBtn, fontSize: 12, marginLeft: 8 }} onClick={() => setShowDineroCreate(false)}>Annuller</button>
-        </div>
-      )}
-
       <div style={{ marginBottom: 12 }}>
         <div>
           <label style={styles.label}>Adresse for udførsel</label>
@@ -8198,7 +8137,6 @@ function TaskDetailModal({ task, employees, templates, onSetPreferredEmployee, o
   const [justSyncedFlash, setJustSyncedFlash] = useState(false);
   const [dineroResults, setDineroResults] = useState([]);
   const [dineroSearching, setDineroSearching] = useState(false);
-  const [showDineroCreate, setShowDineroCreate] = useState(false);
   const [dineroAvailable, setDineroAvailable] = useState(true);
   // Sand når kunden er en kendt/valgt kunde — se samme forklaring i TaskModal.
   // Forhindrer at "Opret i Dinero" foreslås for en kunde der allerede er tilknyttet
@@ -8259,7 +8197,6 @@ function TaskDetailModal({ task, employees, templates, onSetPreferredEmployee, o
       setEditingSchedule(false);
       setTaskSkills(task.requiredSkills || []);
       setDineroResults([]);
-      setShowDineroCreate(false);
       setCustomerSelected(!!task.customerName);
       setCustomerDineroSynced(!!task.dineroSynced);
     }
@@ -8299,44 +8236,9 @@ function TaskDetailModal({ task, employees, templates, onSetPreferredEmployee, o
     setCustomerSelected(true);
     setCustomerDineroSynced(true);
     setDineroResults([]);
-    setShowDineroCreate(false);
   }
 
-  async function createDineroCustomerForEdit() {
-    setDineroSearching(true);
-    const parts = custAddress.split(",").map((s) => s.trim());
-    let created = false;
 
-    if (dineroAvailable) {
-      try {
-        const { data, error } = await supabase.functions.invoke("dinero", {
-          body: { action: "create", contact: { name: custName, address: parts[0] || "", zipCode: parts[1] || "", city: parts[2] || "" } },
-        });
-        if (!error && (data?.Name || data?.ContactGuid)) {
-          if (data?.Name) setCustName(data.Name);
-          if (data?.ContactGuid) setCustGuid(data.ContactGuid);
-          created = true;
-          setCustomerDineroSynced(true);
-        } else {
-          setDineroAvailable(false);
-        }
-      } catch {
-        setDineroAvailable(false);
-      }
-    }
-
-    // Fallback direkte i Supabase customers-tabel er IKKE en Dinero-kontakt.
-    if (!created) {
-      const newId = uid("cust");
-      const { error: dbErr } = await supabase.from("customers").insert({
-        id: newId, name: custName, address: custAddress, access_instructions: "",
-      });
-      if (!dbErr) created = true;
-    }
-
-    setDineroSearching(false);
-    setShowDineroCreate(false);
-  }
 
   if (!task) return null;
 
@@ -8411,7 +8313,6 @@ function TaskDetailModal({ task, employees, templates, onSetPreferredEmployee, o
     onUpdateCustomerInfo(t.id, { customerName: custName, address: custAddress, poNumber: custPo, accessInstructions: custAccess, dineroSynced: customerDineroSynced, dineroContactGuid: custGuid });
     setEditingCustomer(false);
     setDineroResults([]);
-    setShowDineroCreate(false);
   }
 
   function saveSkills() {
@@ -8663,14 +8564,14 @@ return (
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             <div>
               <div style={{ fontSize: 11, color: dineroAvailable ? "#94A3B8" : "#D97706", marginBottom: 4 }}>
-                {dineroAvailable ? "Søger i Dinero mens du skriver" : "Dinero ikke tilgængelig — indtast manuelt"}
+                {dineroAvailable ? "Søger i Dinero mens du skriver" : "Dinero svarer ikke — prøv igen om lidt"}
               </div>
               <div style={{ position: "relative" }}>
                 <input
                   style={styles.input}
                   value={custName}
-                  onChange={(e) => { setCustomerSelected(false); setCustomerDineroSynced(false); searchDineroForCustomer(e.target.value); setShowDineroCreate(false); }}
-                  placeholder={dineroAvailable ? "Skriv kundenavn for at søge i Dinero…" : "Kundenavn"}
+                  onChange={(e) => { setCustomerSelected(false); setCustomerDineroSynced(false); searchDineroForCustomer(e.target.value); }}
+                  placeholder="Skriv kundenavn for at søge i Dinero…"
                 />
                 {dineroSearching && <span style={{ position: "absolute", right: 10, top: 10, fontSize: 11, color: "#94A3B8" }}>Søger…</span>}
                 {dineroResults.length > 0 && (
@@ -8690,43 +8591,21 @@ return (
                 )}
                       </div>
                     ))}
-                    <div
-                      style={{ padding: "10px 14px", cursor: "pointer", fontSize: 13, color: "#D6247A", fontWeight: 600, background: "#FFF6FA" }}
-                      onMouseDown={() => { setDineroResults([]); setShowDineroCreate(true); }}>
-                      + Opret "{custName}" som ny kunde
-                    </div>
                   </div>
                 )}
-                {!dineroSearching && !customerSelected && custName.length >= 2 && dineroResults.length === 0 && !showDineroCreate && (
-                  <div style={{ marginTop: 4 }}>
-                    <button type="button"
-                      style={{ ...styles.addSkillBtn, fontSize: 12 }}
-                      onClick={() => setShowDineroCreate(true)}>
-                      + Opret "{custName}" som ny kunde {dineroAvailable ? "i Dinero" : "i systemet"}
-                    </button>
+                {!dineroSearching && !customerSelected && custName.length >= 2 && dineroResults.length === 0 && (
+                  <div style={styles.hint}>
+                    Ingen kunde i Dinero hedder det. Opret kunden i Dinero først — så kan du finde den her.
                   </div>
                 )}
               </div>
-              {showDineroCreate && (
-                <div style={{ background: "#FFF6FA", borderRadius: 10, padding: 10, marginTop: 6 }}>
-                  <div style={{ fontSize: 12, color: "#9C1B5D", marginBottom: 6 }}>
-                    {dineroAvailable
-                      ? "Kunden oprettes i Dinero og i systemet med navn og adresse nedenfor"
-                      : "Dinero er ikke tilgængelig — kunden oprettes direkte i systemets kundedatabase"}
-                  </div>
-                  <button style={{ ...styles.primaryBtn, fontSize: 12 }} onClick={createDineroCustomerForEdit} disabled={dineroSearching}>
-                    {dineroSearching ? "Opretter…" : `Opret "${custName}" ${dineroAvailable ? "i Dinero" : "i systemet"}`}
-                  </button>
-                  <button style={{ ...styles.secondaryBtn, fontSize: 12, marginLeft: 8 }} onClick={() => setShowDineroCreate(false)}>Annuller</button>
-                </div>
-              )}
             </div>
             <input style={styles.input} value={custAddress} onChange={(e) => setCustAddress(e.target.value)} placeholder="Adresse" />
             <input style={styles.input} value={custPo} onChange={(e) => setCustPo(e.target.value)} placeholder="Fakturabeskrivelse (PO, navn m.v.)" />
             <textarea style={{ ...styles.input, minHeight: 60 }} value={custAccess} onChange={(e) => setCustAccess(e.target.value)} placeholder="Adgangsinstruktioner" />
             <div style={{ display: "flex", gap: 8 }}>
               <button style={styles.primaryBtn} onClick={saveCustomer}>Gem</button>
-              <button style={styles.secondaryBtn} onClick={() => { setEditingCustomer(false); setDineroResults([]); setShowDineroCreate(false); }}>Annuller</button>
+              <button style={styles.secondaryBtn} onClick={() => { setEditingCustomer(false); setDineroResults([]); }}>Annuller</button>
             </div>
           </div>
         ) : (
