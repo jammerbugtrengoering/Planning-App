@@ -1332,11 +1332,19 @@ const MODULE_HELP = {
   ], warn: "En fleksibel opgave har en «senest udført»-dato. Er fristen passeret, planlægges opgaven ikke — den rulles ikke videre af sig selv. Ret fristen, så placeres den med det samme." },
 
   employees: { title: "Medarbejdere", intro: "Her styrer du hvem der kan hvad, hvor meget tid de har, og hvilke områder de dækker.", blocks: [
-    { h: "Opret og redigér", p: ["Tryk «Ny medarbejder», eller blyanten på et kort.",
+    { h: "Sådan læses listen", p: [
+        "Hver medarbejder er én linje. Bjælken viser hvor meget der er tilbage af ugen — ikke hvor meget der er planlagt. Grøn er der plads, orange er næsten fuld, rød er overbelagt.",
+        "Mærkaterne til højre er det du ellers ikke kan se: manglende app-adgang, kørsel som arbejdstid, administrator, og de to første kompetencer.",
+        "Tryk på linjen for at folde den ud. Så kommer kompetencer med niveau, områder, timer pr. dag, app-adgang og udleveringshistorik. Flere kan være åbne ad gangen, så du kan sammenligne to medarbejdere.",
+        "I den udfoldede visning står timerne som «brugt / kapacitet» pr. dag. Er tallet rødt, er dagen overbelagt.",
+        "Søgefeltet søger i både navn og kompetencer, så «vindue» finder dem der kan vinduespolering. Sorteringen og områdefilteret virker sammen med søgningen."] },
+    { h: "Opret og redigér", p: ["Tryk «Ny medarbejder», eller «Redigér» når du har foldet en linje ud.",
         "Mødetid bruges til at beregne hvornår dagens første opgave kan starte.",
         "Timeløn bruges til lønsummerne i Medarbejder-eksport. Nye medarbejdere starter på 170 kr.",
-        "Sæt kompetenceniveau: Nybegynder, Øvet eller Ekspert.",
-        "Sæt timer til rådighed for mandag til fredag."] },
+        "Dialogen er delt i fire afsnit: Personen, Kan, Tid, og Løn og transport bag hængelås.",
+        "Under Kan vises kun de kompetencer hun har. Tryk «Tilføj kompetence» for at se resten.",
+        "Under Tid kan du sætte mandagens timetal på alle dage med ét tryk, og du kan se ugens sum — så du kan tjekke at det passer med hendes ansættelse.",
+        "Administrator-fluebenet står for sig med rød ramme. Det giver adgang til hele planlægningsappen, til kollegernes løn og hjemmeadresser, til kundernes nøglebokskoder, til budgetterne i Rapportering, og til at markere fakturalinjer som sendt til Dinero. Sæt det kun på kontorets folk."] },
     { h: "Kørsel som arbejdstid", p: [
         "Nogle medarbejdere har kørsel med i arbejdstiden. Sæt fluebenet «Kørsel er en del af arbejdstiden» på hendes kort og skriv hjemmeadressen.",
         "Så tæller dagens kørsel i hendes kapacitet: hjemmefra til første opgave, mellem opgaverne, og fra sidste opgave hjem. På kortet står hvor meget af ugen der går til kørsel.",
@@ -1354,7 +1362,16 @@ const MODULE_HELP = {
         "Medarbejder-appen henter aldrig lønnen. En medarbejder kan altså ikke se hverken sin egen eller kollegernes sats der."] },
     { h: "Kompetencer", p: ["Ligger under knappen «Kompetencer» øverst på siden. Her opretter, omdøber og sletter du de færdigheder du kan kræve på en opgave.", "En kompetence er et krav, ikke et ønske: kan medarbejderen den ikke på det krævede niveau, kommer hun slet ikke i betragtning til opgaven.", "Selve niveauet sættes pr. medarbejder på hendes eget kort — Nybegynder, Øvet eller Ekspert. Kræver opgaven Øvet, er Nybegynder ikke nok.", "Blandt dem der lever op til kravene, vælges den med det højeste samlede niveau. Står to lige, vælges den med mest ledig tid den dag.", "Sletter du en kompetence, fjernes den fra alle medarbejdere og fra alle opgaver.", "Omdøber du en kompetence, følger medarbejderne og aftalerne med. Men opgaver der allerede ligger i kalenderen, husker det gamle navn og viser derefter «Ingen har alle krævede kompetencer» — så ret kompetencen på de opgaver, eller lad være med at omdøbe når der er oprettet opgaver."] },
         { h: "Områder", p: ["Ligger under knappen «Områder». Et område er et navn og en række postnumre, og du klikker de medarbejdere til der dækker det.", "Ved planlægning aflæses postnummeret i opgavens adresse. Findes der et område med det postnummer, søges der kun blandt de medarbejdere der er knyttet til området.", "Har adressen intet postnummer, eller er postnummeret ikke lagt ind på noget område, planlægges der frit blandt alle med kompetencerne.", "Er der ikke klikket en eneste medarbejder på et område, springes området over. Et tomt område spærrer altså ikke — det gør ingenting.", "Kan ingen i området løse opgaven, planlægges den alligevel hos en der kan, og opgaven mærkes «Planlagt uden for medarbejderens område». En opgave bliver aldrig liggende alene fordi den falder uden for et område.", "Sletter du et område, forsvinder tilknytningerne med det samme. Opgaverne røres ikke."] },
-    { h: "Adgang til Worklist", p: ["Skriv medarbejderens e-mail nederst på kortet og tryk Opret. Hun får en mail og kan logge ind i medarbejder-appen."] },
+    { h: "Adgang til Worklist", p: ["Fold medarbejderen ud, skriv e-mailen og tryk Opret. Hun får en mail og kan logge ind i medarbejder-appen.",
+        "«Luk adgang» fjerner loginet, men beholder medarbejderen og hendes historik. Brug den når nogen holder op."] },
+    { h: "Arbejdstøj", p: [
+        "Medarbejderne bestiller selv arbejdstøj i deres app, og du godkender bestillingerne under Lager. Her på medarbejderen ser du kun hvad hun har fået udleveret.",
+        "Fold hende ud og tryk «Se historik» for de seneste 20 udleveringer."] },
+    { h: "Sletning", p: [
+        "«Slet» spørger nu først, og fortæller hvor mange kommende opgaver der mister hende — de går tilbage til «Ikke tildelt», og du skal selv planlægge dem på ny.",
+        "Udførte opgaver beholder hendes navn og tidsregistrering, så historik og fakturagrundlag ikke ændrer sig.",
+        "Sletningen fjerner ikke hendes login. Skal hun ikke kunne komme ind i appen, brug «Luk adgang» først.",
+        "Holder hun bare op, er det som regel bedre at lukke adgangen og lade medarbejderen stå — så bevares sammenhængen i gamle uger."] },
   ], warn: "Weekendarbejde kræver flueben på medarbejderen. Uden det kan hun slet ikke planlægges lørdag og søndag. Med fluebenet er der ingen timegrænse i weekenden — derfor står der Ja/Nej og ikke et timetal." },
 
   checklists: { title: "Tjeklister", intro: "Tjeklister er de arbejdsopgaver medarbejderen sætter flueben ved ude hos kunden.", blocks: [
@@ -1902,6 +1919,9 @@ function PlanningApp({ session, onSignOut }) {
   // ved naeste indlaesning. Par vi ikke faar svar paa, proeves ikke igen i denne
   // session, saa en adresse der ikke kan geokodes ikke udloeser kald i en uendelighed.
   const [cancelTarget, setCancelTarget] = useState(null);
+  // Id'et paa den medarbejder der er ved at blive slettet. Sletningen sker foerst naar
+  // bekraeftelsen er givet — knappen udloeser kun spoergsmaalet.
+  const [sletMedarbejder, setSletMedarbejder] = useState(null);
   // Oensker om ny tid fra medarbejderne. De aendrer ikke selv planen — de beder om
   // en aendring, og backoffice afgoer og planlaegger den.
   const [nyTidOnsker, setNyTidOnsker] = useState([]);
@@ -3617,6 +3637,15 @@ function PlanningApp({ session, onSignOut }) {
       {/* Modulhjælp: knappen ligger i selve modulet og aabner hjaelp for netop det view man staar i. */}
       {MODULE_HELP[view] && <HelpButton onClick={() => setShowHelp(true)} />}
       {showHelp && <ModuleHelp view={view} onClose={() => setShowHelp(false)} />}
+      {sletMedarbejder && (
+        <DeleteEmployeeModal
+          emp={employees.find((e) => e.id === sletMedarbejder)}
+          instances={instances}
+          onClose={() => setSletMedarbejder(null)}
+          onConfirm={deleteEmployee}
+        />
+      )}
+
       {cancelTarget && (
         <CancelTemplateModal
           template={templates.find((tp) => tp.id === cancelTarget)}
@@ -3758,7 +3787,7 @@ function PlanningApp({ session, onSignOut }) {
         <EmployeesView employees={employees} instances={weekInstancesList} travelSettings={travelSettings}
           onAdd={() => { setEditEmp(null); setShowAddEmp(true); }}
           onEdit={(e) => { setEditEmp(e); setShowAddEmp(true); }}
-          onDelete={deleteEmployee}
+          onDelete={(id) => setSletMedarbejder(id)}
           supabase={supabase}
           skills={skills}
           onSkillsChange={setSkills}
@@ -4503,34 +4532,78 @@ function TypeBadge({ type, mini }) {
 
 // ---------- Employees ----------
 function EmployeesView({ employees, instances, onAdd, onEdit, onDelete, supabase, skills, onSkillsChange, areas, employeeAreas, onAreasChange, onEmployeeAreasChange, travelSettings = DEFAULT_TRAVEL }) {
+  const [sog, setSog] = useState("");
+  const [sortering, setSortering] = useState("ledig");
+  const [omraadeFilter, setOmraadeFilter] = useState("alle");
+  // Hvilke raekker er foldet ud. Et Set frem for et id, saa flere kan vaere aabne ad
+  // gangen — man sammenligner to medarbejdere naar man skal flytte en opgave.
+  const [udfoldet, setUdfoldet] = useState(new Set());
+  function skiftUdfoldet(id) {
+    setUdfoldet((prev) => {
+      const naeste = new Set(prev);
+      if (naeste.has(id)) naeste.delete(id); else naeste.add(id);
+      return naeste;
+    });
+  }
+
+  // Alt det raekken skal vise, regnet ét sted. Belastningen bruger samme funktion som
+  // planlaegningen, saa bjaelken og systemets egen beslutning altid er enige.
+  // useMemo, fordi regnestykket ellers koeres forfra ved hvert tastetryk — ogsaa i
+  // invitations-mailfeltet, som bor i samme komponent. Med tyve medarbejdere er det
+  // 140 opslag i hele opgavelisten pr. bogstav.
+  const beregnede = useMemo(() => (employees || []).map((emp) => {
+    // Kun hverdage. Weekenden har intet kapacitetsloft, saa weekendtimer maalt mod et
+    // hverdagsloft ville sende bjaelken over 100 % og skrive "over" paa en medarbejder
+    // der slet ikke er overbelagt — og tallet kunne ikke forklares nogen steder.
+    const activeMin = DAYS.reduce((s, d) => s + usedMinutes(instances, emp.id, d.key), 0);
+    const capMin = DAYS.reduce((s, d) => s + ((emp.capacity || {})[d.key] || 0), 0);
+    const transportMin = DAYS.reduce(
+      (s, d) => s + dagensTransport(instances, emp, d.key, travelSettings), 0);
+    // Weekendarbejde opgoeres for sig, saa det kan staa i den udfoldede raekke.
+    const weekendMin = WEEKEND_DAYS.reduce((s, k) => s + usedMinutes(instances, emp.id, k), 0);
+    const brugt = activeMin + transportMin;
+    const ledig = capMin - brugt;
+    const pct = capMin > 0 ? (brugt / capMin) * 100 : 0;
+    const barFarve = ledig < 0 ? "#DC2626" : pct > 90 ? "#B45309" : "#16A34A";
+    const ledigTekst = capMin === 0
+      ? "Ingen timer sat"
+      : ledig < 0 ? `${fmtMin(-ledig)} over` : `${fmtMin(ledig)} ledig`;
+    return {
+      emp, activeMin, capMin, transportMin, weekendMin, pct, ledig, barFarve, ledigTekst,
+      kompetenceListe: Object.keys(emp.skills || {}),
+    };
+  }), [employees, instances, travelSettings]);
+
+  const sogLille = sog.trim().toLowerCase();
+  const synligeMedarbejdere = useMemo(() => beregnede
+    .filter((r) => {
+      if (!sogLille) return true;
+      // Soeger i baade navn og kompetencer, saa "vindue" finder dem der kan det.
+      return (r.emp.name || "").toLowerCase().includes(sogLille)
+        || r.kompetenceListe.some((k) => k.toLowerCase().includes(sogLille));
+    })
+    .filter((r) => {
+      if (omraadeFilter === "alle") return true;
+      return (employeeAreas || []).some((ea) => ea.employee_id === r.emp.id && ea.area_id === omraadeFilter);
+    })
+    .sort((a, b) => {
+      if (sortering === "navn") return (a.emp.name || "").localeCompare(b.emp.name || "", "da");
+      if (sortering === "fuld") return a.ledig - b.ledig;
+      return b.ledig - a.ledig;
+    }), [beregnede, sogLille, omraadeFilter, sortering, employeeAreas]);
   const [showSkillsPanel, setShowSkillsPanel] = useState(false);
   const [showAreasPanel, setShowAreasPanel] = useState(false);
   const [inviteEmail, setInviteEmail] = useState({});
   const [inviteStatus, setInviteStatus] = useState({});
   const [orderPanel, setOrderPanel] = useState(null); // emp.id
-  const [empProducts, setEmpProducts] = useState([]); // medarbejderprodukter
   const [empOrders, setEmpOrders] = useState({}); // { empId: [transactions] }
-  const [orderQty, setOrderQty] = useState({}); // { itemId: qty }
-  const [ordering, setOrdering] = useState(false);
 
-  // Load medarbejderprodukter én gang
-  useEffect(() => {
-    async function loadProducts() {
-      const { data: cats } = await supabase.from("inventory_categories").select("id").eq("type", "medarbejder");
-      if (!cats?.length) return;
-      const { data } = await supabase
-        .from("inventory_items")
-        .select("*, inventory_categories(name, icon)")
-        .in("category_id", cats.map((c) => c.id))
-        .order("name");
-      setEmpProducts(data || []);
-    }
-    loadProducts();
-  }, []);
-
+  // Arbejdstoej bestilles i medarbejder-appen og godkendes under Lager. Her vises kun
+  // historikken. Der laa tidligere en komplet bestillingsfunktion her — produktliste,
+  // antalsfelter og fradrag i lageret — men den havde ingen indgang i brugerfladen og
+  // blev aldrig kaldt. Den er fjernet, saa der ikke er to veje til det samme.
   async function openOrderPanel(emp) {
     setOrderPanel(emp.id);
-    setOrderQty({});
     // Hent historik for denne medarbejder
     const { data } = await supabase
       .from("inventory_transactions")
@@ -4543,36 +4616,7 @@ function EmployeesView({ employees, instances, onAdd, onEdit, onDelete, supabase
     setEmpOrders((prev) => ({ ...prev, [emp.id]: (data || []).filter((tx) => tx.inventory_items?.inventory_categories?.type === "medarbejder") }));
   }
 
-  async function submitOrder(emp) {
-    const entries = Object.entries(orderQty).filter(([, q]) => Number(q) > 0);
-    if (!entries.length) return;
-    setOrdering(true);
-    for (const [itemId, qty] of entries) {
-      const amount = Number(qty);
-      const item = empProducts.find((i) => i.id === itemId);
-      if (!item) continue;
-      const { error: txErr } = await supabase.from("inventory_transactions").insert({
-        item_id: itemId, quantity: -amount, type: "out",
-        reason: `Udleveret til ${emp.name}`,
-        employee_id: emp.id,
-      });
-      if (txErr) { console.error("inventory_transactions insert:", txErr.message); alert(`Kunne ikke registrere udlevering af "${item.name}" — prøv igen.`); setOrdering(false); return; }
-      // Atomart fradrag i databasen — undgår at to samtidige udleveringer
-      // overskriver hinandens lagertal.
-      const { data: newStock, error: stockErr } = await supabase.rpc("consume_stock", { p_item_id: itemId, p_amount: amount });
-      if (stockErr) { console.error("consume_stock:", stockErr.message); alert(`Kunne ikke opdatere lageret for "${item.name}" — prøv igen.`); setOrdering(false); return; }
-      setEmpProducts((prev) => prev.map((p) => p.id === itemId ? { ...p, stock: newStock ?? Math.max(0, p.stock - amount) } : p));
-    }
-    // Opdatér historik
-    const { data } = await supabase
-      .from("inventory_transactions")
-      .select("*, inventory_items(name, unit)")
-      .eq("employee_id", emp.id).eq("type", "out")
-      .order("id", { ascending: false }).limit(20);
-    setEmpOrders((prev) => ({ ...prev, [emp.id]: data || [] }));
-    setOrderQty({});
-    setOrdering(false);
-  }
+
 
   async function inviteUser(emp) {
     const email = inviteEmail[emp.id]?.trim();
@@ -4640,46 +4684,115 @@ function EmployeesView({ employees, instances, onAdd, onEdit, onDelete, supabase
         <AreasView supabase={supabase} areas={areas} employees={employees} employeeAreas={employeeAreas}
           onAreasChange={onAreasChange} onEmployeeAreasChange={onEmployeeAreasChange} />
       )}
-      <div style={styles.empGrid}>
-        {employees.map((e) => {
-          const activeMin = ALL_DAYS.reduce((s, d) => s + usedMinutes(instances, e.id, d.key), 0);
-          // Weekend har intet kapacitetsloft, saa den taeller ikke med her.
-          const capMin = DAYS.reduce((s, d) => s + (e.capacity[d.key] || 0), 0);
-          // Transporten vises for sig, saa planlaeggeren kan se hvad ordningen koster i
-          // kapacitet. Uden ordningen er tallet nul og linjen vises slet ikke.
-          const transportMin = ALL_DAYS.reduce(
-            (s, d) => s + dagensTransport(instances, e, d.key, travelSettings), 0);
+      {/* Vaerktoejslinje. Fandtes ikke foer: "hvem kan vinduespolering og har tid" betoed
+          at laese tyve kort igennem. */}
+      <div style={styles.empVaerktoej}>
+        <input style={{ ...styles.inputSm, flex: 1, minWidth: 150 }} value={sog}
+          onChange={(ev) => setSog(ev.target.value)} placeholder="Søg navn eller kompetence" />
+        <select style={styles.inputSm} value={sortering} onChange={(ev) => setSortering(ev.target.value)}>
+          <option value="ledig">Mest ledig tid først</option>
+          <option value="fuld">Mest belagt først</option>
+          <option value="navn">Navn</option>
+        </select>
+        <select style={styles.inputSm} value={omraadeFilter} onChange={(ev) => setOmraadeFilter(ev.target.value)}>
+          <option value="alle">Alle områder</option>
+          {(areas || []).map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+        </select>
+        <button style={styles.secondaryBtn}
+          onClick={() => setUdfoldet((prev) => prev.size ? new Set() : new Set(synligeMedarbejdere.map((r) => r.emp.id)))}>
+          {udfoldet.size ? "Fold alle sammen" : "Fold alle ud"}
+        </button>
+      </div>
+
+      <div style={styles.empListe}>
+        {synligeMedarbejdere.map(({ emp: e, activeMin, capMin, transportMin, weekendMin, pct, ledigTekst, barFarve, kompetenceListe }) => {
           const status = inviteStatus[e.id];
           const hasUser = !!e.auth_user_id;
           return (
-            <div key={e.id} style={styles.empCard}>
-              <div style={styles.empCardTop}>
-                <span style={{ ...styles.avatar, background: e.color, width: 40, height: 40, fontSize: 15 }}>{initials(e.name)}</span>
-                <div style={{ flex: 1 }}>
+            <div key={e.id} style={{ borderBottom: "1px solid #F1F5F9" }}>
+              {/* Sammenklappet raekke. Foer var alt udfoldet paa alle 20 kort samtidig:
+                  kompetencer, kapacitet pr. dag, app-adgang med mailfelt og
+                  udleveringshistorik. Spoergsmaalet "hvem har plads torsdag" kraevede
+                  at man scrollede forbi det hele. */}
+              {/* role og tabIndex fordi raekken er en div og ikke en knap: den skal kunne
+                  naas med tastatur, ligesom de knapper den erstattede. */}
+              <div style={styles.empRaekke} onClick={() => skiftUdfoldet(e.id)}
+                role="button" tabIndex={0} aria-expanded={udfoldet.has(e.id)}
+                onKeyDown={(ev) => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); skiftUdfoldet(e.id); } }}>
+                <span style={{ ...styles.avatar, background: e.color, width: 34, height: 34, fontSize: 13, flexShrink: 0 }}>{initials(e.name)}</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={styles.empName}>{e.name}</div>
-                  <div style={styles.empLoad}>
-                    {fmtMin(activeMin + transportMin)} af {fmtMin(capMin)} planlagt denne uge
-                    {transportMin > 0 && (
-                      <span style={{ color: "#4F46E5", fontWeight: 600 }}> · heraf {fmtMin(transportMin)} kørsel</span>
-                    )}
+                  {/* Ledig tid frem for planlagt tid: planlaeggeren spoerger altid om
+                      hvad der er tilbage, ikke om hvad der allerede ligger. */}
+                  <div style={styles.empBjaelkeRaekke}>
+                    <div style={styles.empBjaelkeSpor}>
+                      <div style={{ ...styles.empBjaelkeFyld, width: `${Math.min(100, pct)}%`, background: barFarve }} />
+                    </div>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: barFarve, flexShrink: 0 }}>{ledigTekst}</span>
                   </div>
                 </div>
-                <button style={styles.iconBtnGhostInline} onClick={() => onEdit(e)} title="Rediger medarbejder"><Pencil size={14} /></button>
-                <button style={styles.iconBtnGhostInline} onClick={() => onDelete(e.id)} title="Slet medarbejder"><Trash2 size={14} /></button>
+                <div style={styles.empMaerker}>
+                  {!hasUser && <span style={styles.empMaerkeRoed}>Ingen app-adgang</span>}
+                  {e.travelInWorktime && <span style={styles.empMaerkeLilla} title="Kørsel tæller i kapaciteten">Kørsel</span>}
+                  {e.isAdmin && <span style={styles.empMaerkeGraa}>Administrator</span>}
+                  {kompetenceListe.slice(0, 2).map((s) => (
+                    <span key={s} style={styles.empMaerkeRosa}>{s}</span>
+                  ))}
+                  {kompetenceListe.length > 2 && <span style={styles.empMaerkeGraa}>+{kompetenceListe.length - 2}</span>}
+                  {kompetenceListe.length === 0 && <span style={styles.empMaerkeGraa}>Ingen kompetencer</span>}
+                </div>
+                {udfoldet.has(e.id)
+                  ? <ChevronUp size={18} color="#94A3B8" style={{ flexShrink: 0 }} />
+                  : <ChevronDown size={18} color="#94A3B8" style={{ flexShrink: 0 }} />}
+              </div>
+
+              {udfoldet.has(e.id) && (
+              <div style={styles.empDetaljer}>
+              {/* Ugens tal i tekst. Bjaelken i raekken viser hvor meget der er tilbage,
+                  men ikke hvad det er af — og transporten skal kunne laeses for sig. */}
+              <div style={styles.empUgeTotal}>
+                {fmtMin(activeMin + transportMin)} af {fmtMin(capMin)} belagt på hverdage
+                {transportMin > 0 && (
+                  <span style={{ color: "#4F46E5", fontWeight: 600 }}> · heraf {fmtMin(transportMin)} kørsel</span>
+                )}
+                {weekendMin > 0 && (
+                  <span style={{ color: "#B45309", fontWeight: 600 }}> · {fmtMin(weekendMin)} i weekenden (uden loft)</span>
+                )}
+              </div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
+                <button style={styles.secondaryBtn} onClick={() => onEdit(e)}><Pencil size={14} /> Redigér</button>
+                <button style={{ ...styles.secondaryBtn, color: "#B91C1C", borderColor: "#FCA5A5", marginLeft: "auto" }}
+                  onClick={() => onDelete(e.id)}><Trash2 size={14} /> Slet</button>
               </div>
               <div style={styles.empSkills}>
-                {Object.entries(e.skills).map(([s, lvl]) => (
+                {Object.entries(e.skills || {}).map(([s, lvl]) => (
                   <span key={s} style={styles.skillLevelTag}>{s} <StarLevel level={lvl} /></span>
                 ))}
-                {Object.keys(e.skills).length === 0 && <span style={styles.cardMeta}>Ingen kompetencer angivet</span>}
+                {Object.keys(e.skills || {}).length === 0 && <span style={styles.cardMeta}>Ingen kompetencer angivet</span>}
+                {/* Omraaderne stod slet ikke paa kortet foer, selvom de er med til at
+                    afgoere hvem der overhovedet kan planlaegges hvor. */}
+                {(areas || [])
+                  .filter((a) => (employeeAreas || []).some((ea) => ea.employee_id === e.id && ea.area_id === a.id))
+                  .map((a) => (
+                    <span key={a.id} style={{ ...styles.skillLevelTag, background: "#EEF2FF", color: "#4F46E5" }}>📍 {a.name}</span>
+                  ))}
               </div>
               <div style={styles.capRow}>
-                {DAYS.map((d) => (
-                  <div key={d.key} style={styles.capDayBox}>
-                    <div style={styles.capDayLabel}>{d.label.slice(0, 3)}</div>
-                    <div style={styles.capDayValue}>{(e.capacity[d.key] / 60).toFixed(1)}t</div>
-                  </div>
-                ))}
+                {/* Brugt mod kapacitet, ikke bare loftet. "7,5t" fortalte ikke om dagen
+                    var fuld — og det er praecis det man skal vide for at flytte en opgave. */}
+                {DAYS.map((d) => {
+                  const dagBrugt = belastning([e], instances, e.id, d.key, travelSettings);
+                  const dagLoft = (e.capacity || {})[d.key] || 0;
+                  const dagOver = dagLoft > 0 && dagBrugt > dagLoft;
+                  return (
+                    <div key={d.key} style={styles.capDayBox}>
+                      <div style={styles.capDayLabel}>{d.label.slice(0, 3)}</div>
+                      <div style={{ ...styles.capDayValue, color: dagOver ? "#DC2626" : "#111111" }}>
+                        {(dagBrugt / 60).toFixed(1)} / {(dagLoft / 60).toFixed(1)}
+                      </div>
+                    </div>
+                  );
+                })}
                 <div style={styles.capDayBox}>
                   <div style={styles.capDayLabel}>WEEKEND</div>
                   <div style={{ ...styles.capDayValue, color: e.weekendOk ? "#16A34A" : "#CBD5E1" }}>
@@ -4759,6 +4872,8 @@ function EmployeesView({ employees, instances, onAdd, onEdit, onDelete, supabase
                   </div>
                 )}
               </div>
+              </div>
+              )}
             </div>
           );
         })}
@@ -6488,6 +6603,56 @@ function DayPills({ days }) {
 // Dialogen der markerer en aftale som udgaaet. Kraever baade en aarsag, en
 // sidste gyldig dag og en udtrykkelig bekraeftelse, fordi handlingen ikke kan
 // fortrydes i appen.
+// Bekraeftelse foer en medarbejder slettes. Foer skete det ved ét klik: hun forsvandt,
+// og alle hendes opgaver blev sat tilbage til "ikke tildelt" uden at nogen fik besked.
+// Bemaerk at "Luk adgang" i forvejen spurgte — sletningen var det farligste og det
+// eneste sted uden spoergsmaal.
+function DeleteEmployeeModal({ emp, instances, onClose, onConfirm }) {
+  const [accepted, setAccepted] = useState(false);
+  const [busy, setBusy] = useState(false);
+  if (!emp) return null;
+  // Hvor meget rammer det? Tal frem for en advarsel i almindelighed — planlaeggeren
+  // skal kunne se om det er to opgaver eller halvfems der bliver hjemloese.
+  const paavirkede = (instances || []).filter((t) => (t.assignees || []).includes(emp.id));
+  const kommende = paavirkede.filter((t) => t.status !== "udført");
+  const udfoerte = paavirkede.length - kommende.length;
+  const blocked = !accepted || busy;
+  return (
+    <div style={styles.overlay} onClick={onClose}>
+      <div style={styles.modal} onClick={(e) => e.stopPropagation()}>
+        <div style={styles.modalTitle}>Slet {emp.name}?</div>
+        <div style={styles.hint}>
+          {kommende.length > 0
+            ? `${kommende.length} kommende opgave${kommende.length === 1 ? "" : "r"} mister hende og går tilbage til "Ikke tildelt". Du skal selv planlægge dem på ny.`
+            : "Hun står ikke på nogen kommende opgaver."}
+        </div>
+        {udfoerte > 0 && (
+          <div style={styles.hint}>
+            {udfoerte} udført{udfoerte === 1 ? " opgave" : "e opgaver"} beholder hendes navn og
+            tidsregistrering, så historik og fakturagrundlag ikke ændrer sig.
+          </div>
+        )}
+        <div style={{ ...styles.hint, color: "#B91C1C" }}>
+          Hendes login til medarbejder-appen fjernes ikke af dette. Brug «Luk adgang» først,
+          hvis hun ikke længere skal kunne logge ind.
+        </div>
+        <label style={{ display: "flex", gap: 8, alignItems: "flex-start", marginTop: 12, fontSize: 13, cursor: "pointer" }}>
+          <input type="checkbox" checked={accepted} onChange={(e) => setAccepted(e.target.checked)} />
+          <span>Jeg er klar over at det <b>ikke kan fortrydes</b> i appen.</span>
+        </label>
+        <div style={{ display: "flex", gap: 8, marginTop: 18, justifyContent: "flex-end" }}>
+          <button type="button" style={styles.secondaryBtn} onClick={onClose}>Annullér</button>
+          <button type="button" disabled={blocked}
+            style={{ ...styles.primaryBtn, background: blocked ? "#CBD5E1" : "#B91C1C", cursor: blocked ? "not-allowed" : "pointer" }}
+            onClick={() => { setBusy(true); onConfirm(emp.id); onClose(); }}>
+            Slet medarbejderen
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function CancelTemplateModal({ template, onClose, onConfirm }) {
   const now = new Date();
   const iso = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0") + "-" + String(now.getDate()).padStart(2, "0");
@@ -7617,8 +7782,15 @@ function EmployeeModal({ emp, onClose, onSave, skills: skillList }) {
   const [travelInWorktime, setTravelInWorktime] = useState(emp?.travelInWorktime ?? false);
   const [weekendOk, setWeekendOk] = useState(emp?.weekendOk ?? false);
   const [empSkills, setEmpSkills] = useState(emp?.skills || {});
-  const [capacity, setCapacity] = useState(emp?.capacity || defaultCapacity());
+  // Et tomt objekt skal ogsaa falde tilbage: en medarbejder uden raekker i
+  // employee_capacity kommer ind som {}, og saa blev hvert felt vist som "NaN".
+  const [capacity, setCapacity] = useState(
+    emp?.capacity && Object.keys(emp.capacity).length ? emp.capacity : defaultCapacity(),
+  );
   const [isAdmin, setIsAdmin] = useState(emp?.isAdmin || false);
+  // Kompetencer hun ikke har, ligger skjult. Med seks-otte kompetencer var listen
+  // over "Ingen / N / OE / E" for hver af dem den laengste del af hele dialogen.
+  const [visAlleKompetencer, setVisAlleKompetencer] = useState(false);
   const colorPool = ["#D6247A", "#111111", "#9C1B5D", "#5B5B60", "#C2487A", "#3A3A3E"];
   const [color] = useState(emp?.color || colorPool[Math.floor(Math.random() * colorPool.length)]);
 
@@ -7626,101 +7798,174 @@ function EmployeeModal({ emp, onClose, onSave, skills: skillList }) {
     setEmpSkills((prev) => { const next = { ...prev }; if (level === 0) delete next[skill]; else next[skill] = level; return next; });
   }
   function setCap(day, hours) { setCapacity((prev) => ({ ...prev, [day]: Math.max(0, Number(hours)) * 60 })); }
+  // De fleste har samme timetal alle dage. Uden denne skulle man tale fem felter ind
+  // hver gang en ansaettelse aendrer sig.
+  function saetAlleDage(hours) {
+    const timer = Number(hours);
+    if (!Number.isFinite(timer)) return;
+    const min = Math.max(0, timer) * 60;
+    // ...prev skal med. Uden den forsvandt Sat og Sun helt ud af objektet, og
+    // syncEmployee saetter manglende dage til standardkapaciteten — saa en haevet
+    // weekendkapacitet blev nulstillet lydloest hver gang man trykkede paa genvejen.
+    setCapacity((prev) => ({ ...prev, ...Object.fromEntries(DAYS.map((d) => [d.key, min])) }));
+  }
+
+  const ugeTimer = DAYS.reduce((s, d) => s + (capacity[d.key] || 0), 0);
+  const valgte = (skillList || []).filter((s) => (empSkills[s] || 0) > 0);
+  const oevrige = (skillList || []).filter((s) => !(empSkills[s] || 0));
+  const synlige = visAlleKompetencer ? (skillList || []) : valgte;
 
   return (
     <Modal onClose={onClose} title={emp ? `Rediger ${emp.name}` : "Ny medarbejder"} persistent>
-      <label style={styles.label}>Navn</label>
-      <input style={styles.input} value={name} onChange={(e) => setName(e.target.value)} placeholder="Fulde navn" />
+      {/* Fire afsnit med samme farvesprog som Ny opgave: rosa er personen, groent er
+          hvad hun kan, blaat er tid. Det graa med haengelaas er det som kun
+          administratorer kan se — og det skal se anderledes ud af netop den grund. */}
+      <div style={styles.empSection}>
+        <div style={{ ...styles.empSectionHead, background: "#FCE4EF" }}>
+          <div style={{ ...styles.empSectionTitle, color: "#9C1B5D" }}>Personen</div>
+          <div style={{ ...styles.empSectionHint, color: "#B4436F" }}>Navn og hvornår dagen begynder</div>
+        </div>
+        <div style={styles.empSectionBody}>
+          <label style={styles.label}>Navn</label>
+          <input style={styles.input} value={name} onChange={(e) => setName(e.target.value)} placeholder="Fulde navn" />
 
-      <label style={styles.label}>Mødetid (bruges til at planlægge dagens første opgave)</label>
-      <input style={styles.input} type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} />
-
-      <label style={styles.label}>Timeløn (kr.)</label>
-      <input style={styles.input} type="number" min="0" step="1" value={hourlyWage}
-        onChange={(e) => setHourlyWage(e.target.value)} placeholder={String(STANDARD_TIMELOEN)} />
-      <div style={styles.hint}>
-        Bruges til lønsummerne i Medarbejder-eksport. Satsen kan kun ses og rettes af administratorer.
-      </div>
-
-      <label style={styles.label}>Transport</label>
-      <button type="button"
-        style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left",
-                 padding: "11px 12px", borderRadius: 10, cursor: "pointer",
-                 border: travelInWorktime ? "2px solid #16A34A" : "1.5px solid #E2E8F0",
-                 background: travelInWorktime ? "#F0FDF4" : "#fff" }}
-        onClick={() => setTravelInWorktime((v) => !v)}>
-        <span style={{ width: 20, height: 20, borderRadius: 5, flexShrink: 0,
-                       border: travelInWorktime ? "2px solid #16A34A" : "2px solid #CBD5E1",
-                       background: travelInWorktime ? "#16A34A" : "#fff",
-                       display: "flex", alignItems: "center", justifyContent: "center" }}>
-          {travelInWorktime && <Check size={12} color="#fff" strokeWidth={3} />}
-        </span>
-        <span style={{ fontSize: 14, color: "#111111" }}>Kørsel er en del af arbejdstiden</span>
-      </button>
-      <div style={styles.hint}>
-        Med fluebenet tæller dagens kørsel i hendes kapacitet — hjemmefra til første opgave,
-        mellem opgaverne, og fra sidste opgave hjem. Uden fluebenet planlægges hun som hidtil,
-        og kørslen afregnes med kilometerpenge.
-      </div>
-
-      {travelInWorktime && (
-        <>
-          <label style={styles.label}>Hjemmeadresse</label>
-          <input style={styles.input} value={homeAddress} onChange={(e) => setHomeAddress(e.target.value)}
-            placeholder="Vejnavn 1, 9490 Pandrup" />
+          <label style={styles.label}>Mødetid</label>
+          <input style={styles.input} type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} />
           <div style={styles.hint}>
-            Bruges kun til at beregne turen til dagens første og fra dagens sidste opgave.
-            Adressen kan kun ses af administratorer og af medarbejderen selv, og sendes til
-            rutetjenesten på samme måde som kundernes adresser.
-            {!homeAddress.trim() && <strong style={{ color: "#B45309" }}> Uden adresse slår ordningen ikke til.</strong>}
+            Bruges til at beregne hvornår dagens første opgave kan starte.
+            {travelInWorktime && " Da kørslen er en del af hendes arbejdstid, er det tidspunktet hun tager hjemmefra."}
           </div>
-        </>
-      )}
+        </div>
+      </div>
 
-      <label style={styles.label}>Kompetenceniveau pr. kompetence</label>
-      <div style={styles.skillLevelGrid}>
-        {(skillList || []).map((s) => {
-          const current = empSkills[s] || 0;
-          return (
-            <div key={s} style={styles.skillLevelRow}>
-              <span style={styles.skillLevelName}>{s}</span>
-              <div style={styles.levelSeg}>
-                <button type="button" onClick={() => setLevel(s, 0)} style={current === 0 ? styles.levelBtnActiveNone : styles.levelBtn}>Ingen</button>
-                {LEVELS.map((l) => (
-                  <button key={l.v} type="button" onClick={() => setLevel(s, l.v)} style={current === l.v ? styles.levelBtnActive : styles.levelBtn}>{l.short}</button>
-                ))}
+      <div style={styles.empSection}>
+        <div style={{ ...styles.empSectionHead, background: "#F0FDFA" }}>
+          <div style={{ ...styles.empSectionTitle, color: "#0F766E" }}>Kan</div>
+          <div style={{ ...styles.empSectionHint, color: "#149285" }}>Kompetencer og niveau — afgør hvilke opgaver hun kommer i betragtning til</div>
+        </div>
+        <div style={styles.empSectionBody}>
+          {synlige.length === 0 && (
+            <div style={styles.hint}>Ingen kompetencer valgt endnu.</div>
+          )}
+          <div style={styles.skillLevelGrid}>
+            {synlige.map((s) => {
+              const current = empSkills[s] || 0;
+              return (
+                <div key={s} style={styles.skillLevelRow}>
+                  <span style={styles.skillLevelName}>{s}</span>
+                  <div style={styles.levelSeg}>
+                    <button type="button" onClick={() => setLevel(s, 0)} style={current === 0 ? styles.levelBtnActiveNone : styles.levelBtn}>Ingen</button>
+                    {LEVELS.map((l) => (
+                      <button key={l.v} type="button" onClick={() => setLevel(s, l.v)} style={current === l.v ? styles.levelBtnActive : styles.levelBtn}>{l.short}</button>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          {oevrige.length > 0 && (
+            <button type="button" style={styles.empFoldBtn} onClick={() => setVisAlleKompetencer((v) => !v)}>
+              {visAlleKompetencer
+                ? "Skjul de kompetencer hun ikke har"
+                : `+ Tilføj kompetence — ${oevrige.length} ${oevrige.length === 1 ? "er" : "er"} skjult`}
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div style={styles.empSection}>
+        <div style={{ ...styles.empSectionHead, background: "#EFF6FF" }}>
+          <div style={{ ...styles.empSectionTitle, color: "#1D4ED8" }}>Tid</div>
+          <div style={{ ...styles.empSectionHint, color: "#3B82F6" }}>Timer til rådighed pr. dag — det loft planlægningen regner med</div>
+        </div>
+        <div style={styles.empSectionBody}>
+          <div style={styles.capEditRow}>
+            {DAYS.map((d) => (
+              <div key={d.key} style={styles.capEditBox}>
+                <div style={styles.capDayLabel}>{d.label.slice(0, 3)}</div>
+                <input type="number" min={0} step={0.5} style={styles.capInput} value={(capacity[d.key] / 60).toString()} onChange={(e) => setCap(d.key, e.target.value)} />
               </div>
-            </div>
-          );
-        })}
-      </div>
-
-      <label style={styles.label}>Timer til rådighed pr. dag</label>
-      <div style={styles.capEditRow}>
-        {DAYS.map((d) => (
-          <div key={d.key} style={styles.capEditBox}>
-            <div style={styles.capDayLabel}>{d.label.slice(0, 3)}</div>
-            <input type="number" min={0} step={0.5} style={styles.capInput} value={(capacity[d.key] / 60).toString()} onChange={(e) => setCap(d.key, e.target.value)} />
+            ))}
           </div>
-        ))}
+          <div style={styles.empTidFod}>
+            <button type="button" style={styles.empFoldBtn}
+              onClick={() => saetAlleDage(capacity[DAYS[0].key] / 60)}>
+              Sæt mandagens timetal på alle dage
+            </button>
+            <span style={{ fontSize: 13, fontWeight: 600, color: "#111111" }}>
+              {(ugeTimer / 60).toLocaleString("da-DK", { maximumFractionDigits: 1 })} timer om ugen
+            </span>
+          </div>
+
+          <button type="button" style={weekendOk ? styles.empTjekAktivGroen : styles.empTjek}
+            onClick={() => setWeekendOk((v) => !v)}>
+            <span style={weekendOk ? styles.empTjekFirkantGroen : styles.empTjekFirkant}>
+              {weekendOk && <Check size={11} color="#fff" strokeWidth={3} />}
+            </span>
+            <span style={{ fontSize: 13, color: "#111111" }}>Må arbejde i weekenden — der er intet timeloft de dage</span>
+          </button>
+          <div style={styles.hint}>
+            Uden fluebenet kan hun slet ikke planlægges lørdag og søndag. Weekendarbejde udløser tillæg.
+          </div>
+        </div>
       </div>
 
-      <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", marginTop: 12 }} onClick={() => setWeekendOk((v) => !v)}>
-        <span style={{ width: 18, height: 18, borderRadius: 5, border: weekendOk ? "2px solid #16A34A" : "2px solid #CBD5E1", background: weekendOk ? "#16A34A" : "#fff", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-          {weekendOk && <Check size={11} color="#fff" strokeWidth={3} />}
-        </span>
-        <span style={{ fontSize: 13, fontWeight: 600, color: "#111111" }}>📅 Må arbejde i weekenden (aftalt — udløser tillæg)</span>
-      </label>
-      <div style={{ fontSize: 11, color: "#94A3B8", marginTop: 4, marginLeft: 26 }}>
-        Uden fluebenet kan medarbejderen slet ikke planlægges lørdag og søndag. Med fluebenet er der ingen øvre grænse på weekendtimer.
+      <div style={styles.empSection}>
+        <div style={{ ...styles.empSectionHead, background: "#F1F5F9" }}>
+          <div style={{ ...styles.empSectionTitle, color: "#334155" }}>🔒 Løn og transport</div>
+          <div style={{ ...styles.empSectionHint, color: "#64748B" }}>Kun administratorer kan se og rette dette</div>
+        </div>
+        <div style={styles.empSectionBody}>
+          <label style={styles.label}>Timeløn (kr.)</label>
+          <input style={{ ...styles.input, maxWidth: 160 }} type="number" min="0" step="1" value={hourlyWage}
+            onChange={(e) => setHourlyWage(e.target.value)} placeholder={String(STANDARD_TIMELOEN)} />
+          <div style={styles.hint}>Bruges kun til lønsummerne i Medarbejder-eksport, ikke til priser over for kunden.</div>
+
+          <button type="button" style={travelInWorktime ? styles.empTjekAktivGroen : styles.empTjek}
+            onClick={() => setTravelInWorktime((v) => !v)}>
+            <span style={travelInWorktime ? styles.empTjekFirkantGroen : styles.empTjekFirkant}>
+              {travelInWorktime && <Check size={11} color="#fff" strokeWidth={3} />}
+            </span>
+            <span style={{ fontSize: 13, color: "#111111" }}>Kørsel er en del af arbejdstiden</span>
+          </button>
+          <div style={styles.hint}>
+            Med fluebenet tæller dagens kørsel i hendes kapacitet — hjemmefra til første opgave,
+            mellem opgaverne, og fra sidste opgave hjem. Uden det afregnes kørslen med kilometerpenge.
+          </div>
+
+          {travelInWorktime && (
+            <>
+              <label style={styles.label}>Hjemmeadresse</label>
+              <input style={styles.input} value={homeAddress} onChange={(e) => setHomeAddress(e.target.value)}
+                placeholder="Vejnavn 1, 9490 Pandrup" />
+              <div style={styles.hint}>
+                Kan kun ses af administratorer og af hende selv. Sendes til rutetjenesten på samme måde
+                som kundernes adresser.
+                {!homeAddress.trim() && <strong style={{ color: "#B45309" }}> Uden adresse slår ordningen ikke til.</strong>}
+              </div>
+            </>
+          )}
+        </div>
       </div>
 
-      <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", marginTop: 12 }} onClick={() => setIsAdmin((v) => !v)}>
-        <span style={{ width: 18, height: 18, borderRadius: 5, border: isAdmin ? "2px solid #16A34A" : "2px solid #CBD5E1", background: isAdmin ? "#16A34A" : "#fff", display: "flex", alignItems: "center", justifyContent: "center" }}>
-          {isAdmin && <Check size={11} color="#fff" strokeWidth={3} />}
-        </span>
-        <span style={{ fontSize: 13, fontWeight: 600, color: "#111111" }}>🛡️ Administrator (kan markere opgaver som sendt til Dinero)</span>
-      </label>
+      {/* Administrator staar for sig med roed ramme. Fluebenet er i mellemtiden blevet
+          den kontakt der afgoer om man kan aabne planlaegningsappen overhovedet, se
+          kollegernes loen, deres hjemmeadresser og kundernes noeglebokskoder — og
+          markere fakturalinjer som sendt til Dinero. Det maa ikke ligne et vilkaarligt felt. */}
+      <div style={styles.empAdminBoks}>
+        <button type="button" style={isAdmin ? styles.empTjekAktivRoed : styles.empTjek}
+          onClick={() => setIsAdmin((v) => !v)}>
+          <span style={isAdmin ? styles.empTjekFirkantRoed : styles.empTjekFirkant}>
+            {isAdmin && <Check size={11} color="#fff" strokeWidth={3} />}
+          </span>
+          <span style={{ fontSize: 13, fontWeight: 600, color: "#111111" }}>🛡️ Administrator</span>
+        </button>
+        <div style={styles.empAdminAdvarsel}>
+          Giver adgang til hele planlægningsappen, til alle kollegers timeløn og hjemmeadresser,
+          til kundernes nøglebokskoder, til budgetterne i Rapportering, og til at markere
+          fakturalinjer som sendt til Dinero. Sæt det kun på kontorets folk.
+        </div>
+      </div>
 
       <div style={styles.modalActions}>
         <button style={styles.secondaryBtn} onClick={onClose}>Annuller</button>
@@ -8633,6 +8878,50 @@ const styles = {
   levelBtnActive: { padding: "5px 9px", borderRadius: 6, border: "1px solid #D6247A", background: "#D6247A", color: "#fff", fontSize: 11, fontWeight: 600, cursor: "pointer" },
   levelBtnActiveNone: { padding: "5px 9px", borderRadius: 6, border: "1px solid #94A3B8", background: "#E2E8F0", color: "#334155", fontSize: 11, fontWeight: 600, cursor: "pointer" },
   capEditRow: { display: "flex", gap: 6 },
+
+  // Medarbejderliste
+  empVaerktoej: { display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 12 },
+  empListe: { background: "#fff", borderRadius: 12, boxShadow: "0 1px 3px rgba(0,0,0,0.06)", overflow: "hidden" },
+  empRaekke: { display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", cursor: "pointer" },
+  empBjaelkeRaekke: { display: "flex", alignItems: "center", gap: 8, marginTop: 5 },
+  empBjaelkeSpor: { flex: 1, maxWidth: 160, height: 6, background: "#E2E8F0", borderRadius: 99, overflow: "hidden" },
+  empBjaelkeFyld: { height: 6, borderRadius: 99, transition: "width 0.3s" },
+  empMaerker: { display: "flex", gap: 5, flexWrap: "wrap", justifyContent: "flex-end", flexShrink: 0, maxWidth: 300 },
+  empMaerkeRosa: { background: "#FCE4EF", color: "#9C1B5D", borderRadius: 99, padding: "2px 9px", fontSize: 11, fontWeight: 600 },
+  empMaerkeGraa: { background: "#F1F5F9", color: "#475569", borderRadius: 99, padding: "2px 9px", fontSize: 11, fontWeight: 600 },
+  empMaerkeRoed: { background: "#FEF2F2", color: "#B91C1C", borderRadius: 99, padding: "2px 9px", fontSize: 11, fontWeight: 600 },
+  empMaerkeLilla: { background: "#EEF2FF", color: "#4F46E5", borderRadius: 99, padding: "2px 9px", fontSize: 11, fontWeight: 600 },
+  // Detaljerne rykkes ind under navnet, saa det er tydeligt hvem de hoerer til.
+  empDetaljer: { padding: "0 14px 14px 60px", background: "#F8FAFC" },
+  empUgeTotal: { fontSize: 12.5, color: "#64748B", paddingBottom: 10, lineHeight: 1.5 },
+
+  // Redigering af medarbejder, opdelt i afsnit
+  empSection: { border: "1px solid #E2E8F0", borderRadius: 12, overflow: "hidden", marginBottom: 14 },
+  empSectionHead: { padding: "9px 13px" },
+  empSectionTitle: { fontSize: 13, fontWeight: 700 },
+  empSectionHint: { fontSize: 12, marginTop: 1, lineHeight: 1.4 },
+  empSectionBody: { padding: "12px 13px" },
+  empFoldBtn: { background: "none", border: "none", padding: "6px 0", fontSize: 12.5, color: "#0F766E",
+    textDecoration: "underline", cursor: "pointer", fontFamily: "inherit", textAlign: "left" },
+  empTidFod: { display: "flex", alignItems: "center", justifyContent: "space-between",
+    gap: 10, flexWrap: "wrap", marginTop: 8, marginBottom: 4 },
+  // Hele feltet er trykflade, ikke bare afkrydsningen. Foer var det en 18 px firkant.
+  empTjek: { display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left",
+    padding: "11px 12px", borderRadius: 10, border: "1.5px solid #E2E8F0", background: "#fff",
+    cursor: "pointer", fontFamily: "inherit", marginTop: 10 },
+  empTjekAktivGroen: { display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left",
+    padding: "11px 12px", borderRadius: 10, border: "2px solid #16A34A", background: "#F0FDF4",
+    cursor: "pointer", fontFamily: "inherit", marginTop: 10 },
+  empTjekAktivRoed: { display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left",
+    padding: "11px 12px", borderRadius: 10, border: "2px solid #DC2626", background: "#FEF2F2",
+    cursor: "pointer", fontFamily: "inherit" },
+  empTjekFirkant: { width: 18, height: 18, borderRadius: 5, border: "2px solid #CBD5E1", background: "#fff", flexShrink: 0 },
+  empTjekFirkantGroen: { width: 18, height: 18, borderRadius: 5, border: "2px solid #16A34A", background: "#16A34A",
+    display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
+  empTjekFirkantRoed: { width: 18, height: 18, borderRadius: 5, border: "2px solid #DC2626", background: "#DC2626",
+    display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
+  empAdminBoks: { border: "1px solid #FCA5A5", borderRadius: 12, padding: 12, marginBottom: 14 },
+  empAdminAdvarsel: { fontSize: 12, color: "#B91C1C", lineHeight: 1.5, marginTop: 8 },
   capEditBox: { flex: 1, textAlign: "center" },
   capInput: { width: "100%", textAlign: "center", padding: "6px 4px", borderRadius: 6, border: "1px solid #E2E8F0", fontSize: 12.5, marginTop: 3 },
 
