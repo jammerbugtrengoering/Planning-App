@@ -4560,6 +4560,18 @@ function WeekView({ employees, instances, unplaced, onAdd, onAuto, onScheduleWee
                               )}
                               {menuOpen && (
                                 <div style={styles.chipAddMenu}>
+                                  {/* Er der allerede nogen paa, skal planlaeggeren se hvad
+                                      en person mere goer ved den samlede tid — ogsaa her.
+                                      Bekraeftelsen laa kun i serviceordren, men det er
+                                      plusset paa kortet man bruger i det daglige. */}
+                                  {assignedEmps.length >= 1 && (
+                                    <div style={styles.chipAddAdvarsel}>
+                                      Varigheden er <strong>pr. person</strong>. Med én mere bliver det{" "}
+                                      {assignedEmps.length + 1} × {fmtMin(t.duration)} ={" "}
+                                      <strong>{fmtMin(t.duration * (assignedEmps.length + 1))}</strong> samlet arbejde.
+                                      Skal opgaven gå hurtigere med flere, så sæt varigheden ned bagefter.
+                                    </div>
+                                  )}
                                   {addable.map((e) => (
                                     <button key={e.id} type="button" style={styles.chipAddMenuItem} onClick={() => { onPlace(t.id, d.key, e.id); setAddMenuTaskId(null); }}>
                                       <span style={{ ...styles.chipAvatar, background: e.color }}>{initials(e.name)}</span> {e.name}
@@ -9148,6 +9160,9 @@ const styles = {
   chipAvatar: { width: 16, height: 16, borderRadius: "50%", color: "#fff", fontSize: 8, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", border: "none", cursor: "pointer", flexShrink: 0 },
   chipAddBtn: { width: 16, height: 16, borderRadius: "50%", border: "1px dashed #CBD5E1", background: "#fff", color: "#64748B", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", padding: 0 },
   chipAddMenu: { position: "absolute", top: 20, left: 0, background: "#fff", border: "1px solid #E2E8F0", borderRadius: 8, boxShadow: "0 6px 18px rgba(0,0,0,0.12)", padding: 4, zIndex: 20, minWidth: 140 },
+  // Bredere end menuen, saa saetningen kan staa paa faa linjer i en smal dagkolonne.
+  chipAddAdvarsel: { background: "#FFFBEB", border: "1px solid #FDE68A", borderRadius: 6,
+    padding: "6px 8px", margin: "0 0 4px", fontSize: 11, color: "#92400E", lineHeight: 1.45, width: 230 },
   chipAddMenuItem: { display: "flex", alignItems: "center", gap: 6, width: "100%", border: "none", background: "transparent", padding: "5px 6px", borderRadius: 6, fontSize: 11.5, color: "#334155", cursor: "pointer", textAlign: "left" },
   emptyCol: { textAlign: "center", color: "#94A3B8", fontSize: 12.5, padding: "20px 0" },
   skillTag: { display: "inline-block", background: "#FCE4EF", color: "#9C1B5D", fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 999 },
