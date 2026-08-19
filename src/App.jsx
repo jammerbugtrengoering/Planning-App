@@ -221,6 +221,15 @@ const STANDARD_TIMELOEN = 170;
 
 // Antal medarbejdere paa opgaven, mindst 1. En opgave uden nogen paa er endnu ikke
 // fordelt, men skal stadig kunne prissaettes ud fra det ene saet varighed.
+// Ligger opgaven i dag? Sammenligner den fulde dato, ikke bare ugedagen.
+//
+// Foer blev der kun sammenlignet ugedagsnummer: en opgave om ti uger paa en mandag
+// taltes som "i dag" hver mandag, og medarbejderne fik mails om aendringer i opgaver
+// der laa langt ude i fremtiden.
+function erIDag(t) {
+  return !!t && instanceDateString(t) === todayIso();
+}
+
 function antalPaaOpgaven(t) {
   return Math.max(1, ((t && t.assignees) || []).length);
 }
@@ -1060,8 +1069,6 @@ function completionInfo(t, employees) {
 
 function statusColor(s) { return { planlagt: "#9C1B5D", udført: "#111111", unscheduled: "#94A3B8" }[s]; }
 
-// Map day strings to numbers (0=Mon, 1=Tue, 2=Wed, 3=Thu, 4=Fri)
-const DAY_STRING_TO_NUM = { Mon: 0, Tue: 1, Wed: 2, Thu: 3, Fri: 4 };
 
 // Send email notification via Supabase Edge Function
 async function notifyEmployeeOfChanges(employeeEmail, employeeName, taskTitle, changeType) {
@@ -1330,7 +1337,8 @@ const MODULE_HELP = {
         "Varigheden på en opgave er tiden PR. PERSON. Sætter du to på en opgave til 1 time, er der afsat 2 timers arbejde i alt — og begge er optaget en time i deres dag.",
         "Sætter du flere på, kommer der en påmindelse med regnestykket: «2 × 1t = 2t samlet arbejde». Tjek at det passer med opgaven.",
         "Det tal er både det medarbejderne måles på, og det der ligger til grund for «Planlagt kr.» i Fakturering. Sætter du varigheden som om det var den samlede tid, får medarbejderne besked om at de har overskredet noget de ikke har.",
-        "Faktureringen bygger stadig på registreret tid, ikke på det planlagte — det er kun forventningen der ændrer sig når du sætter flere på."] },
+        "Faktureringen bygger stadig på registreret tid, ikke på det planlagte — det er kun forventningen der ændrer sig når du sætter flere på.",
+        "Flytter eller ændrer du en opgave der ligger i dag, får alle på opgaven besked på mail — ikke kun den første. Tages nogen af opgaven, får hun også besked om det."] },
     { h: "Fast medarbejder på en aftale", p: [
         "Vælg medarbejderen under Ansvarlig medarbejder når du opretter aftalen, så følger han eller hun aftalen resten af perioden.",
         "Du kan også gøre det fra en åben opgave: tildel medarbejderen, og tryk så «Gør fast på aftalen».",
@@ -2472,11 +2480,20 @@ function PlanningApp({ session, onSignOut }) {
       const after = scheduleWeek(thisWeek, employees, false, areas, employeeAreas, unassignedIds, travelSettings);
       const newlyAssigned = after.filter((t) => unassignedIds.has(t.id) && t.assignees && t.assignees.length);
       newlyAssigned.forEach(syncInstance);
-      newlyAssigned.forEach((t) => {
-        const emp = employees.find((e) => e.id === t.assignees[0]);
-        if (emp?.email) notifyEmployeeOfChanges(emp.email, emp.name, t.title || "Opgave", "Planlagt");
+      // Alle paa opgaven, ikke kun den foerste — ellers ved kun én af fire at hun er
+      // blevet planlagt. Feltet hedder app_email; emp.email findes ikke og var stille
+      // altid undefined, saa der blev i praksis aldrig sendt noget herfra.
+      // Samme regel som ved aendringer: kun dagens opgaver sender mail. Auto-planlaegning
+      // af en hel uge ville ellers give en mail pr. opgave pr. medarbejder.
+      newlyAssigned.filter(erIDag).forEach((t) => {
+        (t.assignees || []).forEach((id) => {
+          const emp = employees.find((e) => e.id === id);
+          const mail = emp?.app_email?.trim();
+          if (mail) notifyEmployeeOfChanges(mail, emp.name, t.title || "Opgave", "✅ Ny opgave på din plan")
+            .catch((e) => console.error("Notify error:", e));
+        });
       });
-      const names = Array.from(new Set(newlyAssigned.map((t) => employees.find((e) => e.id === t.assignees[0])?.name).filter(Boolean)));
+      const names = Array.from(new Set(newlyAssigned.flatMap((t) => (t.assignees || []).map((id) => employees.find((e) => e.id === id)?.name)).filter(Boolean)));
       notify(newlyAssigned.length > 0 ? `${newlyAssigned.length} opgave(r) planlagt til: ${names.join(", ")}` : "Ingen ledige medarbejdere med rette kompetencer fundet lige nu");
       return [...others, ...after];
     });
@@ -2803,41 +2820,44 @@ function PlanningApp({ session, onSignOut }) {
         const oldTask = t;
         const updated = updater(t);
         
-        // Check if today is affected
-        const today = new Date();
-        const todayDayNum = (today.getDay() + 6) % 7;
+        // Kun opgaver der ligger i DAG udloeser mail. Medarbejderen skal vide det hvis
+        // hendes dag aendrer sig mens hun er i gang — resten ser hun i appen.
+        const isOldTaskToday = erIDag(oldTask);
+        const isNewTaskToday = erIDag(updated);
         
-        const oldDayNum = typeof oldTask.day === 'string' ? DAY_STRING_TO_NUM[oldTask.day] : oldTask.day;
-        const newDayNum = typeof updated.day === 'string' ? DAY_STRING_TO_NUM[updated.day] : updated.day;
-        
-        const isOldTaskToday = oldDayNum === todayDayNum;
-        const isNewTaskToday = newDayNum === todayDayNum;
-        
+        // Alle paa opgaven skal have besked, ikke kun den foerste. Tidligere gik mailen
+        // til assignees[0], saa var der fire paa opgaven, fik én at vide at dagen var
+        // aendret, og de tre andre moedte op til noget andet end de troede.
+        const givBesked = (ider, titel, emne) => {
+          (ider || []).forEach((id) => {
+            const emp = employees.find((e) => e.id === id);
+            const mail = emp?.app_email?.trim();
+            if (!mail) return;
+            notifyEmployeeOfChanges(mail, emp.name, titel, emne)
+              .catch((e) => console.error("Notify error:", e));
+          });
+        };
+
         // Send email ONLY if today's tasks are affected
         if (isOldTaskToday || isNewTaskToday) {
           // Task added to today
           if (!isOldTaskToday && isNewTaskToday && updated.assignees?.length > 0) {
-            const emp = employees.find(e => e.id === updated.assignees[0]);
-            if (emp?.app_email?.trim()) {
-              notifyEmployeeOfChanges(emp.app_email.trim(), emp.name, updated.title, '✅ Ny opgave på din dagsplan').catch(e => console.error("Notify error:", e));
-            }
+            givBesked(updated.assignees, updated.title, "✅ Ny opgave på din dagsplan");
           }
-          
+
           // Task removed from today
           if (isOldTaskToday && !isNewTaskToday) {
-            const emp = employees.find(e => e.id === oldTask.assignees?.[0]);
-            if (emp?.app_email?.trim()) {
-              notifyEmployeeOfChanges(emp.app_email.trim(), emp.name, oldTask.title, '❌ Opgave fjernet fra din dagsplan').catch(e => console.error("Notify error:", e));
-            }
+            givBesked(oldTask.assignees, oldTask.title, "❌ Opgave fjernet fra din dagsplan");
           }
-          
+
           // Task on today is modified (title, duration, assignee, etc.)
           if (isOldTaskToday && isNewTaskToday && updated.assignees?.length > 0) {
             if (oldTask.title !== updated.title || oldTask.duration !== updated.duration || JSON.stringify(oldTask.assignees) !== JSON.stringify(updated.assignees)) {
-              const emp = employees.find(e => e.id === updated.assignees[0]);
-              if (emp?.app_email?.trim()) {
-                notifyEmployeeOfChanges(emp.app_email.trim(), emp.name, updated.title, '📝 Opgaven på din dagsplan er ændret').catch(e => console.error("Notify error:", e));
-              }
+              // Er nogen taget AF opgaven, skal hun ogsaa vide det — hun staar ellers
+              // med en opgave i sin plan som hun ikke laengere er sat paa.
+              const fjernede = (oldTask.assignees || []).filter((id) => !(updated.assignees || []).includes(id));
+              givBesked(updated.assignees, updated.title, "📝 Opgaven på din dagsplan er ændret");
+              givBesked(fjernede, oldTask.title, "❌ Opgave fjernet fra din dagsplan");
             }
           }
         }
@@ -5388,6 +5408,11 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
                 ) : (
                   <>
                     {emps.slice(0, 2).map((emp) => <span key={emp.id} style={{ ...styles.avatar, background: emp.color, width: 22, height: 22, fontSize: 10 }}>{initials(emp.name)}</span>)}
+                    {/* Med fire paa opgaven blev der kun vist to cirkler og ingen antydning
+                        af at der var flere. Navnene stod der, men billedet loej. */}
+                    {emps.length > 2 && (
+                      <span style={{ ...styles.avatar, background: "#CBD5E1", color: "#475569", width: 22, height: 22, fontSize: 10 }}>+{emps.length - 2}</span>
+                    )}
                     <span style={{ fontSize: 11, color: "#475569", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{emps.map((e) => e.name).join(", ")}</span>
                   </>
                 )}
