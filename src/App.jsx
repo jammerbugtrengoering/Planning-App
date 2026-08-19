@@ -8130,11 +8130,9 @@ function TaskDetailModal({ task, employees, templates, onSetPreferredEmployee, o
   const [custPo, setCustPo] = useState("");
   const [custAccess, setCustAccess] = useState("");
   const [taskSkills, setTaskSkills] = useState([]);
-  const [dineroSyncing, setDineroSyncing] = useState(false);
   // Kort visuel "✓ Sendt"-bekræftelse lige efter klik — IKKE det samme som om
   // kunden varigt er kendt i Dinero (det styres af den gemte customerDineroSynced
   // nedenfor, som afgør om knappen overhovedet skal vises).
-  const [justSyncedFlash, setJustSyncedFlash] = useState(false);
   const [dineroResults, setDineroResults] = useState([]);
   const [dineroSearching, setDineroSearching] = useState(false);
   const [dineroAvailable, setDineroAvailable] = useState(true);
@@ -8318,25 +8316,6 @@ function TaskDetailModal({ task, employees, templates, onSetPreferredEmployee, o
   function saveSkills() {
     if (onUpdateSkills) onUpdateSkills(t.id, taskSkills);
     setEditingSkills(false);
-  }
-
-  async function syncToDinero() {
-    setDineroSyncing(true);
-    try {
-      const parts = custAddress.split(",").map((s) => s.trim());
-      const { data, error } = await supabase.functions.invoke("dinero", {
-        body: { action: "create", contact: { name: custName, address: parts[0] || "", zipCode: parts[1] || "", city: parts[2] || "" } },
-      });
-      if (!error && (data?.Name || data?.ContactGuid)) {
-        setJustSyncedFlash(true);
-        setTimeout(() => setJustSyncedFlash(false), 3000);
-        // Gem varigt at kunden nu findes i Dinero, så knappen ikke dukker op igen
-        // — hverken på denne opgave eller fremtidige uger af samme faste aftale.
-        setCustomerDineroSynced(true);
-        onUpdateCustomerInfo(t.id, { dineroSynced: true });
-      }
-    } catch {}
-    setDineroSyncing(false);
   }
 
   function addItem() {
@@ -8717,23 +8696,10 @@ return (
                 )}
                 {logFejl && <div style={{ ...styles.cardMeta, color: "#DC2626" }}>{logFejl}</div>}
               </div>
-              {/* Dinero sync-knap — vises kun hvis kunden IKKE allerede vides at
-                  findes i Dinero (valgt fra søgning, eller tidligere oprettet der).
-                  Er kunden allerede kendt, vises i stedet en simpel bekræftelse. */}
-              {!isDone && custName && (
-                customerDineroSynced ? (
-                  <div style={{ ...styles.addSkillBtn, marginTop: 8, fontSize: 12, color: "#16A34A", borderColor: "#22C55E", background: "#ECFDF5", cursor: "default" }}>
-                    ✓ Kunde findes i Dinero
-                  </div>
-                ) : (
-                  <button
-                    style={{ ...styles.addSkillBtn, marginTop: 8, fontSize: 12, color: justSyncedFlash ? "#16A34A" : "#4F46E5", borderColor: justSyncedFlash ? "#22C55E" : "#C7D2FE", background: justSyncedFlash ? "#ECFDF5" : "#EEF2FF" }}
-                    onClick={syncToDinero}
-                    disabled={dineroSyncing}>
-                    {justSyncedFlash ? "✓ Sendt til Dinero" : dineroSyncing ? "Sender…" : "🏢 Send til Dinero"}
-                  </button>
-                )
-              )}
+              {/* Baade bekraeftelsen "Kunde findes i Dinero" og knappen "Send til Dinero"
+                  er fjernet. Kunder oprettes altid i Dinero og vaelges herfra i soegningen,
+                  saa der er intet at sende og intet at bekraefte — og en knap der kunne
+                  oprette kunden herfra var praecis det vi lige har taget ud. */}
             </div>
           ) : (
             <div style={styles.cardMeta}>Ingen kundeoplysninger — klik Rediger for at tilføje</div>
