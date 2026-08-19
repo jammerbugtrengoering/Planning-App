@@ -7701,6 +7701,13 @@ function EmployeeModal({ emp, onClose, onSave, skills: skillList }) {
 
 // ---------- Task / service order detail ----------
 function TaskDetailModal({ task, employees, templates, onSetPreferredEmployee, onCancelTemplate, checklistTemplates, skills, isAdminUser, areas, employeeAreas, onClose, onSetStatus, onToggleChecklistItem, onAddChecklistItem, onAddChecklistTemplate, onAddAssignee, onRemoveAssignee, onUnplace, onDelete, onUpdateCustomer, onUpdateCustomerInfo, onUpdateContractType, onRenameTask, onCopy, onUpdateSkills, onEndBlockEarly, onUpdateSchedule }) {
+  // Disse to laa efter det tidlige return for blokeringer (sygdom/ferie) laengere nede.
+  // Hooks skal kaldes i samme raekkefoelge hver render: aabnede man en blokering og
+  // derefter en almindelig opgave i samme modal, ville React se to hooks mere end sidst
+  // og kaste. Det slap igennem fordi modalen i praksis afmonteres imellem — men det er
+  // en faelde der venter paa den foerste, der aabner de to i traek.
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [titleDraft, setTitleDraft] = useState(task.title);
   const [addOpen, setAddOpen] = useState(false);
   const [newItemText, setNewItemText] = useState("");
   const [showTemplates, setShowTemplates] = useState(false);
@@ -7900,8 +7907,6 @@ function TaskDetailModal({ task, employees, templates, onSetPreferredEmployee, o
   }
 
   const t = task;
-  const [isEditingTitle, setIsEditingTitle] = useState(false);
-  const [titleDraft, setTitleDraft] = useState(task.title);
   const isDone = t.status === "udført";
   // Administratorer må åbne og redigere en opgave, selvom den er markeret som
   // udført (fx for at rette en fejl efterfølgende) — alle andre har kun
