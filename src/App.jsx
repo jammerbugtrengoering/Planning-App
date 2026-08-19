@@ -1341,11 +1341,12 @@ const MODULE_HELP = {
 
   employees: { title: "Medarbejdere", intro: "Her styrer du hvem der kan hvad, hvor meget tid de har, og hvilke områder de dækker.", blocks: [
     { h: "Sådan læses listen", p: [
-        "Hver medarbejder er én linje. Bjælken viser hvor meget der er tilbage af ugen — ikke hvor meget der er planlagt. Grøn er der plads, orange er næsten fuld, rød er overbelagt.",
+        "Denne side er stamdata: hvem medarbejderne er, hvad de kan, hvor mange timer de har, og hvem der har adgang til appen. Hvor meget der er planlagt i en bestemt uge, står i Ugeplan — ikke her.",
+        "Hver medarbejder er én linje med det aftalte timetal, weekendaftale og mødetid.",
         "Mærkaterne til højre er det du ellers ikke kan se: manglende app-adgang, kørsel som arbejdstid, administrator, og de to første kompetencer.",
         "Tryk på linjen for at folde den ud. Så kommer kompetencer med niveau, områder, timer pr. dag, app-adgang og udleveringshistorik. Flere kan være åbne ad gangen, så du kan sammenligne to medarbejdere.",
-        "I den udfoldede visning står timerne som «brugt / kapacitet» pr. dag. Er tallet rødt, er dagen overbelagt.",
-        "Søgefeltet søger i både navn og kompetencer, så «vindue» finder dem der kan vinduespolering. Sorteringen og områdefilteret virker sammen med søgningen."] },
+        "Søgefeltet søger i både navn og kompetencer, så «vindue» finder dem der kan vinduespolering. Sorteringen og områdefilteret virker sammen med søgningen.",
+        "«Mangler app-adgang først» er en hurtig vej til dem du skal oprette et login til."] },
     { h: "Opret og redigér", p: ["Tryk «Ny medarbejder», eller «Redigér» når du har foldet en linje ud.",
         "Mødetid bruges til at beregne hvornår dagens første opgave kan starte.",
         "Timeløn bruges til lønsummerne i Medarbejder-eksport. Nye medarbejdere starter på 170 kr.",
@@ -3802,7 +3803,7 @@ function PlanningApp({ session, onSignOut }) {
         />
       )}
       {view === "employees" && (
-        <EmployeesView employees={employees} instances={weekInstancesList} travelSettings={travelSettings}
+        <EmployeesView employees={employees}
           onAdd={() => { setEditEmp(null); setShowAddEmp(true); }}
           onEdit={(e) => { setEditEmp(e); setShowAddEmp(true); }}
           onDelete={(id) => setSletMedarbejder(id)}
@@ -4553,7 +4554,9 @@ function TypeBadge({ type, mini }) {
 }
 
 // ---------- Employees ----------
-function EmployeesView({ employees, instances, onAdd, onEdit, onDelete, supabase, skills, onSkillsChange, areas, employeeAreas, onAreasChange, onEmployeeAreasChange, travelSettings = DEFAULT_TRAVEL }) {
+// instances og travelSettings er bevidst ikke props laengere: siden er stamdata og
+// skal ikke afhaenge af hvilken uge man staar i. Belaegningen laeses i ugeplanen.
+function EmployeesView({ employees, onAdd, onEdit, onDelete, supabase, skills, onSkillsChange, areas, employeeAreas, onAreasChange, onEmployeeAreasChange }) {
   const [sog, setSog] = useState("");
   const [sortering, setSortering] = useState("ledig");
   const [omraadeFilter, setOmraadeFilter] = useState("alle");
@@ -4570,31 +4573,15 @@ function EmployeesView({ employees, instances, onAdd, onEdit, onDelete, supabase
 
   // Alt det raekken skal vise, regnet ét sted. Belastningen bruger samme funktion som
   // planlaegningen, saa bjaelken og systemets egen beslutning altid er enige.
-  // useMemo, fordi regnestykket ellers koeres forfra ved hvert tastetryk — ogsaa i
-  // invitations-mailfeltet, som bor i samme komponent. Med tyve medarbejdere er det
-  // 140 opslag i hele opgavelisten pr. bogstav.
-  const beregnede = useMemo(() => (employees || []).map((emp) => {
-    // Kun hverdage. Weekenden har intet kapacitetsloft, saa weekendtimer maalt mod et
-    // hverdagsloft ville sende bjaelken over 100 % og skrive "over" paa en medarbejder
-    // der slet ikke er overbelagt — og tallet kunne ikke forklares nogen steder.
-    const activeMin = DAYS.reduce((s, d) => s + usedMinutes(instances, emp.id, d.key), 0);
-    const capMin = DAYS.reduce((s, d) => s + ((emp.capacity || {})[d.key] || 0), 0);
-    const transportMin = DAYS.reduce(
-      (s, d) => s + dagensTransport(instances, emp, d.key, travelSettings), 0);
-    // Weekendarbejde opgoeres for sig, saa det kan staa i den udfoldede raekke.
-    const weekendMin = WEEKEND_DAYS.reduce((s, k) => s + usedMinutes(instances, emp.id, k), 0);
-    const brugt = activeMin + transportMin;
-    const ledig = capMin - brugt;
-    const pct = capMin > 0 ? (brugt / capMin) * 100 : 0;
-    const barFarve = ledig < 0 ? "#DC2626" : pct > 90 ? "#B45309" : "#16A34A";
-    const ledigTekst = capMin === 0
-      ? "Ingen timer sat"
-      : ledig < 0 ? `${fmtMin(-ledig)} over` : `${fmtMin(ledig)} ledig`;
-    return {
-      emp, activeMin, capMin, transportMin, weekendMin, pct, ledig, barFarve, ledigTekst,
-      kompetenceListe: Object.keys(emp.skills || {}),
-    };
-  }), [employees, instances, travelSettings]);
+  // Medarbejdersiden er stamdata: hvem de er, hvad de kan, hvor mange timer de har,
+  // og hvem der har adgang til appen. Belaegning hoerer hjemme i ugeplanen, hvor man
+  // faktisk planlaegger — den er ugeafhaengig og hoerer ikke til paa et stamkort.
+  // Her staar derfor kun det aftalte timetal, ikke hvor meget der er lagt paa.
+  const beregnede = useMemo(() => (employees || []).map((emp) => ({
+    emp,
+    ugeTimer: DAYS.reduce((s, d) => s + ((emp.capacity || {})[d.key] || 0), 0),
+    kompetenceListe: Object.keys(emp.skills || {}),
+  })), [employees]);
 
   const sogLille = sog.trim().toLowerCase();
   const synligeMedarbejdere = useMemo(() => beregnede
@@ -4609,9 +4596,14 @@ function EmployeesView({ employees, instances, onAdd, onEdit, onDelete, supabase
       return (employeeAreas || []).some((ea) => ea.employee_id === r.emp.id && ea.area_id === omraadeFilter);
     })
     .sort((a, b) => {
-      if (sortering === "navn") return (a.emp.name || "").localeCompare(b.emp.name || "", "da");
-      if (sortering === "fuld") return a.ledig - b.ledig;
-      return b.ledig - a.ledig;
+      if (sortering === "timer") return b.ugeTimer - a.ugeTimer;
+      // De der mangler adgang til medarbejder-appen er dem man skal handle paa,
+      // saa de kan hentes frem uden at lede gennem hele listen.
+      if (sortering === "udenadgang") {
+        const forskel = (a.emp.auth_user_id ? 1 : 0) - (b.emp.auth_user_id ? 1 : 0);
+        if (forskel !== 0) return forskel;
+      }
+      return (a.emp.name || "").localeCompare(b.emp.name || "", "da");
     }), [beregnede, sogLille, omraadeFilter, sortering, employeeAreas]);
   const [showSkillsPanel, setShowSkillsPanel] = useState(false);
   const [showAreasPanel, setShowAreasPanel] = useState(false);
@@ -4712,9 +4704,9 @@ function EmployeesView({ employees, instances, onAdd, onEdit, onDelete, supabase
         <input style={{ ...styles.inputSm, flex: 1, minWidth: 150 }} value={sog}
           onChange={(ev) => setSog(ev.target.value)} placeholder="Søg navn eller kompetence" />
         <select style={styles.inputSm} value={sortering} onChange={(ev) => setSortering(ev.target.value)}>
-          <option value="ledig">Mest ledig tid først</option>
-          <option value="fuld">Mest belagt først</option>
           <option value="navn">Navn</option>
+          <option value="timer">Flest timer om ugen</option>
+          <option value="udenadgang">Mangler app-adgang først</option>
         </select>
         <select style={styles.inputSm} value={omraadeFilter} onChange={(ev) => setOmraadeFilter(ev.target.value)}>
           <option value="alle">Alle områder</option>
@@ -4727,7 +4719,7 @@ function EmployeesView({ employees, instances, onAdd, onEdit, onDelete, supabase
       </div>
 
       <div style={styles.empListe}>
-        {synligeMedarbejdere.map(({ emp: e, activeMin, capMin, transportMin, weekendMin, pct, ledigTekst, barFarve, kompetenceListe }) => {
+        {synligeMedarbejdere.map(({ emp: e, ugeTimer, kompetenceListe }) => {
           const status = inviteStatus[e.id];
           const hasUser = !!e.auth_user_id;
           return (
@@ -4744,13 +4736,14 @@ function EmployeesView({ employees, instances, onAdd, onEdit, onDelete, supabase
                 <span style={{ ...styles.avatar, background: e.color, width: 34, height: 34, fontSize: 13, flexShrink: 0 }}>{initials(e.name)}</span>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={styles.empName}>{e.name}</div>
-                  {/* Ledig tid frem for planlagt tid: planlaeggeren spoerger altid om
-                      hvad der er tilbage, ikke om hvad der allerede ligger. */}
-                  <div style={styles.empBjaelkeRaekke}>
-                    <div style={styles.empBjaelkeSpor}>
-                      <div style={{ ...styles.empBjaelkeFyld, width: `${Math.min(100, pct)}%`, background: barFarve }} />
-                    </div>
-                    <span style={{ fontSize: 12, fontWeight: 600, color: barFarve, flexShrink: 0 }}>{ledigTekst}</span>
+                  {/* Stamdata, ikke belaegning: det aftalte timetal og om weekend er med.
+                      Hvor meget der er lagt paa i en given uge, staar i ugeplanen. */}
+                  <div style={styles.empUnderNavn}>
+                    {ugeTimer > 0
+                      ? `${(ugeTimer / 60).toLocaleString("da-DK", { maximumFractionDigits: 1 })} timer om ugen`
+                      : "Ingen timer sat"}
+                    {e.weekendOk && " · weekend"}
+                    {e.startTime && ` · møder ${e.startTime}`}
                   </div>
                 </div>
                 <div style={styles.empMaerker}>
@@ -4770,17 +4763,6 @@ function EmployeesView({ employees, instances, onAdd, onEdit, onDelete, supabase
 
               {udfoldet.has(e.id) && (
               <div style={styles.empDetaljer}>
-              {/* Ugens tal i tekst. Bjaelken i raekken viser hvor meget der er tilbage,
-                  men ikke hvad det er af — og transporten skal kunne laeses for sig. */}
-              <div style={styles.empUgeTotal}>
-                {fmtMin(activeMin + transportMin)} af {fmtMin(capMin)} belagt på hverdage
-                {transportMin > 0 && (
-                  <span style={{ color: "#4F46E5", fontWeight: 600 }}> · heraf {fmtMin(transportMin)} kørsel</span>
-                )}
-                {weekendMin > 0 && (
-                  <span style={{ color: "#B45309", fontWeight: 600 }}> · {fmtMin(weekendMin)} i weekenden (uden loft)</span>
-                )}
-              </div>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
                 <button style={styles.secondaryBtn} onClick={() => onEdit(e)}><Pencil size={14} /> Redigér</button>
                 <button style={{ ...styles.secondaryBtn, color: "#B91C1C", borderColor: "#FCA5A5", marginLeft: "auto" }}
@@ -4800,21 +4782,14 @@ function EmployeesView({ employees, instances, onAdd, onEdit, onDelete, supabase
                   ))}
               </div>
               <div style={styles.capRow}>
-                {/* Brugt mod kapacitet, ikke bare loftet. "7,5t" fortalte ikke om dagen
-                    var fuld — og det er praecis det man skal vide for at flytte en opgave. */}
-                {DAYS.map((d) => {
-                  const dagBrugt = belastning([e], instances, e.id, d.key, travelSettings);
-                  const dagLoft = (e.capacity || {})[d.key] || 0;
-                  const dagOver = dagLoft > 0 && dagBrugt > dagLoft;
-                  return (
-                    <div key={d.key} style={styles.capDayBox}>
-                      <div style={styles.capDayLabel}>{d.label.slice(0, 3)}</div>
-                      <div style={{ ...styles.capDayValue, color: dagOver ? "#DC2626" : "#111111" }}>
-                        {(dagBrugt / 60).toFixed(1)} / {(dagLoft / 60).toFixed(1)}
-                      </div>
-                    </div>
-                  );
-                })}
+                {/* Det aftalte timetal pr. dag. Hvor meget der ligger paa dagen i en
+                    bestemt uge, hoerer i ugeplanen — ikke paa stamkortet. */}
+                {DAYS.map((d) => (
+                  <div key={d.key} style={styles.capDayBox}>
+                    <div style={styles.capDayLabel}>{d.label.slice(0, 3)}</div>
+                    <div style={styles.capDayValue}>{(((e.capacity || {})[d.key] || 0) / 60).toFixed(1)}t</div>
+                  </div>
+                ))}
                 <div style={styles.capDayBox}>
                   <div style={styles.capDayLabel}>WEEKEND</div>
                   <div style={{ ...styles.capDayValue, color: e.weekendOk ? "#16A34A" : "#CBD5E1" }}>
@@ -8960,9 +8935,6 @@ const styles = {
   empVaerktoej: { display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 12 },
   empListe: { background: "#fff", borderRadius: 12, boxShadow: "0 1px 3px rgba(0,0,0,0.06)", overflow: "hidden" },
   empRaekke: { display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", cursor: "pointer" },
-  empBjaelkeRaekke: { display: "flex", alignItems: "center", gap: 8, marginTop: 5 },
-  empBjaelkeSpor: { flex: 1, maxWidth: 160, height: 6, background: "#E2E8F0", borderRadius: 99, overflow: "hidden" },
-  empBjaelkeFyld: { height: 6, borderRadius: 99, transition: "width 0.3s" },
   empMaerker: { display: "flex", gap: 5, flexWrap: "wrap", justifyContent: "flex-end", flexShrink: 0, maxWidth: 300 },
   empMaerkeRosa: { background: "#FCE4EF", color: "#9C1B5D", borderRadius: 99, padding: "2px 9px", fontSize: 11, fontWeight: 600 },
   empMaerkeGraa: { background: "#F1F5F9", color: "#475569", borderRadius: 99, padding: "2px 9px", fontSize: 11, fontWeight: 600 },
@@ -8970,7 +8942,7 @@ const styles = {
   empMaerkeLilla: { background: "#EEF2FF", color: "#4F46E5", borderRadius: 99, padding: "2px 9px", fontSize: 11, fontWeight: 600 },
   // Detaljerne rykkes ind under navnet, saa det er tydeligt hvem de hoerer til.
   empDetaljer: { padding: "0 14px 14px 60px", background: "#F8FAFC" },
-  empUgeTotal: { fontSize: 12.5, color: "#64748B", paddingBottom: 10, lineHeight: 1.5 },
+  empUnderNavn: { fontSize: 12, color: "#64748B", marginTop: 3 },
 
   // Redigering af medarbejder, opdelt i afsnit
   empSection: { border: "1px solid #E2E8F0", borderRadius: 12, overflow: "hidden", marginBottom: 14 },
