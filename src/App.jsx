@@ -1615,6 +1615,30 @@ function PlanningApp({ session, onSignOut }) {
 
   // ── Supabase: load alt ved opstart ──
   useEffect(() => {
+    // Henter en tabel og proever ÉN gang igen efter en tvungen fornyelse af sessionen,
+    // hvis svaret var 401.
+    //
+    // Baggrund: ved sideindlaesning giver klienten den gemte session med det samme og
+    // fornyer den derefter i baggrunden. Starter indlaesningen inden fornyelsen er
+    // faerdig, sendes den udloebne token med, og den forespoergsel der er undervejs
+    // faar 401. De oevrige, der afsendes et oejeblik senere, lykkes — saa det ser ud
+    // som om én bestemt tabel er tom, mens resten af appen fungerer.
+    //
+    // Det farlige var ikke fejlen, men at den var lydloes: svaret blev laest som en tom
+    // liste, og planlaeggeren fik at vide at der ikke var nogen kommentarer.
+    async function hentMedFornyelse(navn, byg) {
+      let svar = await byg();
+      if (svar.error && (svar.status === 401 || /jwt|token/i.test(svar.error.message || ""))) {
+        await supabase.auth.refreshSession();
+        svar = await byg();
+      }
+      if (svar.error) {
+        console.error(`kunne ikke hente ${navn}:`, svar.error.message);
+        notify(`Kunne ikke hente ${navn} — genindlæs siden. Oplysningerne vises som tomme indtil da.`);
+      }
+      return { data: svar.data };
+    }
+
     async function loadAll() {
       setLoading(true);
       const [
@@ -1650,18 +1674,18 @@ function PlanningApp({ session, onSignOut }) {
       // Dermed forsvinder de fra ugeplan, fakturering, rapportering og alt andet
       // paa én gang, uden at hvert modul skal huske at filtrere.
       fetchAllRows("instances", "*", (q) => q.is("deleted_at", null)).then((data) => ({ data })),
-      supabase.from("reschedule_requests").select("*").eq("status", "afventer").then(({ data }) => ({ data })),
-      supabase.from("task_notes").select("*").order("created_at", { ascending: false }).then(({ data }) => ({ data })),
+      hentMedFornyelse("ønsker om ny tid", () => supabase.from("reschedule_requests").select("*").eq("status", "afventer")),
+      hentMedFornyelse("kommentarer og billeder", () => supabase.from("task_notes").select("*").order("created_at", { ascending: false })),
       // Timeloen. Politikken slipper kun administratorer ind, saa for alle andre
       // kommer der en tom liste tilbage — helt uden fejl, og uden at loennen laekker.
-      supabase.from("employee_wages").select("*").then(({ data }) => ({ data })),
+      hentMedFornyelse("timelønninger", () => supabase.from("employee_wages").select("*")),
       // Hjemmeadresse og transportordning. Samme historie som loennen: er man ikke
       // administrator, kommer der en tom liste tilbage, og ordningen slaar ikke til.
-      supabase.from("employee_home").select("*").then(({ data }) => ({ data })),
+      hentMedFornyelse("transportordninger", () => supabase.from("employee_home").select("*")),
       // Adgangsoplysninger ligger i beskyttede tabeller. Planlaeggeren er administrator
       // og kan laese dem direkte; medarbejderne kan kun naa dem gennem hent_adgangsinfo.
-      supabase.from("instance_access").select("*").then(({ data }) => ({ data })),
-      supabase.from("customer_access").select("*").then(({ data }) => ({ data })),
+      hentMedFornyelse("adgangsoplysninger", () => supabase.from("instance_access").select("*")),
+      hentMedFornyelse("adgangsoplysninger på kunder", () => supabase.from("customer_access").select("*")),
         supabase.from("travel_settings").select("*").eq("id","default").single(),
         supabase.from("travel_overrides").select("*"),
       ]);
