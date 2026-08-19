@@ -837,6 +837,9 @@ function ensureWeekInstances(week, year, allInstances, templates, employees, are
           customerName: tpl.customerName || "", address: tpl.address || "", poNumber: tpl.poNumber || "",
           dineroContactGuid: tpl.dineroContactGuid || "",
           accessInstructions: tpl.accessInstructions || "",
+          // Arves fra aftalen. Kan slaas fra paa den enkelte dag hvor noeglen
+          // allerede er udleveret, uden at aftalen aendres.
+          needsKeyPickup: !!tpl.needsKeyPickup,
           templateDays: tpl.days, // for off-schedule detection
           scheduledTime: (tpl.dayTimes && tpl.dayTimes[day]) || null,
           contractType: tpl.contractType || "privat",
@@ -866,6 +869,7 @@ function ensureWeekInstances(week, year, allInstances, templates, employees, are
             address: tpl.address || "",
             poNumber: tpl.poNumber || "",
             accessInstructions: tpl.accessInstructions || "",
+            needsKeyPickup: !!tpl.needsKeyPickup,
             contractType: tpl.contractType || "privat",
             pricingType: tpl.pricingType || "hourly",
             fixedPrice: tpl.fixedPrice ?? null,
@@ -1303,6 +1307,16 @@ const MODULE_HELP = {
         "Tryk «Sæt til udført og fakturér», så registreres antallet af minutter i feltet ved siden af, og opgaven kommer med på fakturaen. Feltet starter på opgavens planlagte varighed — sæt det ned hvis kun turen skal faktureres.",
         "Har medarbejderen samtidig foreslået en ny dato, kan du i stedet trykke «Flyt til …».",
         "Skal kunden ikke betale, tryk «Fakturér ikke». Opgaven bliver stående uden registreret tid og falder dermed selv ud af fakturagrundlaget."] },
+    { h: "Nøgle på kontoret", p: [
+        "Skal medarbejderen forbi kontoret efter en nøgle, sæt fluebenet «Nøglen skal hentes på kontoret først» under Adgang.",
+        "Sættes det på aftalen, gentager det sig på alle kommende opgaver. Er nøglen allerede udleveret en enkelt uge, kan du slå det fra på den ene opgave uden at røre aftalen.",
+        "Medarbejderen ser det på selve opgavekortet i dagslisten — altså inden hun kører — og ikke først når hun åbner opgaven."] },
+    { h: "Adgangsoplysninger og logning", p: [
+        "Nøgleboks- og alarmkoder ligger nu i en beskyttet tabel. De sendes ikke længere ud til medarbejder-appen sammen med opgaven.",
+        "I appen er teksten skjult bag knappen «Vis adgangsoplysninger». Trykker hun, tjekker databasen at hun er på opgaven, skriver en linje i loggen med navn og tidspunkt, og svarer så med teksten.",
+        "Det betyder at loggen er fuldstændig: der findes ingen anden vej til koden. Tidligere lå koden i det svar appen fik, uanset om den blev vist — og så kunne man læse den uden at det blev registreret.",
+        "Du redigerer teksten som hidtil under Adgang på opgaven eller aftalen. Kun administratorer kan se og rette den.",
+        "Loggen ligger i tabellen access_log. Den kan læses i Supabase, og kun af administratorer."] },
     { h: "Kommentarer og billeder", p: [
         "Medarbejderne kan skrive en kommentar og tage billeder på enhver opgave — også dem der gik som de skulle.",
         "Er der en kommentar på en opgave, står der 💬 på den i ugeplanen. Er der billeder med, står der 📷 i stedet.",
@@ -1616,6 +1630,8 @@ function PlanningApp({ session, onSignOut }) {
       { data: noterData },
       { data: wageData },
       { data: homeData },
+      { data: instAccessData },
+      { data: custAccessData },
         { data: travelData },
         { data: overridesData },
       ] = await Promise.all([
@@ -1640,6 +1656,10 @@ function PlanningApp({ session, onSignOut }) {
       // Hjemmeadresse og transportordning. Samme historie som loennen: er man ikke
       // administrator, kommer der en tom liste tilbage, og ordningen slaar ikke til.
       supabase.from("employee_home").select("*").then(({ data }) => ({ data })),
+      // Adgangsoplysninger ligger i beskyttede tabeller. Planlaeggeren er administrator
+      // og kan laese dem direkte; medarbejderne kan kun naa dem gennem hent_adgangsinfo.
+      supabase.from("instance_access").select("*").then(({ data }) => ({ data })),
+      supabase.from("customer_access").select("*").then(({ data }) => ({ data })),
         supabase.from("travel_settings").select("*").eq("id","default").single(),
         supabase.from("travel_overrides").select("*"),
       ]);
@@ -1707,6 +1727,14 @@ function PlanningApp({ session, onSignOut }) {
         setChecklistTemplates(clMapped);
       }
 
+      // Adgangsoplysninger laegges i opslag, saa de kan slaas op pr. opgave og pr. kunde
+      // uden at loebe hele listen igennem hver gang. Refs frem for state alene, fordi
+      // realtime-opdateringer sker uden for render og skal kunne slaa det samme op.
+      const instAccess = Object.fromEntries((instAccessData || []).map((r) => [r.instance_id, r.adgangstekst]));
+      const custAccess = Object.fromEntries((custAccessData || []).map((r) => [r.customer_id, r.adgangstekst]));
+      instAccessRef.current = instAccess;
+      custAccessRef.current = custAccess;
+
       // Serviceordre-skabeloner – saml skills op + hent kundedata
       if (tplData?.length) {
         const mapped = tplData.map((t) => {
@@ -1721,7 +1749,10 @@ function PlanningApp({ session, onSignOut }) {
             videoUrl: t.video_url, poNumber: t.po_number,
             customerName: t.customer_name || cust?.name || "",
             address: t.address_text || cust?.address || "",
-            accessInstructions: t.access_instructions || cust?.access_instructions || "",
+            // Aftalens egen tekst staar stadig paa service_templates: den tabel kan
+            // slet ikke laeses af medarbejdere, saa den behoevede ikke flyttes.
+            accessInstructions: t.access_instructions || custAccess[t.customer_id] || "",
+            needsKeyPickup: t.needs_key_pickup ?? false,
             contractType: t.contract_type || "privat",
             pricingType: t.pricing_type || "hourly",
             fixedPrice: t.fixed_price,
@@ -1760,7 +1791,8 @@ function PlanningApp({ session, onSignOut }) {
             requiredSkills: i.required_skills ?? [],
             customerName: (i.customer_name || cust?.name || i.customer_id) ?? "",
             address: (i.address_text || cust?.address) ?? "",
-            accessInstructions: (i.access_instructions || cust?.access_instructions) ?? "",
+            accessInstructions: instAccess[i.id] || custAccess[i.customer_id] || "",
+            needsKeyPickup: i.needs_key_pickup ?? false,
             contractType: i.contract_type || "privat",
             pricingType: i.pricing_type || "hourly",
             fixedPrice: i.fixed_price,
@@ -1974,7 +2006,9 @@ function PlanningApp({ session, onSignOut }) {
         customerName: i.customer_name ?? i.customer_id ?? "",
         dineroContactGuid: i.dinero_contact_guid || "",
         address: i.address_text ?? "",
-        accessInstructions: i.access_instructions ?? "",
+        // Kolonnen paa instances staar tom nu. Teksten slaas op i det beskyttede opslag.
+        accessInstructions: instAccessRef.current[i.id] || custAccessRef.current[i.customer_id] || "",
+        needsKeyPickup: i.needs_key_pickup ?? false,
         contractType: i.contract_type || "privat",
         pricingType: i.pricing_type || "hourly",
         fixedPrice: i.fixed_price,
@@ -2022,6 +2056,10 @@ function PlanningApp({ session, onSignOut }) {
   // ── Supabase: sync-helpers ──
   // Saettes laengere nede i render, hvor isAdminUser er regnet ud.
   const isAdminRef = useRef(false);
+  // Adgangsoplysninger pr. opgave og pr. kunde. Refs frem for state, fordi de laeses
+  // fra realtime-haandteringen og fra sync-funktioner der ligger uden for render.
+  const instAccessRef = useRef({});
+  const custAccessRef = useRef({});
   const syncEmployee = useCallback(async (emp) => {
     const { data: skillRows_db } = await supabase.from("skills").select("id, name");
     const { error: empErr } = await supabase.from("employees").upsert({ id: emp.id, name: emp.name, color: emp.color, is_admin: emp.isAdmin ?? false, weekend_ok: emp.weekendOk ?? false, start_time: emp.startTime || null }, { onConflict: "id" });
@@ -2099,7 +2137,10 @@ function PlanningApp({ session, onSignOut }) {
       required_skills: inst.requiredSkills ?? [],
       customer_name: inst.customerName ?? "",
       address_text: inst.address ?? "",
-      access_instructions: inst.accessInstructions ?? "",
+      // access_instructions skrives IKKE laengere her. Kolonnen staar tom med vilje:
+      // den sendes med i ethvert svar til medarbejderen, og saa kunne adgangskoden
+      // laeses uden om det loggede opslag. Teksten gemmes i instance_access nedenfor.
+      needs_key_pickup: !!inst.needsKeyPickup,
       contract_type: inst.contractType ?? "privat",
       pricing_type: inst.pricingType || "hourly",
       fixed_price: inst.fixedPrice ?? null,
@@ -2138,6 +2179,25 @@ function PlanningApp({ session, onSignOut }) {
       // gemt i databasen, og var så væk igen ved næste genindlæsning uden at
       // brugeren nogensinde fik besked om at noget gik galt.
       notify(`Kunne ikke gemme "${inst.title || "opgaven"}" — prøv igen (${error.message})`);
+      return;
+    }
+    // Adgangsteksten gemmes for sig, i den beskyttede tabel. Kun administratorer maa
+    // skrive der, saa der spoerges ikke naar man ikke er det — ellers ville politikken
+    // afvise kaldet og brugeren faa en fejl for noget hun ikke havde bedt om.
+    if (isAdminRef.current) {
+      const tekst = (inst.accessInstructions || "").trim();
+      if (tekst) {
+        const { error: accErr } = await supabase.from("instance_access")
+          .upsert({ instance_id: inst.id, adgangstekst: tekst, updated_at: new Date().toISOString() }, { onConflict: "instance_id" });
+        if (accErr) notify("Opgaven er gemt, men adgangsoplysningen kunne ikke gemmes: " + accErr.message);
+        else instAccessRef.current = { ...instAccessRef.current, [inst.id]: tekst };
+      } else if (instAccessRef.current[inst.id]) {
+        // Teksten er fjernet i brugerfladen — saa skal raekken ogsaa vaek.
+        await supabase.from("instance_access").delete().eq("instance_id", inst.id);
+        const kopi = { ...instAccessRef.current };
+        delete kopi[inst.id];
+        instAccessRef.current = kopi;
+      }
     }
   }, []);
 
@@ -2154,7 +2214,10 @@ function PlanningApp({ session, onSignOut }) {
     const payload = {};
     if ("customerName" in fields) payload.customer_name = fields.customerName ?? "";
     if ("address" in fields) payload.address_text = fields.address ?? "";
+    // Aftalen ligger i service_templates, som medarbejdere slet ikke kan laese, saa
+    // adgangsteksten kan blive staaende her. Det er kopien paa opgaven der var problemet.
     if ("accessInstructions" in fields) payload.access_instructions = fields.accessInstructions ?? "";
+    if ("needsKeyPickup" in fields) payload.needs_key_pickup = !!fields.needsKeyPickup;
     if ("contractType" in fields) payload.contract_type = fields.contractType ?? "privat";
     if ("dineroSynced" in fields) payload.dinero_synced = !!fields.dineroSynced;
     if ("dineroContactGuid" in fields) payload.dinero_contact_guid = fields.dineroContactGuid || null;
@@ -2352,6 +2415,7 @@ function PlanningApp({ session, onSignOut }) {
       customer_name: payload.customerName || "",
       address_text: payload.address || "",
       access_instructions: payload.accessInstructions || "",
+      needs_key_pickup: !!payload.needsKeyPickup,
       contract_type: payload.contractType || "privat",
       pricing_type: payload.pricingType || "hourly",
       fixed_price: fastPris,
@@ -2398,6 +2462,7 @@ function PlanningApp({ session, onSignOut }) {
       address: payload.address,
       poNumber: payload.poNumber,
       accessInstructions: payload.accessInstructions,
+      needsKeyPickup: !!payload.needsKeyPickup,
       contractType: payload.contractType,
       expiryDate: payload.expiryDate,
       pricingType: payload.pricingType || "hourly",
@@ -2472,6 +2537,7 @@ function PlanningApp({ session, onSignOut }) {
         checklistItems: checklistItemsCombined,
         videoUrl: payload.videoUrl, customerName: payload.customerName, address: payload.address,
         poNumber: payload.poNumber, accessInstructions: payload.accessInstructions,
+        needsKeyPickup: !!payload.needsKeyPickup,
         contractType: payload.contractType, expiryDate: payload.expiryDate,
         pricingType: payload.pricingType || "hourly", fixedPrice: payload.pricingType === "fixed" ? (Number(payload.fixedPrice) || 0) : null,
         planInterval: payload.planInterval || "uge",
@@ -2484,7 +2550,8 @@ function PlanningApp({ session, onSignOut }) {
         day_durations: tpl.dayDurations || {},
         video_url: tpl.videoUrl || "", po_number: tpl.poNumber || "",
         customer_name: tpl.customerName || "", address_text: tpl.address || "",
-        access_instructions: tpl.accessInstructions || "", contract_type: tpl.contractType || "privat",
+        access_instructions: tpl.accessInstructions || "", needs_key_pickup: !!tpl.needsKeyPickup,
+        contract_type: tpl.contractType || "privat",
         pricing_type: tpl.pricingType || "hourly", fixed_price: tpl.fixedPrice,
         plan_interval: tpl.planInterval || "uge",
         dinero_synced: tpl.dineroSynced,
@@ -2555,6 +2622,7 @@ function PlanningApp({ session, onSignOut }) {
         checklistTemplateIds: payload.checklistTemplateIds || [], extraItems: payload.extraItems || [],
         videoUrl: payload.videoUrl, customerName: payload.customerName,
         address: payload.address, poNumber: payload.poNumber, accessInstructions: payload.accessInstructions,
+        needsKeyPickup: !!payload.needsKeyPickup,
         contractType: payload.contractType, dineroSynced: payload.dineroSynced || false,
         pricingType: payload.pricingType || "hourly",
         fixedPrice: payload.pricingType === "fixed" ? (Number(payload.fixedPrice) || 0) : null,
@@ -3879,6 +3947,11 @@ function EmployeeAppView({ employees, instances, onLogMinutes, onSetStatus, onTo
 
                   {open && (
                     <div style={styles.phoneCardBody}>
+                      {t.needsKeyPickup && (
+                        <div style={{ background: "#FFFBEB", border: "1px solid #FDE68A", borderRadius: 8, padding: "7px 10px", marginBottom: 8, fontSize: 12.5, fontWeight: 600, color: "#92400E" }}>
+                          🔑 Nøglen hentes på kontoret først
+                        </div>
+                      )}
                       {t.accessInstructions && (
                         <div style={styles.accessBox}>
                           <div style={styles.accessTitle}><Lock size={13} /> Adgang</div>
@@ -4360,6 +4433,7 @@ function WeekView({ employees, instances, unplaced, onAdd, onAuto, onScheduleWee
                           <div style={{ fontWeight: 700, fontSize: 14 }}>{fmtClock(seg.start)} · {t.title} ({t.duration} min)</div>
                           {t.customerName ? <div style={{ fontSize: 13 }}>Kunde: {t.customerName}</div> : null}
                           {t.address ? <div style={{ fontSize: 13 }}>Adresse: {t.address}</div> : null}
+                          {t.needsKeyPickup ? <div style={{ fontSize: 13, fontWeight: 700 }}>🔑 Nøgle hentes på kontoret</div> : null}
                           {t.accessInstructions ? <div style={{ fontSize: 13 }}>Adgang: {t.accessInstructions}</div> : null}
                           {(t.checklist || []).length > 0 ? (
                             <ul style={{ margin: "6px 0 0", paddingLeft: 18, fontSize: 13 }}>
@@ -5990,6 +6064,7 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
   const [address, setAddress] = useState(copyFrom?.address || "");
   const [poNumber, setPoNumber] = useState(copyFrom?.poNumber || "");
   const [accessInstructions, setAccessInstructions] = useState(copyFrom?.accessInstructions || "");
+  const [needsKeyPickup, setNeedsKeyPickup] = useState(copyFrom?.needsKeyPickup ?? false);
 
   function toggleTemplate(id) { setChecklistTemplateIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id])); }
   function addExtraItem() { if (!newItemText.trim()) return; setExtraItems((prev) => [...prev, newItemText.trim()]); setNewItemText(""); }
@@ -6038,6 +6113,7 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
     address: address.trim(),
     poNumber: poNumber.trim(),
     accessInstructions: accessInstructions.trim(),
+    needsKeyPickup,
     dineroSynced: customerDineroSynced,
     dineroContactGuid,
     assigned_employee_id: assignedEmployeeId,
@@ -6169,6 +6245,26 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
 
       <label style={styles.label}>Adgang (nøgleboks, koder, kontaktperson m.v.)</label>
       <textarea style={styles.textarea} rows={2} value={accessInstructions} onChange={(e) => setAccessInstructions(e.target.value)} placeholder="F.eks. Nøgleboks ved hovedindgang, kode 4471" />
+      <div style={styles.hint}>
+        Teksten er skjult i medarbejder-appen. Hun skal trykke for at se den, og hver åbning registreres.
+      </div>
+
+      {/* Noeglen skal hentes paa kontoret. Vises paa opgavekortet i medarbejder-appen,
+          ikke inde i opgaven — hun skal se det inden hun koerer, ikke naar hun staar der. */}
+      <button type="button"
+        style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left",
+                 padding: "11px 12px", borderRadius: 10, cursor: "pointer", marginTop: 10,
+                 border: needsKeyPickup ? "2px solid #B45309" : "1.5px solid #E2E8F0",
+                 background: needsKeyPickup ? "#FFFBEB" : "#fff" }}
+        onClick={() => setNeedsKeyPickup((v) => !v)}>
+        <span style={{ width: 20, height: 20, borderRadius: 5, flexShrink: 0,
+                       border: needsKeyPickup ? "2px solid #B45309" : "2px solid #CBD5E1",
+                       background: needsKeyPickup ? "#B45309" : "#fff",
+                       display: "flex", alignItems: "center", justifyContent: "center" }}>
+          {needsKeyPickup && <Check size={12} color="#fff" strokeWidth={3} />}
+        </span>
+        <span style={{ fontSize: 14, color: "#111111" }}>🔑 Nøglen skal hentes på kontoret først</span>
+      </button>
 
       </div></div><div style={styles.formSection}><div style={{ ...styles.formSectionHead, background: "#F0FDFA" }}><div style={{ ...styles.formSectionTitle, color: "#0F766E" }}>Opgaven</div><div style={{ ...styles.formSectionHint, color: "#149285" }}>Hvem der tager den, hvad der kræves, og hvad der skal udføres</div></div><div style={styles.formSectionBody}><label style={styles.label}>Ansvarlig Medarbejder (valgfrit)</label>
       <select style={styles.input} value={assignedEmployeeId} onChange={(e) => setAssignedEmployeeId(e.target.value)}>
