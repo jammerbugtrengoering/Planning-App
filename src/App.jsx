@@ -1764,6 +1764,16 @@ function PlanningApp({ session, onSignOut }) {
       // Customers
       if (customersData) setCustomers(customersData);
 
+      // Satshistorikken grupperes pr. medarbejder, nyeste gyldighedsdato foerst — saa
+      // kan opslaget noejes med at tage den foerste raekke der ikke ligger efter datoen.
+      const satsHistorik = {};
+      (wageData || []).forEach((r) => {
+        if (!satsHistorik[r.employee_id]) satsHistorik[r.employee_id] = [];
+        satsHistorik[r.employee_id].push({ hourly_wage: r.hourly_wage, gyldig_fra: r.gyldig_fra });
+      });
+      Object.values(satsHistorik).forEach((liste) => liste.sort((a, b) => (a.gyldig_fra < b.gyldig_fra ? 1 : -1)));
+      setSatsHistorik(satsHistorik);
+
       // Employees – saml skills og capacity op
       let empMapped = [];
       if (empData?.length) {
@@ -1813,16 +1823,6 @@ function PlanningApp({ session, onSignOut }) {
       const custAccess = Object.fromEntries((custAccessData || []).map((r) => [r.customer_id, r.adgangstekst]));
       instAccessRef.current = instAccess;
       custAccessRef.current = custAccess;
-
-      // Satshistorikken grupperes pr. medarbejder, nyeste gyldighedsdato foerst — saa
-      // kan opslaget noejes med at tage den foerste raekke der ikke ligger efter datoen.
-      const satsHistorik = {};
-      (wageData || []).forEach((r) => {
-        if (!satsHistorik[r.employee_id]) satsHistorik[r.employee_id] = [];
-        satsHistorik[r.employee_id].push({ hourly_wage: r.hourly_wage, gyldig_fra: r.gyldig_fra });
-      });
-      Object.values(satsHistorik).forEach((liste) => liste.sort((a, b) => (a.gyldig_fra < b.gyldig_fra ? 1 : -1)));
-      setSatsHistorik(satsHistorik);
 
       // Serviceordre-skabeloner – saml skills op + hent kundedata
       if (tplData?.length) {
