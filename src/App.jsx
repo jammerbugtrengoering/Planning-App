@@ -6374,8 +6374,8 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
           bredt paa en almindelig skaerm. De tre farvede afsnit betyder det samme her
           og i serviceordren: rosa = kunden, groen = opgaven, blaa = tid. */}
       <div style={styles.formCol}>
-      <div style={styles.formSection}>
-        <div style={{ ...styles.formSectionHead, background: "#FCE4EF" }}>
+      <div style={{ ...styles.formSection, borderColor: "#EFAFC9" }}>
+        <div style={{ ...styles.formSectionHead, background: "#FCE4EF", borderBottom: "1.5px solid #EFAFC9" }}>
           <div style={{ ...styles.formSectionTitle, color: "#9C1B5D" }}>Aftale og kunde</div>
           <div style={{ ...styles.formSectionHint, color: "#B4436F" }}>Hvem der faktureres, hvad aftalen hedder, og hvor der arbejdes</div>
         </div>
@@ -6490,7 +6490,7 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
         <span style={{ fontSize: 14, color: "#111111" }}>🔑 Nøgle/adgangskort skal hentes på kontoret først</span>
       </button>
 
-      </div></div><div style={styles.formSection}><div style={{ ...styles.formSectionHead, background: "#F0FDFA" }}><div style={{ ...styles.formSectionTitle, color: "#0F766E" }}>Opgaven</div><div style={{ ...styles.formSectionHint, color: "#149285" }}>Hvem der tager den, hvad der kræves, og hvad der skal udføres</div></div><div style={styles.formSectionBody}><label style={styles.label}>Ansvarlig Medarbejder (valgfrit)</label>
+      </div></div><div style={{ ...styles.formSection, borderColor: "#9ED2CB" }}><div style={{ ...styles.formSectionHead, background: "#F0FDFA", borderBottom: "1.5px solid #9ED2CB" }}><div style={{ ...styles.formSectionTitle, color: "#0F766E" }}>Opgaven</div><div style={{ ...styles.formSectionHint, color: "#149285" }}>Hvem der tager den, hvad der kræves, og hvad der skal udføres</div></div><div style={styles.formSectionBody}><label style={styles.label}>Ansvarlig Medarbejder (valgfrit)</label>
       <select style={styles.input} value={assignedEmployeeId} onChange={(e) => setAssignedEmployeeId(e.target.value)}>
         <option value="">- Ingen (auto-matching) -</option>
         {employees?.map(emp => <option key={emp.id} value={emp.id}>{emp.name}</option>)}
@@ -6560,7 +6560,7 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
       )}
 
       <label style={styles.label}>Link til instruktionsvideo (valgfrit)</label>
-      <input style={styles.input} value={videoUrl} onChange={(e) => setVideoUrl(e.target.value)} placeholder="https://…" /></div></div><div style={styles.formSection}><div style={{ ...styles.formSectionHead, background: "#EEF2FF" }}><div style={{ ...styles.formSectionTitle, color: "#4F46E5" }}>Planlægning</div><div style={{ ...styles.formSectionHint, color: "#6B63EA" }}>Hvornår og hvor ofte opgaven gentages</div></div><div style={styles.formSectionBody}><label style={styles.label}>Type</label>
+      <input style={styles.input} value={videoUrl} onChange={(e) => setVideoUrl(e.target.value)} placeholder="https://…" /></div></div><div style={{ ...styles.formSection, borderColor: "#B9C0F4" }}><div style={{ ...styles.formSectionHead, background: "#EEF2FF", borderBottom: "1.5px solid #B9C0F4" }}><div style={{ ...styles.formSectionTitle, color: "#4F46E5" }}>Planlægning</div><div style={{ ...styles.formSectionHint, color: "#6B63EA" }}>Hvornår og hvor ofte opgaven gentages</div></div><div style={styles.formSectionBody}><label style={styles.label}>Type</label>
       <div style={styles.typePicker}>
         {CREATABLE_TYPES.map((k) => {
           const m = TYPE_META[k];
@@ -8563,7 +8563,7 @@ return (
           Det er en aftale med kunden, saa det skal kunne laeses uden at aabne noget. */}
       <div style={styles.cardMeta}>{dayLabel}{t.scheduledTime ? ` kl. ${t.scheduledTime}` : ""} · {fmtMin(t.duration)}{t.deadline ? ` · senest ${ALL_DAYS.find((d) => d.key === t.deadline)?.label}` : ""}{t.expiryDate ? ` · udløber ${t.expiryDate}` : ""}</div>
 
-      <div style={styles.formSection}><div style={{ ...styles.formSectionHead, background: "#F0FDFA" }}><div style={{ ...styles.formSectionTitle, color: "#0F766E" }}>Opgaven</div><div style={{ ...styles.formSectionHint, color: "#149285" }}>Hvad der skal laves, og hvornår den senest skal være udført</div></div><div style={styles.formSectionBody}>{/* Kompetencer — redigerbare */}
+      <div style={{ ...styles.formSection, borderColor: "#9ED2CB" }}><div style={{ ...styles.formSectionHead, background: "#F0FDFA", borderBottom: "1.5px solid #9ED2CB" }}><div style={{ ...styles.formSectionTitle, color: "#0F766E" }}>Opgaven</div><div style={{ ...styles.formSectionHint, color: "#149285" }}>Hvad der skal laves, og hvornår den senest skal være udført</div></div><div style={styles.formSectionBody}>{/* Kompetencer — redigerbare */}
       <div style={{ marginBottom: 12 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
           <label style={styles.label}>Kompetencer</label>
@@ -8693,7 +8693,7 @@ return (
         </div>
       )}
 
-      </div></div><div style={styles.formSection}><div style={{ ...styles.formSectionHead, background: "#FCE4EF" }}><div style={{ ...styles.formSectionTitle, color: "#9C1B5D" }}>Kunde</div><div style={{ ...styles.formSectionHint, color: "#B4436F" }}>Hvem der faktureres, og hvor der arbejdes</div></div><div style={styles.formSectionBody}>{/* Kunde — redigerbar indtil udført */}
+      </div></div><div style={{ ...styles.formSection, borderColor: "#EFAFC9" }}><div style={{ ...styles.formSectionHead, background: "#FCE4EF", borderBottom: "1.5px solid #EFAFC9" }}><div style={{ ...styles.formSectionTitle, color: "#9C1B5D" }}>Kunde</div><div style={{ ...styles.formSectionHint, color: "#B4436F" }}>Hvem der faktureres, og hvor der arbejdes</div></div><div style={styles.formSectionBody}>{/* Kunde — redigerbar indtil udført */}
       <div style={{ marginBottom: 12 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
           <label style={styles.label}>Kundeoplysninger</label>
@@ -8848,7 +8848,7 @@ return (
           )
         )}
       </div>
-      </div></div><div style={styles.formSection}><div style={{ ...styles.formSectionHead, background: "#EEF2FF" }}><div style={{ ...styles.formSectionTitle, color: "#4F46E5" }}>Udførelse</div><div style={{ ...styles.formSectionHint, color: "#6B63EA" }}>Status, bemanding, tasks og registreret tid</div></div><div style={styles.formSectionBody}>{candidatesFor(t, employees, areas, employeeAreas).candidates.length === 0 && <span style={styles.errorChip}><AlertTriangle size={12} /> Ingen har alle krævede kompetencer</span>}
+      </div></div><div style={{ ...styles.formSection, borderColor: "#B9C0F4" }}><div style={{ ...styles.formSectionHead, background: "#EEF2FF", borderBottom: "1.5px solid #B9C0F4" }}><div style={{ ...styles.formSectionTitle, color: "#4F46E5" }}>Udførelse</div><div style={{ ...styles.formSectionHint, color: "#6B63EA" }}>Status, bemanding, tasks og registreret tid</div></div><div style={styles.formSectionBody}>{candidatesFor(t, employees, areas, employeeAreas).candidates.length === 0 && <span style={styles.errorChip}><AlertTriangle size={12} /> Ingen har alle krævede kompetencer</span>}
       {candidatesFor(t, employees, areas, employeeAreas).candidates.length > 0 && t.warning === "overloaded" && <span style={styles.warnChip}><AlertTriangle size={12} /> Ingen ledig kapacitet den dag</span>}
 
       <label style={styles.label}>Status</label>
@@ -9181,7 +9181,13 @@ const styles = {
   modal: { background: "#fff", borderRadius: 14, width: 460, maxWidth: "100%", maxHeight: "90vh", overflowY: "auto", color: "#111111" },
   modalHeader: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 18px", borderBottom: "1px solid #FFF6FA" },
   modalTitle: { fontWeight: 700, fontSize: 15, fontFamily: "'Space Grotesk', sans-serif" },
-  modalBody: { padding: "16px 18px" }, formCol: { maxWidth: 720, margin: "0 auto", textAlign: "left" }, formSection: { border: "1px solid #E2E8F0", borderRadius: 10, overflow: "hidden", marginBottom: 14 }, formSectionHead: { padding: "9px 13px" }, formSectionTitle: { fontSize: 13.5, fontWeight: 700, display: "flex", alignItems: "center", gap: 7 }, formSectionHint: { fontSize: 11.5, marginTop: 2, opacity: 0.9 }, formSectionBody: { padding: 13, background: "#fff", textAlign: "left" },
+  modalBody: { padding: "16px 18px" }, formCol: { maxWidth: 720, margin: "0 auto", textAlign: "left" }, // Rammen om et formularafsnit tager afsnittets EGEN farve — den saettes med
+  // borderColor der hvor afsnittet bruges. En graa 1px-streg paa hvid baggrund
+  // forsvandt i praksis, og afsnittene flød sammen til én lang formular.
+  // Sort blev valgt fra: det skurrer mod paletten, og appen har ingen dark mode at
+  // skifte til hvid i (afsnittet i index.css er efterladt fra Vite-skabelonen og
+  // laeses ikke af noget). Skygge og lidt luft mere goer resten.
+  formSection: { border: "1.5px solid #E2E8F0", borderRadius: 10, overflow: "hidden", marginBottom: 18, boxShadow: "0 1px 3px rgba(15,23,42,0.06)" }, formSectionHead: { padding: "9px 13px" }, formSectionTitle: { fontSize: 13.5, fontWeight: 700, display: "flex", alignItems: "center", gap: 7 }, formSectionHint: { fontSize: 11.5, marginTop: 2, opacity: 0.9 }, formSectionBody: { padding: 13, background: "#fff", textAlign: "left" },
   modalActions: { display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 14 },
   label: { display: "block", textAlign: "left", fontSize: 12, fontWeight: 600, color: "#475569", marginTop: 12, marginBottom: 5 },
   hint: { fontSize: 11.5, color: "#64748B", marginTop: 4 },
