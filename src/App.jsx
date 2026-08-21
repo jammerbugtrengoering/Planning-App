@@ -888,7 +888,6 @@ function ensureWeekInstances(week, year, allInstances, templates, employees, are
           // Arves fra aftalen. Kan slaas fra paa den enkelte dag hvor noeglen
           // allerede er udleveret, uden at aftalen aendres.
           needsKeyPickup: !!tpl.needsKeyPickup,
-          deliversProducts: !!tpl.deliversProducts,
           templateDays: tpl.days, // for off-schedule detection
           scheduledTime: (tpl.dayTimes && tpl.dayTimes[day]) || null,
           contractType: tpl.contractType || "privat",
@@ -919,7 +918,6 @@ function ensureWeekInstances(week, year, allInstances, templates, employees, are
             poNumber: tpl.poNumber || "",
             accessInstructions: tpl.accessInstructions || "",
             needsKeyPickup: !!tpl.needsKeyPickup,
-            deliversProducts: !!tpl.deliversProducts,
             contractType: tpl.contractType || "privat",
             pricingType: tpl.pricingType || "hourly",
             fixedPrice: tpl.fixedPrice ?? null,
@@ -1070,40 +1068,35 @@ function completionInfo(t, employees) {
 function statusColor(s) { return { planlagt: "#9C1B5D", udført: "#111111", unscheduled: "#94A3B8" }[s]; }
 
 
-// Send email notification via Supabase Edge Function
+// Besked til medarbejderen om en aendring i hendes dagsplan.
+//
+// Kaldet gik foer gennem en raa fetch UDEN Authorization-header. Det virkede kun fordi
+// send-email stod helt aaben — og det var netop problemet: kendte man URL'en, kunne man
+// sende mail i Jammerbugt Rengoerings navn. Funktionen kraever nu et rigtigt login, og
+// supabase.functions.invoke saetter planlaeggerens eget token paa automatisk.
 async function notifyEmployeeOfChanges(employeeEmail, employeeName, taskTitle, changeType) {
   try {
-    const response = await fetch(
-      'https://gteowfoahsfpunzgdxum.supabase.co/functions/v1/send-email',
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          email: employeeEmail,
-          name: employeeName,
-          subject: `Ændring i din dagsplan - ${changeType}`,
-          html: `
+    const { error } = await supabase.functions.invoke("send-email", {
+      body: {
+        email: employeeEmail,
+        name: employeeName,
+        subject: `Ændring i din dagsplan - ${changeType}`,
+        html: `
             <h2>Hej ${employeeName},</h2>
             <p>${changeType}</p>
             <p>Opgave: <strong>${taskTitle}</strong></p>
             <p>Tjek venligst din dagsplan i Rengøringsplan for at se detaljerne.</p>
             <p>Med venlig hilsen,<br/>Jammerbugt Rengøring</p>
-          `
-        })
-      }
-    );
-
-    if (response.ok) {
-      console.log('✅ Email sent to', employeeEmail);
-      return true;
-    } else {
-      console.error('❌ Email error:', await response.json());
+          `,
+      },
+    });
+    if (error) {
+      console.error("send-email:", error.message);
       return false;
     }
+    return true;
   } catch (error) {
-    console.error('❌ Email error:', error);
+    console.error("send-email:", error);
     return false;
   }
 }
@@ -1365,11 +1358,11 @@ const MODULE_HELP = {
         "Har medarbejderen samtidig foreslået en ny dato, kan du i stedet trykke «Flyt til …».",
         "Skal kunden ikke betale, tryk «Fakturér ikke». Opgaven bliver stående uden registreret tid og falder dermed selv ud af fakturagrundlaget."] },
     { h: "Udlevering af produkter", p: [
-        "Sæt fluebenet «Der udleveres produkter til kunden» under Opgaven, hvis der bruges rengøringsmidler eller andet hos kunden.",
-        "Med fluebenet bliver medarbejderen spurgt om produktforbrug når hun afslutter opgaven, og forbruget trækkes fra lageret og kommer med på fakturaen.",
-        "Uden fluebenet springes spørgsmålet helt over i medarbejder-appen. Hun får ét trin mindre, og tælleren siger fx «1 af 2».",
-        "Sat på aftalen gentager det sig på alle kommende opgaver. Du kan slå det til eller fra på en enkelt opgave i serviceordren, hvor det står lige under nøglefluebenet.",
-        "Alle aftaler starter med det slået fra. Der var ikke registreret en eneste udlevering i systemet, da fluebenet blev indført, så det er sat op til at du selv vælger hvor det hører til."] },
+        "Produkter udleveres på kontoret under Lager, ikke ude hos kunden. Medarbejderne kører i privat bil og har aldrig lagervarer med.",
+        "Tryk «Udlever produkter», vælg medarbejder, kunde, dato og varer. Lageret trækkes med det samme, for varen er væk fra hylden.",
+        "Næste gang medarbejderen afslutter en opgave hos den kunde, bliver hun spurgt om kunden har fået varerne. Det er ligegyldigt hvilken opgave — udleveringen følger hende og kunden, ikke en bestemt dag.",
+        "Først når hun har svaret ja, bliver linjen fakturerbar og dukker op her i Fakturering. Svarer hun nej, bliver den stående og dukker op igen næste gang.",
+        "Det gamle flueben «Der udleveres produkter til kunden» findes ikke længere. Hun bliver spurgt når hun faktisk har noget med — ikke ud fra et flueben der forsøgte at forudsige det."] },
     { h: "Nøgle eller adgangskort på kontoret", p: [
         "Skal medarbejderen forbi kontoret efter en nøgle eller et adgangskort, sæt fluebenet «Nøgle/adgangskort skal hentes på kontoret først» under Adgang.",
         "Sættes det på aftalen, gentager det sig på alle kommende opgaver. Er nøglen eller kortet allerede udleveret en enkelt uge, kan du slå det fra på den ene opgave uden at røre aftalen.",
@@ -1426,7 +1419,9 @@ const MODULE_HELP = {
         "Medarbejder-appen henter aldrig lønnen. En medarbejder kan altså ikke se hverken sin egen eller kollegernes sats der."] },
     { h: "Kompetencer", p: ["Ligger under knappen «Kompetencer» øverst på siden. Her opretter, omdøber og sletter du de færdigheder du kan kræve på en opgave.", "En kompetence er et krav, ikke et ønske: kan medarbejderen den ikke på det krævede niveau, kommer hun slet ikke i betragtning til opgaven.", "Selve niveauet sættes pr. medarbejder på hendes eget kort — Nybegynder, Øvet eller Ekspert. Kræver opgaven Øvet, er Nybegynder ikke nok.", "Blandt dem der lever op til kravene, vælges den med det højeste samlede niveau. Står to lige, vælges den med mest ledig tid den dag.", "Sletter du en kompetence, fjernes den fra alle medarbejdere og fra alle opgaver.", "Omdøber du en kompetence, følger medarbejderne og aftalerne med. Men opgaver der allerede ligger i kalenderen, husker det gamle navn og viser derefter «Ingen har alle krævede kompetencer» — så ret kompetencen på de opgaver, eller lad være med at omdøbe når der er oprettet opgaver."] },
         { h: "Områder", p: ["Ligger under knappen «Områder». Et område er et navn og en række postnumre, og du klikker de medarbejdere til der dækker det.", "Ved planlægning aflæses postnummeret i opgavens adresse. Findes der et område med det postnummer, søges der kun blandt de medarbejdere der er knyttet til området.", "Har adressen intet postnummer, eller er postnummeret ikke lagt ind på noget område, planlægges der frit blandt alle med kompetencerne.", "Er der ikke klikket en eneste medarbejder på et område, springes området over. Et tomt område spærrer altså ikke — det gør ingenting.", "Kan ingen i området løse opgaven, planlægges den alligevel hos en der kan, og opgaven mærkes «Planlagt uden for medarbejderens område». En opgave bliver aldrig liggende alene fordi den falder uden for et område.", "Sletter du et område, forsvinder tilknytningerne med det samme. Opgaverne røres ikke."] },
-    { h: "Adgang til Worklist", p: ["Fold medarbejderen ud, skriv e-mailen og tryk Opret. Hun får en mail og kan logge ind i medarbejder-appen.",
+    { h: "Adgang til Worklist", p: ["Fold medarbejderen ud, skriv e-mailen og tryk Opret. Hun får en mail med et link, hvor hun selv vælger sin adgangskode, og kan derefter logge ind i medarbejder-appen.",
+        "Har mailen allerede et login — for eksempel fordi hun også bruger planlægningsappen — bliver det eksisterende login koblet til hende. Du behøver ikke finde på en ny mailadresse.",
+        "Står der at adgangen er oprettet, men at mailen ikke kunne sendes, er hun kommet ind i systemet alligevel. Så skal hun bare bruge «glemt adgangskode» på login-siden.",
         "«Luk adgang» fjerner loginet, men beholder medarbejderen og hendes historik. Brug den når nogen holder op."] },
     { h: "Arbejdstøj", p: [
         "Medarbejderne bestiller selv arbejdstøj i deres app, og du godkender bestillingerne under Lager. Her på medarbejderen ser du kun hvad hun har fået udleveret.",
@@ -1475,6 +1470,12 @@ const MODULE_HELP = {
         "«Nyt produkt» opretter en vare — husk varenummer og pris på kundeprodukter.",
         "Varer under minimumbeholdning fremhæves.",
         "Bestillinger skal godkendes, før de trækkes fra lageret."] },
+    { h: "Udlevering til kunde", p: [
+        "Produkter udleveres her på kontoret. Medarbejderne kører i privat bil og har aldrig lagervarer med, så varen forlader hylden i det øjeblik du giver den fra dig — og der trækkes lageret.",
+        "Tryk «Udlever produkter», vælg medarbejder, kunde, dato og varer. Kundelisten er dem der har opgaver — ikke et opslag i Dinero. Vælger du en kunde uden opgaver, ville udleveringen aldrig komme til syne hos nogen.",
+        "Udleveringen hænger på medarbejder og kunde, ikke på en bestemt opgave. Næste gang hun afslutter en opgave hos den kunde, bliver hun spurgt om kunden har fået varerne. Flyttes opgaven, eller kommer hun en anden dag, følger udleveringen med.",
+        "Først når hun har svaret ja, bliver linjen fakturerbar og dukker op i Fakturering. Svarer hun nej, bliver den stående og dukker op igen næste gang.",
+        "Listen «Udleveret, ikke afleveret hos kunden endnu» viser hvad der er undervejs. Står noget der længe, er varen ikke kommet frem — og den bliver ikke faktureret."] },
   ], warn: "Retter du prisen på et kundeprodukt, slår den igennem i Fakturering med det samme. Allerede sendte fakturalinjer røres ikke." },
 
   contracts: { title: "Aftaler", intro: "De faste kundeaftaler, sorteret så den der udløber først står øverst.", blocks: [
@@ -1878,7 +1879,6 @@ function PlanningApp({ session, onSignOut }) {
             // slet ikke laeses af medarbejdere, saa den behoevede ikke flyttes.
             accessInstructions: t.access_instructions || custAccess[t.customer_id] || "",
             needsKeyPickup: t.needs_key_pickup ?? false,
-            deliversProducts: t.delivers_products ?? false,
             contractType: t.contract_type || "privat",
             pricingType: t.pricing_type || "hourly",
             fixedPrice: t.fixed_price,
@@ -1919,7 +1919,6 @@ function PlanningApp({ session, onSignOut }) {
             address: (i.address_text || cust?.address) ?? "",
             accessInstructions: instAccess[i.id] || custAccess[i.customer_id] || "",
             needsKeyPickup: i.needs_key_pickup ?? false,
-            deliversProducts: i.delivers_products ?? false,
             contractType: i.contract_type || "privat",
             pricingType: i.pricing_type || "hourly",
             fixedPrice: i.fixed_price,
@@ -2142,7 +2141,6 @@ function PlanningApp({ session, onSignOut }) {
         // Kolonnen paa instances staar tom nu. Teksten slaas op i det beskyttede opslag.
         accessInstructions: instAccessRef.current[i.id] || custAccessRef.current[i.customer_id] || "",
         needsKeyPickup: i.needs_key_pickup ?? false,
-        deliversProducts: i.delivers_products ?? false,
         contractType: i.contract_type || "privat",
         pricingType: i.pricing_type || "hourly",
         fixedPrice: i.fixed_price,
@@ -2282,7 +2280,6 @@ function PlanningApp({ session, onSignOut }) {
       // den sendes med i ethvert svar til medarbejderen, og saa kunne adgangskoden
       // laeses uden om det loggede opslag. Teksten gemmes i instance_access nedenfor.
       needs_key_pickup: !!inst.needsKeyPickup,
-      delivers_products: !!inst.deliversProducts,
       contract_type: inst.contractType ?? "privat",
       pricing_type: inst.pricingType || "hourly",
       fixed_price: inst.fixedPrice ?? null,
@@ -2360,7 +2357,6 @@ function PlanningApp({ session, onSignOut }) {
     // adgangsteksten kan blive staaende her. Det er kopien paa opgaven der var problemet.
     if ("accessInstructions" in fields) payload.access_instructions = fields.accessInstructions ?? "";
     if ("needsKeyPickup" in fields) payload.needs_key_pickup = !!fields.needsKeyPickup;
-    if ("deliversProducts" in fields) payload.delivers_products = !!fields.deliversProducts;
     if ("dayTimes" in fields) payload.day_times = fields.dayTimes || {};
     if ("contractType" in fields) payload.contract_type = fields.contractType ?? "privat";
     if ("dineroSynced" in fields) payload.dinero_synced = !!fields.dineroSynced;
@@ -2569,7 +2565,6 @@ function PlanningApp({ session, onSignOut }) {
       address_text: payload.address || "",
       access_instructions: payload.accessInstructions || "",
       needs_key_pickup: !!payload.needsKeyPickup,
-      delivers_products: !!payload.deliversProducts,
       contract_type: payload.contractType || "privat",
       pricing_type: payload.pricingType || "hourly",
       fixed_price: fastPris,
@@ -2617,7 +2612,6 @@ function PlanningApp({ session, onSignOut }) {
       poNumber: payload.poNumber,
       accessInstructions: payload.accessInstructions,
       needsKeyPickup: !!payload.needsKeyPickup,
-      deliversProducts: !!payload.deliversProducts,
       contractType: payload.contractType,
       expiryDate: payload.expiryDate,
       pricingType: payload.pricingType || "hourly",
@@ -2693,7 +2687,6 @@ function PlanningApp({ session, onSignOut }) {
         videoUrl: payload.videoUrl, customerName: payload.customerName, address: payload.address,
         poNumber: payload.poNumber, accessInstructions: payload.accessInstructions,
         needsKeyPickup: !!payload.needsKeyPickup,
-        deliversProducts: !!payload.deliversProducts,
         contractType: payload.contractType, expiryDate: payload.expiryDate,
         pricingType: payload.pricingType || "hourly", fixedPrice: payload.pricingType === "fixed" ? (Number(payload.fixedPrice) || 0) : null,
         planInterval: payload.planInterval || "uge",
@@ -2707,7 +2700,6 @@ function PlanningApp({ session, onSignOut }) {
         video_url: tpl.videoUrl || "", po_number: tpl.poNumber || "",
         customer_name: tpl.customerName || "", address_text: tpl.address || "",
         access_instructions: tpl.accessInstructions || "", needs_key_pickup: !!tpl.needsKeyPickup,
-        delivers_products: !!tpl.deliversProducts,
         contract_type: tpl.contractType || "privat",
         pricing_type: tpl.pricingType || "hourly", fixed_price: tpl.fixedPrice,
         plan_interval: tpl.planInterval || "uge",
@@ -2780,7 +2772,6 @@ function PlanningApp({ session, onSignOut }) {
         videoUrl: payload.videoUrl, customerName: payload.customerName,
         address: payload.address, poNumber: payload.poNumber, accessInstructions: payload.accessInstructions,
         needsKeyPickup: !!payload.needsKeyPickup,
-        deliversProducts: !!payload.deliversProducts,
         contractType: payload.contractType, dineroSynced: payload.dineroSynced || false,
         pricingType: payload.pricingType || "hourly",
         fixedPrice: payload.pricingType === "fixed" ? (Number(payload.fixedPrice) || 0) : null,
@@ -4024,10 +4015,6 @@ function PlanningApp({ session, onSignOut }) {
             }));
             notify(tid ? `Tidspunktet er sat til kl. ${tid} på alle kommende ${(ALL_DAYS.find((d) => d.key === opgave.day)?.label || "").toLowerCase()}e` : "Det faste tidspunkt er fjernet");
           }}
-          onUpdateDeliversProducts={(taskId, vaerdi, heleAftalen) => {
-            if (heleAftalen) updateCustomerInfo(taskId, { deliversProducts: vaerdi });
-            else updateInstance(taskId, (t) => ({ ...t, deliversProducts: vaerdi }));
-          }}
           onUpdateContractType={updateContractType}
           onRenameTask={renameTask}
           onUpdateSkills={(taskId, newSkills) => updateInstance(taskId, (t) => ({ ...t, requiredSkills: newSkills }))}
@@ -4771,28 +4758,42 @@ function EmployeesView({ employees, onAdd, onEdit, onDelete, supabase, skills, o
     if (!email) return;
     setInviteStatus((prev) => ({ ...prev, [emp.id]: "sending" }));
 
-    // signUp sender bekræftelses-mail — brugeren sætter selv adgangskode via linket
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password: crypto.randomUUID().replace(/-/g, "") + "Aa1!",
-      options: { emailRedirectTo: window.location.origin }
+    // Oprettelsen sker i edge-funktionen, ikke her. Grunden er at et EKSISTERENDE login
+    // kun kan slaas op paa mail med service-noeglen — og den maa aldrig ligge i en
+    // browser, for saa kunne hvem som helst afproeve mailadresser. Tidligere kaldte vi
+    // supabase.auth.signUp() her, og den svarer med en ATTRAP-bruger med et opdigtet id
+    // naar mailen allerede findes. Det id blev skrevet i employees, og fremmednoeglen
+    // til auth.users afviste det: "violates foreign key constraint".
+    const { data, error } = await supabase.functions.invoke("inviter-bruger", {
+      body: {
+        type: "medarbejder",
+        email,
+        empId: emp.id,
+        redirectTo: "https://jammerbugtrengoering-service.netlify.app",
+      },
     });
 
-    if (error) {
-      setInviteStatus((prev) => ({ ...prev, [emp.id]: "error: " + error.message }));
+    const fejl = data?.error || error?.message;
+    if (fejl) {
+      setInviteStatus((prev) => ({ ...prev, [emp.id]: "error: " + fejl }));
       return;
     }
 
-    // Kobl auth_user_id hvis vi fik et id tilbage
-    const userId = data?.user?.id;
-    if (userId) {
-      const { error: linkErr } = await supabase.from("employees").update({ auth_user_id: userId, app_email: email }).eq("id", emp.id);
-      if (dbFail(linkErr, "knytte login til medarbejderen")) return;
-      emp.auth_user_id = userId;
-      emp.app_email = email;
-    }
+    // Funktionen har skrevet koblingen med service-noeglen. Raekken laeses tilbage, saa
+    // maerkatet "Ingen app-adgang" forsvinder med det samme.
+    const { data: opdateret } = await supabase
+      .from("employees").select("auth_user_id, app_email").eq("id", emp.id).maybeSingle();
+    emp.auth_user_id = opdateret?.auth_user_id || null;
+    emp.app_email = opdateret?.app_email || email;
 
-    setInviteStatus((prev) => ({ ...prev, [emp.id]: "sent" }));
+    // Koblingen kan lykkes selv om mailen driller. Det skal planlaeggeren kunne se,
+    // ellers sender hun invitationen igen til en medarbejder der allerede har adgang.
+    setInviteStatus((prev) => ({
+      ...prev,
+      [emp.id]: data?.mailSendt === false
+        ? "error: Adgangen er oprettet, men mailen kunne ikke sendes. Bed medarbejderen bruge «glemt adgangskode»."
+        : "sent",
+    }));
     setInviteEmail((prev) => ({ ...prev, [emp.id]: "" }));
   }
 
@@ -6308,7 +6309,6 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
   const [poNumber, setPoNumber] = useState(copyFrom?.poNumber || "");
   const [accessInstructions, setAccessInstructions] = useState(copyFrom?.accessInstructions || "");
   const [needsKeyPickup, setNeedsKeyPickup] = useState(copyFrom?.needsKeyPickup ?? false);
-  const [deliversProducts, setDeliversProducts] = useState(copyFrom?.deliversProducts ?? false);
 
   function toggleTemplate(id) { setChecklistTemplateIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id])); }
   function addExtraItem() { if (!newItemText.trim()) return; setExtraItems((prev) => [...prev, newItemText.trim()]); setNewItemText(""); }
@@ -6358,7 +6358,6 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
     poNumber: poNumber.trim(),
     accessInstructions: accessInstructions.trim(),
     needsKeyPickup,
-    deliversProducts,
     dineroSynced: customerDineroSynced,
     dineroContactGuid,
     assigned_employee_id: assignedEmployeeId,
@@ -6501,27 +6500,9 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
         <div style={styles.hint}>Vælges her, følger medarbejderen aftalen resten af perioden og sættes automatisk på alle kommende opgaver.</div>
       )}
 
-      {/* Styrer om medarbejderen bliver spurgt om produktforbrug naar hun afslutter.
-          Uden fluebenet springes trinnet helt over — det har vaeret vist paa hver
-          eneste opgave uden at der nogensinde er registreret en udlevering. */}
-      <button type="button"
-        style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left",
-                 padding: "11px 12px", borderRadius: 10, cursor: "pointer", marginTop: 12,
-                 border: deliversProducts ? "2px solid #0F766E" : "1.5px solid #E2E8F0",
-                 background: deliversProducts ? "#F0FDFA" : "#fff" }}
-        onClick={() => setDeliversProducts((v) => !v)}>
-        <span style={{ width: 20, height: 20, borderRadius: 5, flexShrink: 0,
-                       border: deliversProducts ? "2px solid #0F766E" : "2px solid #CBD5E1",
-                       background: deliversProducts ? "#0F766E" : "#fff",
-                       display: "flex", alignItems: "center", justifyContent: "center" }}>
-          {deliversProducts && <Check size={12} color="#fff" strokeWidth={3} />}
-        </span>
-        <span style={{ fontSize: 14, color: "#111111" }}>📦 Der udleveres produkter til kunden</span>
-      </button>
-      <div style={styles.hint}>
-        Med fluebenet bliver medarbejderen spurgt om produktforbrug når hun afslutter opgaven,
-        og forbruget trækkes fra lageret og kommer med på fakturaen. Uden det springes spørgsmålet over.
-      </div>
+      {/* Fluebenet «Der udleveres produkter til kunden» er fjernet. Produkter udleveres
+          nu paa kontoret under Lager, og medarbejderen bliver spurgt naar hun FAKTISK
+          har noget med til kunden. Et flueben paa aftalen kunne kun gaette. */}
 
       {type === "adhoc" && assignedEmployeeId && (
         <>
@@ -7348,6 +7329,180 @@ function SkillsView({ supabase, skills: skillNames, onSkillsChange }) {
 }
 
 // ── Inventory View ────────────────────────────────────────────────────────────
+// ── Udlevering af kundeprodukter ─────────────────────────────────────────────
+// Produkterne udleveres paa KONTORET. Medarbejderne koerer i privat bil og har aldrig
+// lagervarer med, saa varen forlader hylden naar den gives til medarbejderen — og der
+// traekkes lageret.
+//
+// Udleveringen peger IKKE paa en bestemt opgave. Den foelger medarbejder + kunde, saa
+// den overlever at opgaven flyttes, at en anden dag bliver det, eller at ugeplanen
+// laegges om. Foerst naar medarbejderen bekraefter i Worklist at kunden har faaet varen,
+// bindes linjen til opgaven — og foerst DER kan den faktureres.
+function UdleveringPanel({ supabase, employees, items, onOpdateret }) {
+  const [kunder, setKunder] = useState([]);
+  const [afventer, setAfventer] = useState([]);
+  const [aaben, setAaben] = useState(false);
+  const [medarb, setMedarb] = useState("");
+  const [kundeGuid, setKundeGuid] = useState("");
+  const [dato, setDato] = useState(() => new Date().toISOString().slice(0, 10));
+  const [valg, setValg] = useState({});
+  const [gemmer, setGemmer] = useState(false);
+  const [fejl, setFejl] = useState("");
+
+  // Noeglen laves naar formularen aabnes og ikke ved hvert forsoeg paa at gemme. Fejler
+  // udleveringen ved vare to af tre, rammer naeste forsoeg de samme raekker i stedet for
+  // at traekke de to foerste fra lageret en gang til.
+  const [udlevNoegle, setUdlevNoegle] = useState(() => uid("ud"));
+
+  const kundeProdukter = items.filter((i) => i.inventory_categories?.type === "kunde");
+
+  async function hent() {
+    const [{ data: k }, { data: a }] = await Promise.all([
+      supabase.from("kunder_med_opgaver").select("*").order("navn"),
+      supabase.from("inventory_transactions")
+        .select("*, inventory_items(name,unit), employees(name)")
+        .not("til_kunde_guid", "is", null).is("instance_id", null)
+        .order("udleveret_dato", { ascending: true }),
+    ]);
+    setKunder(k || []);
+    setAfventer(a || []);
+  }
+  useEffect(() => { hent(); }, []);
+
+  function saet(itemId, antal) {
+    setValg((prev) => ({ ...prev, [itemId]: antal }));
+  }
+
+  const linjer = Object.entries(valg)
+    .map(([item_id, antal]) => ({ item_id, antal: Number(antal) }))
+    .filter((l) => l.antal > 0);
+
+  async function udlever() {
+    if (!medarb || !kundeGuid || linjer.length === 0) return;
+    setGemmer(true);
+    setFejl("");
+    const kunde = kunder.find((k) => k.guid === kundeGuid);
+    // Oprettelse af linjer OG lagertraek sker i eet kald. Foer var det to skridt fra
+    // browseren, og fejlede det andet, stod der en linje uden et lagertraek.
+    const { error } = await supabase.rpc("registrer_udlevering", {
+      p_udlevering_id: udlevNoegle,
+      p_employee_id: medarb,
+      p_kunde_guid: kundeGuid,
+      p_kunde_navn: kunde?.navn || "",
+      p_dato: dato,
+      p_linjer: linjer,
+    });
+    setGemmer(false);
+    if (error) { setFejl(error.message); return; }
+    setAaben(false);
+    setValg({});
+    setMedarb("");
+    setKundeGuid("");
+    setUdlevNoegle(uid("ud"));
+    await hent();
+    if (onOpdateret) onOpdateret();
+  }
+
+  // Grupper de afventende linjer, saa én udlevering med tre varer staar som én linje.
+  const grupper = Object.values(afventer.reduce((acc, r) => {
+    const n = r.order_group_id || r.id;
+    if (!acc[n]) acc[n] = { n, navn: r.til_kunde_navn, medarb: r.employees?.name || "?", dato: r.udleveret_dato, rows: [] };
+    acc[n].rows.push(r);
+    return acc;
+  }, {}));
+
+  return (
+    <div style={{ background: "#fff", borderRadius: 10, padding: 16, marginBottom: 20, boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8, marginBottom: 10 }}>
+        <div>
+          <div style={{ fontSize: 15, fontWeight: 800 }}>Udlevering til kunde</div>
+          <div style={{ fontSize: 12, color: "#64748B", marginTop: 2 }}>
+            Lageret trækkes med det samme. Linjen kan først faktureres når medarbejderen har bekræftet at kunden har fået varen.
+          </div>
+        </div>
+        <button style={styles.primaryBtn} onClick={() => setAaben(true)}><Plus size={14} /> Udlever produkter</button>
+      </div>
+
+      {grupper.length === 0 ? (
+        <div style={{ fontSize: 13, color: "#94A3B8" }}>Intet er udleveret uden at være afleveret hos kunden.</div>
+      ) : (
+        <>
+          <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".04em", color: "#B45309", marginBottom: 6 }}>
+            Udleveret, ikke afleveret hos kunden endnu — {grupper.length}
+          </div>
+          {grupper.map((g) => (
+            <div key={g.n} style={{ display: "flex", justifyContent: "space-between", gap: 10, padding: "8px 10px", borderTop: "1px solid #F1F5F9", fontSize: 13, flexWrap: "wrap" }}>
+              <div>
+                <b>{g.navn}</b>
+                <span style={{ color: "#64748B" }}> · {g.medarb} · {g.dato}</span>
+              </div>
+              <div style={{ color: "#64748B" }}>
+                {g.rows.map((r) => `${Math.abs(r.quantity)} × ${r.inventory_items?.name || r.item_id}`).join(", ")}
+              </div>
+            </div>
+          ))}
+        </>
+      )}
+
+      {aaben && (
+        <div style={styles.overlay} onClick={() => setAaben(false)}>
+          <div style={{ ...styles.modal, width: 520 }} onClick={(e) => e.stopPropagation()}>
+            <div style={styles.modalHeader}><div style={styles.modalTitle}>Udlever produkter</div></div>
+            <div style={styles.modalBody}>
+            <p style={{ margin: "0 0 4px", fontSize: 12.5, color: "#64748B", lineHeight: 1.5 }}>
+              Medarbejderen henter varerne på kontoret. Kunden vælges her, så udleveringen
+              dukker op hos hende næste gang hun er ude hos netop den kunde.
+            </p>
+
+            <label style={styles.label}>Medarbejder</label>
+            <select style={styles.input} value={medarb} onChange={(e) => setMedarb(e.target.value)}>
+              <option value="">Vælg medarbejder…</option>
+              {employees.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
+            </select>
+
+            <label style={styles.label}>Kunde</label>
+            <select style={styles.input} value={kundeGuid} onChange={(e) => setKundeGuid(e.target.value)}>
+              <option value="">Vælg kunde…</option>
+              {kunder.map((k) => <option key={k.guid} value={k.guid}>{k.navn}</option>)}
+            </select>
+
+            <label style={styles.label}>Udleveringsdato</label>
+            <input type="date" style={styles.input} value={dato} onChange={(e) => setDato(e.target.value)} />
+
+            <label style={styles.label}>Produkter</label>
+            {kundeProdukter.length === 0 ? (
+              <div style={{ fontSize: 13, color: "#94A3B8" }}>Der er ingen kundeprodukter på lageret endnu.</div>
+            ) : kundeProdukter.map((p) => (
+              <div key={p.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "6px 0", borderBottom: "1px solid #F1F5F9" }}>
+                <div style={{ fontSize: 13 }}>
+                  {p.name}
+                  <span style={{ color: p.stock <= p.min_stock ? "#DC2626" : "#94A3B8", marginLeft: 6, fontSize: 12 }}>
+                    {p.stock} {p.unit} på lager
+                  </span>
+                </div>
+                <input type="number" min="0" step="1" style={{ ...styles.input, width: 80, margin: 0 }}
+                  value={valg[p.id] ?? ""} placeholder="0"
+                  onChange={(ev) => saet(p.id, ev.target.value)} />
+              </div>
+            ))}
+
+            {fejl && <div style={{ color: "#B91C1C", fontSize: 13, marginTop: 10 }}>{fejl}</div>}
+
+            <div style={styles.modalActions}>
+              <button style={styles.secondaryBtn} onClick={() => setAaben(false)}>Annullér</button>
+              <button style={styles.primaryBtn} disabled={!medarb || !kundeGuid || linjer.length === 0 || gemmer}
+                onClick={udlever}>
+                {gemmer ? "Udleverer…" : `Udlevér ${linjer.length || ""} ${linjer.length === 1 ? "vare" : "varer"}`}
+              </button>
+            </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function InventoryView({ supabase, employees, currentUserName, onInventoryChanged }) {
   const [categories, setCategories] = useState([]);
   const [items, setItems] = useState([]);
@@ -7538,6 +7693,19 @@ function InventoryView({ supabase, employees, currentUserName, onInventoryChange
           </div>
         ))}
       </div>
+
+      {/* Udleveringen staar oeverst, fordi den er en daglig handling — modsat resten af
+          siden, der er vedligehold af produktkartoteket. */}
+      <UdleveringPanel supabase={supabase} employees={employees} items={items}
+        onOpdateret={async () => {
+          // Lageret er lige blevet trukket i databasen. Uden en genindlaesning ville
+          // beholdningen paa skaermen vise det gamle tal, og planlaeggeren ville tro
+          // at udleveringen ikke gik igennem.
+          const { data } = await supabase.from("inventory_items")
+            .select("*, inventory_categories(name,type,icon)").order("name");
+          if (data) setItems(data);
+          if (onInventoryChanged) onInventoryChanged();
+        }} />
 
       {orderGroups.length > 0 && (
         <div style={{ background: "#FFFBEB", border: "1px solid #FDE68A", borderRadius: 12, padding: 14, marginBottom: 16 }}>
@@ -8107,7 +8275,7 @@ function EmployeeModal({ emp, onClose, onSave, skills: skillList, satsHistorik }
 }
 
 // ---------- Task / service order detail ----------
-function TaskDetailModal({ task, employees, templates, onSetPreferredEmployee, onCancelTemplate, checklistTemplates, skills, isAdminUser, areas, employeeAreas, onClose, onSetStatus, onToggleChecklistItem, onAddChecklistItem, onAddChecklistTemplate, onAddAssignee, onRemoveAssignee, onUnplace, onDelete, onUpdateCustomer, onUpdateCustomerInfo, onUpdateContractType, onRenameTask, onCopy, onUpdateSkills, onEndBlockEarly, onUpdateSchedule, onUpdateKeyPickup, onUpdateDeliversProducts, onUpdateScheduledTime }) {
+function TaskDetailModal({ task, employees, templates, onSetPreferredEmployee, onCancelTemplate, checklistTemplates, skills, isAdminUser, areas, employeeAreas, onClose, onSetStatus, onToggleChecklistItem, onAddChecklistItem, onAddChecklistTemplate, onAddAssignee, onRemoveAssignee, onUnplace, onDelete, onUpdateCustomer, onUpdateCustomerInfo, onUpdateContractType, onRenameTask, onCopy, onUpdateSkills, onEndBlockEarly, onUpdateSchedule, onUpdateKeyPickup, onUpdateScheduledTime }) {
   // Disse to laa efter det tidlige return for blokeringer (sygdom/ferie) laengere nede.
   // Hooks skal kaldes i samme raekkefoelge hver render: aabnede man en blokering og
   // derefter en almindelig opgave i samme modal, ville React se to hooks mere end sidst
@@ -8153,7 +8321,6 @@ function TaskDetailModal({ task, employees, templates, onSetPreferredEmployee, o
   // denne", fordi et enkeltstaaende noejleudlaan er det almindelige tilfaelde — og
   // fordi det er den harmloese af de to, hvis man trykker forkert.
   const [keyHeleAftalen, setKeyHeleAftalen] = useState(false);
-  const [produktHeleAftalen, setProduktHeleAftalen] = useState(false);
   // Medarbejderen der er ved at blive tilfoejet som nummer to eller flere. Tilfoejelsen
   // sker foerst naar planlaeggeren har set hvad det goer ved den samlede tid.
   const [bekraeftTilfoej, setBekraeftTilfoej] = useState(null);
@@ -8187,7 +8354,7 @@ function TaskDetailModal({ task, employees, templates, onSetPreferredEmployee, o
       setAdgangLog(null);
       setLogFejl("");
       setKeyHeleAftalen(false);
-      setProduktHeleAftalen(false);
+
       // Ellers ville spørgsmålet om at sætte en kollega på hænge ved over på næste
       // opgave — og et tryk på "Sæt på" ville ramme den forkerte.
       setBekraeftTilfoej(null);
@@ -8633,34 +8800,9 @@ return (
                     : "Ændringen gælder kun denne ene opgave."}
                 </div>
 
-                {/* Samme mekanik som noeglen: styrer om medarbejderen bliver spurgt om
-                    produktforbrug naar hun afslutter opgaven. */}
-                <button type="button" disabled={locked}
-                  style={{ display: "flex", alignItems: "center", gap: 9, width: "100%", textAlign: "left",
-                           padding: "9px 11px", borderRadius: 8, cursor: locked ? "default" : "pointer", marginTop: 10,
-                           border: t.deliversProducts ? "2px solid #0F766E" : "1.5px solid #E2E8F0",
-                           background: t.deliversProducts ? "#F0FDFA" : "#fff", opacity: locked ? 0.6 : 1 }}
-                  onClick={() => { if (!locked) onUpdateDeliversProducts(t.id, !t.deliversProducts, produktHeleAftalen); }}>
-                  <span style={{ width: 18, height: 18, borderRadius: 5, flexShrink: 0,
-                                 border: t.deliversProducts ? "2px solid #0F766E" : "2px solid #CBD5E1",
-                                 background: t.deliversProducts ? "#0F766E" : "#fff",
-                                 display: "flex", alignItems: "center", justifyContent: "center" }}>
-                    {t.deliversProducts && <Check size={11} color="#fff" strokeWidth={3} />}
-                  </span>
-                  <span style={{ fontSize: 13, color: "#111111" }}>📦 Der udleveres produkter til kunden</span>
-                </button>
-                {!locked && t.type === "fixed" && (
-                  <label style={{ display: "flex", alignItems: "center", gap: 7, marginTop: 6, fontSize: 12, color: "#64748B", cursor: "pointer" }}>
-                    <input type="checkbox" checked={produktHeleAftalen} onChange={(e) => setProduktHeleAftalen(e.target.checked)} />
-                    Gælder alle opgaver på aftalen, også de kommende
-                  </label>
-                )}
-                <div style={styles.hint}>
-                  Uden fluebenet bliver medarbejderen ikke spurgt om produktforbrug ved afslutning.
-                  {produktHeleAftalen && t.type === "fixed"
-                    ? " Ændringen slår igennem på hele aftalen."
-                    : " Ændringen gælder kun denne ene opgave."}
-                </div>
+                {/* Produktfluebenet er fjernet. Medarbejderen bliver nu spurgt naar hun
+                    faktisk har faaet varer med fra kontoret til netop denne kunde —
+                    ikke ud fra et flueben der forsoegte at forudsige det. */}
               </div>
               {custAccess && (
                 <div style={{ ...styles.accessBox, marginTop: 8 }}>
