@@ -3950,7 +3950,8 @@ function PlanningApp({ session, onSignOut }) {
 
       {view === "tilbud" && (
         <TilbudView supabase={supabase} checklistTemplates={checklistTemplates}
-          pricing={pricing} currentUserName={currentEmployeeForAuth?.name || ""} />
+          pricing={pricing} currentUserName={currentEmployeeForAuth?.name || ""}
+          employees={employees} currentEmployeeId={currentEmployeeForAuth?.id || ""} />
       )}
 
       {view === "reports" && (
@@ -7391,11 +7392,115 @@ const TILBUD_STATUS = {
 
 const PORTAL_URL = "https://jammerbugtrengoering-kundeportal.netlify.app";
 
-function TilbudView({ supabase, checklistTemplates, pricing, currentUserName }) {
+// Booker et kundemoede. Moedet er en RIGTIG opgave i ugeplanen — hendes kalender skal
+// vise at hun er ude, og kollegerne paa kontoret skal kunne se det.
+function NytKundemoede({ supabase, employees, currentEmployeeId, onOprettet, onLuk }) {
+  const [kunde, setKunde] = useState("");
+  const [adresse, setAdresse] = useState("");
+  const [dato, setDato] = useState(() => new Date().toISOString().slice(0, 10));
+  const [tid, setTid] = useState("10:00");
+  const [minutter, setMinutter] = useState(60);
+  const [empId, setEmpId] = useState(currentEmployeeId || "");
+  // Kontrakttypen bestemmer timeprisen paa tilbuddet. Den er som regel kendt naar
+  // moedet bookes, saa den spoerges der om her — ellers staar prisen tom derude.
+  const [kontrakt, setKontrakt] = useState("privat");
+  const [arbejder, setArbejder] = useState(false);
+  const [fejl, setFejl] = useState("");
+
+  async function opret() {
+    setFejl("");
+    if (!kunde.trim()) { setFejl("Skriv hvem mødet er med."); return; }
+    setArbejder(true);
+    const { data, error } = await supabase.rpc("opret_kundemoede", {
+      p_kunde_navn: kunde.trim(),
+      p_dato: dato,
+      p_tid: tid || null,
+      p_minutter: Number(minutter) || 60,
+      p_adresse: adresse.trim() || null,
+      p_emp_id: empId || null,
+      p_kontrakt: kontrakt,
+    });
+    setArbejder(false);
+    if (error) { setFejl(error.message); return; }
+    onOprettet(data);
+  }
+
+  return (
+    <div style={styles.overlay} onClick={onLuk}>
+      <div style={{ ...styles.modal, width: 480 }} onClick={(e) => e.stopPropagation()}>
+        <div style={styles.modalHeader}><div style={styles.modalTitle}>Nyt kundemøde</div></div>
+        <div style={styles.modalBody}>
+          <p style={{ margin: "0 0 4px", fontSize: 12.5, color: "#64748B", lineHeight: 1.5 }}>
+            Mødet lægges i ugeplanen, så din kalender viser at du er ude, og kontoret kan
+            se det. Samtidig oprettes et tilbud i kladde, som du udfylder ude hos kunden.
+          </p>
+
+          <label style={styles.label}>Hvem er mødet med?</label>
+          <input style={styles.input} value={kunde} onChange={(e) => setKunde(e.target.value)}
+            placeholder="Hotel Søparken — også hvis de ikke er kunde endnu" />
+          <div style={styles.hint}>
+            Kunden behøver ikke findes i Dinero endnu. Den kobling laver du på tilbuddet bagefter.
+          </div>
+
+          <label style={styles.label}>Adresse</label>
+          <input style={styles.input} value={adresse} onChange={(e) => setAdresse(e.target.value)}
+            placeholder="Søparken 1, 9440 Aabybro" />
+
+          <div style={{ display: "flex", gap: 10 }}>
+            <div style={{ flex: 1 }}>
+              <label style={styles.label}>Dato</label>
+              <input type="date" style={styles.input} value={dato} onChange={(e) => setDato(e.target.value)} />
+            </div>
+            <div style={{ width: 120 }}>
+              <label style={styles.label}>Tidspunkt</label>
+              <input type="time" style={styles.input} value={tid} onChange={(e) => setTid(e.target.value)} />
+            </div>
+            <div style={{ width: 110 }}>
+              <label style={styles.label}>Minutter</label>
+              <input type="number" step="15" min="15" style={styles.input}
+                value={minutter} onChange={(e) => setMinutter(e.target.value)} />
+            </div>
+          </div>
+          <div style={styles.hint}>Tiden tæller i kapaciteten — et kundemøde optager en plads i dagen.</div>
+
+          <label style={styles.label}>Kontrakttype</label>
+          <select style={styles.input} value={kontrakt} onChange={(e) => setKontrakt(e.target.value)}>
+            <option value="privat">Privat</option>
+            <option value="erhverv">Erhverv</option>
+            <option value="aeldrelov">Ældreloven</option>
+            <option value="nexus">Kommunal (Nexus)</option>
+          </select>
+          <div style={styles.hint}>Timeprisen sættes automatisk efter typen. Den kan rettes på tilbuddet.</div>
+
+          <label style={styles.label}>Hvem tager mødet?</label>
+          <select style={styles.input} value={empId} onChange={(e) => setEmpId(e.target.value)}>
+            <option value="">Vælg…</option>
+            {(employees || []).filter((e) => e.isAdmin).map((e) => (
+              <option key={e.id} value={e.id}>{e.name}</option>
+            ))}
+          </select>
+          <div style={styles.hint}>Kun planlæggere kan tage et tilbudsmøde.</div>
+
+          {fejl && <div style={{ color: "#B91C1C", fontSize: 13, marginTop: 10 }}>{fejl}</div>}
+
+          <div style={styles.modalActions}>
+            <button style={styles.secondaryBtn} onClick={onLuk}>Annullér</button>
+            <button style={styles.primaryBtn} disabled={arbejder} onClick={opret}>
+              {arbejder ? "Opretter…" : "Opret møde og tilbud"}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TilbudView({ supabase, checklistTemplates, pricing, currentUserName, employees, currentEmployeeId }) {
   const [tilbud, setTilbud] = useState([]);
   const [henter, setHenter] = useState(true);
   const [redigerer, setRedigerer] = useState(null);
   const [filter, setFilter] = useState("alle");
+  const [bookMoede, setBookMoede] = useState(false);
 
   async function hent() {
     setHenter(true);
@@ -7435,8 +7540,26 @@ function TilbudView({ supabase, checklistTemplates, pricing, currentUserName }) 
             );
           })}
         </div>
-        <button style={styles.primaryBtn} onClick={() => setRedigerer("nyt")}><Plus size={14} /> Nyt tilbud</button>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button style={styles.secondaryBtn} onClick={() => setBookMoede(true)}>📅 Nyt kundemøde</button>
+          <button style={styles.primaryBtn} onClick={() => setRedigerer("nyt")}><Plus size={14} /> Nyt tilbud</button>
+        </div>
       </div>
+
+      {bookMoede && (
+        <NytKundemoede
+          supabase={supabase} employees={employees} currentEmployeeId={currentEmployeeId}
+          onLuk={() => setBookMoede(false)}
+          onOprettet={async (svar) => {
+            setBookMoede(false);
+            // Aabn tilbuddet med det samme. Moedet er booket; nu skal hun kunne se
+            // hvad hun skal udfylde naar hun sidder derude.
+            const { data } = await supabase.from("tilbud").select("*").eq("id", svar.tilbudId).maybeSingle();
+            await hent();
+            if (data) setRedigerer(data);
+          }}
+        />
+      )}
 
       {henter ? (
         <div style={{ padding: 40, textAlign: "center", color: "#9C1B5D" }}>Indlæser tilbud…</div>
@@ -7516,12 +7639,21 @@ function TilbudEditor({ supabase, checklistTemplates, pricing, currentUserName, 
 
   // Timeprisen foelger kontrakttypen fra prislisten, men kan rettes. Uden det skulle
   // planlaeggeren huske fire satser udenad.
+  //
+  // Ved foerste visning fyldes kun et TOMT felt ud — et tilbud med en haandsat pris
+  // maa ikke blive overskrevet bare fordi man aabner det igen. Skifter hun derimod
+  // kontrakttype, er det en bevidst handling, og saa skal satsen foelge med.
+  const foersteVisning = useRef(true);
   useEffect(() => {
-    if (laast) return;
-    if (prisform === "hourly" && (timepris === "" || timepris === null)) {
-      const sats = pricing?.[kontrakt];
-      if (sats) setTimepris(sats);
+    if (laast || prisform !== "hourly") return;
+    const sats = pricing?.[kontrakt];
+    if (!sats) return;
+    if (foersteVisning.current) {
+      foersteVisning.current = false;
+      if (timepris === "" || timepris === null) setTimepris(sats);
+      return;
     }
+    setTimepris(sats);
   }, [kontrakt, prisform]);
 
   // Bucket'en er privat, fordi billederne er fra kundernes lokaler. Der findes derfor
