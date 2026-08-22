@@ -1649,6 +1649,9 @@ function PlanningApp({ session, onSignOut }) {
   // haenger et tilbud paa aktiviteten — og saa skulle man lede efter kunden i
   // Tilbud-fanen, hvilket er den slags der faar folk til at lade vaere.
   const [tilbudPerOpgave, setTilbudPerOpgave] = useState({});
+  // Saettes naar man springer fra en moedeopgave til tilbuddet, saa fanen aabner
+  // det rigtige i stedet for bare at vise listen.
+  const [aabnTilbudId, setAabnTilbudId] = useState(null);
   const [instances, setInstances] = useState([]);
   const [travelSettings, setTravelSettings] = useState({ defaultMinutes: 20, dayStart: "07:00", overrides: {} });
   const [loading, setLoading] = useState(true);
@@ -3990,7 +3993,8 @@ function PlanningApp({ session, onSignOut }) {
       {view === "tilbud" && (
         <TilbudView supabase={supabase} checklistTemplates={checklistTemplates}
           pricing={pricing} currentUserName={currentEmployeeForAuth?.name || ""}
-          employees={employees} currentEmployeeId={currentEmployeeForAuth?.id || ""} />
+          employees={employees} currentEmployeeId={currentEmployeeForAuth?.id || ""}
+          aabnId={aabnTilbudId} onAabnet={() => setAabnTilbudId(null)} />
       )}
 
       {view === "reports" && (
@@ -4127,7 +4131,7 @@ function PlanningApp({ session, onSignOut }) {
             setCopyPayload(task);
           }}
           tilbudPaaOpgaven={tilbudPerOpgave[openTaskId] || null}
-          onAabnTilbud={() => { setOpenTaskId(null); setView("tilbud"); }}
+          onAabnTilbud={(t) => { setOpenTaskId(null); setAabnTilbudId(t.id); setView("tilbud"); }}
         />
       )}
     </div>
@@ -7536,7 +7540,7 @@ function NytKundemoede({ supabase, employees, currentEmployeeId, onOprettet, onL
   );
 }
 
-function TilbudView({ supabase, checklistTemplates, pricing, currentUserName, employees, currentEmployeeId }) {
+function TilbudView({ supabase, checklistTemplates, pricing, currentUserName, employees, currentEmployeeId, aabnId, onAabnet }) {
   const [tilbud, setTilbud] = useState([]);
   const [henter, setHenter] = useState(true);
   const [redigerer, setRedigerer] = useState(null);
@@ -7548,8 +7552,21 @@ function TilbudView({ supabase, checklistTemplates, pricing, currentUserName, em
     const { data } = await supabase.from("tilbud").select("*").order("oprettet", { ascending: false });
     setTilbud(data || []);
     setHenter(false);
+    return data || [];
   }
-  useEffect(() => { hent(); }, []);
+
+  useEffect(() => {
+    (async () => {
+      const liste = await hent();
+      // Kom man hertil fra en moedeopgave, aabnes netop det tilbud. Uden det skulle
+      // man lede kunden frem i listen, og saa er der ingen der gider.
+      if (aabnId) {
+        const fundet = liste.find((t) => t.id === aabnId);
+        if (fundet) setRedigerer(fundet);
+        if (onAabnet) onAabnet();
+      }
+    })();
+  }, [aabnId]);
 
   const vist = tilbud.filter((t) => filter === "alle" || t.status === filter);
 
