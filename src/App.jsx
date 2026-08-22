@@ -1478,6 +1478,29 @@ const MODULE_HELP = {
         "Listen «Udleveret, ikke afleveret hos kunden endnu» viser hvad der er undervejs. Står noget der længe, er varen ikke kommet frem — og den bliver ikke faktureret."] },
   ], warn: "Retter du prisen på et kundeprodukt, slår den igennem i Fakturering med det samme. Allerede sendte fakturalinjer røres ikke." },
 
+  tilbud: { title: "Tilbud", intro: "Tilbuddet er forløberen for aftalen. Accepterer kunden, dannes aftalen af sig selv — som kladde.", blocks: [
+    { h: "Sådan laver du et", p: [
+        "Tryk «Nyt tilbud», find kunden i Dinero, og udfyld kontrakttype, pris og hvilke tjeklister der er med.",
+        "Timeprisen foreslås ud fra kontrakttypen, men du kan rette den. Vælger du fast pris, gælder den uanset hvor lang tid besøget tager.",
+        "«Anslået tid pr. besøg» bliver til varigheden på aftalen ved accept. Ved timepris står det også i tilbuddet som et cirka-beløb — der faktureres stadig kun for registreret tid.",
+        "Tjeklisternes punkter kommer med i PDF'en, så kunden kan se præcis hvad der bliver gjort."] },
+    { h: "Referat og billeder", p: [
+        "Referatfeltet er lavet til at blive dikteret. Tryk på mikrofonen på tastaturet og tal — ret det bagefter.",
+        "På iPhone kan du markere teksten og bruge Omskriv eller Korrekturlæs. Det sker på telefonen, og teksten sendes ingen steder hen.",
+        "Der kan lægges op til 10 billeder på tilbuddet. De er interne som udgangspunkt — sæt fluebenet «Vis billederne i tilbuddet kunden får» hvis de skal med i PDF'en.",
+        "Tænk over det flueben. Billeder af snavs i kundens egne lokaler kan læses som en kritik. Brug det når billederne understøtter prisen: arealer, antal vinduer, adgangsforhold."] },
+    { h: "Send og accept", p: [
+        "«Dan og se PDF» viser dokumentet som kunden får det. «Send til kunden» mailer et link.",
+        "PDF'en dannes forfra hver gang du sender. Ellers kunne kunden få et link til en ældre udgave end den der står i systemet.",
+        "Kunden åbner linket, læser tilbuddet og skriver sit navn. Vi gemmer navn, tidspunkt, IP og et fingeraftryk af netop den PDF — så det kan dokumenteres at intet er ændret bagefter.",
+        "Et accepteret tilbud kan ikke rettes. Det er dokumentationen for det kunden skrev under på."] },
+    { h: "Hvad der sker ved accept", p: [
+        "Der dannes en aftale i kladde under Aftaler, med kontrakttype, pris, varighed og tjeklister udfyldt.",
+        "Aftalen har ingen ugedage og står som kladde. Begge dele gør at planlægningsmotoren springer den over — en accept fredag aften giver ikke opgaver mandag morgen.",
+        "Du sætter selv startdato, ugedage og medarbejder, og aktiverer den. Først dér begynder opgaverne at komme i ugeplanen.",
+        "Trykker kunden accept to gange, dannes der stadig kun én aftale."] },
+  ], warn: "Linket til kunden er selve adgangen til dokumentet — der er ingen adgangskode. Send det til den rigtige mailadresse, og husk at det virker indtil tilbuddet er accepteret eller udløbet." },
+
   contracts: { title: "Aftaler", intro: "De faste kundeaftaler, sorteret så den der udløber først står øverst.", blocks: [
     { h: "Sådan læses den", p: ["Kontraktsum er forventet omsætning over hele perioden ud fra planlagte timer.",
         "Realiseret er hvad der faktisk er registreret.", "Dage tilbage viser hvor længe der er til aftalen udløber."] },
@@ -7335,6 +7358,23 @@ function SkillsView({ supabase, skills: skillNames, onSkillsChange }) {
 
 // ── Inventory View ────────────────────────────────────────────────────────────
 // ── Tilbud ───────────────────────────────────────────────────────────────────
+const TILBUD_MAKS_FOTOS = 10;
+
+// Et kamerabillede fra en moderne telefon fylder 3-6 MB. Ti af dem paa et tilbud er
+// 50 MB der skal op gennem et mobilnet fra en kundes kontor — og ned igen hver gang
+// PDF'en dannes. Komprimeringen sker derfor foer uploaden, ikke bagefter.
+async function komprimerTilbudsfoto(fil, maksKant = 1600, kvalitet = 0.72) {
+  const bitmap = await createImageBitmap(fil);
+  const skala = Math.min(1, maksKant / Math.max(bitmap.width, bitmap.height));
+  const b = Math.round(bitmap.width * skala);
+  const h = Math.round(bitmap.height * skala);
+  const lærred = document.createElement("canvas");
+  lærred.width = b; lærred.height = h;
+  lærred.getContext("2d").drawImage(bitmap, 0, 0, b, h);
+  bitmap.close?.();
+  return await new Promise((ok) => lærred.toBlob(ok, "image/jpeg", kvalitet));
+}
+
 // Tilbuddet er forloeberen for aftalen. Accepteres det, dannes en aftale i KLADDE
 // med kontrakttype, pris og tjeklister udfyldt — planlaeggeren saetter startdato,
 // ugedage og medarbejder og aktiverer den selv.
@@ -7461,6 +7501,11 @@ function TilbudEditor({ supabase, checklistTemplates, pricing, currentUserName, 
   const [status, setStatus] = useState(tilbud?.status || "kladde");
   const [noegle, setNoegle] = useState(tilbud?.offentlig_noegle || "");
 
+  const [fotos, setFotos] = useState(tilbud?.fotos || []);
+  const [fotosIPdf, setFotosIPdf] = useState(tilbud?.fotos_i_pdf ?? false);
+  const [fotoUrls, setFotoUrls] = useState({});
+  const [fotoArbejde, setFotoArbejde] = useState(null);
+
   const [dineroResultater, setDineroResultater] = useState([]);
   const [soeger, setSoeger] = useState(false);
   const [arbejder, setArbejder] = useState("");
@@ -7478,6 +7523,64 @@ function TilbudEditor({ supabase, checklistTemplates, pricing, currentUserName, 
       if (sats) setTimepris(sats);
     }
   }, [kontrakt, prisform]);
+
+  // Bucket'en er privat, fordi billederne er fra kundernes lokaler. Der findes derfor
+  // ingen fast URL — den skal signeres hver gang og udloeber af sig selv.
+  useEffect(() => {
+    let afbrudt = false;
+    (async () => {
+      if (fotos.length === 0) { setFotoUrls({}); return; }
+      const { data } = await supabase.storage.from("tilbud").createSignedUrls(fotos, 3600);
+      if (afbrudt || !data) return;
+      const kort = {};
+      fotos.forEach((sti, i) => { if (data[i]?.signedUrl) kort[sti] = data[i].signedUrl; });
+      setFotoUrls(kort);
+    })();
+    return () => { afbrudt = true; };
+  }, [fotos.join("|")]);
+
+  async function tilfoejFotos(filer) {
+    setFejl("");
+    const plads = TILBUD_MAKS_FOTOS - fotos.length;
+    if (plads <= 0) { setFejl(`Der kan højst være ${TILBUD_MAKS_FOTOS} billeder på et tilbud.`); return; }
+    const valgte = Array.from(filer).slice(0, plads);
+    // Tilbuddet skal findes i databasen foer der kan laegges billeder under dets id.
+    if (!(await gem())) return;
+
+    const nye = [];
+    for (let i = 0; i < valgte.length; i++) {
+      setFotoArbejde({ nr: i + 1, iAlt: valgte.length });
+      try {
+        const blob = await komprimerTilbudsfoto(valgte[i]);
+        // Tidsstemplet i navnet goer at et nyt billede aldrig overskriver et gammelt,
+        // ogsaa hvis der er slettet nogle undervejs og taellingen begynder forfra.
+        const sti = `${id}/fotos/${Date.now()}-${i}.jpg`;
+        const { error } = await supabase.storage.from("tilbud")
+          .upload(sti, blob, { contentType: "image/jpeg", upsert: false });
+        if (error) throw new Error(error.message);
+        nye.push(sti);
+      } catch (e) {
+        setFejl("Kunne ikke sende billedet: " + (e?.message || e));
+        break;
+      }
+    }
+    setFotoArbejde(null);
+    if (nye.length) {
+      const alle = [...fotos, ...nye];
+      setFotos(alle);
+      await supabase.from("tilbud").update({ fotos: alle }).eq("id", id);
+    }
+  }
+
+  async function fjernFoto(sti) {
+    if (!window.confirm("Slet billedet?")) return;
+    // Filen slettes gennem storage-API'et. En DELETE i storage.objects ville kun fjerne
+    // raekken; selve billedet ville blive liggende som gemte persondata.
+    await supabase.storage.from("tilbud").remove([sti]);
+    const alle = fotos.filter((f) => f !== sti);
+    setFotos(alle);
+    await supabase.from("tilbud").update({ fotos: alle }).eq("id", id);
+  }
 
   async function soegDinero(q) {
     setKundeNavn(q);
@@ -7518,6 +7621,8 @@ function TilbudEditor({ supabase, checklistTemplates, pricing, currentUserName, 
       referat: referat.trim() || null,
       bemaerkning: bemaerkning.trim() || null,
       gyldig_til: gyldigTil || null,
+      fotos,
+      fotos_i_pdf: fotosIPdf,
       oprettet_af: currentUserName || null,
       ...ekstra,
     };
@@ -7792,6 +7897,74 @@ function TilbudEditor({ supabase, checklistTemplates, pricing, currentUserName, 
               onChange={(e) => setBemaerkning(e.target.value)}
               placeholder="Forbehold, særlige aftaler, opsigelsesvarsel…" />
             <div style={styles.hint}>Referatet og bemærkningerne står begge i PDF'en som kunden ser.</div>
+          </div>
+        </div>
+
+        {/* Billeder fra besigtigelsen */}
+        <div style={{ ...styles.formSection, borderColor: "#B9C0F4" }}>
+          <div style={{ ...styles.formSectionHead, background: "#EEF2FF", borderBottom: "1.5px solid #B9C0F4" }}>
+            <div style={{ ...styles.formSectionTitle, color: "#4F46E5" }}>Billeder fra besigtigelsen</div>
+            <div style={{ ...styles.formSectionHint, color: "#6B63EA" }}>
+              Højst {TILBUD_MAKS_FOTOS}. Det er ofte dem der afgør prisen
+            </div>
+          </div>
+          <div style={styles.formSectionBody}>
+            {fotos.length > 0 && (
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(110px, 1fr))", gap: 8, marginBottom: 10 }}>
+                {fotos.map((sti) => (
+                  <div key={sti} style={{ position: "relative" }}>
+                    {fotoUrls[sti]
+                      ? <img src={fotoUrls[sti]} alt="" style={{ width: "100%", height: 90, objectFit: "cover", borderRadius: 8, display: "block" }} />
+                      : <div style={{ width: "100%", height: 90, borderRadius: 8, background: "#F1F5F9" }} />}
+                    {!laast && (
+                      <button type="button" onClick={() => fjernFoto(sti)} aria-label="Slet billedet"
+                        style={{ position: "absolute", top: 4, right: 4, width: 24, height: 24, borderRadius: "50%",
+                                 border: "none", background: "rgba(17,17,17,0.75)", color: "#fff",
+                                 cursor: "pointer", fontSize: 14, lineHeight: 1 }}>×</button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {fotoArbejde && (
+              <div style={{ fontSize: 12.5, color: "#4F46E5", marginBottom: 8 }}>
+                Sender billede {fotoArbejde.nr} af {fotoArbejde.iAlt}…
+              </div>
+            )}
+
+            {!laast && fotos.length < TILBUD_MAKS_FOTOS && (
+              <label style={{ ...styles.secondaryBtn, display: "inline-flex", cursor: "pointer" }}>
+                📷 Tilføj billeder ({fotos.length} af {TILBUD_MAKS_FOTOS})
+                {/* Uden capture-attributten faar man valget mellem kamera og kamerarulle.
+                    Paa en besigtigelse er begge dele relevante: nye billeder paa stedet,
+                    og tegninger eller plantegninger kunden har sendt paa forhaand. */}
+                <input type="file" accept="image/*" multiple style={{ display: "none" }}
+                  onChange={(e) => { tilfoejFotos(e.target.files); e.target.value = ""; }} />
+              </label>
+            )}
+
+            <button type="button" disabled={laast || fotos.length === 0}
+              onClick={() => setFotosIPdf((v) => !v)}
+              style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left",
+                       padding: "10px 12px", borderRadius: 9, marginTop: 10,
+                       cursor: (laast || fotos.length === 0) ? "default" : "pointer",
+                       opacity: fotos.length === 0 ? 0.5 : 1,
+                       border: fotosIPdf ? "2px solid #4F46E5" : "1.5px solid #E2E8F0",
+                       background: fotosIPdf ? "#EEF2FF" : "#fff" }}>
+              <span style={{ width: 19, height: 19, borderRadius: 5, flexShrink: 0,
+                             border: fotosIPdf ? "2px solid #4F46E5" : "2px solid #CBD5E1",
+                             background: fotosIPdf ? "#4F46E5" : "#fff",
+                             display: "flex", alignItems: "center", justifyContent: "center" }}>
+                {fotosIPdf && <Check size={12} color="#fff" strokeWidth={3} />}
+              </span>
+              <span style={{ fontSize: 13.5 }}>Vis billederne i tilbuddet kunden får</span>
+            </button>
+            <div style={styles.hint}>
+              Slået fra som udgangspunkt. Billeder af snavs i kundens egne lokaler kan
+              læses som en kritik — vælg det kun til når billederne understøtter prisen,
+              for eksempel arealer eller antal vinduer.
+            </div>
           </div>
         </div>
 
