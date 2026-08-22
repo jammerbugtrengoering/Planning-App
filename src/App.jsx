@@ -1606,8 +1606,8 @@ function PlanningApp({ session, onSignOut }) {
   useEffect(() => { localStorage.setItem("rp_lang", lang); }, [lang]);
 
   const L = {
-    da: { schedule:"Ugeplan", employees:"Medarbejdere", checklists:"Tjeklister", time:"Fakturering", inventory:"Lager", contracts:"Aftaler", reports:"Rapportering", medExport:"Medarbejder-eksport", signOut:"Log ud", sub:"Ugeplanlægning · kapacitet · kompetenceniveauer" },
-    en: { schedule:"Schedule", employees:"Employees", checklists:"Checklists", time:"Time & Export", inventory:"Inventory", contracts:"Contracts", reports:"Reporting", medExport:"Employee export", signOut:"Sign out", sub:"Weekly planning · capacity · skill levels" },
+    da: { schedule:"Ugeplan", employees:"Medarbejdere", checklists:"Tjeklister", time:"Fakturering", inventory:"Lager", contracts:"Aftaler", tilbud:"Tilbud", reports:"Rapportering", medExport:"Medarbejder-eksport", signOut:"Log ud", sub:"Ugeplanlægning · kapacitet · kompetenceniveauer" },
+    en: { schedule:"Schedule", employees:"Employees", checklists:"Checklists", time:"Time & Export", inventory:"Inventory", contracts:"Contracts", tilbud:"Quotes", reports:"Reporting", medExport:"Employee export", signOut:"Sign out", sub:"Weekly planning · capacity · skill levels" },
   }[lang];
   // ── Dynamiske master-data fra Supabase ──
   const [skills, setSkills] = useState(SKILLS_FALLBACK);
@@ -3730,7 +3730,7 @@ function PlanningApp({ session, onSignOut }) {
           </div>
         </div>
         <nav style={styles.nav}>
-          {[["uge", L.schedule], ["employees", L.employees], ["checklists", L.checklists], ["time", L.time], ["inventory", L.inventory], ["contracts", L.contracts], ["reports", L.reports], ["medExport", L.medExport]].map(([k, l]) => (
+          {[["uge", L.schedule], ["employees", L.employees], ["checklists", L.checklists], ["time", L.time], ["inventory", L.inventory], ["tilbud", L.tilbud], ["contracts", L.contracts], ["reports", L.reports], ["medExport", L.medExport]].map(([k, l]) => (
             <button key={k} onClick={() => setView(k)} style={view === k ? styles.navBtnActive : styles.navBtn}>{l}</button>
           ))}
           {/* Sprogvalg og Google Translate fjernet - planlaegningsappen bruges kun paa dansk. */}
@@ -3923,6 +3923,11 @@ function PlanningApp({ session, onSignOut }) {
       {view === "contracts" && (
         <ContractsView templates={templates} instances={instances} pricing={pricing} employees={employees} onEditDraft={(tpl) => { setCopyPayload({ ...tpl, type: "fixed", templateDays: tpl.days }); setEditTplId(tpl.id); setShowAddTask(true); }}
             isAdminUser={isAdminUser} onCancelTemplate={(tplId) => setCancelTarget(tplId)} />
+      )}
+
+      {view === "tilbud" && (
+        <TilbudView supabase={supabase} checklistTemplates={checklistTemplates}
+          pricing={pricing} currentUserName={currentEmployeeForAuth?.name || ""} />
       )}
 
       {view === "reports" && (
@@ -7329,6 +7334,490 @@ function SkillsView({ supabase, skills: skillNames, onSkillsChange }) {
 }
 
 // ── Inventory View ────────────────────────────────────────────────────────────
+// ── Tilbud ───────────────────────────────────────────────────────────────────
+// Tilbuddet er forloeberen for aftalen. Accepteres det, dannes en aftale i KLADDE
+// med kontrakttype, pris og tjeklister udfyldt — planlaeggeren saetter startdato,
+// ugedage og medarbejder og aktiverer den selv.
+//
+// Det bygges her og ikke i Dinero. Et Dinero-tilbud er et rent prisdokument: det kan
+// ikke baere tjeklister, kan ikke underskrives, og bliver ikke til en aftale.
+const TILBUD_STATUS = {
+  kladde:     { navn: "Kladde",     bg: "#F1F5F9", tekst: "#475569" },
+  sendt:      { navn: "Sendt",      bg: "#EEF2FF", tekst: "#4F46E5" },
+  accepteret: { navn: "Accepteret", bg: "#F0FDF4", tekst: "#166534" },
+  afvist:     { navn: "Afvist",     bg: "#FEF2F2", tekst: "#B91C1C" },
+  udloebet:   { navn: "Udløbet",    bg: "#FFFBEB", tekst: "#B45309" },
+};
+
+const PORTAL_URL = "https://jammerbugtrengoering-kundeportal.netlify.app";
+
+function TilbudView({ supabase, checklistTemplates, pricing, currentUserName }) {
+  const [tilbud, setTilbud] = useState([]);
+  const [henter, setHenter] = useState(true);
+  const [redigerer, setRedigerer] = useState(null);
+  const [filter, setFilter] = useState("alle");
+
+  async function hent() {
+    setHenter(true);
+    const { data } = await supabase.from("tilbud").select("*").order("oprettet", { ascending: false });
+    setTilbud(data || []);
+    setHenter(false);
+  }
+  useEffect(() => { hent(); }, []);
+
+  const vist = tilbud.filter((t) => filter === "alle" || t.status === filter);
+
+  if (redigerer) {
+    return (
+      <TilbudEditor
+        supabase={supabase} checklistTemplates={checklistTemplates} pricing={pricing}
+        currentUserName={currentUserName}
+        tilbud={redigerer === "nyt" ? null : redigerer}
+        onLuk={() => { setRedigerer(null); hent(); }}
+      />
+    );
+  }
+
+  return (
+    <div style={styles.page}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {[["alle", "Alle"], ["kladde", "Kladder"], ["sendt", "Sendt"], ["accepteret", "Accepteret"], ["afvist", "Afvist"]].map(([k, l]) => {
+            const antal = k === "alle" ? tilbud.length : tilbud.filter((t) => t.status === k).length;
+            const aktiv = filter === k;
+            return (
+              <button key={k} onClick={() => setFilter(k)}
+                style={{ padding: "7px 14px", borderRadius: 999, fontSize: 13, fontWeight: 700, cursor: "pointer",
+                         border: aktiv ? "1px solid #9C1B5D" : "1px solid #E2E8F0",
+                         background: aktiv ? "#9C1B5D" : "#fff", color: aktiv ? "#fff" : "#5B5B60" }}>
+                {l}{antal > 0 ? ` (${antal})` : ""}
+              </button>
+            );
+          })}
+        </div>
+        <button style={styles.primaryBtn} onClick={() => setRedigerer("nyt")}><Plus size={14} /> Nyt tilbud</button>
+      </div>
+
+      {henter ? (
+        <div style={{ padding: 40, textAlign: "center", color: "#9C1B5D" }}>Indlæser tilbud…</div>
+      ) : vist.length === 0 ? (
+        <div style={{ background: "#fff", borderRadius: 10, padding: 28, textAlign: "center", color: "#64748B", fontSize: 14 }}>
+          Der er ingen tilbud her endnu. Tryk «Nyt tilbud» efter et kundemøde — du kan
+          diktere referatet direkte ind med mikrofonen på tastaturet.
+        </div>
+      ) : vist.map((t) => {
+        const st = TILBUD_STATUS[t.status] || TILBUD_STATUS.kladde;
+        return (
+          <div key={t.id} onClick={() => setRedigerer(t)}
+            style={{ background: "#fff", borderRadius: 10, padding: "13px 15px", marginBottom: 8,
+                     boxShadow: "0 1px 3px rgba(0,0,0,0.06)", cursor: "pointer",
+                     display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontWeight: 700, fontSize: 14.5 }}>{t.kunde_navn}</div>
+              <div style={{ fontSize: 12.5, color: "#64748B", marginTop: 2 }}>
+                {t.titel || "Uden titel"}
+                {t.pricing_type === "fixed"
+                  ? ` · fast ${Math.round(Number(t.fast_pris) || 0)} kr`
+                  : ` · ${Math.round(Number(t.timepris) || 0)} kr/t`}
+                {t.anslaaet_timer ? ` · ca. ${String(t.anslaaet_timer).replace(".", ",")} t` : ""}
+              </div>
+            </div>
+            <div style={{ textAlign: "right", flexShrink: 0 }}>
+              <span style={{ display: "inline-block", padding: "3px 10px", borderRadius: 999,
+                             fontSize: 11.5, fontWeight: 700, background: st.bg, color: st.tekst }}>
+                {st.navn}
+              </span>
+              <div style={{ fontSize: 11.5, color: "#94A3B8", marginTop: 4 }}>
+                {new Date(t.oprettet).toLocaleDateString("da-DK")}
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function TilbudEditor({ supabase, checklistTemplates, pricing, currentUserName, tilbud, onLuk }) {
+  const nyt = !tilbud;
+  const [id] = useState(() => tilbud?.id || uid("til"));
+  const [titel, setTitel] = useState(tilbud?.titel || "");
+  const [kundeNavn, setKundeNavn] = useState(tilbud?.kunde_navn || "");
+  const [guid, setGuid] = useState(tilbud?.dinero_contact_guid || "");
+  const [kontakt, setKontakt] = useState(tilbud?.kontaktperson || "");
+  const [email, setEmail] = useState(tilbud?.kunde_email || "");
+  const [adresse, setAdresse] = useState(tilbud?.adresse || "");
+  const [kontrakt, setKontrakt] = useState(tilbud?.contract_type || "privat");
+  const [prisform, setPrisform] = useState(tilbud?.pricing_type || "hourly");
+  const [timepris, setTimepris] = useState(tilbud?.timepris ?? "");
+  const [fastPris, setFastPris] = useState(tilbud?.fast_pris ?? "");
+  const [timer, setTimer] = useState(tilbud?.anslaaet_timer ?? "");
+  const [interval, setInterval_] = useState(tilbud?.plan_interval || "uge");
+  const [valgte, setValgte] = useState(tilbud?.checklist_template_ids || []);
+  const [referat, setReferat] = useState(tilbud?.referat || "");
+  const [bemaerkning, setBemaerkning] = useState(tilbud?.bemaerkning || "");
+  const [gyldigTil, setGyldigTil] = useState(
+    tilbud?.gyldig_til || new Date(Date.now() + 30 * 864e5).toISOString().slice(0, 10));
+  const [status, setStatus] = useState(tilbud?.status || "kladde");
+  const [noegle, setNoegle] = useState(tilbud?.offentlig_noegle || "");
+
+  const [dineroResultater, setDineroResultater] = useState([]);
+  const [soeger, setSoeger] = useState(false);
+  const [arbejder, setArbejder] = useState("");
+  const [fejl, setFejl] = useState("");
+  const [besked, setBesked] = useState("");
+
+  const laast = status === "accepteret";
+
+  // Timeprisen foelger kontrakttypen fra prislisten, men kan rettes. Uden det skulle
+  // planlaeggeren huske fire satser udenad.
+  useEffect(() => {
+    if (laast) return;
+    if (prisform === "hourly" && (timepris === "" || timepris === null)) {
+      const sats = pricing?.[kontrakt];
+      if (sats) setTimepris(sats);
+    }
+  }, [kontrakt, prisform]);
+
+  async function soegDinero(q) {
+    setKundeNavn(q);
+    setGuid("");
+    if (q.length < 2) { setDineroResultater([]); return; }
+    setSoeger(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("dinero", { body: { action: "search", query: q } });
+      setDineroResultater(!error && data?.Collection ? data.Collection : []);
+    } catch { setDineroResultater([]); }
+    setSoeger(false);
+  }
+
+  function vaelgKunde(c) {
+    setKundeNavn(c.Name);
+    setGuid(c.ContactGuid || "");
+    if (!adresse && c.Street) {
+      setAdresse([c.Street, [c.ZipCode, c.City].filter(Boolean).join(" ")].filter(Boolean).join(", "));
+    }
+    setDineroResultater([]);
+  }
+
+  function raekke(ekstra = {}) {
+    return {
+      id, titel: titel.trim() || null,
+      dinero_contact_guid: guid || null,
+      kunde_navn: kundeNavn.trim(),
+      kunde_email: email.trim() || null,
+      kontaktperson: kontakt.trim() || null,
+      adresse: adresse.trim() || null,
+      contract_type: kontrakt,
+      pricing_type: prisform,
+      timepris: prisform === "hourly" ? (Number(timepris) || null) : null,
+      fast_pris: prisform === "fixed" ? (Number(fastPris) || null) : null,
+      anslaaet_timer: Number(timer) || null,
+      plan_interval: interval,
+      checklist_template_ids: valgte,
+      referat: referat.trim() || null,
+      bemaerkning: bemaerkning.trim() || null,
+      gyldig_til: gyldigTil || null,
+      oprettet_af: currentUserName || null,
+      ...ekstra,
+    };
+  }
+
+  async function gem(ekstra = {}) {
+    if (!kundeNavn.trim()) { setFejl("Vælg en kunde først."); return false; }
+    const { error } = await supabase.from("tilbud").upsert(raekke(ekstra), { onConflict: "id" });
+    if (error) { setFejl(error.message); return false; }
+    return true;
+  }
+
+  async function gemKladde() {
+    setFejl(""); setBesked(""); setArbejder("gemmer");
+    const ok = await gem();
+    setArbejder("");
+    if (ok) onLuk();
+  }
+
+  async function dannPdf() {
+    setFejl(""); setBesked(""); setArbejder("pdf");
+    if (!(await gem())) { setArbejder(""); return; }
+    const { data, error } = await supabase.functions.invoke("tilbud-pdf", { body: { tilbudId: id } });
+    setArbejder("");
+    if (error || data?.error) { setFejl(data?.error || error.message); return; }
+    setBesked(`PDF dannet — ${data.sider} side${data.sider === 1 ? "" : "r"}.`);
+    await visPdf();
+  }
+
+  async function visPdf() {
+    const { data: t } = await supabase.from("tilbud").select("pdf_sti").eq("id", id).maybeSingle();
+    if (!t?.pdf_sti) { setFejl("Dan PDF'en først."); return; }
+    const { data: sign } = await supabase.storage.from("tilbud").createSignedUrl(t.pdf_sti, 600);
+    if (sign?.signedUrl) window.open(sign.signedUrl, "_blank");
+  }
+
+  async function send() {
+    setFejl(""); setBesked("");
+    if (!email.trim()) { setFejl("Skriv kundens e-mail, ellers kan tilbuddet ikke sendes."); return; }
+    setArbejder("sender");
+
+    // Noeglen ER adgangen til dokumentet, saa den laves med crypto og ikke med
+    // Math.random. Den genbruges hvis tilbuddet sendes igen, saa et link kunden
+    // allerede har faaet bliver ved med at virke.
+    const n = noegle || Array.from(crypto.getRandomValues(new Uint8Array(24)))
+      .map((b) => b.toString(16).padStart(2, "0")).join("");
+
+    if (!(await gem({ offentlig_noegle: n, status: "sendt", sendt_at: new Date().toISOString() }))) {
+      setArbejder(""); return;
+    }
+    // PDF'en dannes forfra ved afsendelse. Ellers kunne kunden faa et link til en
+    // aeldre udgave end den der staar i systemet — og fingeraftrykket ville passe
+    // paa det forkerte dokument.
+    const { data: pdfSvar, error: pdfFejl } = await supabase.functions.invoke("tilbud-pdf", { body: { tilbudId: id } });
+    if (pdfFejl || pdfSvar?.error) { setArbejder(""); setFejl(pdfSvar?.error || pdfFejl.message); return; }
+
+    const link = `${PORTAL_URL}/tilbud/${n}`;
+    const { error: mailFejl } = await supabase.functions.invoke("send-email", {
+      body: {
+        email: email.trim(), name: kontakt.trim() || kundeNavn.trim(),
+        subject: `Tilbud fra Jammerbugt Rengøring`,
+        html: `<p>Hej ${kontakt.trim() || ""}</p>`
+          + `<p>Her er vores tilbud på ${titel.trim() || "rengøring"}.</p>`
+          + `<p><a href="${link}">Åbn tilbuddet og accepter her</a></p>`
+          + (gyldigTil ? `<p>Tilbuddet er gyldigt til og med ${new Date(gyldigTil).toLocaleDateString("da-DK")}.</p>` : "")
+          + `<p>Med venlig hilsen<br/>Jammerbugt Rengøring</p>`,
+      },
+    });
+    setNoegle(n); setStatus("sendt"); setArbejder("");
+    setBesked(mailFejl
+      ? `Tilbuddet er sendt-markeret, men mailen kunne ikke afsendes. Send linket manuelt: ${link}`
+      : `Tilbuddet er sendt til ${email.trim()}.`);
+  }
+
+  const kladdeEllerSendt = status === "kladde" || status === "sendt";
+
+  return (
+    <div style={styles.page}>
+      <div style={styles.formCol}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14, gap: 8, flexWrap: "wrap" }}>
+          <div>
+            <h2 style={{ margin: 0, fontSize: 19 }}>{nyt ? "Nyt tilbud" : "Tilbud"}</h2>
+            <div style={{ fontSize: 12, color: "#64748B", marginTop: 2 }}>
+              {TILBUD_STATUS[status]?.navn}
+              {noegle ? " · linket er sendt til kunden" : ""}
+            </div>
+          </div>
+          <button style={styles.secondaryBtn} onClick={onLuk}>Tilbage</button>
+        </div>
+
+        {laast && (
+          <div style={{ background: "#F0FDF4", border: "1px solid #BBF7D0", borderRadius: 9,
+                        padding: "11px 13px", fontSize: 13, color: "#166534", marginBottom: 14, lineHeight: 1.5 }}>
+            Kunden har accepteret tilbuddet, og der er dannet en aftale i kladde under Aftaler.
+            Tilbuddet kan ikke længere rettes — det er dokumentationen for det hun skrev under på.
+          </div>
+        )}
+
+        {/* Kunde */}
+        <div style={{ ...styles.formSection, borderColor: "#EFAFC9" }}>
+          <div style={{ ...styles.formSectionHead, background: "#FCE4EF", borderBottom: "1.5px solid #EFAFC9" }}>
+            <div style={{ ...styles.formSectionTitle, color: "#9C1B5D" }}>Kunde</div>
+            <div style={{ ...styles.formSectionHint, color: "#B4436F" }}>Hvem tilbuddet gælder, og hvor det skal sendes hen</div>
+          </div>
+          <div style={styles.formSectionBody}>
+            <label style={styles.label}>Kunde (søges i Dinero)</label>
+            <div style={{ position: "relative" }}>
+              <input style={styles.input} value={kundeNavn} disabled={laast}
+                onChange={(e) => soegDinero(e.target.value)} placeholder="Skriv de første bogstaver…" />
+              {soeger && <span style={{ position: "absolute", right: 10, top: 10, fontSize: 11, color: "#94A3B8" }}>Søger…</span>}
+            </div>
+            {guid && <div style={styles.hint}>✓ Koblet til Dinero</div>}
+            {dineroResultater.length > 0 && (
+              <div style={{ border: "1px solid #E2E8F0", borderRadius: 8, marginTop: 6, overflow: "hidden" }}>
+                {dineroResultater.map((c) => (
+                  <div key={c.ContactGuid} onClick={() => vaelgKunde(c)}
+                    style={{ padding: "9px 11px", cursor: "pointer", fontSize: 13.5, borderBottom: "1px solid #F1F5F9" }}>
+                    {c.Name}
+                    {c.City && <span style={{ color: "#94A3B8" }}> · {c.City}</span>}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <label style={styles.label}>Kontaktperson</label>
+            <input style={styles.input} value={kontakt} disabled={laast}
+              onChange={(e) => setKontakt(e.target.value)} placeholder="Hanne Nielsen" />
+
+            <label style={styles.label}>E-mail — tilbuddet sendes hertil</label>
+            <input style={styles.input} type="email" value={email} disabled={laast}
+              onChange={(e) => setEmail(e.target.value)} placeholder="hanne@virksomhed.dk" />
+
+            <label style={styles.label}>Adresse hvor der arbejdes</label>
+            <input style={styles.input} value={adresse} disabled={laast}
+              onChange={(e) => setAdresse(e.target.value)} placeholder="Søparken 1, 9440 Aabybro" />
+          </div>
+        </div>
+
+        {/* Pris */}
+        <div style={{ ...styles.formSection, borderColor: "#B9C0F4" }}>
+          <div style={{ ...styles.formSectionHead, background: "#EEF2FF", borderBottom: "1.5px solid #B9C0F4" }}>
+            <div style={{ ...styles.formSectionTitle, color: "#4F46E5" }}>Aftale og pris</div>
+            <div style={{ ...styles.formSectionHint, color: "#6B63EA" }}>Det kunden betaler, og hvor ofte</div>
+          </div>
+          <div style={styles.formSectionBody}>
+            <label style={styles.label}>Overskrift på tilbuddet</label>
+            <input style={styles.input} value={titel} disabled={laast}
+              onChange={(e) => setTitel(e.target.value)} placeholder="Ugentlig kontorrengøring" />
+
+            <label style={styles.label}>Kontrakttype</label>
+            <select style={styles.input} value={kontrakt} disabled={laast} onChange={(e) => setKontrakt(e.target.value)}>
+              <option value="privat">Privat</option>
+              <option value="erhverv">Erhverv</option>
+              <option value="aeldrelov">Ældreloven</option>
+              <option value="nexus">Kommunal (Nexus)</option>
+            </select>
+
+            <label style={styles.label}>Prisform</label>
+            <div style={{ display: "flex", gap: 8 }}>
+              {[["hourly", "Timepris"], ["fixed", "Fast pris"]].map(([k, l]) => (
+                <button key={k} type="button" disabled={laast} onClick={() => setPrisform(k)}
+                  style={{ flex: 1, padding: "10px 12px", borderRadius: 9, cursor: laast ? "default" : "pointer",
+                           fontSize: 13.5, fontWeight: 700,
+                           border: prisform === k ? "2px solid #4F46E5" : "1.5px solid #E2E8F0",
+                           background: prisform === k ? "#EEF2FF" : "#fff",
+                           color: prisform === k ? "#4F46E5" : "#475569" }}>
+                  {l}
+                </button>
+              ))}
+            </div>
+
+            {prisform === "hourly" ? (
+              <>
+                <label style={styles.label}>Timepris (kr, ekskl. moms)</label>
+                <input style={styles.input} type="number" value={timepris} disabled={laast}
+                  onChange={(e) => setTimepris(e.target.value)} />
+                <div style={styles.hint}>Foreslået ud fra kontrakttypen. Ret den hvis der er aftalt noget andet.</div>
+              </>
+            ) : (
+              <>
+                <label style={styles.label}>Fast pris pr. besøg (kr, ekskl. moms)</label>
+                <input style={styles.input} type="number" value={fastPris} disabled={laast}
+                  onChange={(e) => setFastPris(e.target.value)} />
+              </>
+            )}
+
+            <label style={styles.label}>Anslået tid pr. besøg (timer)</label>
+            <input style={styles.input} type="number" step="0.25" value={timer} disabled={laast}
+              onChange={(e) => setTimer(e.target.value)} placeholder="2,5" />
+            <div style={styles.hint}>
+              Bliver til varigheden på aftalen ved accept. Ved timepris står det også i tilbuddet
+              som et cirka-beløb — der faktureres stadig kun for registreret tid.
+            </div>
+
+            <label style={styles.label}>Hyppighed</label>
+            <select style={styles.input} value={interval} disabled={laast} onChange={(e) => setInterval_(e.target.value)}>
+              <option value="uge">Hver uge</option>
+              <option value="14_dage">Hver 14. dag</option>
+              <option value="maaned">Hver måned</option>
+            </select>
+
+            <label style={styles.label}>Gyldigt til og med</label>
+            <input style={styles.input} type="date" value={gyldigTil} disabled={laast}
+              onChange={(e) => setGyldigTil(e.target.value)} />
+          </div>
+        </div>
+
+        {/* Ydelser */}
+        <div style={{ ...styles.formSection, borderColor: "#9ED2CB" }}>
+          <div style={{ ...styles.formSectionHead, background: "#F0FDFA", borderBottom: "1.5px solid #9ED2CB" }}>
+            <div style={{ ...styles.formSectionTitle, color: "#0F766E" }}>Ydelser</div>
+            <div style={{ ...styles.formSectionHint, color: "#149285" }}>Tjeklisterne bliver til det kunden får</div>
+          </div>
+          <div style={styles.formSectionBody}>
+            {(checklistTemplates || []).length === 0 && (
+              <div style={{ fontSize: 13, color: "#94A3B8" }}>Der er ingen tjeklister endnu.</div>
+            )}
+            {(checklistTemplates || []).map((c) => {
+              const paa = valgte.includes(c.id);
+              return (
+                <button key={c.id} type="button" disabled={laast}
+                  onClick={() => setValgte((v) => paa ? v.filter((x) => x !== c.id) : [...v, c.id])}
+                  style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left",
+                           padding: "10px 12px", borderRadius: 9, cursor: laast ? "default" : "pointer", marginBottom: 6,
+                           border: paa ? "2px solid #0F766E" : "1.5px solid #E2E8F0",
+                           background: paa ? "#F0FDFA" : "#fff" }}>
+                  <span style={{ width: 19, height: 19, borderRadius: 5, flexShrink: 0,
+                                 border: paa ? "2px solid #0F766E" : "2px solid #CBD5E1",
+                                 background: paa ? "#0F766E" : "#fff",
+                                 display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    {paa && <Check size={12} color="#fff" strokeWidth={3} />}
+                  </span>
+                  <span style={{ fontSize: 13.5 }}>
+                    {c.name}
+                    <span style={{ color: "#94A3B8" }}> · {(c.items || []).length} punkter</span>
+                  </span>
+                </button>
+              );
+            })}
+            <div style={styles.hint}>
+              Punkterne under hver tjekliste kommer med i tilbuddet, så kunden kan se præcis
+              hvad der bliver gjort.
+            </div>
+          </div>
+        </div>
+
+        {/* Referat */}
+        <div style={{ ...styles.formSection, borderColor: "#EFAFC9" }}>
+          <div style={{ ...styles.formSectionHead, background: "#FCE4EF", borderBottom: "1.5px solid #EFAFC9" }}>
+            <div style={{ ...styles.formSectionTitle, color: "#9C1B5D" }}>Referat fra mødet</div>
+            <div style={{ ...styles.formSectionHint, color: "#B4436F" }}>Diktér det på stedet — ret det bagefter</div>
+          </div>
+          <div style={styles.formSectionBody}>
+            {/* Helt almindelig textarea med vilje. Bygger man noget smart med
+                contenteditable, holder baade diktering og systemets skriveværktøjer
+                op med at virke — og saa er hele pointen vaek. */}
+            <textarea
+              style={{ ...styles.input, minHeight: 160, resize: "vertical", lineHeight: 1.5 }}
+              value={referat} disabled={laast}
+              onChange={(e) => setReferat(e.target.value)}
+              placeholder="Hvad kunden ønsker, hvad der blev aftalt, og hvad der er taget forbehold for…" />
+            <div style={styles.hint}>
+              Tryk på mikrofonen på tastaturet og tal. På iPhone kan du bagefter markere
+              teksten og bruge Omskriv eller Korrekturlæs til at rydde op i den —
+              det sker på telefonen, og teksten sendes ingen steder hen.
+            </div>
+
+            <label style={styles.label}>Bemærkninger til kunden</label>
+            <textarea
+              style={{ ...styles.input, minHeight: 80, resize: "vertical", lineHeight: 1.5 }}
+              value={bemaerkning} disabled={laast}
+              onChange={(e) => setBemaerkning(e.target.value)}
+              placeholder="Forbehold, særlige aftaler, opsigelsesvarsel…" />
+            <div style={styles.hint}>Referatet og bemærkningerne står begge i PDF'en som kunden ser.</div>
+          </div>
+        </div>
+
+        {fejl && <div style={{ color: "#B91C1C", fontSize: 13.5, marginBottom: 10 }}>{fejl}</div>}
+        {besked && <div style={{ color: "#166534", fontSize: 13.5, marginBottom: 10, lineHeight: 1.5 }}>{besked}</div>}
+
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 30 }}>
+          {kladdeEllerSendt && (
+            <button style={styles.secondaryBtn} disabled={!!arbejder} onClick={gemKladde}>
+              {arbejder === "gemmer" ? "Gemmer…" : "Gem kladde"}
+            </button>
+          )}
+          <button style={styles.secondaryBtn} disabled={!!arbejder} onClick={dannPdf}>
+            {arbejder === "pdf" ? "Danner…" : "Dan og se PDF"}
+          </button>
+          {kladdeEllerSendt && (
+            <button style={styles.primaryBtn} disabled={!!arbejder} onClick={send}>
+              {arbejder === "sender" ? "Sender…" : status === "sendt" ? "Send igen" : "Send til kunden"}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Udlevering af kundeprodukter ─────────────────────────────────────────────
 // Produkterne udleveres paa KONTORET. Medarbejderne koerer i privat bil og har aldrig
 // lagervarer med, saa varen forlader hylden naar den gives til medarbejderen — og der
