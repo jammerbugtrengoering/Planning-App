@@ -1642,6 +1642,13 @@ function PlanningApp({ session, onSignOut }) {
   const [budgets, setBudgets] = useState([]); // [{id, contract_type, year, month, amount}]
   const [templates, setTemplates] = useState([]);
   const [checklistTemplates, setChecklistTemplates] = useState([]);
+  // Taelles op naar noget er oprettet i databasen udenom den almindelige tilstand —
+  // saa henter effekten nedenfor alt forfra. loadAll ligger inde i effekten.
+  const [genindlaes, setGenindlaes] = useState(0);
+  // Tilbud slaaet op paa moedeopgavens id. Uden det kunne ugeplanen ikke vise at der
+  // haenger et tilbud paa aktiviteten — og saa skulle man lede efter kunden i
+  // Tilbud-fanen, hvilket er den slags der faar folk til at lade vaere.
+  const [tilbudPerOpgave, setTilbudPerOpgave] = useState({});
   const [instances, setInstances] = useState([]);
   const [travelSettings, setTravelSettings] = useState({ defaultMinutes: 20, dayStart: "07:00", overrides: {} });
   const [loading, setLoading] = useState(true);
@@ -1876,6 +1883,17 @@ function PlanningApp({ session, onSignOut }) {
         setChecklistTemplates(clMapped);
       }
 
+      // Tilbud koblet til en moedeopgave. Slaas op paa opgavens id, saa aktiviteten i
+      // ugeplanen kan vise at der haenger et tilbud paa den.
+      {
+        const { data: tilbudData } = await supabase.from("tilbud")
+          .select("id, instance_id, status, pricing_type, timepris, fast_pris, anslaaet_timer, kunde_navn")
+          .not("instance_id", "is", null);
+        setTilbudPerOpgave(Object.fromEntries(
+          (tilbudData || []).map((t) => [t.instance_id, t]),
+        ));
+      }
+
       // Adgangsoplysninger laegges i opslag, saa de kan slaas op pr. opgave og pr. kunde
       // uden at loebe hele listen igennem hver gang. Refs frem for state alene, fordi
       // realtime-opdateringer sker uden for render og skal kunne slaa det samme op.
@@ -2017,7 +2035,7 @@ function PlanningApp({ session, onSignOut }) {
       setLoading(false);
     }
     loadAll();
-  }, []);
+  }, [genindlaes]);
 
   // Henter faktisk koeretid for de adressepar der optraeder i den viste uge, men
   // som vi endnu ikke har en rute for. Edge-funktionen gemmer selv resultatet i
@@ -3330,12 +3348,33 @@ function PlanningApp({ session, onSignOut }) {
     notify(`${TYPE_META[blockType]?.label || blockType} registreret for ${emp?.name || "medarbejderen"}`);
   }
 
-  function addActivity(payload) {
+  async function addActivity(payload) {
     const { employeeId, customerName, address, date, time, duration, description } = payload;
     const emp = employees.find((e) => e.id === employeeId);
     if (!emp || !date) { notify("Vælg medarbejder og dato"); return; }
     const d = new Date(date);
     if (isNaN(d)) { notify("Ugyldig dato"); return; }
+
+    // Et tilbudsmoede er den samme aktivitet — men den oprettes i databasen, saa
+    // aktiviteten og tilbuddet bliver koblet i ét kald og reglen om hvem der maa,
+    // haandhaeves ét sted. Ellers kunne de to naa at komme i utakt.
+    if (payload.erTilbudsmoede) {
+      if (!customerName?.trim()) { notify("Et tilbudsmøde skal have et kundenavn"); return; }
+      const { data, error } = await supabase.rpc("opret_kundemoede", {
+        p_kunde_navn: customerName.trim(),
+        p_dato: date,
+        p_tid: time || null,
+        p_minutter: Number(duration) || 60,
+        p_adresse: address || null,
+        p_emp_id: employeeId,
+        p_kontrakt: payload.kontrakt || "privat",
+      });
+      if (error) { notify("Kunne ikke oprette mødet: " + error.message); return; }
+      setGenindlaes((n) => n + 1);
+      notify(`Tilbudsmøde oprettet for ${emp.name || "medarbejderen"} — tilbuddet ligger under Tilbud`);
+      return data;
+    }
+
     const { week, year } = isoWeekInfo(d);
     const dayKey = weekdayKeyFor(d);
     const activityInst = {
@@ -4087,6 +4126,8 @@ function PlanningApp({ session, onSignOut }) {
             setOpenTaskId(null);
             setCopyPayload(task);
           }}
+          tilbudPaaOpgaven={tilbudPerOpgave[openTaskId] || null}
+          onAabnTilbud={() => { setOpenTaskId(null); setView("tilbud"); }}
         />
       )}
     </div>
@@ -8732,10 +8773,19 @@ function ActivityModal({ employees, onClose, onSave }) {
   const [time, setTime] = useState("09:00");
   const [duration, setDuration] = useState(60);
   const [description, setDescription] = useState("");
+  // Et tilbudsmoede ER en aktivitet — der er ingen grund til to slags opgaver der
+  // opfoerer sig ens. Fluebenet bestemmer bare om der ogsaa oprettes et tilbud.
+  const [erTilbudsmoede, setErTilbudsmoede] = useState(false);
+  const [kontrakt, setKontrakt] = useState("privat");
+
+  const valgt = employees.find((e) => e.id === employeeId);
+  // Kun planlaeggere kan tage et tilbudsmoede — det er ogsaa haandhaevet i databasen.
+  const maaTageTilbud = !!valgt?.isAdmin;
 
   function submit() {
     if (!employeeId || !date) return;
-    onSave({ employeeId, customerName, address, date, time, duration, description });
+    onSave({ employeeId, customerName, address, date, time, duration, description,
+             erTilbudsmoede: erTilbudsmoede && maaTageTilbud, kontrakt });
     onClose();
   }
 
@@ -8756,6 +8806,41 @@ function ActivityModal({ employees, onClose, onSave }) {
       <select style={styles.input} value={employeeId} onChange={(e) => setEmployeeId(e.target.value)}>
         {employees.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
       </select>
+
+      <button type="button" disabled={!maaTageTilbud}
+        onClick={() => setErTilbudsmoede((v) => !v)}
+        style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left",
+                 padding: "11px 12px", borderRadius: 10, marginTop: 12,
+                 cursor: maaTageTilbud ? "pointer" : "default",
+                 opacity: maaTageTilbud ? 1 : 0.5,
+                 border: erTilbudsmoede ? "2px solid #9C1B5D" : "1.5px solid #E2E8F0",
+                 background: erTilbudsmoede ? "#FCE4EF" : "#fff" }}>
+        <span style={{ width: 20, height: 20, borderRadius: 5, flexShrink: 0,
+                       border: erTilbudsmoede ? "2px solid #9C1B5D" : "2px solid #CBD5E1",
+                       background: erTilbudsmoede ? "#9C1B5D" : "#fff",
+                       display: "flex", alignItems: "center", justifyContent: "center" }}>
+          {erTilbudsmoede && <Check size={12} color="#fff" strokeWidth={3} />}
+        </span>
+        <span style={{ fontSize: 14 }}>📋 Det er et tilbudsmøde</span>
+      </button>
+      <div style={styles.hint}>
+        {maaTageTilbud
+          ? "Så oprettes der samtidig et tilbud i kladde, som kan udfyldes ude hos kunden i medarbejder-appen."
+          : "Kun planlæggere kan tage et tilbudsmøde. Vælg en administrator for at slå det til."}
+      </div>
+
+      {erTilbudsmoede && maaTageTilbud && (
+        <>
+          <label style={styles.label}>Kontrakttype</label>
+          <select style={styles.input} value={kontrakt} onChange={(e) => setKontrakt(e.target.value)}>
+            <option value="privat">Privat</option>
+            <option value="erhverv">Erhverv</option>
+            <option value="aeldrelov">Ældreloven</option>
+            <option value="nexus">Kommunal (Nexus)</option>
+          </select>
+          <div style={styles.hint}>Timeprisen sættes automatisk efter typen og kan rettes på tilbuddet.</div>
+        </>
+      )}
 
       <label style={styles.label}>Dato</label>
       <input type="date" style={styles.input} value={date} onChange={(e) => setDate(e.target.value)} />
@@ -9069,7 +9154,7 @@ function EmployeeModal({ emp, onClose, onSave, skills: skillList, satsHistorik }
 }
 
 // ---------- Task / service order detail ----------
-function TaskDetailModal({ task, employees, templates, onSetPreferredEmployee, onCancelTemplate, checklistTemplates, skills, isAdminUser, areas, employeeAreas, onClose, onSetStatus, onToggleChecklistItem, onAddChecklistItem, onAddChecklistTemplate, onAddAssignee, onRemoveAssignee, onUnplace, onDelete, onUpdateCustomer, onUpdateCustomerInfo, onUpdateContractType, onRenameTask, onCopy, onUpdateSkills, onEndBlockEarly, onUpdateSchedule, onUpdateKeyPickup, onUpdateScheduledTime }) {
+function TaskDetailModal({ task, employees, templates, onSetPreferredEmployee, onCancelTemplate, checklistTemplates, skills, isAdminUser, areas, employeeAreas, onClose, onSetStatus, onToggleChecklistItem, onAddChecklistItem, onAddChecklistTemplate, onAddAssignee, onRemoveAssignee, onUnplace, onDelete, onUpdateCustomer, onUpdateCustomerInfo, onUpdateContractType, onRenameTask, onCopy, onUpdateSkills, onEndBlockEarly, onUpdateSchedule, onUpdateKeyPickup, onUpdateScheduledTime, tilbudPaaOpgaven, onAabnTilbud }) {
   // Disse to laa efter det tidlige return for blokeringer (sygdom/ferie) laengere nede.
   // Hooks skal kaldes i samme raekkefoelge hver render: aabnede man en blokering og
   // derefter en almindelig opgave i samme modal, ville React se to hooks mere end sidst
@@ -9205,7 +9290,7 @@ function TaskDetailModal({ task, employees, templates, onSetPreferredEmployee, o
     const emp = employees.find((e) => (task.assignees || []).includes(e.id));
     const dayLabel = ALL_DAYS.find((d) => d.key === task.day)?.label || task.day;
     return (
-      <Modal title="Anden aktivitet" onClose={onClose}>
+      <Modal title={tilbudPaaOpgaven ? "Tilbudsmøde" : "Anden aktivitet"} onClose={onClose}>
         <div style={{ padding: "4px 0 16px" }}>
           <p style={{ margin: "0 0 8px", color: "#475569" }}>
             <strong>{emp?.name || "Ukendt medarbejder"}</strong> · {dayLabel} · Uge {task.week} · {task.year}
@@ -9215,11 +9300,42 @@ function TaskDetailModal({ task, employees, templates, onSetPreferredEmployee, o
           {task.address && <p style={{ margin: "0 0 4px" }}><strong>Adresse:</strong> {task.address}</p>}
           {task.accessInstructions && <p style={{ margin: "0 0 4px" }}><strong>Beskrivelse:</strong> {task.accessInstructions}</p>}
           <p style={{ margin: "8px 0 16px", color: "#475569" }}><strong>Varighed:</strong> {task.duration} min</p>
+
+          {/* Er der et tilbud paa aktiviteten, skal man kunne gaa direkte til det.
+              Ellers skulle man lede efter kunden i Tilbud-fanen, og det er den slags
+              der faar folk til at lade vaere. */}
+          {tilbudPaaOpgaven && (
+            <div style={{ background: "#FCE4EF", border: "1px solid #EFAFC9", borderRadius: 10,
+                          padding: "11px 13px", marginBottom: 14 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: "#9C1B5D" }}>
+                Tilbud · {TILBUD_STATUS[tilbudPaaOpgaven.status]?.navn || tilbudPaaOpgaven.status}
+              </div>
+              <div style={{ fontSize: 12.5, color: "#B4436F", marginTop: 3, lineHeight: 1.5 }}>
+                {tilbudPaaOpgaven.pricing_type === "fixed"
+                  ? `Fast pris ${Math.round(Number(tilbudPaaOpgaven.fast_pris) || 0)} kr`
+                  : `${Math.round(Number(tilbudPaaOpgaven.timepris) || 0)} kr/t`}
+                {tilbudPaaOpgaven.anslaaet_timer
+                  ? ` · ca. ${String(tilbudPaaOpgaven.anslaaet_timer).replace(".", ",")} t pr. besøg` : ""}
+              </div>
+              <button style={{ ...styles.primaryBtn, marginTop: 10 }}
+                onClick={() => onAabnTilbud(tilbudPaaOpgaven)}>
+                Åbn tilbuddet
+              </button>
+            </div>
+          )}
+
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <button style={styles.secondaryBtn} onClick={() => onDelete(task.id)}>
               <Trash2 size={14} /> Slet aktivitet
             </button>
           </div>
+          {tilbudPaaOpgaven && (
+            <div style={styles.hint}>
+              Sletter du aktiviteten, bliver tilbuddet stående under Tilbud. Det er med
+              vilje — et tilbud der er sendt til en kunde må ikke forsvinde fordi mødet
+              bliver aflyst.
+            </div>
+          )}
         </div>
       </Modal>
     );
