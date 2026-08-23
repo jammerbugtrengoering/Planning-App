@@ -1669,9 +1669,14 @@ function PlanningApp({ session, onSignOut }) {
   // det rigtige i stedet for bare at vise listen.
   const [aabnTilbudId, setAabnTilbudId] = useState(null);
 
+  const [instances, setInstances] = useState([]);
+
   // Adresser der allerede er i brug. Bruges af AdresseFelt til at opdage at den samme
   // adresse er ved at blive skrevet paa en ny maade — det var praecis dét der gav
   // dobbelte raekker i Transporttid.
+  //
+  // Skal staa EFTER instances og templates. Stod den foer dem, laeste den to
+  // variabler der endnu ikke fandtes, og hele appen blev blank i produktion.
   const kendteAdresser = useMemo(() => {
     const s = new Set();
     instances.forEach((t) => { if (t.address) s.add(t.address); });
@@ -1680,9 +1685,8 @@ function PlanningApp({ session, onSignOut }) {
   }, [instances, templates]);
 
   // Holder modulets opslag opdateret, saa AdresseFelt kan naa listen uden at den skal
-  // traedes gennem fem komponenter.
+  // traedes gennem fem komponentsignaturer.
   useEffect(() => { adresserIBrug.nu = kendteAdresser; }, [kendteAdresser]);
-  const [instances, setInstances] = useState([]);
   const [travelSettings, setTravelSettings] = useState({ defaultMinutes: 20, dayStart: "07:00", overrides: {} });
   const [loading, setLoading] = useState(true);
 
