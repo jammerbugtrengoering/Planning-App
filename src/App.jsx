@@ -7445,6 +7445,30 @@ function SkillsView({ supabase, skills: skillNames, onSkillsChange }) {
 // Kundens fakturaer hentet direkte fra Dinero. Hentes foerst naar der trykkes —
 // et opslag pr. kunde ved hver indlaesning ville vaere 17 kald mod Dinero for at
 // vise noget de faerreste kigger paa.
+// Dinero giver kladder fakturanummeret 9223372036854775807 — det stoerste heltal der
+// findes. Det er deres maade at sige "intet nummer endnu", og vist raat ville kunden
+// se en faktura med nitten cifre.
+const FAKTURA_KLADDENUMMER = "9223372036854775807";
+function fakturaNummer(f) {
+  const n = String(f.Number ?? "");
+  return !n || n === FAKTURA_KLADDENUMMER ? "Kladde" : `#${n}`;
+}
+
+// Status kommer fra Dinero og er den eneste paalidelige kilde. PaymentDate er
+// FORFALDSDATOEN og ikke betalingsdatoen — den staar udfyldt paa kladder der aldrig
+// er sendt, saa "betalt" maa aldrig udledes af den.
+const FAKTURA_STATUS = {
+  Draft:     { tekst: "Kladde",     farve: "#64748B", visForfald: false },
+  Booked:    { tekst: "Bogført",    farve: "#B45309", visForfald: true },
+  Paid:      { tekst: "Betalt",     farve: "#166534", visForfald: false },
+  Overdue:   { tekst: "Forfalden",  farve: "#B91C1C", visForfald: true },
+  Overpaid:  { tekst: "Overbetalt", farve: "#166534", visForfald: false },
+  Deleted:   { tekst: "Slettet",    farve: "#94A3B8", visForfald: false },
+};
+function fakturaStatus(s) {
+  return FAKTURA_STATUS[s] || { tekst: s || "Ukendt", farve: "#64748B", visForfald: true };
+}
+
 function KundeFakturaer({ supabase, guid }) {
   const [raekker, setRaekker] = useState(null);
   const [henter, setHenter] = useState(false);
@@ -7457,15 +7481,7 @@ function KundeFakturaer({ supabase, guid }) {
     });
     setHenter(false);
     const f = data?.error || error?.message;
-    if (f) {
-      // Midlertidigt: Dinero svarer 500 med tom krop, saa vi kan ikke se hvad der er
-      // galt. Proeven kalder deres API i fire varianter og viser hvilken der fejler.
-      const { data: proeve } = await supabase.functions.invoke("dinero-probe", {
-        body: { contactGuid: guid },
-      });
-      setFejl((data?.message || f) + "\n\n" + JSON.stringify(proeve, null, 1));
-      return;
-    }
+    if (f) { setFejl(data?.message || f); return; }
     setRaekker(data?.fakturaer || []);
   }
 
@@ -7490,24 +7506,29 @@ function KundeFakturaer({ supabase, guid }) {
                     letterSpacing: ".04em", color: "#9C1B5D", marginBottom: 4 }}>
         Fakturaer i Dinero
       </div>
-      {raekker.map((f) => (
-        <div key={f.Guid} style={{ display: "flex", justifyContent: "space-between", gap: 10,
-                                   padding: "7px 0", borderTop: "1px solid #F1F5F9", fontSize: 13 }}>
-          <div>
-            <b>{f.Number ? `#${f.Number}` : "Kladde"}</b>
-            <span style={{ color: "#64748B" }}>
-              {f.Date ? ` · ${new Date(f.Date).toLocaleDateString("da-DK")}` : ""}
-              {f.Description ? ` · ${f.Description}` : ""}
-            </span>
-          </div>
-          <div style={{ textAlign: "right", whiteSpace: "nowrap" }}>
-            <b>{Math.round(Number(f.TotalInclVat) || 0).toLocaleString("da-DK")} kr</b>
-            <div style={{ fontSize: 11.5, color: f.PaymentDate ? "#166534" : "#B45309" }}>
-              {f.PaymentDate ? "Betalt" : (f.Status || "Ikke betalt")}
+      {raekker.map((f) => {
+        const st = fakturaStatus(f.Status);
+        return (
+          <div key={f.Guid} style={{ display: "flex", justifyContent: "space-between", gap: 10,
+                                     padding: "7px 0", borderTop: "1px solid #F1F5F9", fontSize: 13 }}>
+            <div>
+              <b>{fakturaNummer(f)}</b>
+              <span style={{ color: "#64748B" }}>
+                {f.Date ? ` · ${new Date(f.Date).toLocaleDateString("da-DK")}` : ""}
+                {f.Description ? ` · ${f.Description}` : ""}
+              </span>
+            </div>
+            <div style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+              <b>{Math.round(Number(f.TotalInclVat) || 0).toLocaleString("da-DK")} kr</b>
+              <div style={{ fontSize: 11.5, color: st.farve }}>
+                {st.tekst}
+                {f.PaymentDate && st.visForfald
+                  ? ` · forfald ${new Date(f.PaymentDate).toLocaleDateString("da-DK")}` : ""}
+              </div>
             </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
