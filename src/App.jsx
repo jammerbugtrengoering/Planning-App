@@ -201,6 +201,24 @@ function instanceDateString(t) {
   const dd = String(monday.getDate()).padStart(2, "0");
   return monday.getFullYear() + "-" + mm + "-" + dd;
 }
+// Menuen i to raekker: grupper oeverst, siderne i den valgte gruppe nedenunder.
+//
+// Ikke en rullemenu. Der er ingen skjult tilstand, ingenting at aabne, og det virker
+// paa en iPad hvor der ikke findes en mus at foere henover. Det genbruger samtidig det
+// moenster ugeplanen allerede havde: handlingerne staar i en raekke under hovedet.
+//
+// Ugeplanen er sin egen gruppe med én side. Dens anden raekke er derfor handlingerne
+// og ikke sidefaner — der er ikke andre sider at skifte til.
+const MENU_GRUPPER = [
+  { key: "drift",     navn: "Ugeplan",    sider: [["uge", "Ugeplan"]] },
+  { key: "salg",      navn: "Salg",       sider: [["kunder", "Kunder"], ["tilbud", "Tilbud"], ["contracts", "Aftaler"]] },
+  { key: "oekonomi",  navn: "\u00d8konomi",     sider: [["time", "Fakturering"], ["reports", "Rapportering"], ["medExport", "Medarbejder-eksport"]] },
+  { key: "opsaetning", navn: "Ops\u00e6tning", sider: [["employees", "Medarbejdere"], ["checklists", "Tjeklister"], ["inventory", "Lager"]] },
+];
+function gruppeFor(view) {
+  return MENU_GRUPPER.find((g) => g.sider.some(([k]) => k === view)) || MENU_GRUPPER[0];
+}
+
 const CONTRACT_TYPES = [
   { key: "privat",    label: "Privat",   icon: "🏠", color: "#9C1B5D", bg: "#FFF6FA", chart: "#D6247A" },
   { key: "erhverv",   label: "Erhverv",  icon: "💼", color: "#0F766E", bg: "#F0FDFA", chart: "#0D9488" },
@@ -3829,13 +3847,28 @@ function PlanningApp({ session, onSignOut }) {
           </div>
         </div>
         <nav style={styles.nav}>
-          {[["uge", L.schedule], ["employees", L.employees], ["checklists", L.checklists], ["time", L.time], ["inventory", L.inventory], ["kunder", L.kunder], ["tilbud", L.tilbud], ["contracts", L.contracts], ["reports", L.reports], ["medExport", L.medExport]].map(([k, l]) => (
-            <button key={k} onClick={() => setView(k)} style={view === k ? styles.navBtnActive : styles.navBtn}>{l}</button>
-          ))}
+          {MENU_GRUPPER.map((gr) => {
+            const aktiv = gruppeFor(view).key === gr.key;
+            return (
+              <button key={gr.key} onClick={() => setView(gr.sider[0][0])}
+                style={aktiv ? styles.navBtnActive : styles.navBtn}>{gr.navn}</button>
+            );
+          })}
           {/* Sprogvalg og Google Translate fjernet - planlaegningsappen bruges kun paa dansk. */}
           <button onClick={onSignOut} style={{ ...styles.navBtn, marginLeft: 4, color: "#E8AFC9", borderLeft: "1px solid #333", paddingLeft:12 }}>{L.signOut}</button>
         </nav>
       </header>
+
+      {/* Anden raekke: siderne i den valgte gruppe. Ugeplanen har kun én side, og
+          dens egen vaerktoejslinje staar allerede her — saa der vises ingen faner. */}
+      {gruppeFor(view).sider.length > 1 && (
+        <div style={styles.underNav}>
+          {gruppeFor(view).sider.map(([k, l]) => (
+            <button key={k} onClick={() => setView(k)}
+              style={view === k ? styles.underNavAktiv : styles.underNavBtn}>{l}</button>
+          ))}
+        </div>
+      )}
 
       {toast && <div style={styles.toast}>{toast}</div>}
 
@@ -10621,12 +10654,23 @@ const styles = {
   brandMark: { width: 36, height: 36, borderRadius: 10, background: "#D6247A", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 14 },
   brandTitle: { fontFamily: "'Space Grotesk', sans-serif", fontWeight: 600, fontSize: 16 },
   brandSub: { fontSize: 12, color: "#E8AFC9" },
-  nav: { display: "flex", gap: 6 },
+  nav: { display: "flex", gap: 6, flexWrap: "wrap" },
+  // Anden raekke klaeber sig fast lige under hovedet, saa baade gruppen og siderne
+  // bliver staaende naar man ruller. Toppen er 68 px — hovedets hoejde.
+  underNav: { position: "sticky", top: 68, zIndex: 99, display: "flex", gap: 7, flexWrap: "wrap",
+    padding: "10px 24px", background: "#FFF6FA", borderBottom: "1px solid #F4D7E4" },
+  // Mindst 40 px hoej: skal kunne rammes med en finger paa en iPad.
+  underNavBtn: { padding: "9px 15px", borderRadius: 999, border: "1px solid #E2E8F0",
+    background: "#fff", color: "#5B5B60", cursor: "pointer", fontSize: 13, fontWeight: 600, minHeight: 40 },
+  underNavAktiv: { padding: "9px 15px", borderRadius: 999, border: "1px solid #9C1B5D",
+    background: "#9C1B5D", color: "#fff", cursor: "pointer", fontSize: 13, fontWeight: 700, minHeight: 40 },
   navBtn: { padding: "8px 14px", borderRadius: 8, border: "none", background: "transparent", color: "#D9A9C0", cursor: "pointer", fontSize: 13.5, fontWeight: 500 },
   navBtnActive: { padding: "8px 14px", borderRadius: 8, border: "none", background: "#D6247A", color: "#fff", cursor: "pointer", fontSize: 13.5, fontWeight: 600 },
   toast: { position: "fixed", top: 16, right: 24, background: "#111111", color: "#fff", padding: "10px 16px", borderRadius: 8, fontSize: 13.5, zIndex: 50, boxShadow: "0 8px 24px rgba(0,0,0,0.2)" },
   page: { padding: "16px 20px 40px", flex: 1 },
-  toolbar: { display: "flex", alignItems: "center", gap: 10, marginBottom: 10, flexWrap: "wrap" },
+  toolbar: { display: "flex", alignItems: "center", gap: 10, marginBottom: 10, flexWrap: "wrap",
+    position: "sticky", top: 68, zIndex: 98, background: "#FFF6FA",
+    paddingTop: 10, paddingBottom: 10, borderBottom: "1px solid #F4D7E4" },
   toolbarSpacer: { flex: 1 },
   primaryBtn: { display: "flex", alignItems: "center", gap: 6, padding: "9px 14px", borderRadius: 8, border: "none", background: "#D6247A", color: "#fff", fontWeight: 600, fontSize: 13.5, cursor: "pointer" },
   secondaryBtn: { display: "flex", alignItems: "center", gap: 6, padding: "9px 14px", borderRadius: 8, border: "1px solid #CBD5E1", background: "#fff", color: "#334155", fontWeight: 500, fontSize: 13.5, cursor: "pointer" },
