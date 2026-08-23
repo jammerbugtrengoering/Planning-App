@@ -7690,7 +7690,9 @@ function KunderView({ supabase, currentEmployeeId }) {
                     ["Opgaver i alt", k.opgaver_i_alt],
                     ["Udført", k.udfoerte],
                     ["Kommende", k.kommende],
-                    ["Kontrakttype", k.kontrakttype],
+                    // Etiketten og ikke databasevaerdien. Kunden hedder "Ældrelov",
+                    // ikke "aeldrelov" — det sidste er bare den maade det er gemt paa.
+                    ["Kontrakttype", contractLabel(k.kontrakttype)],
                   ].map(([l, v]) => (
                     <div key={l}>
                       <div style={{ fontSize: 15, fontWeight: 700 }}>{v}</div>
@@ -7925,10 +7927,9 @@ function NytKundemoede({ supabase, employees, currentEmployeeId, onOprettet, onL
 
           <label style={styles.label}>Kontrakttype</label>
           <select style={styles.input} value={kontrakt} onChange={(e) => setKontrakt(e.target.value)}>
-            <option value="privat">Privat</option>
-            <option value="erhverv">Erhverv</option>
-            <option value="aeldrelov">Ældreloven</option>
-            <option value="nexus">Kommunal (Nexus)</option>
+            {CONTRACT_TYPES.map((c) => (
+              <option key={c.key} value={c.key}>{c.label}</option>
+            ))}
           </select>
           <div style={styles.hint}>Timeprisen sættes automatisk efter typen. Den kan rettes på tilbuddet.</div>
 
@@ -8379,10 +8380,9 @@ function TilbudEditor({ supabase, checklistTemplates, pricing, currentUserName, 
 
             <label style={styles.label}>Kontrakttype</label>
             <select style={styles.input} value={kontrakt} disabled={laast} onChange={(e) => setKontrakt(e.target.value)}>
-              <option value="privat">Privat</option>
-              <option value="erhverv">Erhverv</option>
-              <option value="aeldrelov">Ældreloven</option>
-              <option value="nexus">Kommunal (Nexus)</option>
+              {CONTRACT_TYPES.map((c) => (
+                <option key={c.key} value={c.key}>{c.label}</option>
+              ))}
             </select>
 
             <label style={styles.label}>Prisform</label>
@@ -9265,10 +9265,9 @@ function ActivityModal({ employees, onClose, onSave }) {
         <>
           <label style={styles.label}>Kontrakttype</label>
           <select style={styles.input} value={kontrakt} onChange={(e) => setKontrakt(e.target.value)}>
-            <option value="privat">Privat</option>
-            <option value="erhverv">Erhverv</option>
-            <option value="aeldrelov">Ældreloven</option>
-            <option value="nexus">Kommunal (Nexus)</option>
+            {CONTRACT_TYPES.map((c) => (
+              <option key={c.key} value={c.key}>{c.label}</option>
+            ))}
           </select>
           <div style={styles.hint}>Timeprisen sættes automatisk efter typen og kan rettes på tilbuddet.</div>
         </>
@@ -9892,9 +9891,9 @@ return (
             style={{ fontSize: 12, fontWeight: 600, padding: "3px 8px", borderRadius: 99, border: "1.5px solid #E2E8F0", background: contractMeta(t.contractType).bg, color: contractMeta(t.contractType).color, cursor: "pointer" }}
             value={t.contractType || "privat"}
             onChange={(e) => onUpdateContractType(t.id, e.target.value)}>
-            <option value="privat">🏠 Privat</option>
-            <option value="nexus">🏢 Nexus</option>
-            <option value="aeldrelov">👴 Ældrelov</option>
+            {CONTRACT_TYPES.map((c) => (
+              <option key={c.key} value={c.key}>{c.icon} {c.label}</option>
+            ))}
           </select>
         )}
         {t.offSchedule && <span style={{ ...styles.typeChip, background: "#FEF9C3", color: "#B45309" }}>⚠️ Uden for aftale</span>}
