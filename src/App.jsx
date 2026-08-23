@@ -7446,12 +7446,19 @@ function SkillsView({ supabase, skills: skillNames, onSkillsChange }) {
 // et opslag pr. kunde ved hver indlaesning ville vaere 17 kald mod Dinero for at
 // vise noget de faerreste kigger paa.
 // Dinero giver kladder fakturanummeret 9223372036854775807 — det stoerste heltal der
-// findes. Det er deres maade at sige "intet nummer endnu", og vist raat ville kunden
-// se en faktura med nitten cifre.
-const FAKTURA_KLADDENUMMER = "9223372036854775807";
+// findes. Det er deres maade at sige "intet nummer endnu".
+//
+// Men tallet er stoerre end JavaScript kan regne praecist med, saa det bliver rundet
+// af til 9223372036854776000 i det oejeblik svaret laeses. En sammenligning med det
+// rigtige tal rammer derfor ALDRIG, og kladden blev vist som "#9223372036854776000".
+//
+// Derfor sammenlignes der ikke med et tal. Alt over det praecise omraade er pr.
+// definition ikke et fakturanummer, og Dineros egen status er det endelige svar.
 function fakturaNummer(f) {
-  const n = String(f.Number ?? "");
-  return !n || n === FAKTURA_KLADDENUMMER ? "Kladde" : `#${n}`;
+  if (f.Status === "Draft") return "Kladde";
+  const n = Number(f.Number);
+  if (!Number.isFinite(n) || n <= 0 || n > Number.MAX_SAFE_INTEGER) return "Kladde";
+  return `#${n}`;
 }
 
 // Status kommer fra Dinero og er den eneste paalidelige kilde. PaymentDate er
@@ -7790,48 +7797,6 @@ function PortalAfsnit({ supabase, kunde, currentEmployeeId, onAendret }) {
 //
 // Herfra taendes ogsaa kundeportalen. Det hoerer til her og ikke under Tilbud: en
 // portal er noget en kunde HAR, ikke noget der saelges én gang.
-// Kunden ringer og siger "jeg har faaet faktura 1234". Uden det her skal
-// planlaeggeren foerst gaette hvilken kunde det er, og lede sig frem.
-//
-// MIDLERTIDIG TILSTAND: vi ved endnu ikke om Dinero tillader at filtrere paa
-// fakturanummer. Knappen koerer indtil videre proeven og viser deres raa svar, saa vi
-// kan se hvilken syntaks der duer i stedet for at gaette.
-function FakturaSoegning({ supabase }) {
-  const [nr, setNr] = useState("");
-  const [svar, setSvar] = useState(null);
-  const [henter, setHenter] = useState(false);
-
-  async function soeg() {
-    setHenter(true); setSvar(null);
-    const { data, error } = await supabase.functions.invoke("dinero-probe", { body: { nummer: nr } });
-    setHenter(false);
-    setSvar(error ? { fejl: error.message } : data);
-  }
-
-  return (
-    <div style={{ background: "#fff", borderRadius: 10, padding: "14px 15px", marginBottom: 12,
-                  boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
-      <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 6 }}>Slå en faktura op på nummer</div>
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-        <input style={{ ...styles.input, flex: 1, minWidth: 160, fontSize: 16, padding: "12px 12px" }}
-          value={nr} onChange={(e) => setNr(e.target.value)} inputMode="numeric"
-          placeholder="Fakturanummer" />
-        <button style={{ ...styles.primaryBtn, minHeight: 44 }} disabled={henter} onClick={soeg}>
-          {henter ? "Søger…" : "Afprøv"}
-        </button>
-      </div>
-      <div style={styles.hint}>
-        Under afprøvning. Knappen spørger Dinero på tre måder og viser deres svar,
-        så vi kan se hvilken der virker.
-      </div>
-      {svar && (
-        <pre style={{ fontSize: 11, whiteSpace: "pre-wrap", wordBreak: "break-word",
-                      marginTop: 8, color: "#475569" }}>{JSON.stringify(svar, null, 1)}</pre>
-      )}
-    </div>
-  );
-}
-
 function KunderView({ supabase, currentEmployeeId }) {
   const [kunder, setKunder] = useState([]);
   const [henter, setHenter] = useState(true);
@@ -7872,8 +7837,6 @@ function KunderView({ supabase, currentEmployeeId }) {
 
       {/* 16 px er ikke pynt: er skriften mindre, zoomer Safari paa iPad ind naar
           feltet faar fokus, og saa hopper hele siden. */}
-      <FakturaSoegning supabase={supabase} />
-
       <input style={{ ...styles.input, marginBottom: 12, fontSize: 16, padding: "12px 12px" }}
         value={soeg} onChange={(e) => setSoeg(e.target.value)}
         placeholder="Søg efter kunde…" autoComplete="off" />
