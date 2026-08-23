@@ -7442,6 +7442,68 @@ function SkillsView({ supabase, skills: skillNames, onSkillsChange }) {
 }
 
 // ── Inventory View ────────────────────────────────────────────────────────────
+// Kundens fakturaer hentet direkte fra Dinero. Hentes foerst naar der trykkes —
+// et opslag pr. kunde ved hver indlaesning ville vaere 17 kald mod Dinero for at
+// vise noget de faerreste kigger paa.
+function KundeFakturaer({ supabase, guid }) {
+  const [raekker, setRaekker] = useState(null);
+  const [henter, setHenter] = useState(false);
+  const [fejl, setFejl] = useState("");
+
+  async function hent() {
+    setHenter(true); setFejl("");
+    const { data, error } = await supabase.functions.invoke("dinero", {
+      body: { action: "kundefakturaer", contactGuid: guid },
+    });
+    setHenter(false);
+    const f = data?.error || error?.message;
+    if (f) { setFejl(data?.message || f); return; }
+    setRaekker(data?.fakturaer || []);
+  }
+
+  if (raekker === null) {
+    return (
+      <div style={{ marginTop: 12 }}>
+        <button style={styles.secondaryBtn} disabled={henter} onClick={hent}>
+          {henter ? "Henter fra Dinero…" : "Vis fakturaer"}
+        </button>
+        {fejl && <div style={{ color: "#B91C1C", fontSize: 13, marginTop: 8 }}>{fejl}</div>}
+      </div>
+    );
+  }
+
+  if (raekker.length === 0) {
+    return <div style={{ fontSize: 13, color: "#94A3B8", marginTop: 12 }}>Ingen fakturaer i Dinero endnu.</div>;
+  }
+
+  return (
+    <div style={{ marginTop: 12 }}>
+      <div style={{ fontSize: 11.5, fontWeight: 700, textTransform: "uppercase",
+                    letterSpacing: ".04em", color: "#9C1B5D", marginBottom: 4 }}>
+        Fakturaer i Dinero
+      </div>
+      {raekker.map((f) => (
+        <div key={f.Guid} style={{ display: "flex", justifyContent: "space-between", gap: 10,
+                                   padding: "7px 0", borderTop: "1px solid #F1F5F9", fontSize: 13 }}>
+          <div>
+            <b>{f.Number ? `#${f.Number}` : "Kladde"}</b>
+            <span style={{ color: "#64748B" }}>
+              {f.Date ? ` · ${new Date(f.Date).toLocaleDateString("da-DK")}` : ""}
+              {f.Description ? ` · ${f.Description}` : ""}
+            </span>
+          </div>
+          <div style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+            <b>{Math.round(Number(f.TotalInclVat) || 0).toLocaleString("da-DK")} kr</b>
+            <div style={{ fontSize: 11.5, color: f.PaymentDate ? "#166534" : "#B45309" }}>
+              {f.PaymentDate ? "Betalt" : (f.Status || "Ikke betalt")}
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // Taender og styrer kundens portal. Ligger paa kunden og ikke under Tilbud: en portal
 // er noget en kunde HAR, ikke noget der saelges én gang.
 function PortalAfsnit({ supabase, kunde, currentEmployeeId, onAendret }) {
@@ -7700,6 +7762,7 @@ function KunderView({ supabase, currentEmployeeId }) {
                     </div>
                   ))}
                 </div>
+                <KundeFakturaer supabase={supabase} guid={k.guid} />
                 <PortalAfsnit supabase={supabase} kunde={k} currentEmployeeId={currentEmployeeId} onAendret={hent} />
               </div>
             )}
