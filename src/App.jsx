@@ -7514,8 +7514,11 @@ function FakturaRaekke({ supabase, guid, faktura: f }) {
   return (
     <div style={{ borderTop: "1px solid #F1F5F9" }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 10,
-                    padding: "8px 0", fontSize: 13, alignItems: "center" }}>
-        <div onClick={fold} style={{ cursor: "pointer", flex: 1, minWidth: 0 }}>
+                    padding: "6px 0", fontSize: 14, alignItems: "center" }}>
+        {/* Hele venstre side er trykflade, ikke bare trekanten. Paa en iPad skal
+            man kunne ramme den med en finger uden at sigte. */}
+        <div onClick={fold} style={{ cursor: "pointer", flex: 1, minWidth: 0,
+                                     padding: "10px 0", minHeight: 44 }}>
           <b>{aaben ? "▾" : "▸"} {fakturaNummer(f)}</b>
           <span style={{ color: "#64748B" }}>
             {f.Date ? ` · ${new Date(f.Date).toLocaleDateString("da-DK")}` : ""}
@@ -7531,7 +7534,8 @@ function FakturaRaekke({ supabase, guid, faktura: f }) {
           </div>
         </div>
         <button onClick={aabnPdf} disabled={pdfHenter}
-          style={{ ...styles.secondaryBtn, padding: "5px 10px", fontSize: 12, flexShrink: 0 }}>
+          style={{ ...styles.secondaryBtn, padding: "11px 16px", fontSize: 13.5,
+                   flexShrink: 0, minHeight: 44 }}>
           {pdfHenter ? "Henter…" : "PDF"}
         </button>
       </div>
@@ -7574,6 +7578,10 @@ function KundeFakturaer({ supabase, guid }) {
   const [henter, setHenter] = useState(false);
   const [fejl, setFejl] = useState("");
 
+  // Hentes med det samme naar kunden foldes ud. Komponenten vises foerst der, saa det
+  // er stadig ét opslag pr. kunde og ikke sytten ved hver indlaesning.
+  useEffect(() => { hent(); }, [guid]);
+
   async function hent() {
     setHenter(true); setFejl("");
     const { data, error } = await supabase.functions.invoke("dinero", {
@@ -7588,9 +7596,9 @@ function KundeFakturaer({ supabase, guid }) {
   if (raekker === null) {
     return (
       <div style={{ marginTop: 12 }}>
-        <button style={styles.secondaryBtn} disabled={henter} onClick={hent}>
-          {henter ? "Henter fra Dinero…" : "Vis fakturaer"}
-        </button>
+        {henter
+          ? <div style={{ fontSize: 13, color: "#94A3B8" }}>Henter fakturaer fra Dinero…</div>
+          : <button style={styles.secondaryBtn} onClick={hent}>Prøv igen</button>}
         {fejl && <pre style={{ color: "#B91C1C", fontSize: 11.5, marginTop: 8, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{fejl}</pre>}
       </div>
     );
@@ -7782,6 +7790,48 @@ function PortalAfsnit({ supabase, kunde, currentEmployeeId, onAendret }) {
 //
 // Herfra taendes ogsaa kundeportalen. Det hoerer til her og ikke under Tilbud: en
 // portal er noget en kunde HAR, ikke noget der saelges én gang.
+// Kunden ringer og siger "jeg har faaet faktura 1234". Uden det her skal
+// planlaeggeren foerst gaette hvilken kunde det er, og lede sig frem.
+//
+// MIDLERTIDIG TILSTAND: vi ved endnu ikke om Dinero tillader at filtrere paa
+// fakturanummer. Knappen koerer indtil videre proeven og viser deres raa svar, saa vi
+// kan se hvilken syntaks der duer i stedet for at gaette.
+function FakturaSoegning({ supabase }) {
+  const [nr, setNr] = useState("");
+  const [svar, setSvar] = useState(null);
+  const [henter, setHenter] = useState(false);
+
+  async function soeg() {
+    setHenter(true); setSvar(null);
+    const { data, error } = await supabase.functions.invoke("dinero-probe", { body: { nummer: nr } });
+    setHenter(false);
+    setSvar(error ? { fejl: error.message } : data);
+  }
+
+  return (
+    <div style={{ background: "#fff", borderRadius: 10, padding: "14px 15px", marginBottom: 12,
+                  boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
+      <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 6 }}>Slå en faktura op på nummer</div>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <input style={{ ...styles.input, flex: 1, minWidth: 160, fontSize: 16, padding: "12px 12px" }}
+          value={nr} onChange={(e) => setNr(e.target.value)} inputMode="numeric"
+          placeholder="Fakturanummer" />
+        <button style={{ ...styles.primaryBtn, minHeight: 44 }} disabled={henter} onClick={soeg}>
+          {henter ? "Søger…" : "Afprøv"}
+        </button>
+      </div>
+      <div style={styles.hint}>
+        Under afprøvning. Knappen spørger Dinero på tre måder og viser deres svar,
+        så vi kan se hvilken der virker.
+      </div>
+      {svar && (
+        <pre style={{ fontSize: 11, whiteSpace: "pre-wrap", wordBreak: "break-word",
+                      marginTop: 8, color: "#475569" }}>{JSON.stringify(svar, null, 1)}</pre>
+      )}
+    </div>
+  );
+}
+
 function KunderView({ supabase, currentEmployeeId }) {
   const [kunder, setKunder] = useState([]);
   const [henter, setHenter] = useState(true);
@@ -7820,8 +7870,13 @@ function KunderView({ supabase, currentEmployeeId }) {
         ))}
       </div>
 
-      <input style={{ ...styles.input, marginBottom: 12 }} value={soeg}
-        onChange={(e) => setSoeg(e.target.value)} placeholder="Søg efter kunde…" />
+      {/* 16 px er ikke pynt: er skriften mindre, zoomer Safari paa iPad ind naar
+          feltet faar fokus, og saa hopper hele siden. */}
+      <FakturaSoegning supabase={supabase} />
+
+      <input style={{ ...styles.input, marginBottom: 12, fontSize: 16, padding: "12px 12px" }}
+        value={soeg} onChange={(e) => setSoeg(e.target.value)}
+        placeholder="Søg efter kunde…" autoComplete="off" />
 
       {vist.map((k) => {
         const erAaben = aaben === k.guid;
@@ -7829,8 +7884,9 @@ function KunderView({ supabase, currentEmployeeId }) {
           <div key={k.guid} style={{ background: "#fff", borderRadius: 10, marginBottom: 8,
                                      boxShadow: "0 1px 3px rgba(0,0,0,0.06)", overflow: "hidden" }}>
             <div onClick={() => setAaben(erAaben ? null : k.guid)}
-              style={{ padding: "13px 15px", cursor: "pointer", display: "flex",
-                       justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+              style={{ padding: "16px 15px", cursor: "pointer", display: "flex",
+                       justifyContent: "space-between", gap: 12, flexWrap: "wrap",
+                       minHeight: 44 }}>
               <div style={{ minWidth: 0 }}>
                 <div style={{ fontWeight: 700, fontSize: 14.5 }}>
                   {k.navn}
