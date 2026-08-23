@@ -7457,7 +7457,15 @@ function KundeFakturaer({ supabase, guid }) {
     });
     setHenter(false);
     const f = data?.error || error?.message;
-    if (f) { setFejl(data?.message || f); return; }
+    if (f) {
+      // Midlertidigt: Dinero svarer 500 med tom krop, saa vi kan ikke se hvad der er
+      // galt. Proeven kalder deres API i fire varianter og viser hvilken der fejler.
+      const { data: proeve } = await supabase.functions.invoke("dinero-probe", {
+        body: { contactGuid: guid },
+      });
+      setFejl((data?.message || f) + "\n\n" + JSON.stringify(proeve, null, 1));
+      return;
+    }
     setRaekker(data?.fakturaer || []);
   }
 
@@ -7467,7 +7475,7 @@ function KundeFakturaer({ supabase, guid }) {
         <button style={styles.secondaryBtn} disabled={henter} onClick={hent}>
           {henter ? "Henter fra Dinero…" : "Vis fakturaer"}
         </button>
-        {fejl && <div style={{ color: "#B91C1C", fontSize: 13, marginTop: 8 }}>{fejl}</div>}
+        {fejl && <pre style={{ color: "#B91C1C", fontSize: 11.5, marginTop: 8, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{fejl}</pre>}
       </div>
     );
   }
