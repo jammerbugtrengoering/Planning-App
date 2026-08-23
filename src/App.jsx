@@ -1652,6 +1652,20 @@ function PlanningApp({ session, onSignOut }) {
   // Saettes naar man springer fra en moedeopgave til tilbuddet, saa fanen aabner
   // det rigtige i stedet for bare at vise listen.
   const [aabnTilbudId, setAabnTilbudId] = useState(null);
+
+  // Adresser der allerede er i brug. Bruges af AdresseFelt til at opdage at den samme
+  // adresse er ved at blive skrevet paa en ny maade — det var praecis dét der gav
+  // dobbelte raekker i Transporttid.
+  const kendteAdresser = useMemo(() => {
+    const s = new Set();
+    instances.forEach((t) => { if (t.address) s.add(t.address); });
+    templates.forEach((t) => { if (t.address) s.add(t.address); });
+    return [...s];
+  }, [instances, templates]);
+
+  // Holder modulets opslag opdateret, saa AdresseFelt kan naa listen uden at den skal
+  // traedes gennem fem komponenter.
+  useEffect(() => { adresserIBrug.nu = kendteAdresser; }, [kendteAdresser]);
   const [instances, setInstances] = useState([]);
   const [travelSettings, setTravelSettings] = useState({ defaultMinutes: 20, dayStart: "07:00", overrides: {} });
   const [loading, setLoading] = useState(true);
@@ -6533,7 +6547,8 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
       <div style={{ marginBottom: 12 }}>
         <div>
           <label style={styles.label}>Adresse for udførsel</label>
-          <input style={styles.input} value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Vejnavn 1, 9000 Aalborg" />
+          <AdresseFelt vaerdi={address} onChange={setAddress}
+            placeholder="Vejnavn 1, 9000 Aalborg" />
         </div>
         <div>
           <label style={styles.label}>Fakturabeskrivelse (PO, navn m.v.)</label>
@@ -7403,6 +7418,116 @@ function SkillsView({ supabase, skills: skillNames, onSkillsChange }) {
 }
 
 // ── Inventory View ────────────────────────────────────────────────────────────
+// ── Adressefelt med opslag i Danmarks adresseregister ────────────────────────
+// Forhindrer to fejl vi har set i drift:
+//
+//   Langgade 43, 9440 Pandrup — et postnummer der ikke findes til den vej. Adressen
+//   blev geokodet 2,3 km ved siden af, og alle koeretider til og fra var forkerte.
+//
+//   "Vesterhavsparken 2, 9492 Blokhus" og "Vesterhavsparken 2,9492 Blokhus" — samme
+//   sted skrevet paa to maader. Gav dobbelte raekker i Transporttid, og en gemt
+//   koeretid kunne ikke genbruges.
+//
+// Registret er Danmarks officielle (dataforsyningen.dk) — samme kilde som geokodningen
+// i travel-distance, saa det man vaelger her, er praecis det ruteberegningen kan finde.
+//
+// Fri indtastning er STADIG tilladt. Nogle adresser i drift har etage og doer skrevet
+// ind ("Passagen 43,3.sal,9440 Aabybro"), og en spaerring ville bare faa folk til at
+// lade adressefeltet staa tomt. Der advares i stedet.
+const adresserIBrug = { nu: [] };
+
+function normalisérAdresse(a) {
+  return (a || "").toLowerCase().replace(/[\s,.]/g, "");
+}
+
+function AdresseFelt({ vaerdi, onChange, kendteAdresser, disabled, placeholder }) {
+  const kendte = kendteAdresser ?? adresserIBrug.nu;
+  const [forslag, setForslag] = useState([]);
+  const [soeger, setSoeger] = useState(false);
+  const [kendtIRegistret, setKendtIRegistret] = useState(null); // null = ikke tjekket
+  const [harValgt, setHarValgt] = useState(false);
+  const timer = useRef(null);
+
+  // Findes adressen allerede i en ANDEN skrivemaade? Saa er det formentlig den samme,
+  // og to skrivemaader betyder dobbelt arbejde i Transporttid.
+  const dublet = (kendte || []).find(
+    (a) => a !== vaerdi && normalisérAdresse(a) === normalisérAdresse(vaerdi) && vaerdi,
+  );
+
+  useEffect(() => {
+    if (disabled) return;
+    const q = (vaerdi || "").trim();
+    setHarValgt(false);
+    if (q.length < 3) { setForslag([]); setKendtIRegistret(null); return; }
+    clearTimeout(timer.current);
+    // Ventetid foer opslaget. Uden den kaldes registret ved hvert eneste tastetryk.
+    timer.current = setTimeout(async () => {
+      setSoeger(true);
+      try {
+        const res = await fetch(
+          "https://api.dataforsyningen.dk/adresser/autocomplete?per_side=6&q=" + encodeURIComponent(q));
+        const data = res.ok ? await res.json() : [];
+        setForslag(Array.isArray(data) ? data : []);
+        // Rammer det indtastede en rigtig adresse praecist? Sammenlignes normaliseret,
+        // saa komma og mellemrum ikke afgoer det.
+        setKendtIRegistret((Array.isArray(data) ? data : [])
+          .some((f) => normalisérAdresse(f.tekst) === normalisérAdresse(q)));
+      } catch {
+        // Registret kan vaere nede. Saa siger vi ingenting frem for at paastaa at
+        // adressen er forkert.
+        setForslag([]); setKendtIRegistret(null);
+      }
+      setSoeger(false);
+    }, 300);
+    return () => clearTimeout(timer.current);
+  }, [vaerdi, disabled]);
+
+  return (
+    <>
+      <div style={{ position: "relative" }}>
+        <input style={styles.input} value={vaerdi || ""} disabled={disabled}
+          onChange={(e) => onChange(e.target.value)} placeholder={placeholder || "Vejnavn og nummer…"} />
+        {soeger && <span style={{ position: "absolute", right: 10, top: 10, fontSize: 11, color: "#94A3B8" }}>Slår op…</span>}
+      </div>
+
+      {!disabled && !harValgt && forslag.length > 0 && !kendtIRegistret && (
+        <div style={{ border: "1px solid #E2E8F0", borderRadius: 8, marginTop: 6, overflow: "hidden" }}>
+          {forslag.map((f) => (
+            <div key={f.adresse?.id || f.tekst}
+              onClick={() => { onChange(f.tekst); setForslag([]); setHarValgt(true); setKendtIRegistret(true); }}
+              style={{ padding: "9px 11px", cursor: "pointer", fontSize: 13.5, borderBottom: "1px solid #F1F5F9" }}>
+              {f.tekst}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {dublet && (
+        <div style={{ background: "#EEF2FF", border: "1px solid #C7D2FE", borderRadius: 8,
+                      padding: "8px 10px", marginTop: 6, fontSize: 12.5, color: "#3730A3", lineHeight: 1.5 }}>
+          Den samme adresse findes allerede som <b>{dublet}</b>.
+          <button type="button" onClick={() => onChange(dublet)}
+            style={{ marginLeft: 8, border: "none", background: "#C7D2FE", color: "#3730A3",
+                     borderRadius: 6, padding: "3px 9px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+            Brug den
+          </button>
+        </div>
+      )}
+
+      {kendtIRegistret === false && (vaerdi || "").trim().length >= 3 && (
+        <div style={{ background: "#FFFBEB", border: "1px solid #FDE68A", borderRadius: 8,
+                      padding: "8px 10px", marginTop: 6, fontSize: 12.5, color: "#92400E", lineHeight: 1.5 }}>
+          Adressen findes ikke i adresseregistret. Køretid og kilometer kan ikke beregnes,
+          og opgaven kan ende det forkerte sted på kortet. Vælg et forslag, eller tjek stavemåden.
+        </div>
+      )}
+      {kendtIRegistret === true && (
+        <div style={{ fontSize: 12, color: "#166534", marginTop: 5 }}>✓ Fundet i adresseregistret</div>
+      )}
+    </>
+  );
+}
+
 // ── Tilbud ───────────────────────────────────────────────────────────────────
 const TILBUD_MAKS_FOTOS = 10;
 
@@ -7488,7 +7613,7 @@ function NytKundemoede({ supabase, employees, currentEmployeeId, onOprettet, onL
           </div>
 
           <label style={styles.label}>Adresse</label>
-          <input style={styles.input} value={adresse} onChange={(e) => setAdresse(e.target.value)}
+          <AdresseFelt vaerdi={adresse} onChange={setAdresse}
             placeholder="Søparken 1, 9440 Aabybro" />
 
           <div style={{ display: "flex", gap: 10 }}>
@@ -7946,8 +8071,8 @@ function TilbudEditor({ supabase, checklistTemplates, pricing, currentUserName, 
               onChange={(e) => setEmail(e.target.value)} placeholder="hanne@virksomhed.dk" />
 
             <label style={styles.label}>Adresse hvor der arbejdes</label>
-            <input style={styles.input} value={adresse} disabled={laast}
-              onChange={(e) => setAdresse(e.target.value)} placeholder="Søparken 1, 9440 Aabybro" />
+            <AdresseFelt vaerdi={adresse} onChange={setAdresse}
+              disabled={laast} placeholder="Søparken 1, 9440 Aabybro" />
           </div>
         </div>
 
@@ -8817,7 +8942,7 @@ function ActivityModal({ employees, onClose, onSave }) {
       <input style={styles.input} value={customerName} onChange={(e) => setCustomerName(e.target.value)} />
 
       <label style={styles.label}>Adresse</label>
-      <input style={styles.input} value={address} onChange={(e) => setAddress(e.target.value)} />
+      <AdresseFelt vaerdi={address} onChange={setAddress} />
 
       <label style={styles.label}>Medarbejder</label>
       <select style={styles.input} value={employeeId} onChange={(e) => setEmployeeId(e.target.value)}>
@@ -9673,7 +9798,8 @@ return (
                 )}
               </div>
             </div>
-            <input style={styles.input} value={custAddress} onChange={(e) => setCustAddress(e.target.value)} placeholder="Adresse" />
+            <AdresseFelt vaerdi={custAddress} onChange={setCustAddress}
+              placeholder="Adresse" />
             <input style={styles.input} value={custPo} onChange={(e) => setCustPo(e.target.value)} placeholder="Fakturabeskrivelse (PO, navn m.v.)" />
             <textarea style={{ ...styles.input, minHeight: 60 }} value={custAccess} onChange={(e) => setCustAccess(e.target.value)} placeholder="Adgangsinstruktioner" />
             <div style={{ display: "flex", gap: 8 }}>
