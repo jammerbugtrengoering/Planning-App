@@ -1382,6 +1382,11 @@ const MODULE_HELP = {
         "Rettelsen gemmes med det samme, så medarbejder-appen ser den samme adresse som du gør. Tidligere levede den kun i din egen browser.",
         "Opgaver der er udført, har registreret tid eller er sendt til Dinero, røres aldrig. Der er arbejdet leveret, og en senere prisændring må ikke omregne det bagud.",
         "PO-nummer og Dinero-nummer arves kun ned hvis aftalen faktisk har et. Er aftalens felt tomt, bevares det der står på den enkelte opgave — det er sådan borgerens navn bliver stående på kommunens opgaver."] },
+    { h: "Kunden skal findes i Dinero", p: [
+        "Fakturakunden skrives ikke — den vælges. Skriv de første bogstaver, og vælg kunden i listen der kommer frem. Er hun der ikke, skal hun oprettes i Dinero først.",
+        "Gem-knappen er slået fra indtil du har valgt. Et navn der bare er skrevet, giver en opgave faktureringen ikke kan sende, og en kunde der hverken kan få en portal eller står rigtigt i Kunder.",
+        "Det gælder også når du skifter kunde på en opgave der allerede findes.",
+        "Kundemøder og andre aktiviteter er undtaget. Skal du ud og give et tilbud, findes kunden jo netop ikke i Dinero endnu."] },
     { h: "Ikke tildelt", p: ["En opgave havner her hvis den er ny, hvis medarbejderen er blevet syg, eller hvis systemet ikke kunne finde nogen der passer.",
                              "Træk den over på en medarbejder, eller sæt Auto-planlæg og tryk Planlæg."] },
     { h: "Hvorfor bliver en opgave ikke planlagt?", p: [
@@ -1531,7 +1536,7 @@ const MODULE_HELP = {
         "Kunderne kommer fra Dinero. Der oprettes ingen kunder her — det sker i Dinero, og de findes derefter via opslag.",
         "Løse opgaver tæller med. En kunde uden aftale, som bare har fået en enkelt opgave, står også på listen."] },
     { h: "«Ikke i Dinero»", p: [
-        "Mærkatet betyder at kundens opgaver ikke har hendes kundenummer fra Dinero. Det sker typisk når opgaven er oprettet i hånden og kunden er skrevet ind som navn.",
+        "Mærkatet betyder at kundens opgaver ikke har hendes kundenummer fra Dinero. Det kan ikke længere opstå: en fakturerbar opgave kan ikke gemmes før kunden er valgt i Dinero-listen. Mærkatet er kun på kunder fra før den spærring.",
         "Fakturaen bliver dannet alligevel, fordi kunden så slås op på navnet. Men det opslag fejler den dag to kontakter i Dinero hedder det samme — og kunden kan ikke få en portal, for portalen hænger på kundenummeret.",
         "Fold kunden ud og tryk «Find i Dinero». Er der præcis ét træf, kan du koble hende, og alle hendes opgaver og aftaler får nummeret. Er der flere træf, skal dubletterne ryddes op i Dinero først.",
         "Lykkes en fakturering på et navneopslag, gemmer systemet selv nummeret bagefter, så mærkatet forsvinder af sig selv."] },
@@ -6512,6 +6517,13 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
 
   const [dineroAvailable, setDineroAvailable] = useState(true);
 
+  // Denne formular danner KUN fakturerbart arbejde — aktiviteter og kundemoeder
+  // oprettes et andet sted og maa gerne have en kunde der endnu ikke findes i Dinero.
+  // Her skal kunden vaere valgt i listen, ikke bare skrevet. Et navn uden nummer
+  // betyder at faktureringen skal gaette sig frem, og at kunden hverken kan faa en
+  // portal eller staa rigtigt i kundeoversigten.
+  const manglerDineroKunde = !dineroContactGuid;
+
   async function searchDinero(q) {
     setCustomerName(q);
     if (q.length < 2) { setDineroResults([]); return; }
@@ -6694,6 +6706,12 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
         {!dineroSearching && !customerSelected && customerName.length >= 2 && dineroResults.length === 0 && (
           <div style={styles.hint}>
             Ingen kunde i Dinero hedder det. Opret kunden i Dinero først — så kan du finde den her.
+          </div>
+        )}
+        {manglerDineroKunde && (
+          <div style={{ ...styles.hint, color: "#B45309" }}>
+            Vælg kunden i listen. Opgaven kan ikke gemmes med et navn der bare er skrevet —
+            så ved faktureringen ikke hvem den skal sendes til.
           </div>
         )}
       </div>
@@ -6884,7 +6902,8 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
         <button style={styles.secondaryBtn} onClick={onClose}>Annuller</button>
         <button
           style={styles.primaryBtn}
-          disabled={!title.trim() || (type === "fixed" && days.length === 0) || requiredSkills.length === 0 || (type === "fixed" && !!startDate && startDate < todayIso())}
+          disabled={!title.trim() || manglerDineroKunde || (type === "fixed" && days.length === 0) || requiredSkills.length === 0 || (type === "fixed" && !!startDate && startDate < todayIso())}
+          title={manglerDineroKunde ? "Vælg kunden i Dinero-listen først" : undefined}
           onClick={() => onSave(buildPayload(false), editId)}>
           {editId ? "Godkend og planlæg" : "Gem og planlæg"}
         </button>
@@ -6893,7 +6912,7 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
         {type === "fixed" && (
           <button
             style={{ ...styles.secondaryBtn, color: "#9C1B5D", borderColor: "#F4C0D1" }}
-            disabled={!title.trim() || (!!startDate && startDate < todayIso())}
+            disabled={!title.trim() || manglerDineroKunde || (!!startDate && startDate < todayIso())}
             title="Gemmer aftalen uden at oprette opgaver. Du kan rette alle felter bagefter og godkende den under Aftaler."
             onClick={() => onSave(buildPayload(true), editId)}>
             {editId ? "Gem kladde" : "Gem som kladde"}
@@ -10225,7 +10244,16 @@ function TaskDetailModal({ task, employees, templates, onSetPreferredEmployee, o
   (t.timeLog || []).forEach((l) => { if (!l.empId) return; byEmployee[l.empId] = (byEmployee[l.empId] || 0) + l.minutes; });
   const existingTexts = new Set((t.checklist || []).map((i) => i.text));
 
+  // Samme krav som ved oprettelsen. Uden det kunne man omgaa spaerringen ved at
+  // oprette opgaven med den rigtige kunde og bagefter skrive et andet navn ind.
+  //
+  // Men kun naar navnet FAKTISK er aendret. Ellers ville de gamle opgaver der ligger
+  // uden nummer blive laast helt: man kunne ikke rette deres adresse eller
+  // adgangstekst, fordi kundefeltet aldrig kunne komme i orden.
+  const kundeIkkeValgt = !custGuid && custName.trim() !== (t.customerName || "").trim();
+
   function saveCustomer() {
+    if (kundeIkkeValgt) return;
     onUpdateCustomerInfo(t.id, { customerName: custName, address: custAddress, poNumber: custPo, accessInstructions: custAccess, dineroSynced: customerDineroSynced, dineroContactGuid: custGuid });
     setEditingCustomer(false);
     setDineroResults([]);
@@ -10502,7 +10530,10 @@ return (
             <input style={styles.input} value={custPo} onChange={(e) => setCustPo(e.target.value)} placeholder="Fakturabeskrivelse (PO, navn m.v.)" />
             <textarea style={{ ...styles.input, minHeight: 60 }} value={custAccess} onChange={(e) => setCustAccess(e.target.value)} placeholder="Adgangsinstruktioner" />
             <div style={{ display: "flex", gap: 8 }}>
-              <button style={styles.primaryBtn} onClick={saveCustomer}>Gem</button>
+              <button style={{ ...styles.primaryBtn, opacity: kundeIkkeValgt ? 0.5 : 1 }}
+                disabled={kundeIkkeValgt}
+                title={kundeIkkeValgt ? "Vælg kunden i Dinero-listen først" : undefined}
+                onClick={saveCustomer}>Gem</button>
               <button style={styles.secondaryBtn} onClick={() => { setEditingCustomer(false); setDineroResults([]); }}>Annuller</button>
             </div>
           </div>
