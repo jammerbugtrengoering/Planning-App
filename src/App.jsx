@@ -7469,6 +7469,106 @@ function fakturaStatus(s) {
   return FAKTURA_STATUS[s] || { tekst: s || "Ukendt", farve: "#64748B", visForfald: true };
 }
 
+// Én faktura. Kun visning — der findes ingen handling her der kan aendre noget i
+// Dinero, og portalkunden kan i det hele taget kun naa de tre opslag.
+function FakturaRaekke({ supabase, guid, faktura: f }) {
+  const [aaben, setAaben] = useState(false);
+  const [detalje, setDetalje] = useState(null);
+  const [henter, setHenter] = useState(false);
+  const [pdfHenter, setPdfHenter] = useState(false);
+  const [fejl, setFejl] = useState("");
+  const st = fakturaStatus(f.Status);
+
+  async function fold() {
+    const nu = !aaben;
+    setAaben(nu);
+    if (!nu || detalje) return;
+    setHenter(true); setFejl("");
+    const { data, error } = await supabase.functions.invoke("dinero", {
+      body: { action: "fakturalinjer", query: f.Guid, contactGuid: guid },
+    });
+    setHenter(false);
+    const fj = data?.error || error?.message;
+    if (fj) { setFejl("Kunne ikke hente linjerne: " + fj); return; }
+    setDetalje(data);
+  }
+
+  async function aabnPdf() {
+    setPdfHenter(true); setFejl("");
+    const { data, error } = await supabase.functions.invoke("dinero", {
+      body: { action: "fakturaPdf", query: f.Guid, contactGuid: guid },
+    });
+    setPdfHenter(false);
+    if (error) { setFejl("Kunne ikke hente PDF'en: " + error.message); return; }
+    // Kommer der JSON tilbage, er det en fejlbesked og ikke et dokument.
+    if (!(data instanceof Blob)) { setFejl(data?.error ? "PDF: " + data.error : "Fik ikke en PDF retur."); return; }
+    const url = URL.createObjectURL(new Blob([data], { type: "application/pdf" }));
+    window.open(url, "_blank", "noopener");
+    // Hukommelsen frigives efter et minut. Lukker man vinduet med det samme, er
+    // adressen alligevel doed — men et minut er rigeligt til at browseren har laest den.
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  }
+
+  const kr = (n) => Math.round(Number(n) || 0).toLocaleString("da-DK") + " kr";
+
+  return (
+    <div style={{ borderTop: "1px solid #F1F5F9" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 10,
+                    padding: "8px 0", fontSize: 13, alignItems: "center" }}>
+        <div onClick={fold} style={{ cursor: "pointer", flex: 1, minWidth: 0 }}>
+          <b>{aaben ? "▾" : "▸"} {fakturaNummer(f)}</b>
+          <span style={{ color: "#64748B" }}>
+            {f.Date ? ` · ${new Date(f.Date).toLocaleDateString("da-DK")}` : ""}
+            {f.Description ? ` · ${f.Description}` : ""}
+          </span>
+        </div>
+        <div style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+          <b>{kr(f.TotalInclVat)}</b>
+          <div style={{ fontSize: 11.5, color: st.farve }}>
+            {st.tekst}
+            {f.PaymentDate && st.visForfald
+              ? ` · forfald ${new Date(f.PaymentDate).toLocaleDateString("da-DK")}` : ""}
+          </div>
+        </div>
+        <button onClick={aabnPdf} disabled={pdfHenter}
+          style={{ ...styles.secondaryBtn, padding: "5px 10px", fontSize: 12, flexShrink: 0 }}>
+          {pdfHenter ? "Henter…" : "PDF"}
+        </button>
+      </div>
+
+      {aaben && (
+        <div style={{ padding: "4px 0 12px 14px" }}>
+          {henter && <div style={{ fontSize: 12.5, color: "#94A3B8" }}>Henter linjer…</div>}
+          {fejl && <div style={{ fontSize: 12.5, color: "#B91C1C" }}>{fejl}</div>}
+          {detalje && (detalje.linjer || []).length === 0 && (
+            <div style={{ fontSize: 12.5, color: "#94A3B8" }}>Ingen linjer på fakturaen.</div>
+          )}
+          {detalje && (detalje.linjer || []).map((l, i) => (
+            <div key={i} style={{ display: "flex", justifyContent: "space-between", gap: 10,
+                                  fontSize: 12.5, padding: "4px 0", borderBottom: "1px solid #F8FAFC" }}>
+              <div style={{ minWidth: 0 }}>
+                {l.beskrivelse}
+                {l.bemaerkning && <span style={{ color: "#94A3B8" }}> · {l.bemaerkning}</span>}
+                <div style={{ color: "#94A3B8" }}>
+                  {String(l.antal).replace(".", ",")} {l.enhed === "hours" ? "timer" : l.enhed} × {kr(l.stykpris)}
+                </div>
+              </div>
+              <div style={{ whiteSpace: "nowrap", fontWeight: 600 }}>{kr(l.total)}</div>
+            </div>
+          ))}
+          {detalje && (
+            <div style={{ marginTop: 6, fontSize: 12.5, textAlign: "right", color: "#475569" }}>
+              <div>Ekskl. moms: <b>{kr(detalje.exMoms)}</b></div>
+              <div>Moms: <b>{kr(detalje.moms)}</b></div>
+              <div style={{ fontSize: 13.5, marginTop: 2 }}>I alt: <b>{kr(detalje.inklMoms)}</b></div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function KundeFakturaer({ supabase, guid }) {
   const [raekker, setRaekker] = useState(null);
   const [henter, setHenter] = useState(false);
@@ -7506,29 +7606,9 @@ function KundeFakturaer({ supabase, guid }) {
                     letterSpacing: ".04em", color: "#9C1B5D", marginBottom: 4 }}>
         Fakturaer i Dinero
       </div>
-      {raekker.map((f) => {
-        const st = fakturaStatus(f.Status);
-        return (
-          <div key={f.Guid} style={{ display: "flex", justifyContent: "space-between", gap: 10,
-                                     padding: "7px 0", borderTop: "1px solid #F1F5F9", fontSize: 13 }}>
-            <div>
-              <b>{fakturaNummer(f)}</b>
-              <span style={{ color: "#64748B" }}>
-                {f.Date ? ` · ${new Date(f.Date).toLocaleDateString("da-DK")}` : ""}
-                {f.Description ? ` · ${f.Description}` : ""}
-              </span>
-            </div>
-            <div style={{ textAlign: "right", whiteSpace: "nowrap" }}>
-              <b>{Math.round(Number(f.TotalInclVat) || 0).toLocaleString("da-DK")} kr</b>
-              <div style={{ fontSize: 11.5, color: st.farve }}>
-                {st.tekst}
-                {f.PaymentDate && st.visForfald
-                  ? ` · forfald ${new Date(f.PaymentDate).toLocaleDateString("da-DK")}` : ""}
-              </div>
-            </div>
-          </div>
-        );
-      })}
+      {raekker.map((f) => (
+        <FakturaRaekke key={f.Guid} supabase={supabase} guid={guid} faktura={f} />
+      ))}
     </div>
   );
 }
