@@ -1478,6 +1478,22 @@ const MODULE_HELP = {
         "Listen «Udleveret, ikke afleveret hos kunden endnu» viser hvad der er undervejs. Står noget der længe, er varen ikke kommet frem — og den bliver ikke faktureret."] },
   ], warn: "Retter du prisen på et kundeprodukt, slår den igennem i Fakturering med det samme. Allerede sendte fakturalinjer røres ikke." },
 
+  kunder: { title: "Kunder", intro: "Kunden set samlet — og stedet hvor kundeportalen tændes.", blocks: [
+    { h: "Sådan læses listen", p: [
+        "Her ser du hver kunde ét sted: hvad hun har givet i omsætning, hvor mange aftaler hun har, og hvornår hun sidst fik besøg.",
+        "Omsætningen er realiseret — registreret tid gange satsen for kontrakttypen, plus udførte fastprisopgaver. Planlagt tid tæller ikke med; det er ikke penge før nogen har været der.",
+        "Står der «aldrig besøgt», er der oprettet opgaver men endnu ikke registreret tid på nogen af dem.",
+        "Kunderne kommer fra Dinero. Der oprettes ingen kunder her — det sker i Dinero, og de findes derefter via opslag."] },
+    { h: "Tænd kundeportalen", p: [
+        "Fold kunden ud og vælg et kort navn til adressen. Det foreslås ud fra kundens navn og må kun indeholde små bogstaver, tal og bindestreg.",
+        "Kunden får sin egen adresse med sit navn på, og hun ser kun sine egne data. Det er håndhævet i databasen, ikke i skærmbilledet.",
+        "Vælg Basis. Udvidet er ikke bygget endnu — vælger du den, får kunden det samme som basis indtil videre.",
+        "Inviter derefter den første bruger. Hun bliver administrator og kan selv invitere kolleger hos kunden, men kun hos sin egen."] },
+    { h: "Når portalen lukkes", p: [
+        "«Luk portalen» stopper adgangen med det samme for alle kundens brugere. Du behøver ikke slette dem enkeltvis.",
+        "Det korte navn bliver stående, så portalen kan tændes igen senere og det gamle link virker."] },
+  ], warn: "Kunden ser sine opgaver med tid, tjekliste og hvem der udførte dem — men aldrig interne advarsler, kontrakttype eller lønrelevante tal. Felterne er valgt enkeltvis i databasen." },
+
   tilbud: { title: "Tilbud", intro: "Tilbuddet er forløberen for aftalen. Accepterer kunden, dannes aftalen af sig selv — som kladde.", blocks: [
     { h: "Sådan laver du et", p: [
         "Tryk «Nyt tilbud», find kunden i Dinero, og udfyld kontrakttype, pris og hvilke tjeklister der er med.",
@@ -1629,8 +1645,8 @@ function PlanningApp({ session, onSignOut }) {
   useEffect(() => { localStorage.setItem("rp_lang", lang); }, [lang]);
 
   const L = {
-    da: { schedule:"Ugeplan", employees:"Medarbejdere", checklists:"Tjeklister", time:"Fakturering", inventory:"Lager", contracts:"Aftaler", tilbud:"Tilbud", reports:"Rapportering", medExport:"Medarbejder-eksport", signOut:"Log ud", sub:"Ugeplanlægning · kapacitet · kompetenceniveauer" },
-    en: { schedule:"Schedule", employees:"Employees", checklists:"Checklists", time:"Time & Export", inventory:"Inventory", contracts:"Contracts", tilbud:"Quotes", reports:"Reporting", medExport:"Employee export", signOut:"Sign out", sub:"Weekly planning · capacity · skill levels" },
+    da: { schedule:"Ugeplan", employees:"Medarbejdere", checklists:"Tjeklister", time:"Fakturering", inventory:"Lager", contracts:"Aftaler", kunder:"Kunder", tilbud:"Tilbud", reports:"Rapportering", medExport:"Medarbejder-eksport", signOut:"Log ud", sub:"Ugeplanlægning · kapacitet · kompetenceniveauer" },
+    en: { schedule:"Schedule", employees:"Employees", checklists:"Checklists", time:"Time & Export", inventory:"Inventory", contracts:"Contracts", kunder:"Customers", tilbud:"Quotes", reports:"Reporting", medExport:"Employee export", signOut:"Sign out", sub:"Weekly planning · capacity · skill levels" },
   }[lang];
   // ── Dynamiske master-data fra Supabase ──
   const [skills, setSkills] = useState(SKILLS_FALLBACK);
@@ -3809,7 +3825,7 @@ function PlanningApp({ session, onSignOut }) {
           </div>
         </div>
         <nav style={styles.nav}>
-          {[["uge", L.schedule], ["employees", L.employees], ["checklists", L.checklists], ["time", L.time], ["inventory", L.inventory], ["tilbud", L.tilbud], ["contracts", L.contracts], ["reports", L.reports], ["medExport", L.medExport]].map(([k, l]) => (
+          {[["uge", L.schedule], ["employees", L.employees], ["checklists", L.checklists], ["time", L.time], ["inventory", L.inventory], ["kunder", L.kunder], ["tilbud", L.tilbud], ["contracts", L.contracts], ["reports", L.reports], ["medExport", L.medExport]].map(([k, l]) => (
             <button key={k} onClick={() => setView(k)} style={view === k ? styles.navBtnActive : styles.navBtn}>{l}</button>
           ))}
           {/* Sprogvalg og Google Translate fjernet - planlaegningsappen bruges kun paa dansk. */}
@@ -4002,6 +4018,10 @@ function PlanningApp({ session, onSignOut }) {
       {view === "contracts" && (
         <ContractsView templates={templates} instances={instances} pricing={pricing} employees={employees} onEditDraft={(tpl) => { setCopyPayload({ ...tpl, type: "fixed", templateDays: tpl.days }); setEditTplId(tpl.id); setShowAddTask(true); }}
             isAdminUser={isAdminUser} onCancelTemplate={(tplId) => setCancelTarget(tplId)} />
+      )}
+
+      {view === "kunder" && (
+        <KunderView supabase={supabase} currentEmployeeId={currentEmployeeForAuth?.id || ""} />
       )}
 
       {view === "tilbud" && (
@@ -7418,6 +7438,272 @@ function SkillsView({ supabase, skills: skillNames, onSkillsChange }) {
 }
 
 // ── Inventory View ────────────────────────────────────────────────────────────
+// Taender og styrer kundens portal. Ligger paa kunden og ikke under Tilbud: en portal
+// er noget en kunde HAR, ikke noget der saelges én gang.
+function PortalAfsnit({ supabase, kunde, currentEmployeeId, onAendret }) {
+  const aktiv = kunde.portal_status === "aktiv";
+  const [slug, setSlug] = useState(kunde.portal_slug || "");
+  const [option, setOption] = useState(kunde.portal_option || "basis");
+  const [email, setEmail] = useState("");
+  const [navn, setNavn] = useState("");
+  const [arbejder, setArbejder] = useState("");
+  const [fejl, setFejl] = useState("");
+  const [besked, setBesked] = useState("");
+
+  // Kun smaa bogstaver, tal og bindestreg — det skal kunne staa i en adresse.
+  // Foreslaas ud fra navnet, saa planlaeggeren ikke skal finde paa noget.
+  function foreslaaSlug() {
+    return (kunde.navn || "")
+      .toLowerCase()
+      .replace(/[æä]/g, "ae").replace(/[øö]/g, "oe").replace(/å/g, "aa")
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 30);
+  }
+
+  async function taend() {
+    setFejl(""); setBesked("");
+    const s = (slug || foreslaaSlug()).trim();
+    if (!/^[a-z0-9][a-z0-9-]{1,38}[a-z0-9]$/.test(s)) {
+      setFejl("Det korte navn må kun indeholde små bogstaver, tal og bindestreg — og mindst tre tegn.");
+      return;
+    }
+    setArbejder("taender");
+    const { error } = await supabase.from("portal_abonnement").upsert({
+      dinero_contact_guid: kunde.guid,
+      visningsnavn: kunde.navn,
+      portal_slug: s,
+      option,
+      status: "aktiv",
+    }, { onConflict: "dinero_contact_guid" });
+    setArbejder("");
+    if (error) {
+      // Den mest sandsynlige fejl er at det korte navn er taget af en anden kunde.
+      setFejl(/duplicate|unique/i.test(error.message)
+        ? `«${s}» er allerede brugt af en anden kunde. Vælg et andet.`
+        : error.message);
+      return;
+    }
+    setSlug(s);
+    onAendret();
+  }
+
+  async function sluk() {
+    if (!window.confirm(`Luk portalen for ${kunde.navn}? Hendes login holder op med at virke med det samme.`)) return;
+    setArbejder("slukker");
+    await supabase.from("portal_abonnement")
+      .update({ status: "opsagt", opsagt_dato: new Date().toISOString().slice(0, 10) })
+      .eq("dinero_contact_guid", kunde.guid);
+    setArbejder("");
+    onAendret();
+  }
+
+  async function inviter() {
+    setFejl(""); setBesked("");
+    if (!email.trim()) { setFejl("Skriv kundens e-mail."); return; }
+    setArbejder("inviterer");
+    const { data, error } = await supabase.functions.invoke("inviter-bruger", {
+      body: {
+        type: "portal", email: email.trim(), guid: kunde.guid,
+        navn: navn.trim() || null, rolle: "admin",
+        redirectTo: `${PORTAL_URL}/${slug || kunde.portal_slug}`,
+      },
+    });
+    setArbejder("");
+    const f = data?.error || error?.message;
+    if (f) { setFejl(f); return; }
+    setEmail(""); setNavn("");
+    setBesked(data?.mailSendt === false
+      ? "Brugeren er oprettet, men mailen kunne ikke sendes. Send linket manuelt."
+      : `Invitationen er sendt til ${email.trim()}.`);
+    onAendret();
+  }
+
+  if (!aktiv) {
+    return (
+      <div style={{ borderTop: "1px solid #F1F5F9", paddingTop: 12 }}>
+        <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>Kundeportal</div>
+        <div style={{ fontSize: 12.5, color: "#64748B", lineHeight: 1.5, marginBottom: 10 }}>
+          Kunden kan få adgang til at se sine egne opgaver og fakturaer. Hun får sin egen
+          adresse med sit navn på — og kun sine egne data.
+        </div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end" }}>
+          <div style={{ flex: 1, minWidth: 180 }}>
+            <label style={styles.label}>Kort navn i adressen</label>
+            <input style={styles.input} value={slug} onChange={(e) => setSlug(e.target.value)}
+              placeholder={foreslaaSlug()} />
+            <div style={styles.hint}>{PORTAL_URL}/{slug || foreslaaSlug()}</div>
+          </div>
+          <div style={{ width: 170 }}>
+            <label style={styles.label}>Option</label>
+            <select style={styles.input} value={option} onChange={(e) => setOption(e.target.value)}>
+              <option value="basis">Basis — faktura og opgaver</option>
+              <option value="udvidet">Udvidet — bestilling</option>
+            </select>
+          </div>
+          <button style={styles.primaryBtn} disabled={!!arbejder} onClick={taend}>
+            {arbejder === "taender" ? "Tænder…" : "Tænd portalen"}
+          </button>
+        </div>
+        {option === "udvidet" && (
+          <div style={{ ...styles.hint, color: "#B45309" }}>
+            Udvidet er ikke bygget endnu. Kunden får det samme som basis indtil da.
+          </div>
+        )}
+        {fejl && <div style={{ color: "#B91C1C", fontSize: 13, marginTop: 8 }}>{fejl}</div>}
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ borderTop: "1px solid #F1F5F9", paddingTop: 12 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+        <div>
+          <div style={{ fontSize: 13, fontWeight: 700 }}>
+            Kundeportal · {kunde.portal_option === "udvidet" ? "Udvidet" : "Basis"}
+          </div>
+          <a href={`${PORTAL_URL}/${kunde.portal_slug}`} target="_blank" rel="noreferrer"
+            style={{ fontSize: 12.5, color: "#4F46E5" }}>
+            {PORTAL_URL}/{kunde.portal_slug}
+          </a>
+          <div style={{ fontSize: 12, color: "#64748B", marginTop: 2 }}>
+            {kunde.portal_brugere} bruger{kunde.portal_brugere === 1 ? "" : "e"} med adgang
+          </div>
+        </div>
+        <button style={{ ...styles.secondaryBtn, color: "#B91C1C", borderColor: "#FCA5A5" }}
+          disabled={!!arbejder} onClick={sluk}>
+          {arbejder === "slukker" ? "Lukker…" : "Luk portalen"}
+        </button>
+      </div>
+
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end", marginTop: 12 }}>
+        <div style={{ flex: 1, minWidth: 150 }}>
+          <label style={styles.label}>Navn</label>
+          <input style={styles.input} value={navn} onChange={(e) => setNavn(e.target.value)} placeholder="Hanne Nielsen" />
+        </div>
+        <div style={{ flex: 1, minWidth: 180 }}>
+          <label style={styles.label}>E-mail</label>
+          <input style={styles.input} type="email" value={email} onChange={(e) => setEmail(e.target.value)}
+            placeholder="hanne@virksomhed.dk" />
+        </div>
+        <button style={styles.secondaryBtn} disabled={!!arbejder} onClick={inviter}>
+          {arbejder === "inviterer" ? "Sender…" : "Inviter"}
+        </button>
+      </div>
+      <div style={styles.hint}>
+        Den første bruger bliver administrator og kan selv invitere kolleger hos kunden.
+      </div>
+
+      {fejl && <div style={{ color: "#B91C1C", fontSize: 13, marginTop: 8 }}>{fejl}</div>}
+      {besked && <div style={{ color: "#166534", fontSize: 13, marginTop: 8 }}>{besked}</div>}
+    </div>
+  );
+}
+
+// ── Kunder ───────────────────────────────────────────────────────────────────
+// Der har aldrig vaeret ét sted at se en kunde samlet. customers-tabellen er doede
+// data, og kunderne kommer fra Dinero — saa omsaetning, aftaler og sidste besoeg laa
+// spredt ud over Fakturering, Aftaler og Ugeplan.
+//
+// Herfra taendes ogsaa kundeportalen. Det hoerer til her og ikke under Tilbud: en
+// portal er noget en kunde HAR, ikke noget der saelges én gang.
+function KunderView({ supabase, currentEmployeeId }) {
+  const [kunder, setKunder] = useState([]);
+  const [henter, setHenter] = useState(true);
+  const [aaben, setAaben] = useState(null);
+  const [soeg, setSoeg] = useState("");
+
+  async function hent() {
+    setHenter(true);
+    const { data } = await supabase.from("kundeoversigt").select("*").order("navn");
+    setKunder(data || []);
+    setHenter(false);
+  }
+  useEffect(() => { hent(); }, []);
+
+  const vist = kunder.filter((k) =>
+    !soeg.trim() || (k.navn || "").toLowerCase().includes(soeg.trim().toLowerCase()));
+
+  const samletKr = kunder.reduce((s, k) => s + Number(k.realiseret_kr || 0), 0);
+  const medPortal = kunder.filter((k) => k.portal_status === "aktiv").length;
+
+  if (henter) return <div style={{ padding: 40, textAlign: "center", color: "#9C1B5D" }}>Indlæser kunder…</div>;
+
+  return (
+    <div style={styles.page}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px,1fr))", gap: 8, marginBottom: 16 }}>
+        {[
+          { label: "Kunder", value: kunder.length, color: "#111111" },
+          { label: "Realiseret i alt", value: Math.round(samletKr).toLocaleString("da-DK") + " kr", color: "#9C1B5D" },
+          { label: "Aktive aftaler", value: kunder.reduce((s, k) => s + Number(k.aktive_aftaler || 0), 0), color: "#0F766E" },
+          { label: "Med kundeportal", value: medPortal, color: "#4F46E5" },
+        ].map((s) => (
+          <div key={s.label} style={{ background: "#fff", borderRadius: 10, padding: "12px 14px", boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
+            <div style={{ fontSize: 22, fontWeight: 800, color: s.color }}>{s.value}</div>
+            <div style={{ fontSize: 12, color: "#64748B", marginTop: 2 }}>{s.label}</div>
+          </div>
+        ))}
+      </div>
+
+      <input style={{ ...styles.input, marginBottom: 12 }} value={soeg}
+        onChange={(e) => setSoeg(e.target.value)} placeholder="Søg efter kunde…" />
+
+      {vist.map((k) => {
+        const erAaben = aaben === k.guid;
+        return (
+          <div key={k.guid} style={{ background: "#fff", borderRadius: 10, marginBottom: 8,
+                                     boxShadow: "0 1px 3px rgba(0,0,0,0.06)", overflow: "hidden" }}>
+            <div onClick={() => setAaben(erAaben ? null : k.guid)}
+              style={{ padding: "13px 15px", cursor: "pointer", display: "flex",
+                       justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontWeight: 700, fontSize: 14.5 }}>
+                  {k.navn}
+                  {k.portal_status === "aktiv" && (
+                    <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 700, padding: "2px 8px",
+                                   borderRadius: 999, background: "#EEF2FF", color: "#4F46E5" }}>Portal</span>
+                  )}
+                </div>
+                <div style={{ fontSize: 12.5, color: "#64748B", marginTop: 2 }}>
+                  {k.adresse || "Ingen adresse"} · {k.aktive_aftaler} aftale{k.aktive_aftaler === 1 ? "" : "r"}
+                  {k.sidste_besoeg ? ` · sidst ${new Date(k.sidste_besoeg).toLocaleDateString("da-DK")}` : " · aldrig besøgt"}
+                </div>
+              </div>
+              <div style={{ textAlign: "right", flexShrink: 0 }}>
+                <div style={{ fontWeight: 800, fontSize: 15 }}>
+                  {Math.round(Number(k.realiseret_kr || 0)).toLocaleString("da-DK")} kr
+                </div>
+                <div style={{ fontSize: 11.5, color: "#94A3B8" }}>
+                  {String(k.timer_registreret).replace(".", ",")} timer registreret
+                </div>
+              </div>
+            </div>
+
+            {erAaben && (
+              <div style={{ borderTop: "1px solid #F1F5F9", padding: "14px 15px", background: "#FCFCFD" }}>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(130px,1fr))", gap: 10, marginBottom: 14 }}>
+                  {[
+                    ["Opgaver i alt", k.opgaver_i_alt],
+                    ["Udført", k.udfoerte],
+                    ["Kommende", k.kommende],
+                    ["Kontrakttype", k.kontrakttype],
+                  ].map(([l, v]) => (
+                    <div key={l}>
+                      <div style={{ fontSize: 15, fontWeight: 700 }}>{v}</div>
+                      <div style={{ fontSize: 11.5, color: "#64748B" }}>{l}</div>
+                    </div>
+                  ))}
+                </div>
+                <PortalAfsnit supabase={supabase} kunde={k} currentEmployeeId={currentEmployeeId} onAendret={hent} />
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // ── Adressefelt med opslag i Danmarks adresseregister ────────────────────────
 // Forhindrer to fejl vi har set i drift:
 //
