@@ -756,6 +756,17 @@ function scheduleWeek(weekInstances, employees, autoOnly = false, areas = [], em
   return list;
 }
 
+// Felterne der arves fra aftalen ned paa opgaven. Listen bruges BAADE af
+// selvhelbredelsen og af nedskrivningen, saa de to aldrig kan naa hver sin
+// konklusion om hvad der er i sync.
+const ARVEDE_FELTER = [
+  "customerName", "address", "dineroContactGuid", "poNumber",
+  "needsKeyPickup", "contractType", "pricingType", "fixedPrice", "videoUrl",
+];
+function arvetAftryk(t) {
+  return ARVEDE_FELTER.map((f) => JSON.stringify(t?.[f] ?? null)).join("|");
+}
+
 function ensureWeekInstances(week, year, allInstances, templates, employees, areas = [], employeeAreas = [], travelSettings = DEFAULT_TRAVEL) {
   let list = [...allInstances];
   const weekMonday = mondayOfWeek(week, year);
@@ -940,7 +951,11 @@ function ensureWeekInstances(week, year, allInstances, templates, employees, are
             // Kun hvis aftalen faktisk HAR et nummer: ellers ville en tom aftale
             // slette et nummer der er sat i haanden paa den enkelte opgave.
             ...(tpl.dineroContactGuid ? { dineroContactGuid: tpl.dineroContactGuid } : {}),
-            poNumber: tpl.poNumber || "",
+            // Samme vaern paa PO. Hos Jammerbugt Kommune staar borgerens navn i det
+            // felt paa den enkelte opgave, mens aftalen er tom — en ubetinget kopi
+            // ned ville slette referencen paa 49 opgaver, og fakturaen ville komme
+            // uden at kommunen kunne se hvem den vedroerer.
+            ...(tpl.poNumber ? { poNumber: tpl.poNumber } : {}),
             accessInstructions: tpl.accessInstructions || "",
             needsKeyPickup: !!tpl.needsKeyPickup,
             contractType: tpl.contractType || "privat",
@@ -1362,6 +1377,11 @@ const MODULE_HELP = {
         "Du kan også gøre det fra en åben opgave: tildel medarbejderen, og tryk så «Gør fast på aftalen».",
         "Det slår igennem på alle kommende opgaver på aftalen. Udførte opgaver røres ikke.",
         "Tilføjer du derimod bare en medarbejder på en enkelt opgave, gælder det kun den ene opgave. Brug det til afløsning."] },
+    { h: "Når du retter på en aftale", p: [
+        "Kundenavn, adresse, kundenummer i Dinero, PO-nummer, nøgleafhentning, kontrakttype, prisform, fastpris og video arves fra aftalen ned på opgaverne. Retter du et af dem, slår det igennem på alle kommende opgaver, næste gang appen åbnes — også dem der allerede ligger i kalenderen.",
+        "Rettelsen gemmes med det samme, så medarbejder-appen ser den samme adresse som du gør. Tidligere levede den kun i din egen browser.",
+        "Opgaver der er udført, har registreret tid eller er sendt til Dinero, røres aldrig. Der er arbejdet leveret, og en senere prisændring må ikke omregne det bagud.",
+        "PO-nummer og Dinero-nummer arves kun ned hvis aftalen faktisk har et. Er aftalens felt tomt, bevares det der står på den enkelte opgave — det er sådan borgerens navn bliver stående på kommunens opgaver."] },
     { h: "Ikke tildelt", p: ["En opgave havner her hvis den er ny, hvis medarbejderen er blevet syg, eller hvis systemet ikke kunne finde nogen der passer.",
                              "Træk den over på en medarbejder, eller sæt Auto-planlæg og tryk Planlæg."] },
     { h: "Hvorfor bliver en opgave ikke planlagt?", p: [
@@ -2067,17 +2087,15 @@ function PlanningApp({ session, onSignOut }) {
         // i browseren, og medarbejder-appen ville aldrig faa dem at se.
         const knownIds = new Set(existingInst.map((t) => t.id));
         allInst.filter((t) => !knownIds.has(t.id)).forEach(syncInstance);
-        // Har selvhelbredelsen givet en allerede gemt opgave kundens Dinero-nummer,
-        // skal det ogsaa NED i databasen. Ellers findes koblingen kun i den aabne
-        // browser, kunden staar fortsat dobbelt i overblikket, og faktureringen
-        // hviler videre paa navneopslaget. Kun nummeret sammenlignes — de oevrige
-        // felter helbredes hver gang appen aabnes og behoever ikke en skrivning her.
-        const guidFoer = new Map(existingInst.map((t) => [t.id, t.dineroContactGuid || ""]));
-        allInst
-          .filter((t) => knownIds.has(t.id)
-            && (t.dineroContactGuid || "") !== ""
-            && (t.dineroContactGuid || "") !== guidFoer.get(t.id))
-          .forEach(syncInstance);
+        // Selvhelbredelsen levede kun i browserens hukommelse: retter man en adresse
+        // paa en aftale, saa planlaeggeren det med det samme, men databasen fik det
+        // foerst hvis nogen tilfaeldigvis roerte opgaven bagefter. Medarbejder-appen
+        // laeser databasen, saa den kunne staa med den gamle adresse i ubestemt tid.
+        // Her skrives forskellen ned — kun for de opgaver der faktisk har aendret sig.
+        const aftrykFoer = new Map(existingInst.map((t) => [t.id, arvetAftryk(t)]));
+        const helbredte = allInst.filter(
+          (t) => knownIds.has(t.id) && arvetAftryk(t) !== aftrykFoer.get(t.id));
+        if (helbredte.length) gemArvedeFelter(helbredte);
       } else if (instData?.length) {
         setInstances(instData.map((i) => ({
           ...i, timeLog: i.time_log ?? [], requiredSkills: i.required_skills ?? [],
@@ -2379,6 +2397,33 @@ function PlanningApp({ session, onSignOut }) {
   const removeEmployee = useCallback(async (id) => {
     const { error: delEmpErr } = await supabase.from("employees").delete().eq("id", id);
     if (dbFail(delEmpErr, "slette medarbejderen")) return;
+  }, []);
+
+  // Skriver kun de arvede felter. Bevidst IKKE syncInstance pr. opgave: foerste gang
+  // det her koerer, er der flere hundrede opgaver at rette op, og lige saa mange kald
+  // ville tage minutter og kunne ramme et hastighedsloft midt i. En upsert med kun
+  // disse kolonner roerer heller ikke status, tid eller tjekliste — de bliver staaende
+  // som de er, ogsaa hvis en medarbejder skriver samtidig.
+  const gemArvedeFelter = useCallback(async (opgaver) => {
+    const PORTION = 200;
+    for (let i = 0; i < opgaver.length; i += PORTION) {
+      const raekker = opgaver.slice(i, i + PORTION).map((t) => ({
+        id: t.id,
+        customer_name: t.customerName ?? "",
+        address_text: t.address ?? "",
+        dinero_contact_guid: t.dineroContactGuid || null,
+        po_number: t.poNumber ?? "",
+        needs_key_pickup: !!t.needsKeyPickup,
+        contract_type: t.contractType ?? "privat",
+        pricing_type: t.pricingType || "hourly",
+        fixed_price: t.fixedPrice ?? null,
+        video_url: t.videoUrl ?? "",
+      }));
+      const { error } = await supabase.from("instances").upsert(raekker, { onConflict: "id" });
+      // Ingen besked til planlaeggeren: hun har ikke bedt om det her, og opgaverne
+      // staar rigtigt paa skaermen uanset. Naeste aabning proever igen af sig selv.
+      if (error) { console.error("gemArvedeFelter:", error.message); return; }
+    }
   }, []);
 
   const syncInstance = useCallback(async (inst) => {
