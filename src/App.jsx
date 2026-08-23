@@ -1586,24 +1586,27 @@ const MODULE_HELP = {
         "Forecast fremskriver resten af året."] },
   ], warn: "Er «Registreret» meget lavere end «Planlagt», er det som regel manglende tidsregistrering — ikke manglende arbejde. Tjek Kundetimer." },
 
-  kundetimer: { title: "Kundetimer", intro: "Planlagt mod registreret tid pr. kunde, m\u00e5ned for m\u00e5ned.", blocks: [
+  kundetimer: { title: "Kundetimer", intro: "Hvorn\u00e5r blev der brugt en anden tid end aftalt \u2014 og hvorfor.", blocks: [
     { h: "Hvad du ser", p: [
-        "\u00c9n linje pr. kunde for den valgte m\u00e5ned: hvor mange timer der var afsat, hvor mange der blev registreret, og forskellen.",
-        "Tryk p\u00e5 en kunde for at folde hendes enkelte bes\u00f8g ud. Der st\u00e5r ogs\u00e5 medarbejderens begrundelse, hvis der er skrevet en.",
-        "To medarbejdere p\u00e5 samme bes\u00f8g t\u00e6ller som \u00e9t bes\u00f8g. Deres minutter l\u00e6gges sammen, for det er \u00e9t bes\u00f8g set fra kundens side.",
-        "Listen er sorteret efter st\u00f8rste afvigelse f\u00f8rst, uanset om der er brugt for meget eller for lidt tid.",
-        "Der st\u00e5r ingen priser her med vilje. Skal der kroner p\u00e5, ligger de under Fakturering."] },
-    { h: "Kolonnen Udest\u00e5r", p: [
-        "Antallet af opgaver i m\u00e5neden der endnu ikke er udf\u00f8rt.",
-        "Uden det tal ville hver eneste kunde se ud til at mangle timer den f\u00f8rste i m\u00e5neden. St\u00e5r der et h\u00f8jt tal, er afvigelsen bare at m\u00e5neden ikke er slut."] },
-    { h: "S\u00e5dan l\u00e6ses en afvigelse", p: [
-        "Et minus betyder at der er brugt mindre tid end planlagt. Er der ingen udest\u00e5ende opgaver, er det som regel manglende tidsregistrering \u2014 ikke sparet arbejde.",
-        "Et plus betyder mere tid end afsat. Er det fast hver m\u00e5ned hos samme kunde, er det aftalens varighed der er sat for lavt.",
-        "Ved timepris faktureres der efter registreret tid, s\u00e5 en afvigelse ses ogs\u00e5 p\u00e5 fakturaen. Ved fast pris g\u00f8r den ikke, og s\u00e5 er det her du opdager at en aftale er blevet ul\u00f8nsom."] },
+        "Kun de bes\u00f8g hvor den registrerede tid er en anden end den aftalte. Passer tiden, er der ikke noget at forklare, og s\u00e5 fylder opgaven ikke.",
+        "For hvert bes\u00f8g st\u00e5r den planlagte tid, den registrerede tid, forskellen, og medarbejderens begrundelse.",
+        "Alt er foldet ud. Ringer kunden og sp\u00f8rger hvorfor der er brugt mere tid, skal du kunne l\u00e6se svaret uden at klikke f\u00f8rst.",
+        "Mest merforbrug \u00f8verst \u2014 det er den samtale der kommer.",
+        "S\u00f8gefeltet finder kunden med det samme, hvis du allerede har hende i r\u00f8ret."] },
+    { h: "Kun udf\u00f8rte opgaver", p: [
+        "En opgave der ikke er k\u00f8rt endnu, er ikke en afvigelse og t\u00e6ller ikke med.",
+        "Regnede vi den med, ville hver eneste kunde se ud til at mangle timer den f\u00f8rste i m\u00e5neden, og listen ville v\u00e6re ubrugelig pr\u00e6cis n\u00e5r du kigger p\u00e5 den."] },
+    { h: "Uden begrundelse", p: [
+        "Tallet \u00f8verst er de bes\u00f8g hvor der er brugt mere tid end aftalt, uden at nogen har skrevet hvorfor.",
+        "Det er dem du ikke kan svare kunden p\u00e5. St\u00e5r der et tal, er det v\u00e6rd at sp\u00f8rge medarbejderen mens hun stadig kan huske det."] },
+    { h: "S\u00e5dan l\u00e6ses forskellen", p: [
+        "Et plus betyder mere tid end aftalt. Sker det fast hos samme kunde, er det aftalens varighed der er sat for lavt \u2014 ret den p\u00e5 aftalen.",
+        "Et minus betyder mindre tid. Er opgaven udf\u00f8rt, er det enten g\u00e5et hurtigere, eller ogs\u00e5 er tiden ikke registreret f\u00e6rdig.",
+        "Ved timepris f\u00f8lger fakturaen den registrerede tid, s\u00e5 forskellen ses ogs\u00e5 der. Ved fast pris g\u00f8r den ikke \u2014 og s\u00e5 er det her du opdager at en aftale er blevet ul\u00f8nsom."] },
     { h: "Eksport", p: [
-        "CSV-filen har en linje pr. bes\u00f8g, en sumlinje pr. kunde, og en samlet sum nederst.",
-        "Timer st\u00e5r b\u00e5de som minutter og som decimaltimer, s\u00e5 der ikke skal regnes om i regnearket."] },
-  ], warn: "Tilbudsm\u00f8der og interne blokke som ferie og sygdom t\u00e6ller ikke med. Det er kun arbejde hos en kunde." },
+        "CSV-filen har en linje pr. bes\u00f8g med begrundelsen, og en sumlinje pr. kunde.",
+        "Der st\u00e5r ingen priser \u2014 hverken p\u00e5 sk\u00e6rmen eller i filen. Skal der kroner p\u00e5, ligger de under Fakturering."] },
+  ], warn: "Tilbudsm\u00f8der og interne blokke som ferie og sygdom t\u00e6ller ikke med. To medarbejdere p\u00e5 samme bes\u00f8g er \u00e9t bes\u00f8g, og deres minutter l\u00e6gges sammen \u2014 det er s\u00e5dan kunden ser det." },
 
   medExport: { title: "Løn data", intro: "Grundlaget for løn: timer og kørsel pr. medarbejder.", blocks: [
     { h: "Sådan gør du", p: ["Vælg måned og år.", "«Afvigelse» viser hvor medarbejderen har skrevet en begrundelse.",
@@ -5896,111 +5899,98 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
   );
 }
 
-// Kundens timer maaned for maaned: hvad var planlagt, hvad blev registreret, og
-// hvorfor er der forskel.
+// Kundetimer: hvorn\u00e5r blev der brugt en anden tid end aftalt, og hvorfor.
 //
-// Bevidst UDEN priser. Planlaeggeren skal kunne have den aaben mens hun har kunden i
-// roeret, og der maa ikke staa timeloen eller daekningsbidrag paa den samme skaerm.
-// Skal der tal paa, ligger de i Fakturering.
+// Skaermen har \u00e9n situation for oeje: kunden ringer og spoerger hvorfor der er brugt
+// mere tid, og planlaeggeren skal kunne svare med det samme. Derfor staar der KUN
+// afvigelser og begrundelser. Opgaver der passede, fylder ikke \u2014 dem er der ikke
+// noget at forklare ved.
+//
+// Kun UDF\u00d8RTE opgaver taeller. En opgave der ikke er koert endnu, er ikke en
+// afvigelse; regnede vi den med, ville hver eneste kunde se ud til at mangle timer den
+// foerste i maaneden, og listen ville vaere ubrugelig praecis naar man kigger paa den.
+//
+// Ingen priser. Skal der kroner paa, ligger de under Fakturering.
 function CustomerHoursView({ instances }) {
   const now = new Date();
   const [filterMonth, setFilterMonth] = useState(now.getMonth());
   const [filterYear, setFilterYear] = useState(now.getFullYear());
-  const [aaben, setAaben] = useState(null);
-  const [kunSkaev, setKunSkaev] = useState(false);
+  const [soeg, setSoeg] = useState("");
 
   const MONTHS = ["Januar","Februar","Marts","April","Maj","Juni","Juli","August","September","Oktober","November","December"];
   const years = [now.getFullYear() - 1, now.getFullYear(), now.getFullYear() + 1];
 
-  // Én linje pr. opgave, ikke pr. medarbejder. Det er kunden der er i fokus, og to
-  // medarbejdere paa samme besoeg er ét besoeg set fra hendes side — deres minutter
-  // laegges sammen.
-  const linjer = [];
+  // \u00c9n linje pr. bes\u00f8g, ikke pr. medarbejder. To medarbejdere paa samme bes\u00f8g er \u00e9t
+  // bes\u00f8g set fra kundens side, og deres minutter laegges sammen.
+  const alle = [];
   instances
     .filter((t) => !BLOCK_TYPES.includes(t.type) && t.type !== "aktivitet")
     .filter((t) => (t.customerName || "").trim())
+    .filter((t) => t.status === "udf\u00f8rt")
     .forEach((t) => {
       const { month, year } = instanceMonthYear(t, filterYear);
       if (month !== filterMonth || year !== filterYear) return;
       const tl = t.timeLog || t.time_log || [];
       const registreret = tl.reduce((sum, l) => sum + (l.minutes || 0), 0);
-      const begrundelse = tl
-        .filter((l) => l.note && String(l.note).trim() && l.empId !== "planner")
-        .map((l) => l.note.trim())
-        .join(" / ");
-      linjer.push({
+      alle.push({
         kunde: t.customerName.trim(),
         week: t.week,
-        day: t.day,
+        dato: instanceDateString(t),
         dayLabel: ALL_DAYS.find((d) => d.key === t.day)?.label || t.day || "\u2014",
         titel: t.title,
-        status: t.status,
         planlagt: t.duration || 0,
         registreret,
-        begrundelse,
+        afvigelse: registreret - (t.duration || 0),
+        begrundelse: tl
+          .filter((l) => l.note && String(l.note).trim() && l.empId !== "planner")
+          .map((l) => l.note.trim())
+          .join(" / "),
       });
     });
 
-  const kunder = [];
-  linjer.forEach((l) => {
-    let k = kunder.find((x) => x.navn === l.kunde);
-    if (!k) { k = { navn: l.kunde, planlagt: 0, registreret: 0, opgaver: [], udestaar: 0 }; kunder.push(k); }
-    k.planlagt += l.planlagt;
-    k.registreret += l.registreret;
-    // En opgave der ikke er udfoert endnu, er ikke en afvigelse. Uden det her ville
-    // hele resten af maaneden se ud som manglende tid den 1.
-    if (l.status !== "udf\u00f8rt") k.udestaar += 1;
-    k.opgaver.push(l);
-  });
-  kunder.forEach((k) => {
-    k.afvigelse = k.registreret - k.planlagt;
-    k.opgaver.sort((a, b) => (a.week - b.week)
-      || (ALL_DAYS.findIndex((d) => d.key === a.day) - ALL_DAYS.findIndex((d) => d.key === b.day))
-      || String(a.titel).localeCompare(String(b.titel), "da"));
-  });
-  // Stoerste afvigelse foerst — i minutter, uanset fortegn. Det er dem der skal ses paa,
-  // ikke dem der passer.
-  kunder.sort((a, b) => Math.abs(b.afvigelse) - Math.abs(a.afvigelse) || a.navn.localeCompare(b.navn, "da"));
+  const skaeve = alle.filter((b) => b.afvigelse !== 0);
 
-  const vist = kunSkaev ? kunder.filter((k) => k.afvigelse !== 0) : kunder;
-  const sumPlanlagt = kunder.reduce((s, k) => s + k.planlagt, 0);
-  const sumRegistreret = kunder.reduce((s, k) => s + k.registreret, 0);
-  const sumAfvigelse = sumRegistreret - sumPlanlagt;
-  const antalSkaeve = kunder.filter((k) => k.afvigelse !== 0).length;
+  const kunder = [];
+  skaeve.forEach((b) => {
+    let k = kunder.find((x) => x.navn === b.kunde);
+    if (!k) { k = { navn: b.kunde, afvigelse: 0, planlagt: 0, registreret: 0, besoeg: [] }; kunder.push(k); }
+    k.afvigelse += b.afvigelse;
+    k.planlagt += b.planlagt;
+    k.registreret += b.registreret;
+    k.besoeg.push(b);
+  });
+  kunder.forEach((k) => k.besoeg.sort((a, b) => String(a.dato).localeCompare(String(b.dato))));
+  // Mest overforbrug oeverst. Det er den samtale der kommer.
+  kunder.sort((a, b) => b.afvigelse - a.afvigelse || a.navn.localeCompare(b.navn, "da"));
+
+  const q = soeg.trim().toLowerCase();
+  const vist = q ? kunder.filter((k) => k.navn.toLowerCase().includes(q)) : kunder;
+
+  const merforbrug = skaeve.reduce((s, b) => s + (b.afvigelse > 0 ? b.afvigelse : 0), 0);
+  const mindreforbrug = skaeve.reduce((s, b) => s + (b.afvigelse < 0 ? -b.afvigelse : 0), 0);
+  const udenBegrundelse = skaeve.filter((b) => b.afvigelse > 0 && !b.begrundelse).length;
 
   const fortegn = (m) => (m > 0 ? "+" : m < 0 ? "\u2212" : "");
-  const afvigTekst = (m) => (m === 0 ? "\u2014" : fortegn(m) + fmtMin(Math.abs(m)));
-  const afvigFarve = (m) => (m === 0 ? "#CBD5E1" : m > 0 ? "#B45309" : "#2563EB");
-
-  const kolonner = "1fr 90px 110px 110px 110px 90px";
+  const afvig = (m) => fortegn(m) + fmtMin(Math.abs(m));
+  const farve = (m) => (m > 0 ? "#B45309" : m < 0 ? "#2563EB" : "#CBD5E1");
+  // Overskrift, kundelinje og bes\u00f8gslinjer er tre selvstaendige gitre. Faar de ikke
+  // praecis samme definition, staar tallene forskudt for deres egen overskrift.
+  const KOL = "1fr 120px 120px 120px";
 
   function eksporter() {
-    const header = ["Kunde", "Uge", "Dag", "Opgave", "Status",
-                    "Planlagt (min)", "Planlagt (timer)",
-                    "Registreret (min)", "Registreret (timer)",
+    const header = ["Kunde", "Dato", "Uge", "Dag", "Opgave",
+                    "Planlagt (min)", "Registreret (min)",
                     "Afvigelse (min)", "Afvigelse (timer)", "Begrundelse"];
     const data = [];
     kunder.forEach((k) => {
-      k.opgaver.forEach((o) => {
-        const afv = o.registreret - o.planlagt;
-        data.push([k.navn, `Uge ${o.week}`, o.dayLabel, o.titel, o.status,
-          o.planlagt, (o.planlagt / 60).toFixed(2),
-          o.registreret, (o.registreret / 60).toFixed(2),
-          afv, (afv / 60).toFixed(2), o.begrundelse || ""]);
-      });
-      // Kundens egen sum lige under hendes linjer, saa filen kan laeses uden at
-      // modtageren skal lave en pivottabel foerst.
-      data.push([`${k.navn} \u2014 i alt`, "", "", "", "",
-        k.planlagt, (k.planlagt / 60).toFixed(2),
-        k.registreret, (k.registreret / 60).toFixed(2),
+      k.besoeg.forEach((b) => data.push([
+        k.navn, b.dato, `Uge ${b.week}`, b.dayLabel, b.titel,
+        b.planlagt, b.registreret, b.afvigelse, (b.afvigelse / 60).toFixed(2),
+        b.begrundelse || "",
+      ]));
+      data.push([`${k.navn} \u2014 i alt`, "", "", "", "", "", "",
         k.afvigelse, (k.afvigelse / 60).toFixed(2), ""]);
     });
-    if (kunder.length > 0) {
-      data.push(["ALLE KUNDER I ALT", "", "", "", "",
-        sumPlanlagt, (sumPlanlagt / 60).toFixed(2),
-        sumRegistreret, (sumRegistreret / 60).toFixed(2),
-        sumAfvigelse, (sumAfvigelse / 60).toFixed(2), ""]);
-    }
     const csv = [header, ...data]
       .map((row) => row.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
     // BOM foran, ellers viser Excel \u00e6\u00f8\u00e5 som volapyk.
@@ -6008,7 +5998,7 @@ function CustomerHoursView({ instances }) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `kundetimer-${MONTHS[filterMonth]}-${filterYear}.csv`;
+    a.download = `afvigelser-${MONTHS[filterMonth]}-${filterYear}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   }
@@ -6016,13 +6006,18 @@ function CustomerHoursView({ instances }) {
   return (
     <div style={styles.page}>
       <div style={styles.toolbar}>
-        <div style={{ ...styles.statBlock, borderLeft: "3px solid #64748B" }}>
-          <div><div style={{ ...styles.statValue, color: "#64748B" }}>{fmtMin(sumPlanlagt)}</div><div style={styles.statLabel}>Planlagt i alt</div></div>
-          <div style={styles.statBox}><div style={{ ...styles.statValue, color: "#16A34A" }}>{fmtMin(sumRegistreret)}</div><div style={styles.statLabel}>Registreret i alt</div></div>
+        <div style={{ ...styles.statBlock, borderLeft: "3px solid #B45309" }}>
+          <div><div style={{ ...styles.statValue, color: "#B45309" }}>{fmtMin(merforbrug)}</div><div style={styles.statLabel}>Brugt mere end aftalt</div></div>
+          <div style={styles.statBox}><div style={{ ...styles.statValue, color: "#2563EB" }}>{fmtMin(mindreforbrug)}</div><div style={styles.statLabel}>Brugt mindre</div></div>
         </div>
-        <div style={{ ...styles.statBlock, borderLeft: `3px solid ${afvigFarve(sumAfvigelse)}` }}>
-          <div><div style={{ ...styles.statValue, color: afvigFarve(sumAfvigelse) }}>{afvigTekst(sumAfvigelse)}</div><div style={styles.statLabel}>Samlet afvigelse</div></div>
-          <div style={styles.statBox}><div style={{ ...styles.statValue, color: "#111111" }}>{antalSkaeve}</div><div style={styles.statLabel}>Kunder med afvigelse</div></div>
+        <div style={{ ...styles.statBlock, borderLeft: "3px solid #64748B" }}>
+          <div><div style={{ ...styles.statValue, color: "#111111" }}>{skaeve.length}</div><div style={styles.statLabel}>Bes\u00f8g med afvigelse</div></div>
+          {/* Et merforbrug uden begrundelse er det man IKKE kan svare kunden paa.
+              Derfor staar tallet her og ikke gemt nede i listen. */}
+          <div style={styles.statBox}>
+            <div style={{ ...styles.statValue, color: udenBegrundelse ? "#B91C1C" : "#94A3B8" }}>{udenBegrundelse}</div>
+            <div style={styles.statLabel}>Uden begrundelse</div>
+          </div>
         </div>
         <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
           <select style={{ ...styles.inputSm, fontSize: 13, fontWeight: 600 }} value={filterMonth} onChange={(e) => setFilterMonth(Number(e.target.value))}>
@@ -6032,79 +6027,64 @@ function CustomerHoursView({ instances }) {
             {years.map((y) => <option key={y} value={y}>{y}</option>)}
           </select>
         </div>
-        <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "#475569", cursor: "pointer" }}>
-          <input type="checkbox" checked={kunSkaev} onChange={(e) => setKunSkaev(e.target.checked)} />
-          Kun kunder med afvigelse
-        </label>
+        <input style={{ ...styles.inputSm, fontSize: 13, minWidth: 190 }} value={soeg}
+          placeholder="S\u00f8g kunde\u2026" onChange={(e) => setSoeg(e.target.value)} />
         <div style={styles.toolbarSpacer} />
         <button style={styles.primaryBtn} onClick={eksporter}><Download size={16} /> Eksporter CSV</button>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: kolonner, gap: 0, background: "#F8FAFC", borderRadius: "10px 10px 0 0", padding: "8px 14px", fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.04em" }}>
-        <span>Kunde</span>
-        <span style={{ textAlign: "right" }}>Opgaver</span>
-        <span style={{ textAlign: "right" }}>Planlagt</span>
-        <span style={{ textAlign: "right" }}>Registreret</span>
-        <span style={{ textAlign: "right" }}>Afvigelse</span>
-        <span style={{ textAlign: "right" }}>Udest\u00e5r</span>
-      </div>
-      <div style={{ background: "#fff", borderRadius: "0 0 10px 10px", boxShadow: "0 1px 3px rgba(0,0,0,0.06)", overflow: "hidden" }}>
-        {vist.map((k) => {
-          const erAaben = aaben === k.navn;
-          return (
-            <div key={k.navn} style={{ borderBottom: "1px solid #F1F5F9" }}>
-              <div onClick={() => setAaben(erAaben ? null : k.navn)}
-                style={{ display: "grid", gridTemplateColumns: kolonner, gap: 0, padding: "11px 14px",
-                         alignItems: "center", cursor: "pointer", minHeight: 44,
-                         background: erAaben ? "#FDF2F8" : "transparent" }}>
-                <span style={{ fontSize: 13, fontWeight: 600, color: "#111111" }}>{k.navn}</span>
-                <span style={{ fontSize: 12, color: "#94A3B8", textAlign: "right" }}>{k.opgaver.length}</span>
-                <span style={{ fontSize: 13, color: "#111111", textAlign: "right" }}>{fmtMin(k.planlagt)}</span>
-                <span style={{ fontSize: 13, fontWeight: 700, color: k.registreret === 0 ? "#94A3B8" : "#16A34A", textAlign: "right" }}>{fmtMin(k.registreret)}</span>
-                <span style={{ fontSize: 13, fontWeight: 700, color: afvigFarve(k.afvigelse), textAlign: "right" }}>{afvigTekst(k.afvigelse)}</span>
-                {/* Udestaaende opgaver forklarer den mest almindelige "afvigelse":
-                    maaneden er ikke slut endnu. Uden tallet ville hver eneste kunde se
-                    ud til at mangle timer den foerste i maaneden. */}
-                <span style={{ fontSize: 12, color: k.udestaar ? "#64748B" : "#CBD5E1", textAlign: "right" }}>
-                  {k.udestaar || "\u2014"}
+      {/* Alt er foldet ud. Kunden staar i telefonen \u2014 der skal ikke klikkes foerst. */}
+      {vist.map((k) => (
+        <div key={k.navn} style={{ background: "#fff", borderRadius: 10, marginBottom: 10,
+                                   boxShadow: "0 1px 3px rgba(0,0,0,0.06)", overflow: "hidden" }}>
+          <div style={{ display: "grid", gridTemplateColumns: KOL, gap: 0, alignItems: "center",
+                        padding: "11px 16px", background: "#F8FAFC" }}>
+            <span style={{ fontSize: 14, fontWeight: 700, color: "#111111" }}>{k.navn}</span>
+            <span style={{ fontSize: 13, color: "#64748B", textAlign: "right" }}>{fmtMin(k.planlagt)}</span>
+            <span style={{ fontSize: 13, fontWeight: 600, color: "#111111", textAlign: "right" }}>{fmtMin(k.registreret)}</span>
+            <span style={{ fontSize: 14, fontWeight: 700, color: farve(k.afvigelse), textAlign: "right" }}>{afvig(k.afvigelse)}</span>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: KOL, gap: 0, padding: "6px 16px",
+                        fontSize: 10, fontWeight: 700, color: "#94A3B8", textTransform: "uppercase",
+                        letterSpacing: "0.04em", borderTop: "1px solid #F1F5F9" }}>
+            <span>Opgave</span>
+            <span style={{ textAlign: "right" }}>Planlagt</span>
+            <span style={{ textAlign: "right" }}>Registreret</span>
+            <span style={{ textAlign: "right" }}>Afvigelse</span>
+          </div>
+          {k.besoeg.map((b, i) => (
+            <div key={i} style={{ padding: "9px 16px", borderTop: "1px solid #F8FAFC" }}>
+              <div style={{ display: "grid", gridTemplateColumns: KOL, gap: 0, alignItems: "baseline" }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 13, color: "#111111", overflow: "hidden",
+                                textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{b.titel}</div>
+                  <div style={{ fontSize: 12, color: "#94A3B8" }}>{b.dayLabel} uge {b.week}</div>
+                </div>
+                <span style={{ fontSize: 13.5, color: "#64748B", textAlign: "right" }}>{fmtMin(b.planlagt)}</span>
+                <span style={{ fontSize: 13.5, fontWeight: 600, color: "#111111", textAlign: "right" }}>{fmtMin(b.registreret)}</span>
+                <span style={{ fontSize: 14, fontWeight: 700, color: farve(b.afvigelse), textAlign: "right" }}>
+                  {afvig(b.afvigelse)}
                 </span>
               </div>
-
-              {erAaben && (
-                <div style={{ padding: "0 14px 12px", background: "#FDF2F8" }}>
-                  {k.opgaver.map((o, i) => {
-                    const afv = o.registreret - o.planlagt;
-                    return (
-                      <div key={i} style={{ display: "grid", gridTemplateColumns: "70px 90px 1fr 90px 90px 90px", gap: 0,
-                                            padding: "7px 0", borderTop: "1px solid #FBCFE8", alignItems: "center", fontSize: 12.5 }}>
-                        <span style={{ color: "#94A3B8" }}>Uge {o.week}</span>
-                        <span style={{ color: "#64748B" }}>{o.dayLabel}</span>
-                        <span style={{ color: "#111111", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                          {o.titel}
-                          {o.status !== "udf\u00f8rt" && (
-                            <span style={{ color: "#94A3B8" }}> \u00b7 {o.status === "planlagt" ? "ikke udf\u00f8rt endnu" : o.status}</span>
-                          )}
-                        </span>
-                        <span style={{ textAlign: "right", color: "#64748B" }}>{fmtMin(o.planlagt)}</span>
-                        <span style={{ textAlign: "right", color: o.registreret === 0 ? "#94A3B8" : "#16A34A", fontWeight: 600 }}>{fmtMin(o.registreret)}</span>
-                        <span style={{ textAlign: "right", color: afvigFarve(afv), fontWeight: 600 }}>{afvigTekst(afv)}</span>
-                        {o.begrundelse && (
-                          <span style={{ gridColumn: "3 / -1", color: "#D97706", fontSize: 12, paddingTop: 2 }}>{o.begrundelse}</span>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
+              {/* Begrundelsen staar i fuld bredde under tallene. Den er tit en hel
+                  saetning, og klemt ned i en kolonne ville den blive klippet af \u2014
+                  netop den tekst man skal laese hoejt for kunden. */}
+              {b.begrundelse ? (
+                <div style={{ fontSize: 13, color: "#B45309", marginTop: 4, lineHeight: 1.5 }}>{b.begrundelse}</div>
+              ) : b.afvigelse > 0 ? (
+                <div style={{ fontSize: 12.5, color: "#B91C1C", marginTop: 4 }}>Ingen begrundelse skrevet</div>
+              ) : null}
             </div>
-          );
-        })}
-        {vist.length === 0 && (
-          <div style={{ ...styles.emptyCol, padding: 40 }}>
-            {kunder.length === 0 ? "Ingen opgaver p\u00e5 kunder i denne m\u00e5ned" : "Ingen kunder med afvigelse i denne m\u00e5ned"}
-          </div>
-        )}
-      </div>
+          ))}
+        </div>
+      ))}
+
+      {vist.length === 0 && (
+        <div style={{ ...styles.emptyCol, padding: 40, background: "#fff", borderRadius: 10 }}>
+          {q ? "Ingen kunde med det navn har en afvigelse i denne m\u00e5ned"
+             : "Ingen afvigelser i denne m\u00e5ned \u2014 alt udf\u00f8rt arbejde matcher den aftalte tid"}
+        </div>
+      )}
     </div>
   );
 }
