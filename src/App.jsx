@@ -1501,7 +1501,13 @@ const MODULE_HELP = {
         "Her ser du hver kunde ét sted: hvad hun har givet i omsætning, hvor mange aftaler hun har, og hvornår hun sidst fik besøg.",
         "Omsætningen er realiseret — registreret tid gange satsen for kontrakttypen, plus udførte fastprisopgaver. Planlagt tid tæller ikke med; det er ikke penge før nogen har været der.",
         "Står der «aldrig besøgt», er der oprettet opgaver men endnu ikke registreret tid på nogen af dem.",
-        "Kunderne kommer fra Dinero. Der oprettes ingen kunder her — det sker i Dinero, og de findes derefter via opslag."] },
+        "Kunderne kommer fra Dinero. Der oprettes ingen kunder her — det sker i Dinero, og de findes derefter via opslag.",
+        "Løse opgaver tæller med. En kunde uden aftale, som bare har fået en enkelt opgave, står også på listen."] },
+    { h: "«Ikke i Dinero»", p: [
+        "Mærkatet betyder at kundens opgaver ikke har hendes kundenummer fra Dinero. Det sker typisk når opgaven er oprettet i hånden og kunden er skrevet ind som navn.",
+        "Fakturaen bliver dannet alligevel, fordi kunden så slås op på navnet. Men det opslag fejler den dag to kontakter i Dinero hedder det samme — og kunden kan ikke få en portal, for portalen hænger på kundenummeret.",
+        "Fold kunden ud og tryk «Find i Dinero». Er der præcis ét træf, kan du koble hende, og alle hendes opgaver og aftaler får nummeret. Er der flere træf, skal dubletterne ryddes op i Dinero først.",
+        "Lykkes en fakturering på et navneopslag, gemmer systemet selv nummeret bagefter, så mærkatet forsvinder af sig selv."] },
     { h: "Tænd kundeportalen", p: [
         "Fold kunden ud og vælg et kort navn til adressen. Det foreslås ud fra kundens navn og må kun indeholde små bogstaver, tal og bindestreg.",
         "Kunden får sin egen adresse med sit navn på, og hun ser kun sine egne data. Det er håndhævet i databasen, ikke i skærmbilledet.",
@@ -3708,6 +3714,7 @@ function PlanningApp({ session, onSignOut }) {
         return [serviceLine, ...productLines];
       });
 
+      const sendtGuid = (tasks.find((t) => t.dineroContactGuid) || {}).dineroContactGuid || null;
       try {
         const { data, error } = await supabase.functions.invoke("dinero", {
           body: {
@@ -3717,7 +3724,7 @@ function PlanningApp({ session, onSignOut }) {
             invoiceDescription: `Faktura ${label}`,
           // Kundens unikke id i Dinero. Uden det maa funktionen slaa op paa navnet,
           // og det fejler naar flere kontakter hedder det samme.
-          contactGuid: (tasks.find((t) => t.dineroContactGuid) || {}).dineroContactGuid || null,
+          contactGuid: sendtGuid,
             lines,
           },
         });
@@ -3733,6 +3740,12 @@ function PlanningApp({ session, onSignOut }) {
           results.error.push({ customerName, message: data.message || data.error });
         } else if (data?.Guid) {
           results.success.push({ customerName, guid: data.Guid });
+          // Fakturaen lykkedes UDEN at vi sendte et kundenummer med — altsaa fandt
+          // Dinero kunden paa navnet. Det opslag maa ikke skulle gaa godt igen naeste
+          // maaned: gemmer vi ikke nummeret nu, staar kunden fortsat som ukoblet, og
+          // faktureringen bliver ved med at hvile paa at ingen anden kontakt kommer
+          // til at hedde det samme.
+          if (!sendtGuid) gemDineroNummer(customerName);
           // Markér alle opgaver i denne gruppe som sendt til Dinero, så de ikke kan eksporteres igen.
           tasks.forEach((t) => updateInstance(t.id, (old) => ({ ...old, dineroExported: true })));
           // Markér de medsendte produktlinjer som sendt til Dinero.
@@ -3755,6 +3768,26 @@ function PlanningApp({ session, onSignOut }) {
 
     notify(results.success.length ? "Fakturakladder oprettet i Dinero" : "Eksport til Dinero afsluttet med fejl");
     if (parts.length) window.alert(parts.join("\n\n"));
+  }
+
+  // Slaar kunden op i Dinero og gemmer nummeret paa hendes opgaver. Kaldes efter en
+  // faktura der lykkedes paa et navneopslag. Fejler den, sker der ingenting: kunden
+  // beholder maerkatet "Ikke i Dinero", og planlaeggeren kan koble hende i haanden.
+  // Derfor ingen fejlbesked her — fakturaen ER dannet, og en advarsel oveni ville
+  // faa det til at se ud som om noget gik galt.
+  async function gemDineroNummer(customerName) {
+    try {
+      const { data } = await supabase.functions.invoke("dinero", {
+        body: { action: "search", query: customerName },
+      });
+      const traef = data?.Collection ?? [];
+      // Kun ved præcis ét træf. To kontakter med samme navn er netop den situation
+      // vi ikke selv maa gaette os ud af.
+      if (traef.length !== 1) return;
+      await supabase.rpc("kobl_kunde_til_dinero", {
+        p_kunde_navn: customerName, p_guid: traef[0].ContactGuid,
+      });
+    } catch { /* stille — fakturaen er dannet, og koblingen kan tages i haanden */ }
   }
 
   // Hvem er den indloggede? Vi matcher primært på auth_user_id, fordi det er
@@ -7613,6 +7646,72 @@ function FakturaRaekke({ supabase, guid, faktura: f }) {
   );
 }
 
+// En kunde uden Dinero-id. Fakturaen bliver godt nok oprettet, fordi funktionen
+// falder tilbage til at slaa kunden op paa NAVN — men den vej fejler saa snart to
+// kontakter i Dinero hedder det samme. Og kunden kan ikke faa en portal, for
+// abonnementet er noeglet paa id'et.
+function KoblTilDinero({ supabase, kunde, onKoblet }) {
+  const [soeger, setSoeger] = useState(false);
+  const [resultater, setResultater] = useState(null);
+  const [arbejder, setArbejder] = useState(false);
+  const [fejl, setFejl] = useState("");
+
+  async function soeg() {
+    setSoeger(true); setFejl(""); setResultater(null);
+    const { data, error } = await supabase.functions.invoke("dinero", {
+      body: { action: "search", query: kunde.navn },
+    });
+    setSoeger(false);
+    if (error) { setFejl(error.message); return; }
+    setResultater(data?.Collection ?? []);
+  }
+
+  async function kobl(c) {
+    if (!window.confirm(`Kobl alle ${kunde.navn}s opgaver til «${c.Name}» i Dinero?`)) return;
+    setArbejder(true);
+    const { data, error } = await supabase.rpc("kobl_kunde_til_dinero", {
+      p_kunde_navn: kunde.navn, p_guid: c.ContactGuid,
+    });
+    setArbejder(false);
+    if (error) { setFejl(error.message); return; }
+    onKoblet(data);
+  }
+
+  return (
+    <div style={{ background: "#FFFBEB", border: "1px solid #FDE68A", borderRadius: 10,
+                  padding: "12px 14px", marginTop: 12 }}>
+      <div style={{ fontSize: 13, fontWeight: 700, color: "#92400E" }}>Ikke koblet til Dinero</div>
+      <div style={{ fontSize: 12.5, color: "#92400E", lineHeight: 1.55, marginTop: 4 }}>
+        Fakturaer bliver oprettet alligevel, fordi kunden slås op på navn — men det
+        fejler så snart to kontakter i Dinero hedder det samme. Kunden kan heller ikke
+        få en portal før hun er koblet.
+      </div>
+      {!resultater && (
+        <button style={{ ...styles.secondaryBtn, marginTop: 10, minHeight: 40 }}
+          disabled={soeger} onClick={soeg}>
+          {soeger ? "Søger i Dinero…" : `Find «${kunde.navn}» i Dinero`}
+        </button>
+      )}
+      {resultater && resultater.length === 0 && (
+        <div style={{ fontSize: 12.5, color: "#92400E", marginTop: 10 }}>
+          Ingen kontakt med det navn i Dinero. Opret kunden i Dinero først, og søg igen.
+        </div>
+      )}
+      {resultater && resultater.map((c) => (
+        <div key={c.ContactGuid} onClick={() => !arbejder && kobl(c)}
+          style={{ background: "#fff", border: "1px solid #FDE68A", borderRadius: 8,
+                   padding: "11px 12px", marginTop: 8, cursor: "pointer", minHeight: 44 }}>
+          <div style={{ fontSize: 13.5, fontWeight: 600 }}>{c.Name}</div>
+          <div style={{ fontSize: 12, color: "#64748B" }}>
+            {[c.Street, c.ZipCode, c.City].filter(Boolean).join(" ") || "Ingen adresse i Dinero"}
+          </div>
+        </div>
+      ))}
+      {fejl && <div style={{ color: "#B91C1C", fontSize: 12.5, marginTop: 8 }}>{fejl}</div>}
+    </div>
+  );
+}
+
 function KundeFakturaer({ supabase, guid }) {
   const [raekker, setRaekker] = useState(null);
   const [henter, setHenter] = useState(false);
@@ -7834,6 +7933,11 @@ function KunderView({ supabase, currentEmployeeId }) {
   const [kunder, setKunder] = useState([]);
   const [henter, setHenter] = useState(true);
   const [aaben, setAaben] = useState(null);
+  const [koblBesked, setKoblBesked] = useState("");
+  function notifyKobling(antal) {
+    setKoblBesked(`${antal} opgaver og aftaler er koblet til Dinero.`);
+    setTimeout(() => setKoblBesked(""), 6000);
+  }
   const [soeg, setSoeg] = useState("");
 
   async function hent() {
@@ -7870,16 +7974,22 @@ function KunderView({ supabase, currentEmployeeId }) {
 
       {/* 16 px er ikke pynt: er skriften mindre, zoomer Safari paa iPad ind naar
           feltet faar fokus, og saa hopper hele siden. */}
+      {koblBesked && (
+        <div style={{ background: "#F0FDF4", border: "1px solid #BBF7D0", borderRadius: 9,
+                      padding: "10px 12px", marginBottom: 10, fontSize: 13, color: "#166534" }}>
+          {koblBesked}
+        </div>
+      )}
       <input style={{ ...styles.input, marginBottom: 12, fontSize: 16, padding: "12px 12px" }}
         value={soeg} onChange={(e) => setSoeg(e.target.value)}
         placeholder="Søg efter kunde…" autoComplete="off" />
 
       {vist.map((k) => {
-        const erAaben = aaben === k.guid;
+        const erAaben = aaben === k.noegle;
         return (
-          <div key={k.guid} style={{ background: "#fff", borderRadius: 10, marginBottom: 8,
+          <div key={k.noegle} style={{ background: "#fff", borderRadius: 10, marginBottom: 8,
                                      boxShadow: "0 1px 3px rgba(0,0,0,0.06)", overflow: "hidden" }}>
-            <div onClick={() => setAaben(erAaben ? null : k.guid)}
+            <div onClick={() => setAaben(erAaben ? null : k.noegle)}
               style={{ padding: "16px 15px", cursor: "pointer", display: "flex",
                        justifyContent: "space-between", gap: 12, flexWrap: "wrap",
                        minHeight: 44 }}>
@@ -7889,6 +7999,12 @@ function KunderView({ supabase, currentEmployeeId }) {
                   {k.portal_status === "aktiv" && (
                     <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 700, padding: "2px 8px",
                                    borderRadius: 999, background: "#EEF2FF", color: "#4F46E5" }}>Portal</span>
+                  )}
+                  {k.mangler_dinero && (
+                    <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 700, padding: "2px 8px",
+                                   borderRadius: 999, background: "#FFFBEB", color: "#B45309" }}>
+                      Ikke i Dinero
+                    </span>
                   )}
                 </div>
                 <div style={{ fontSize: 12.5, color: "#64748B", marginTop: 2 }}>
@@ -7923,8 +8039,15 @@ function KunderView({ supabase, currentEmployeeId }) {
                     </div>
                   ))}
                 </div>
-                <KundeFakturaer supabase={supabase} guid={k.guid} />
-                <PortalAfsnit supabase={supabase} kunde={k} currentEmployeeId={currentEmployeeId} onAendret={hent} />
+                {k.mangler_dinero ? (
+                  <KoblTilDinero supabase={supabase} kunde={k}
+                    onKoblet={(antal) => { hent(); notifyKobling(antal); }} />
+                ) : (
+                  <>
+                    <KundeFakturaer supabase={supabase} guid={k.guid} />
+                    <PortalAfsnit supabase={supabase} kunde={k} currentEmployeeId={currentEmployeeId} onAendret={hent} />
+                  </>
+                )}
               </div>
             )}
           </div>
