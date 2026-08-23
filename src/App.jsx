@@ -933,6 +933,13 @@ function ensureWeekInstances(week, year, allInstances, templates, employees, are
             ...existing,
             customerName: tpl.customerName || "",
             address: tpl.address || "",
+            // Kundens nummer i Dinero hoerer med i selvhelbredelsen paa lige fod med
+            // navn og adresse. Manglede den her, ville en opgave der én gang blev
+            // dannet uden nummer beholde mangelen for altid — ogsaa efter aftalen fik
+            // nummeret — og kunden ville blive ved med at staa dobbelt i overblikket.
+            // Kun hvis aftalen faktisk HAR et nummer: ellers ville en tom aftale
+            // slette et nummer der er sat i haanden paa den enkelte opgave.
+            ...(tpl.dineroContactGuid ? { dineroContactGuid: tpl.dineroContactGuid } : {}),
             poNumber: tpl.poNumber || "",
             accessInstructions: tpl.accessInstructions || "",
             needsKeyPickup: !!tpl.needsKeyPickup,
@@ -2060,6 +2067,17 @@ function PlanningApp({ session, onSignOut }) {
         // i browseren, og medarbejder-appen ville aldrig faa dem at se.
         const knownIds = new Set(existingInst.map((t) => t.id));
         allInst.filter((t) => !knownIds.has(t.id)).forEach(syncInstance);
+        // Har selvhelbredelsen givet en allerede gemt opgave kundens Dinero-nummer,
+        // skal det ogsaa NED i databasen. Ellers findes koblingen kun i den aabne
+        // browser, kunden staar fortsat dobbelt i overblikket, og faktureringen
+        // hviler videre paa navneopslaget. Kun nummeret sammenlignes — de oevrige
+        // felter helbredes hver gang appen aabnes og behoever ikke en skrivning her.
+        const guidFoer = new Map(existingInst.map((t) => [t.id, t.dineroContactGuid || ""]));
+        allInst
+          .filter((t) => knownIds.has(t.id)
+            && (t.dineroContactGuid || "") !== ""
+            && (t.dineroContactGuid || "") !== guidFoer.get(t.id))
+          .forEach(syncInstance);
       } else if (instData?.length) {
         setInstances(instData.map((i) => ({
           ...i, timeLog: i.time_log ?? [], requiredSkills: i.required_skills ?? [],
