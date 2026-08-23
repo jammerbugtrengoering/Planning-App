@@ -212,7 +212,7 @@ function instanceDateString(t) {
 const MENU_GRUPPER = [
   { key: "drift",     navn: "Ugeplan",    sider: [["uge", "Ugeplan"]] },
   { key: "salg",      navn: "Salg",       sider: [["kunder", "Kunder"], ["tilbud", "Tilbud"], ["contracts", "Aftaler"]] },
-  { key: "oekonomi",  navn: "\u00d8konomi",     sider: [["time", "Fakturering"], ["reports", "Rapportering"], ["medExport", "Medarbejder-eksport"]] },
+  { key: "oekonomi",  navn: "\u00d8konomi",     sider: [["time", "Fakturering"], ["kundetimer", "Kundetimer"], ["reports", "Rapportering"], ["medExport", "L\u00f8n data"]] },
   { key: "opsaetning", navn: "Ops\u00e6tning", sider: [["employees", "Medarbejdere"], ["checklists", "Tjeklister"], ["inventory", "Lager"]] },
 ];
 function gruppeFor(view) {
@@ -233,7 +233,7 @@ function contractIconLabel(key) { const c = contractMeta(key); return c.icon + "
 // en rigtig rengøringsopgave — blokeringer skal ikke tælle med i fakturagrundlag,
 // rapportering osv., og skal forhindre auto-planlægning af den pågældende medarbejder.
 const BLOCK_TYPES = ["sygdom", "ferie"];
-// Timeloen bruges kun til loensummerne i Medarbejder-eksport. Satsen ligger i sin
+// Timeloen bruges kun til loensummerne under Loen data. Satsen ligger i sin
 // egen tabel med adgang kun for administratorer — se employee_wage_history.
 const STANDARD_TIMELOEN = 170;
 
@@ -1447,7 +1447,7 @@ const MODULE_HELP = {
         "«Mangler app-adgang først» er en hurtig vej til dem du skal oprette et login til."] },
     { h: "Opret og redigér", p: ["Tryk «Ny medarbejder», eller «Redigér» når du har foldet en linje ud.",
         "Mødetid bruges til at beregne hvornår dagens første opgave kan starte.",
-        "Timeløn bruges til lønsummerne i Medarbejder-eksport. Nye medarbejdere starter på 170 kr. Ændrer du satsen, skal du angive hvornår den gælder fra — tidligere satser står nedenunder, så du kan se historikken.",
+        "Timeløn bruges til lønsummerne under Løn data. Nye medarbejdere starter på 170 kr. Ændrer du satsen, skal du angive hvornår den gælder fra — tidligere satser står nedenunder, så du kan se historikken.",
         "Dialogen er delt i fire afsnit: Personen, Kan, Tid, og Løn og transport bag hængelås.",
         "Under Kan vises kun de kompetencer hun har. Tryk «Tilføj kompetence» for at se resten.",
         "Under Tid kan du sætte mandagens timetal på alle dage med ét tryk, og du kan se ugens sum — så du kan tjekke at det passer med hendes ansættelse.",
@@ -1465,7 +1465,7 @@ const MODULE_HELP = {
         "Kilometerpengene røres ikke af ordningen. De beregnes stadig kun mellem opgaver med registreret tid — kørsel mellem hjem og arbejde indgår ikke."] },
     { h: "Hvem kan se lønnen", p: [
         "Timelønnen ligger i sin egen tabel, som kun administratorer har adgang til. Det er håndhævet i databasen, ikke kun i skærmbilledet.",
-        "Er du ikke administrator, står feltet tomt, og lønkolonnerne i Medarbejder-eksport vises slet ikke — heller ikke i CSV-filen.",
+        "Er du ikke administrator, står feltet tomt, og lønkolonnerne under Løn data vises slet ikke — heller ikke i CSV-filen.",
         "Medarbejder-appen henter aldrig lønnen. En medarbejder kan altså ikke se hverken sin egen eller kollegernes sats der."] },
     { h: "Kompetencer", p: ["Ligger under knappen «Kompetencer» øverst på siden. Her opretter, omdøber og sletter du de færdigheder du kan kræve på en opgave.", "En kompetence er et krav, ikke et ønske: kan medarbejderen den ikke på det krævede niveau, kommer hun slet ikke i betragtning til opgaven.", "Selve niveauet sættes pr. medarbejder på hendes eget kort — Nybegynder, Øvet eller Ekspert. Kræver opgaven Øvet, er Nybegynder ikke nok.", "Blandt dem der lever op til kravene, vælges den med det højeste samlede niveau. Står to lige, vælges den med mest ledig tid den dag.", "Sletter du en kompetence, fjernes den fra alle medarbejdere og fra alle opgaver.", "Omdøber du en kompetence, følger medarbejderne og aftalerne med. Men opgaver der allerede ligger i kalenderen, husker det gamle navn og viser derefter «Ingen har alle krævede kompetencer» — så ret kompetencen på de opgaver, eller lad være med at omdøbe når der er oprettet opgaver."] },
         { h: "Områder", p: ["Ligger under knappen «Områder». Et område er et navn og en række postnumre, og du klikker de medarbejdere til der dækker det.", "Ved planlægning aflæses postnummeret i opgavens adresse. Findes der et område med det postnummer, søges der kun blandt de medarbejdere der er knyttet til området.", "Har adressen intet postnummer, eller er postnummeret ikke lagt ind på noget område, planlægges der frit blandt alle med kompetencerne.", "Er der ikke klikket en eneste medarbejder på et område, springes området over. Et tomt område spærrer altså ikke — det gør ingenting.", "Kan ingen i området løse opgaven, planlægges den alligevel hos en der kan, og opgaven mærkes «Planlagt uden for medarbejderens område». En opgave bliver aldrig liggende alene fordi den falder uden for et område.", "Sletter du et område, forsvinder tilknytningerne med det samme. Opgaverne røres ikke."] },
@@ -1584,9 +1584,28 @@ const MODULE_HELP = {
         "Planlagt er værdien af det der ligger i kalenderen.",
         "Registreret er den tid der faktisk er logget.",
         "Forecast fremskriver resten af året."] },
-  ], warn: "Er «Registreret» meget lavere end «Planlagt», er det som regel manglende tidsregistrering — ikke manglende arbejde. Tjek Medarbejder-eksport." },
+  ], warn: "Er «Registreret» meget lavere end «Planlagt», er det som regel manglende tidsregistrering — ikke manglende arbejde. Tjek Kundetimer." },
 
-  medExport: { title: "Medarbejder-eksport", intro: "Grundlaget for løn: timer og kørsel pr. medarbejder.", blocks: [
+  kundetimer: { title: "Kundetimer", intro: "Planlagt mod registreret tid pr. kunde, m\u00e5ned for m\u00e5ned.", blocks: [
+    { h: "Hvad du ser", p: [
+        "\u00c9n linje pr. kunde for den valgte m\u00e5ned: hvor mange timer der var afsat, hvor mange der blev registreret, og forskellen.",
+        "Tryk p\u00e5 en kunde for at folde hendes enkelte bes\u00f8g ud. Der st\u00e5r ogs\u00e5 medarbejderens begrundelse, hvis der er skrevet en.",
+        "To medarbejdere p\u00e5 samme bes\u00f8g t\u00e6ller som \u00e9t bes\u00f8g. Deres minutter l\u00e6gges sammen, for det er \u00e9t bes\u00f8g set fra kundens side.",
+        "Listen er sorteret efter st\u00f8rste afvigelse f\u00f8rst, uanset om der er brugt for meget eller for lidt tid.",
+        "Der st\u00e5r ingen priser her med vilje. Skal der kroner p\u00e5, ligger de under Fakturering."] },
+    { h: "Kolonnen Udest\u00e5r", p: [
+        "Antallet af opgaver i m\u00e5neden der endnu ikke er udf\u00f8rt.",
+        "Uden det tal ville hver eneste kunde se ud til at mangle timer den f\u00f8rste i m\u00e5neden. St\u00e5r der et h\u00f8jt tal, er afvigelsen bare at m\u00e5neden ikke er slut."] },
+    { h: "S\u00e5dan l\u00e6ses en afvigelse", p: [
+        "Et minus betyder at der er brugt mindre tid end planlagt. Er der ingen udest\u00e5ende opgaver, er det som regel manglende tidsregistrering \u2014 ikke sparet arbejde.",
+        "Et plus betyder mere tid end afsat. Er det fast hver m\u00e5ned hos samme kunde, er det aftalens varighed der er sat for lavt.",
+        "Ved timepris faktureres der efter registreret tid, s\u00e5 en afvigelse ses ogs\u00e5 p\u00e5 fakturaen. Ved fast pris g\u00f8r den ikke, og s\u00e5 er det her du opdager at en aftale er blevet ul\u00f8nsom."] },
+    { h: "Eksport", p: [
+        "CSV-filen har en linje pr. bes\u00f8g, en sumlinje pr. kunde, og en samlet sum nederst.",
+        "Timer st\u00e5r b\u00e5de som minutter og som decimaltimer, s\u00e5 der ikke skal regnes om i regnearket."] },
+  ], warn: "Tilbudsm\u00f8der og interne blokke som ferie og sygdom t\u00e6ller ikke med. Det er kun arbejde hos en kunde." },
+
+  medExport: { title: "Løn data", intro: "Grundlaget for løn: timer og kørsel pr. medarbejder.", blocks: [
     { h: "Sådan gør du", p: ["Vælg måned og år.", "«Afvigelse» viser hvor medarbejderen har skrevet en begrundelse.",
         "«Heraf weekend» er timer der udløser tillæg.",
         "Tryk «Eksportér CSV» og send til lønsystemet. Filen har egne kolonner for weekend og weekendtimer, og en sumlinje nederst."] },
@@ -1701,8 +1720,8 @@ function PlanningApp({ session, onSignOut }) {
   useEffect(() => { localStorage.setItem("rp_lang", lang); }, [lang]);
 
   const L = {
-    da: { schedule:"Ugeplan", employees:"Medarbejdere", checklists:"Tjeklister", time:"Fakturering", inventory:"Lager", contracts:"Aftaler", kunder:"Kunder", tilbud:"Tilbud", reports:"Rapportering", medExport:"Medarbejder-eksport", signOut:"Log ud", sub:"Ugeplanlægning · kapacitet · kompetenceniveauer" },
-    en: { schedule:"Schedule", employees:"Employees", checklists:"Checklists", time:"Time & Export", inventory:"Inventory", contracts:"Contracts", kunder:"Customers", tilbud:"Quotes", reports:"Reporting", medExport:"Employee export", signOut:"Sign out", sub:"Weekly planning · capacity · skill levels" },
+    da: { schedule:"Ugeplan", employees:"Medarbejdere", checklists:"Tjeklister", time:"Fakturering", inventory:"Lager", contracts:"Aftaler", kunder:"Kunder", tilbud:"Tilbud", kundetimer:"Kundetimer", reports:"Rapportering", medExport:"L\u00f8n data", signOut:"Log ud", sub:"Ugeplanlægning · kapacitet · kompetenceniveauer" },
+    en: { schedule:"Schedule", employees:"Employees", checklists:"Checklists", time:"Time & Export", inventory:"Inventory", contracts:"Contracts", kunder:"Customers", tilbud:"Quotes", kundetimer:"Customer hours", reports:"Reporting", medExport:"Payroll data", signOut:"Sign out", sub:"Weekly planning · capacity · skill levels" },
   }[lang];
   // ── Dynamiske master-data fra Supabase ──
   const [skills, setSkills] = useState(SKILLS_FALLBACK);
@@ -4173,6 +4192,7 @@ function PlanningApp({ session, onSignOut }) {
         <ReportsView instances={instances} pricing={pricing} budgets={budgets} onSaveBudget={saveBudget} isAdminUser={isAdminUser} />
       )}
 
+      {view === "kundetimer" && (<CustomerHoursView instances={instances} />)}
       {view === "medExport" && (<EmployeeExportView instances={instances} employees={employees} satsHistorik={satsHistorik} />)}
       {view === "inventory" && (
         <InventoryView supabase={supabase} employees={employees} currentUserName={currentEmployeeForAuth?.name || null} onInventoryChanged={loadProductUsage} />
@@ -5624,7 +5644,7 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
 
       <div style={{ display: "grid", gridTemplateColumns: "50px 140px 120px 160px 1fr 70px 80px 100px 100px 100px 90px 70px 28px", gap: 0, background: "#F8FAFC", borderRadius: "10px 10px 0 0", padding: "8px 14px", fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.04em", marginTop: 8 }}>
         <span>Uge</span><span>Medarbejder</span><span>Kunde</span><span>Adresse</span><span>Opgave</span><span>Dag</span>
-        {/* Tid og kroner parvis, som i Medarbejder-eksport: planlagt tid ved siden af
+        {/* Tid og kroner parvis, som under Loen data: planlagt tid ved siden af
             planlagt beloeb, registreret tid ved siden af registreret beloeb. */}
         <span style={{ textAlign: "right" }}>Planlagt</span>
         <span style={{ textAlign: "right" }}>Planlagt kr.</span>
@@ -5870,6 +5890,219 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
               )}
             </tbody>
           </table>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Kundens timer maaned for maaned: hvad var planlagt, hvad blev registreret, og
+// hvorfor er der forskel.
+//
+// Bevidst UDEN priser. Planlaeggeren skal kunne have den aaben mens hun har kunden i
+// roeret, og der maa ikke staa timeloen eller daekningsbidrag paa den samme skaerm.
+// Skal der tal paa, ligger de i Fakturering.
+function CustomerHoursView({ instances }) {
+  const now = new Date();
+  const [filterMonth, setFilterMonth] = useState(now.getMonth());
+  const [filterYear, setFilterYear] = useState(now.getFullYear());
+  const [aaben, setAaben] = useState(null);
+  const [kunSkaev, setKunSkaev] = useState(false);
+
+  const MONTHS = ["Januar","Februar","Marts","April","Maj","Juni","Juli","August","September","Oktober","November","December"];
+  const years = [now.getFullYear() - 1, now.getFullYear(), now.getFullYear() + 1];
+
+  // Én linje pr. opgave, ikke pr. medarbejder. Det er kunden der er i fokus, og to
+  // medarbejdere paa samme besoeg er ét besoeg set fra hendes side — deres minutter
+  // laegges sammen.
+  const linjer = [];
+  instances
+    .filter((t) => !BLOCK_TYPES.includes(t.type) && t.type !== "aktivitet")
+    .filter((t) => (t.customerName || "").trim())
+    .forEach((t) => {
+      const { month, year } = instanceMonthYear(t, filterYear);
+      if (month !== filterMonth || year !== filterYear) return;
+      const tl = t.timeLog || t.time_log || [];
+      const registreret = tl.reduce((sum, l) => sum + (l.minutes || 0), 0);
+      const begrundelse = tl
+        .filter((l) => l.note && String(l.note).trim() && l.empId !== "planner")
+        .map((l) => l.note.trim())
+        .join(" / ");
+      linjer.push({
+        kunde: t.customerName.trim(),
+        week: t.week,
+        day: t.day,
+        dayLabel: ALL_DAYS.find((d) => d.key === t.day)?.label || t.day || "\u2014",
+        titel: t.title,
+        status: t.status,
+        planlagt: t.duration || 0,
+        registreret,
+        begrundelse,
+      });
+    });
+
+  const kunder = [];
+  linjer.forEach((l) => {
+    let k = kunder.find((x) => x.navn === l.kunde);
+    if (!k) { k = { navn: l.kunde, planlagt: 0, registreret: 0, opgaver: [], udestaar: 0 }; kunder.push(k); }
+    k.planlagt += l.planlagt;
+    k.registreret += l.registreret;
+    // En opgave der ikke er udfoert endnu, er ikke en afvigelse. Uden det her ville
+    // hele resten af maaneden se ud som manglende tid den 1.
+    if (l.status !== "udf\u00f8rt") k.udestaar += 1;
+    k.opgaver.push(l);
+  });
+  kunder.forEach((k) => {
+    k.afvigelse = k.registreret - k.planlagt;
+    k.opgaver.sort((a, b) => (a.week - b.week)
+      || (ALL_DAYS.findIndex((d) => d.key === a.day) - ALL_DAYS.findIndex((d) => d.key === b.day))
+      || String(a.titel).localeCompare(String(b.titel), "da"));
+  });
+  // Stoerste afvigelse foerst — i minutter, uanset fortegn. Det er dem der skal ses paa,
+  // ikke dem der passer.
+  kunder.sort((a, b) => Math.abs(b.afvigelse) - Math.abs(a.afvigelse) || a.navn.localeCompare(b.navn, "da"));
+
+  const vist = kunSkaev ? kunder.filter((k) => k.afvigelse !== 0) : kunder;
+  const sumPlanlagt = kunder.reduce((s, k) => s + k.planlagt, 0);
+  const sumRegistreret = kunder.reduce((s, k) => s + k.registreret, 0);
+  const sumAfvigelse = sumRegistreret - sumPlanlagt;
+  const antalSkaeve = kunder.filter((k) => k.afvigelse !== 0).length;
+
+  const fortegn = (m) => (m > 0 ? "+" : m < 0 ? "\u2212" : "");
+  const afvigTekst = (m) => (m === 0 ? "\u2014" : fortegn(m) + fmtMin(Math.abs(m)));
+  const afvigFarve = (m) => (m === 0 ? "#CBD5E1" : m > 0 ? "#B45309" : "#2563EB");
+
+  const kolonner = "1fr 90px 110px 110px 110px 90px";
+
+  function eksporter() {
+    const header = ["Kunde", "Uge", "Dag", "Opgave", "Status",
+                    "Planlagt (min)", "Planlagt (timer)",
+                    "Registreret (min)", "Registreret (timer)",
+                    "Afvigelse (min)", "Afvigelse (timer)", "Begrundelse"];
+    const data = [];
+    kunder.forEach((k) => {
+      k.opgaver.forEach((o) => {
+        const afv = o.registreret - o.planlagt;
+        data.push([k.navn, `Uge ${o.week}`, o.dayLabel, o.titel, o.status,
+          o.planlagt, (o.planlagt / 60).toFixed(2),
+          o.registreret, (o.registreret / 60).toFixed(2),
+          afv, (afv / 60).toFixed(2), o.begrundelse || ""]);
+      });
+      // Kundens egen sum lige under hendes linjer, saa filen kan laeses uden at
+      // modtageren skal lave en pivottabel foerst.
+      data.push([`${k.navn} \u2014 i alt`, "", "", "", "",
+        k.planlagt, (k.planlagt / 60).toFixed(2),
+        k.registreret, (k.registreret / 60).toFixed(2),
+        k.afvigelse, (k.afvigelse / 60).toFixed(2), ""]);
+    });
+    if (kunder.length > 0) {
+      data.push(["ALLE KUNDER I ALT", "", "", "", "",
+        sumPlanlagt, (sumPlanlagt / 60).toFixed(2),
+        sumRegistreret, (sumRegistreret / 60).toFixed(2),
+        sumAfvigelse, (sumAfvigelse / 60).toFixed(2), ""]);
+    }
+    const csv = [header, ...data]
+      .map((row) => row.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
+    // BOM foran, ellers viser Excel \u00e6\u00f8\u00e5 som volapyk.
+    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `kundetimer-${MONTHS[filterMonth]}-${filterYear}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  return (
+    <div style={styles.page}>
+      <div style={styles.toolbar}>
+        <div style={{ ...styles.statBlock, borderLeft: "3px solid #64748B" }}>
+          <div><div style={{ ...styles.statValue, color: "#64748B" }}>{fmtMin(sumPlanlagt)}</div><div style={styles.statLabel}>Planlagt i alt</div></div>
+          <div style={styles.statBox}><div style={{ ...styles.statValue, color: "#16A34A" }}>{fmtMin(sumRegistreret)}</div><div style={styles.statLabel}>Registreret i alt</div></div>
+        </div>
+        <div style={{ ...styles.statBlock, borderLeft: `3px solid ${afvigFarve(sumAfvigelse)}` }}>
+          <div><div style={{ ...styles.statValue, color: afvigFarve(sumAfvigelse) }}>{afvigTekst(sumAfvigelse)}</div><div style={styles.statLabel}>Samlet afvigelse</div></div>
+          <div style={styles.statBox}><div style={{ ...styles.statValue, color: "#111111" }}>{antalSkaeve}</div><div style={styles.statLabel}>Kunder med afvigelse</div></div>
+        </div>
+        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+          <select style={{ ...styles.inputSm, fontSize: 13, fontWeight: 600 }} value={filterMonth} onChange={(e) => setFilterMonth(Number(e.target.value))}>
+            {MONTHS.map((m, i) => <option key={i} value={i}>{m}</option>)}
+          </select>
+          <select style={{ ...styles.inputSm, fontSize: 13, fontWeight: 600 }} value={filterYear} onChange={(e) => setFilterYear(Number(e.target.value))}>
+            {years.map((y) => <option key={y} value={y}>{y}</option>)}
+          </select>
+        </div>
+        <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "#475569", cursor: "pointer" }}>
+          <input type="checkbox" checked={kunSkaev} onChange={(e) => setKunSkaev(e.target.checked)} />
+          Kun kunder med afvigelse
+        </label>
+        <div style={styles.toolbarSpacer} />
+        <button style={styles.primaryBtn} onClick={eksporter}><Download size={16} /> Eksporter CSV</button>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: kolonner, gap: 0, background: "#F8FAFC", borderRadius: "10px 10px 0 0", padding: "8px 14px", fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+        <span>Kunde</span>
+        <span style={{ textAlign: "right" }}>Opgaver</span>
+        <span style={{ textAlign: "right" }}>Planlagt</span>
+        <span style={{ textAlign: "right" }}>Registreret</span>
+        <span style={{ textAlign: "right" }}>Afvigelse</span>
+        <span style={{ textAlign: "right" }}>Udest\u00e5r</span>
+      </div>
+      <div style={{ background: "#fff", borderRadius: "0 0 10px 10px", boxShadow: "0 1px 3px rgba(0,0,0,0.06)", overflow: "hidden" }}>
+        {vist.map((k) => {
+          const erAaben = aaben === k.navn;
+          return (
+            <div key={k.navn} style={{ borderBottom: "1px solid #F1F5F9" }}>
+              <div onClick={() => setAaben(erAaben ? null : k.navn)}
+                style={{ display: "grid", gridTemplateColumns: kolonner, gap: 0, padding: "11px 14px",
+                         alignItems: "center", cursor: "pointer", minHeight: 44,
+                         background: erAaben ? "#FDF2F8" : "transparent" }}>
+                <span style={{ fontSize: 13, fontWeight: 600, color: "#111111" }}>{k.navn}</span>
+                <span style={{ fontSize: 12, color: "#94A3B8", textAlign: "right" }}>{k.opgaver.length}</span>
+                <span style={{ fontSize: 13, color: "#111111", textAlign: "right" }}>{fmtMin(k.planlagt)}</span>
+                <span style={{ fontSize: 13, fontWeight: 700, color: k.registreret === 0 ? "#94A3B8" : "#16A34A", textAlign: "right" }}>{fmtMin(k.registreret)}</span>
+                <span style={{ fontSize: 13, fontWeight: 700, color: afvigFarve(k.afvigelse), textAlign: "right" }}>{afvigTekst(k.afvigelse)}</span>
+                {/* Udestaaende opgaver forklarer den mest almindelige "afvigelse":
+                    maaneden er ikke slut endnu. Uden tallet ville hver eneste kunde se
+                    ud til at mangle timer den foerste i maaneden. */}
+                <span style={{ fontSize: 12, color: k.udestaar ? "#64748B" : "#CBD5E1", textAlign: "right" }}>
+                  {k.udestaar || "\u2014"}
+                </span>
+              </div>
+
+              {erAaben && (
+                <div style={{ padding: "0 14px 12px", background: "#FDF2F8" }}>
+                  {k.opgaver.map((o, i) => {
+                    const afv = o.registreret - o.planlagt;
+                    return (
+                      <div key={i} style={{ display: "grid", gridTemplateColumns: "70px 90px 1fr 90px 90px 90px", gap: 0,
+                                            padding: "7px 0", borderTop: "1px solid #FBCFE8", alignItems: "center", fontSize: 12.5 }}>
+                        <span style={{ color: "#94A3B8" }}>Uge {o.week}</span>
+                        <span style={{ color: "#64748B" }}>{o.dayLabel}</span>
+                        <span style={{ color: "#111111", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {o.titel}
+                          {o.status !== "udf\u00f8rt" && (
+                            <span style={{ color: "#94A3B8" }}> \u00b7 {o.status === "planlagt" ? "ikke udf\u00f8rt endnu" : o.status}</span>
+                          )}
+                        </span>
+                        <span style={{ textAlign: "right", color: "#64748B" }}>{fmtMin(o.planlagt)}</span>
+                        <span style={{ textAlign: "right", color: o.registreret === 0 ? "#94A3B8" : "#16A34A", fontWeight: 600 }}>{fmtMin(o.registreret)}</span>
+                        <span style={{ textAlign: "right", color: afvigFarve(afv), fontWeight: 600 }}>{afvigTekst(afv)}</span>
+                        {o.begrundelse && (
+                          <span style={{ gridColumn: "3 / -1", color: "#D97706", fontSize: 12, paddingTop: 2 }}>{o.begrundelse}</span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        })}
+        {vist.length === 0 && (
+          <div style={{ ...styles.emptyCol, padding: 40 }}>
+            {kunder.length === 0 ? "Ingen opgaver p\u00e5 kunder i denne m\u00e5ned" : "Ingen kunder med afvigelse i denne m\u00e5ned"}
+          </div>
         )}
       </div>
     </div>
@@ -9931,7 +10164,7 @@ function EmployeeModal({ emp, onClose, onSave, skills: skillList, satsHistorik }
           <label style={styles.label}>Timeløn (kr.)</label>
           <input style={{ ...styles.input, maxWidth: 160 }} type="number" min="0" step="1" value={hourlyWage}
             onChange={(e) => setHourlyWage(e.target.value)} placeholder={String(STANDARD_TIMELOEN)} />
-          <div style={styles.hint}>Bruges kun til lønsummerne i Medarbejder-eksport, ikke til priser over for kunden.</div>
+          <div style={styles.hint}>Bruges kun til lønsummerne under Løn data, ikke til priser over for kunden.</div>
 
           {/* Gyldighedsdatoen dukker foerst op naar satsen faktisk aendres. Ellers ville
               man skulle forholde sig til en dato hver gang man rettede et navn. */}
