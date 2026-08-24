@@ -1557,7 +1557,8 @@ const MODULE_HELP = {
     { h: "Basis og Udvidet", p: [
         "Basis giver kunden sine opgaver og sine fakturaer. Det er den de fleste skal have.",
         "Udvidet lægger en Bestil-fane oveni, hvor kunden kan bestille ekstra arbejde. Fanen vises kun ved Udvidet, og databasen afviser en bestilling fra en basis-kunde uanset hvad.",
-        "Du kan skifte option senere. Slår du Udvidet fra, forsvinder fanen, men allerede afgivne bestillinger bliver stående."] },
+        "Option skiftes på den tændte portal: fold kunden ud under Kunder, og vælg i feltet ved siden af adressen. Det slår igennem med det samme, næste gang kunden åbner portalen.",
+        "Slår du Udvidet fra, forsvinder fanen hos kunden, men allerede afgivne bestillinger bliver stående og skal stadig besvares."] },
     { h: "Når kunden bestiller", p: [
         "Kunden vælger en ydelse fra listen eller skriver sit eget ønske, med ønsket dato og eventuelt en anden adresse.",
         "Bestillingen bliver IKKE til en opgave af sig selv. Den lægger sig i en blå boks øverst i Ugeplan, og du får en mail.",
@@ -8381,6 +8382,20 @@ function PortalAfsnit({ supabase, kunde, currentEmployeeId, onAendret }) {
     onAendret();
   }
 
+  async function skiftOption(nyOption) {
+    if (nyOption === (kunde.portal_option || "basis")) return;
+    setFejl(""); setBesked("");
+    setArbejder("option");
+    const { error } = await supabase.from("portal_abonnement")
+      .update({ option: nyOption }).eq("dinero_contact_guid", kunde.guid);
+    setArbejder("");
+    if (error) { setFejl(error.message); return; }
+    setBesked(nyOption === "udvidet"
+      ? "Udvidet er slået til. Kunden kan nu bestille ekstra arbejde."
+      : "Portalen er sat til basis. Bestil-fanen forsvinder hos kunden.");
+    onAendret();
+  }
+
   async function inviter() {
     setFejl(""); setBesked("");
     if (!email.trim()) { setFejl("Skriv kundens e-mail."); return; }
@@ -8452,6 +8467,20 @@ function PortalAfsnit({ supabase, kunde, currentEmployeeId, onAendret }) {
           </a>
           <div style={{ fontSize: 12, color: "#64748B", marginTop: 2 }}>
             {kunde.portal_brugere} bruger{kunde.portal_brugere === 1 ? "" : "e"} med adgang
+          </div>
+        </div>
+        <div style={{ width: 200 }}>
+          <label style={styles.label}>Option</label>
+          <select style={styles.input} value={kunde.portal_option || "basis"}
+            disabled={!!arbejder} onChange={(e) => skiftOption(e.target.value)}>
+            <option value="basis">Basis — faktura og opgaver</option>
+            <option value="udvidet">Udvidet — kunden kan bestille</option>
+          </select>
+          <div style={styles.hint}>
+            {arbejder === "option" ? "Gemmer…"
+              : (kunde.portal_option === "udvidet"
+                  ? "Bestillinger skal godkendes i Ugeplan."
+                  : "Slå til, hvis kunden skal kunne bestille ekstra arbejde.")}
           </div>
         </div>
         <button style={{ ...styles.secondaryBtn, color: "#B91C1C", borderColor: "#FCA5A5" }}
