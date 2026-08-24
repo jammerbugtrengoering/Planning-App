@@ -4,7 +4,7 @@ import {
   Plus, Download, X, Clock, AlertTriangle,
   Trash2, Pencil, Repeat, Zap, CalendarClock, Wand2, Star, ChevronLeft, ChevronRight, ChevronUp, ChevronDown,
   ClipboardList, Video, CheckCircle2, LogIn, ListChecks, Check, Lock, Navigation, Building2, Car, Copy,
-  Thermometer, Palmtree, Mail,
+  Thermometer, Palmtree, Mail, LogOut,
 } from "lucide-react";
 
 // ---------- Opgavenoter og billeder ----------
@@ -212,8 +212,8 @@ function instanceDateString(t) {
 const MENU_GRUPPER = [
   { key: "drift",     navn: "Ugeplan",    sider: [["uge", "Ugeplan"]] },
   { key: "salg",      navn: "Salg",       sider: [["kunder", "Kunder"], ["tilbud", "Tilbud"], ["contracts", "Aftaler"]] },
-  { key: "oekonomi",  navn: "\u00d8konomi",     sider: [["time", "Fakturering"], ["kundetimer", "Kundetimer"], ["reports", "Rapportering"], ["medExport", "L\u00f8n data"]] },
-  { key: "opsaetning", navn: "Ops\u00e6tning", sider: [["employees", "Medarbejdere"], ["checklists", "Tjeklister"], ["inventory", "Lager"]] },
+  { key: "oekonomi",  navn: "Økonomi",     sider: [["time", "Fakturering"], ["kundetimer", "Kundetimer"], ["reports", "Rapportering"], ["medExport", "Løn data"]] },
+  { key: "opsaetning", navn: "Opsætning", sider: [["employees", "Medarbejdere"], ["checklists", "Tjeklister"], ["inventory", "Lager"]] },
 ];
 function gruppeFor(view) {
   return MENU_GRUPPER.find((g) => g.sider.some(([k]) => k === view)) || MENU_GRUPPER[0];
@@ -1472,15 +1472,18 @@ const MODULE_HELP = {
     { h: "Adgang til Worklist", p: ["Fold medarbejderen ud, skriv e-mailen og tryk Opret. Hun får en mail med et link, hvor hun selv vælger sin adgangskode, og kan derefter logge ind i medarbejder-appen.",
         "Har mailen allerede et login — for eksempel fordi hun også bruger planlægningsappen — bliver det eksisterende login koblet til hende. Du behøver ikke finde på en ny mailadresse.",
         "Står der at adgangen er oprettet, men at mailen ikke kunne sendes, er hun kommet ind i systemet alligevel. Så skal hun bare bruge «glemt adgangskode» på login-siden.",
-        "«Luk adgang» fjerner loginet, men beholder medarbejderen og hendes historik. Brug den når nogen holder op."] },
+        "«Luk adgang» sletter login’et helt. Medarbejderen og hele hendes historik bliver stående, og du kan give hende adgang igen senere med en ny mail.",
+        "Bruges når nogen midlertidigt ikke skal kunne logge ind. Holder hun helt op, brug «Fratræd» i stedet — så ryger hun også ud af planlægningen."] },
     { h: "Arbejdstøj", p: [
         "Medarbejderne bestiller selv arbejdstøj i deres app, og du godkender bestillingerne under Lager. Her på medarbejderen ser du kun hvad hun har fået udleveret.",
         "Fold hende ud og tryk «Se historik» for de seneste 20 udleveringer."] },
-    { h: "Sletning", p: [
-        "«Slet» spørger nu først, og fortæller hvor mange kommende opgaver der mister hende — de går tilbage til «Ikke tildelt», og du skal selv planlægge dem på ny.",
-        "Udførte opgaver beholder hendes navn og tidsregistrering, så historik og fakturagrundlag ikke ændrer sig.",
-        "Sletningen fjerner ikke hendes login. Skal hun ikke kunne komme ind i appen, brug «Luk adgang» først.",
-        "Holder hun bare op, er det som regel bedre at lukke adgangen og lade medarbejderen stå — så bevares sammenhængen i gamle uger."] },
+    { h: "Når en medarbejder fratræder", p: [
+        "Fold hende ud og tryk «Fratræd». Du vælger datoen, og dialogen fortæller hvor mange kommende opgaver der mister hende.",
+        "Login’et slettes med det samme. Står appen åben på hendes telefon, bliver hun logget ud i samme øjeblik.",
+        "Kommende opgaver går tilbage til «Ikke tildelt», og du skal selv planlægge dem på ny. Udførte opgaver beholder hendes navn og tidsregistrering.",
+        "Hun forsvinder fra ugeplanen, fra auto-planlægningen, fra områderne og fra alle vælgere — men bliver stående på medarbejderlisten med sin fratrædelsesdato.",
+        "Lønhistorik og kørselslog bevares. Det er dokumentationen for hvad hun har fået udbetalt og kørt, og den skal kunne fremvises også om flere år.",
+        "Skal hun tilbage, fjerner du fratrædelsesdatoen under «Redigér» og opretter en ny adgang. Det gamle login kan ikke gendannes."] },
   ], warn: "Weekendarbejde kræver flueben på medarbejderen. Uden det kan hun slet ikke planlægges lørdag og søndag. Med fluebenet er der ingen timegrænse i weekenden — derfor står der Ja/Nej og ikke et timetal." },
 
   checklists: { title: "Tjeklister", intro: "Tjeklister er de arbejdsopgaver medarbejderen sætter flueben ved ude hos kunden.", blocks: [
@@ -1586,27 +1589,27 @@ const MODULE_HELP = {
         "Forecast fremskriver resten af året."] },
   ], warn: "Er «Registreret» meget lavere end «Planlagt», er det som regel manglende tidsregistrering — ikke manglende arbejde. Tjek Kundetimer." },
 
-  kundetimer: { title: "Kundetimer", intro: "Hvorn\u00e5r blev der brugt en anden tid end aftalt \u2014 og hvorfor.", blocks: [
+  kundetimer: { title: "Kundetimer", intro: "Hvornår blev der brugt en anden tid end aftalt — og hvorfor.", blocks: [
     { h: "Hvad du ser", p: [
-        "Kun de bes\u00f8g hvor den registrerede tid er en anden end den aftalte. Passer tiden, er der ikke noget at forklare, og s\u00e5 fylder opgaven ikke.",
-        "For hvert bes\u00f8g st\u00e5r den planlagte tid, den registrerede tid, forskellen, og medarbejderens begrundelse.",
-        "Alt er foldet ud. Ringer kunden og sp\u00f8rger hvorfor der er brugt mere tid, skal du kunne l\u00e6se svaret uden at klikke f\u00f8rst.",
-        "Mest merforbrug \u00f8verst \u2014 det er den samtale der kommer.",
-        "S\u00f8gefeltet finder kunden med det samme, hvis du allerede har hende i r\u00f8ret."] },
-    { h: "Kun udf\u00f8rte opgaver", p: [
-        "En opgave der ikke er k\u00f8rt endnu, er ikke en afvigelse og t\u00e6ller ikke med.",
-        "Regnede vi den med, ville hver eneste kunde se ud til at mangle timer den f\u00f8rste i m\u00e5neden, og listen ville v\u00e6re ubrugelig pr\u00e6cis n\u00e5r du kigger p\u00e5 den."] },
+        "Kun de besøg hvor den registrerede tid er en anden end den aftalte. Passer tiden, er der ikke noget at forklare, og så fylder opgaven ikke.",
+        "For hvert besøg står den planlagte tid, den registrerede tid, forskellen, og medarbejderens begrundelse.",
+        "Alt er foldet ud. Ringer kunden og spørger hvorfor der er brugt mere tid, skal du kunne læse svaret uden at klikke først.",
+        "Mest merforbrug øverst — det er den samtale der kommer.",
+        "Søgefeltet finder kunden med det samme, hvis du allerede har hende i røret."] },
+    { h: "Kun udførte opgaver", p: [
+        "En opgave der ikke er kørt endnu, er ikke en afvigelse og tæller ikke med.",
+        "Regnede vi den med, ville hver eneste kunde se ud til at mangle timer den første i måneden, og listen ville være ubrugelig præcis når du kigger på den."] },
     { h: "Uden begrundelse", p: [
-        "Tallet \u00f8verst er de bes\u00f8g hvor der er brugt mere tid end aftalt, uden at nogen har skrevet hvorfor.",
-        "Det er dem du ikke kan svare kunden p\u00e5. St\u00e5r der et tal, er det v\u00e6rd at sp\u00f8rge medarbejderen mens hun stadig kan huske det."] },
-    { h: "S\u00e5dan l\u00e6ses forskellen", p: [
-        "Et plus betyder mere tid end aftalt. Sker det fast hos samme kunde, er det aftalens varighed der er sat for lavt \u2014 ret den p\u00e5 aftalen.",
-        "Et minus betyder mindre tid. Er opgaven udf\u00f8rt, er det enten g\u00e5et hurtigere, eller ogs\u00e5 er tiden ikke registreret f\u00e6rdig.",
-        "Ved timepris f\u00f8lger fakturaen den registrerede tid, s\u00e5 forskellen ses ogs\u00e5 der. Ved fast pris g\u00f8r den ikke \u2014 og s\u00e5 er det her du opdager at en aftale er blevet ul\u00f8nsom."] },
+        "Tallet øverst er de besøg hvor der er brugt mere tid end aftalt, uden at nogen har skrevet hvorfor.",
+        "Det er dem du ikke kan svare kunden på. Står der et tal, er det værd at spørge medarbejderen mens hun stadig kan huske det."] },
+    { h: "Sådan læses forskellen", p: [
+        "Et plus betyder mere tid end aftalt. Sker det fast hos samme kunde, er det aftalens varighed der er sat for lavt — ret den på aftalen.",
+        "Et minus betyder mindre tid. Er opgaven udført, er det enten gået hurtigere, eller også er tiden ikke registreret færdig.",
+        "Ved timepris følger fakturaen den registrerede tid, så forskellen ses også der. Ved fast pris gør den ikke — og så er det her du opdager at en aftale er blevet ulønsom."] },
     { h: "Eksport", p: [
-        "CSV-filen har en linje pr. bes\u00f8g med begrundelsen, og en sumlinje pr. kunde.",
-        "Der st\u00e5r ingen priser \u2014 hverken p\u00e5 sk\u00e6rmen eller i filen. Skal der kroner p\u00e5, ligger de under Fakturering."] },
-  ], warn: "Tilbudsm\u00f8der og interne blokke som ferie og sygdom t\u00e6ller ikke med. To medarbejdere p\u00e5 samme bes\u00f8g er \u00e9t bes\u00f8g, og deres minutter l\u00e6gges sammen \u2014 det er s\u00e5dan kunden ser det." },
+        "CSV-filen har en linje pr. besøg med begrundelsen, og en sumlinje pr. kunde.",
+        "Der står ingen priser — hverken på skærmen eller i filen. Skal der kroner på, ligger de under Fakturering."] },
+  ], warn: "Tilbudsmøder og interne blokke som ferie og sygdom tæller ikke med. To medarbejdere på samme besøg er ét besøg, og deres minutter lægges sammen — det er sådan kunden ser det." },
 
   medExport: { title: "Løn data", intro: "Grundlaget for løn: timer og kørsel pr. medarbejder.", blocks: [
     { h: "Sådan gør du", p: ["Vælg måned og år.", "«Afvigelse» viser hvor medarbejderen har skrevet en begrundelse.",
@@ -1723,7 +1726,7 @@ function PlanningApp({ session, onSignOut }) {
   useEffect(() => { localStorage.setItem("rp_lang", lang); }, [lang]);
 
   const L = {
-    da: { schedule:"Ugeplan", employees:"Medarbejdere", checklists:"Tjeklister", time:"Fakturering", inventory:"Lager", contracts:"Aftaler", kunder:"Kunder", tilbud:"Tilbud", kundetimer:"Kundetimer", reports:"Rapportering", medExport:"L\u00f8n data", signOut:"Log ud", sub:"Ugeplanlægning · kapacitet · kompetenceniveauer" },
+    da: { schedule:"Ugeplan", employees:"Medarbejdere", checklists:"Tjeklister", time:"Fakturering", inventory:"Lager", contracts:"Aftaler", kunder:"Kunder", tilbud:"Tilbud", kundetimer:"Kundetimer", reports:"Rapportering", medExport:"Løn data", signOut:"Log ud", sub:"Ugeplanlægning · kapacitet · kompetenceniveauer" },
     en: { schedule:"Schedule", employees:"Employees", checklists:"Checklists", time:"Time & Export", inventory:"Inventory", contracts:"Contracts", kunder:"Customers", tilbud:"Quotes", kundetimer:"Customer hours", reports:"Reporting", medExport:"Payroll data", signOut:"Sign out", sub:"Weekly planning · capacity · skill levels" },
   }[lang];
   // ── Dynamiske master-data fra Supabase ──
@@ -1965,6 +1968,7 @@ function PlanningApp({ session, onSignOut }) {
           app_email: e.app_email ?? null,
           isAdmin: e.is_admin ?? false,
           weekendOk: e.weekend_ok ?? false,
+          fratraadtDato: e.fratraadt_dato || null,
           startTime: e.start_time || null,
           // Er man ikke administrator, giver politikken paa satshistorikken ingen
           // raekker, og satsen bliver null. Eksporten viser da en streg i stedet for
@@ -2096,16 +2100,20 @@ function PlanningApp({ session, onSignOut }) {
         // Planlaegningshorisont: opgaverne materialiseres altid fire uger frem, saa
         // planen kan overskues en maaned ud, og aftaler med fast medarbejder faar
         // vedkommende paa med det samme i stedet for foerst naar ugen aabnes.
+        // Fratraadte medarbejdere holdes ude af alt der PLANLAEGGER. De bliver til
+        // gengaeld ved med at vaere i employees, saa historikken kan sige hvem der
+        // udfoerte hvad — det er hele grunden til at raekken ikke slettes.
+        const empAktive = empMapped.filter((e) => !e.fratraadtDato);
         let allInst = existingInst;
         const horizonAnchor = mondayOf(new Date());
         for (let hw = 0; hw < HORIZON_WEEKS; hw++) {
           const hd = new Date(horizonAnchor);
           hd.setDate(hd.getDate() + hw * 7);
           const hi = isoWeekInfo(hd);
-          allInst = ensureWeekInstances(hi.week, hi.year, allInst, mapped, empMapped, areasData || [], empAreasData || [], travelSettings);
+          allInst = ensureWeekInstances(hi.week, hi.year, allInst, mapped, empAktive, areasData || [], empAreasData || [], travelSettings);
         }
         // Den viste uge kan ligge uden for horisonten (hvis planlaeggeren har bladret).
-        allInst = ensureWeekInstances(currentWeek, currentYear, allInst, mapped, empMapped, areasData || [], empAreasData || [], travelSettings);
+        allInst = ensureWeekInstances(currentWeek, currentYear, allInst, mapped, empAktive, areasData || [], empAreasData || [], travelSettings);
         setNyTidOnsker(onskerData || []);
         setOpgaveNoter(grupperNoter(noterData));
         setInstances(allInst);
@@ -2421,10 +2429,6 @@ function PlanningApp({ session, onSignOut }) {
     }
   }, []);
 
-  const removeEmployee = useCallback(async (id) => {
-    const { error: delEmpErr } = await supabase.from("employees").delete().eq("id", id);
-    if (dbFail(delEmpErr, "slette medarbejderen")) return;
-  }, []);
 
   // Skriver kun de arvede felter. Bevidst IKKE syncInstance pr. opgave: foerste gang
   // det her koerer, er der flere hundrede opgaver at rette op, og lige saa mange kald
@@ -3636,17 +3640,39 @@ function PlanningApp({ session, onSignOut }) {
     notify(`Medarbejder ${emp.name} gemt`);
     setShowAddEmp(false); setEditEmp(null);
   }
-  function deleteEmployee(id) {
-    setEmployees((prev) => prev.filter((e) => e.id !== id));
-    removeEmployee(id);
+  // Fratraedelsen sker i en edge-funktion, fordi sletningen af login’et kraever
+  // servicenoeglen — og den maa aldrig ligge i en browser.
+  async function fratraedEmployee(id, dato) {
+    const { data, error } = await supabase.functions.invoke("fratraed-medarbejder", {
+      body: { empId: id, dato },
+    });
+    if (error || data?.error) {
+      const grunde = {
+        sidste_planlaegger: "Det er den sidste planlægger. Gør en anden til administrator først — ellers kan ingen længere oprette medarbejdere eller åbne adgang.",
+        ikke_dig_selv: "Du kan ikke registrere dig selv som fratrådt. Bed en anden planlægger gøre det.",
+        kun_planlaegger: "Kun planlæggere kan gøre det.",
+        ukendt_medarbejder: "Medarbejderen findes ikke længere.",
+      };
+      return { ok: false, besked: grunde[data?.error] || error?.message || data?.error };
+    }
+    setEmployees((prev) => prev.map((e) => (e.id === id ? { ...e, fratraadtDato: data.dato, auth_user_id: null, app_email: null } : e)));
+    // Kommende opgaver bliver hjemloese og skal planlaegges paa ny. Udfoerte roeres
+    // ikke: der staar hendes navn og tid, og det er fakturagrundlaget.
     setInstances((prev) => prev.map((t) => {
       if (!(t.assignees || []).includes(id)) return t;
+      if (t.status === "udført") return t;
       const nextAssignees = t.assignees.filter((a) => a !== id);
       const updated = nextAssignees.length === 0 ? { ...t, assignees: [], status: "unscheduled" } : { ...t, assignees: nextAssignees };
       syncInstance(updated);
       return updated;
     }));
+    notify(data.loginSlettet
+      ? `${data.navn} er registreret som fratrådt, og login’et er slettet`
+      : `${data.navn} er registreret som fratrådt, men login’et kunne ikke slettes — kontakt support`);
+    return { ok: true };
   }
+
+
 
   function logMinutes(taskId, empId, minutes) {
     updateInstance(taskId, (t) => ({ ...t, timeLog: [...(t.timeLog || []), { minutes, empId }] }));
@@ -3892,6 +3918,10 @@ function PlanningApp({ session, onSignOut }) {
   // Adgang kræver et POSITIVT ja. Tidligere gav et login uden tilknyttet
   // medarbejder automatisk administratorrettigheder i brugerfladen — den slags
   // skal fejle lukket, ikke åbent.
+  // Til alt der planlaegger frem: en fratraadt medarbejder maa ikke kunne vaelges,
+  // tildeles eller taelles med i kapaciteten. Hun bliver i employees, fordi det er
+  // dér navnet paa en udfoert opgave slaas op.
+  const aktiveEmployees = employees.filter((e) => !e.fratraadtDato);
   const isAdminUser = !!currentEmployeeForAuth?.isAdmin;
   // syncEmployee er en useCallback med tomme deps og bliver defineret laenge foer
   // isAdminUser findes. Den kan derfor ikke laese variablen direkte — en closure med
@@ -3999,11 +4029,11 @@ function PlanningApp({ session, onSignOut }) {
       {MODULE_HELP[view] && <HelpButton onClick={() => setShowHelp(true)} />}
       {showHelp && <ModuleHelp view={view} onClose={() => setShowHelp(false)} />}
       {sletMedarbejder && (
-        <DeleteEmployeeModal
+        <FratraedModal
           emp={employees.find((e) => e.id === sletMedarbejder)}
           instances={instances}
           onClose={() => setSletMedarbejder(null)}
-          onConfirm={deleteEmployee}
+          onConfirm={fratraedEmployee}
         />
       )}
 
@@ -4127,7 +4157,7 @@ function PlanningApp({ session, onSignOut }) {
 
       {view === "uge" && (
         <WeekView
-          employees={employees} instances={weekInstancesList} unplaced={unplaced} opgaveNoter={opgaveNoter}
+          employees={aktiveEmployees} instances={weekInstancesList} unplaced={unplaced} opgaveNoter={opgaveNoter}
           onAdd={() => setShowAddTask(true)} onAuto={runAuto} onScheduleWeek={runScheduleWeek} onAutoAllWeeks={runAutoAllWeeks}
           onPlace={manualPlace} onUnplace={unplace} onRemoveAssignee={removeAssignee} onDelete={deleteTask}
           onToggleInclude={(taskId) => updateInstance(taskId, (t) => ({ ...t, includeInAuto: !t.includeInAuto }))}
@@ -4176,7 +4206,7 @@ function PlanningApp({ session, onSignOut }) {
       )}
 
       {view === "contracts" && (
-        <ContractsView templates={templates} instances={instances} pricing={pricing} employees={employees} onEditDraft={(tpl) => { setCopyPayload({ ...tpl, type: "fixed", templateDays: tpl.days }); setEditTplId(tpl.id); setShowAddTask(true); }}
+        <ContractsView templates={templates} instances={instances} pricing={pricing} employees={aktiveEmployees} onEditDraft={(tpl) => { setCopyPayload({ ...tpl, type: "fixed", templateDays: tpl.days }); setEditTplId(tpl.id); setShowAddTask(true); }}
             isAdminUser={isAdminUser} onCancelTemplate={(tplId) => setCancelTarget(tplId)} />
       )}
 
@@ -4205,10 +4235,10 @@ function PlanningApp({ session, onSignOut }) {
         <SkillsView supabase={supabase} skills={skills} onSkillsChange={setSkills} />
       )}
 
-      {showAddTask && <TaskModal onClose={() => { setShowAddTask(false); setCopyPayload(null); setEditTplId(null); }} onSave={(p, editId) => (editId ? updateTemplate(p, editId) : addTask(p))} editId={editTplId} checklistTemplates={checklistTemplates} skills={skills} copyFrom={copyPayload} employees={employees} />}
+      {showAddTask && <TaskModal onClose={() => { setShowAddTask(false); setCopyPayload(null); setEditTplId(null); }} onSave={(p, editId) => (editId ? updateTemplate(p, editId) : addTask(p))} editId={editTplId} checklistTemplates={checklistTemplates} skills={skills} copyFrom={copyPayload} employees={aktiveEmployees} />}
       {showAddEmp && <EmployeeModal emp={editEmp} onClose={() => { setShowAddEmp(false); setEditEmp(null); }} onSave={saveEmployee} skills={skills} satsHistorik={editEmp ? satsHistorik[editEmp.id] : null} />}
-      {showAddBlock && <BlockModal employees={employees} onClose={() => setShowAddBlock(false)} onSave={addBlock} />}
-      {showAddActivity && <ActivityModal employees={employees} onClose={() => setShowAddActivity(false)} onSave={addActivity} />}
+      {showAddBlock && <BlockModal employees={aktiveEmployees} onClose={() => setShowAddBlock(false)} onSave={addBlock} />}
+      {showAddActivity && <ActivityModal employees={aktiveEmployees} onClose={() => setShowAddActivity(false)} onSave={addActivity} />}
       {showTravelSettings && (
         <TravelSettingsModal
           settings={travelSettings}
@@ -4225,7 +4255,7 @@ function PlanningApp({ session, onSignOut }) {
           onSetPreferredEmployee={setPreferredEmployee}
           onCancelTemplate={(tplId) => setCancelTarget(tplId)}
           task={instances.find((t) => t.id === openTaskId)}
-          employees={employees}
+          employees={aktiveEmployees}
           checklistTemplates={checklistTemplates}
           skills={skills}
           isAdminUser={isAdminUser}
@@ -4355,7 +4385,7 @@ function EmployeeAppView({ employees, instances, onLogMinutes, onSetStatus, onTo
           <div style={styles.phoneHeader}>
             <LogIn size={14} />
             <select style={styles.phoneEmpSelect} value={empId} onChange={(e) => setEmpId(e.target.value)}>
-              {employees.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
+              {employees.filter((e) => !e.fratraadtDato).map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
             </select>
           </div>
           <div style={styles.phoneSub}>{weekLabel}</div>
@@ -4947,6 +4977,9 @@ function TypeBadge({ type, mini }) {
 // instances og travelSettings er bevidst ikke props laengere: siden er stamdata og
 // skal ikke afhaenge af hvilken uge man staar i. Belaegningen laeses i ugeplanen.
 function EmployeesView({ employees, onAdd, onEdit, onDelete, supabase, skills, onSkillsChange, areas, employeeAreas, onAreasChange, onEmployeeAreasChange }) {
+  // Omraadefordeling er planlaegning. Fratraadte hoerer ikke til der, men de bliver
+  // staaende i selve medarbejderlisten nedenfor med deres fratraedelsesdato.
+  const aktive = employees.filter((e) => !e.fratraadtDato);
   const [sog, setSog] = useState("");
   const [sortering, setSortering] = useState("ledig");
   const [omraadeFilter, setOmraadeFilter] = useState("alle");
@@ -5066,13 +5099,25 @@ function EmployeesView({ employees, onAdd, onEdit, onDelete, supabase, skills, o
     setInviteEmail((prev) => ({ ...prev, [emp.id]: "" }));
   }
 
+  // Lukker adgangen ved at SLETTE login'et. Før ryddede den kun koblingen på
+  // medarbejderen, så kontoen blev stående i auth: hun kunne stadig logge ind, kom
+  // bare ind uden profil — og ingen kunne se at kontoen var der.
   async function deactivateUser(emp) {
-    if (!window.confirm(`Luk adgang for ${emp.name}? De kan ikke længere logge ind på medarbejder-appen.`)) return;
+    if (!window.confirm(`Luk adgang for ${emp.name}?\n\nLogin'et slettes, og hun bliver logget ud med det samme — også hvis appen står åben på telefonen. Hun bliver stående som medarbejder og kan få en ny adgang senere.`)) return;
     setInviteStatus((prev) => ({ ...prev, [emp.id]: "deactivating" }));
-    const { error: unlinkErr } = await supabase.from("employees").update({ auth_user_id: null }).eq("id", emp.id);
-    if (dbFail(unlinkErr, "fjerne login fra medarbejderen")) return;
-    // Opdatér local state så kortet opdateres med det samme
+    const { data, error } = await supabase.functions.invoke("fratraed-medarbejder", {
+      body: { handling: "lukAdgang", empId: emp.id },
+    });
+    if (error || data?.error) {
+      const grunde = {
+        sidste_planlaegger: "Det er den sidste planlægger med adgang. Giv en anden administratorrettigheder først.",
+        ikke_dig_selv: "Du kan ikke lukke din egen adgang. Bed en anden planlægger gøre det.",
+      };
+      setInviteStatus((prev) => ({ ...prev, [emp.id]: "error: " + (grunde[data?.error] || error?.message || data?.error) }));
+      return;
+    }
     emp.auth_user_id = null;
+    emp.app_email = null;
     setInviteStatus((prev) => ({ ...prev, [emp.id]: "deactivated" }));
   }
 
@@ -5099,7 +5144,7 @@ function EmployeesView({ employees, onAdd, onEdit, onDelete, supabase, skills, o
       )}
 
       {showAreasPanel && (
-        <AreasView supabase={supabase} areas={areas} employees={employees} employeeAreas={employeeAreas}
+        <AreasView supabase={supabase} areas={areas} employees={aktive} employeeAreas={employeeAreas}
           onAreasChange={onAreasChange} onEmployeeAreasChange={onEmployeeAreasChange} />
       )}
       {/* Vaerktoejslinje. Fandtes ikke foer: "hvem kan vinduespolering og har tid" betoed
@@ -5151,7 +5196,12 @@ function EmployeesView({ employees, onAdd, onEdit, onDelete, supabase, skills, o
                   </div>
                 </div>
                 <div style={styles.empMaerker}>
-                  {!hasUser && <span style={styles.empMaerkeRoed}>Ingen app-adgang</span>}
+                  {e.fratraadtDato && (
+                    <span style={{ ...styles.empMaerkeGraa, background: "#F1F5F9", color: "#475569", fontWeight: 700 }}>
+                      Fratrådt {new Date(e.fratraadtDato).toLocaleDateString("da-DK", { day: "numeric", month: "short", year: "numeric" })}
+                    </span>
+                  )}
+                  {!hasUser && !e.fratraadtDato && <span style={styles.empMaerkeRoed}>Ingen app-adgang</span>}
                   {e.travelInWorktime && <span style={styles.empMaerkeLilla} title="Kørsel tæller i kapaciteten">Kørsel</span>}
                   {e.isAdmin && <span style={styles.empMaerkeGraa}>Administrator</span>}
                   {kompetenceListe.slice(0, 2).map((s) => (
@@ -5169,8 +5219,10 @@ function EmployeesView({ employees, onAdd, onEdit, onDelete, supabase, skills, o
               <div style={styles.empDetaljer}>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
                 <button style={styles.secondaryBtn} onClick={() => onEdit(e)}><Pencil size={14} /> Redigér</button>
-                <button style={{ ...styles.secondaryBtn, color: "#B91C1C", borderColor: "#FCA5A5", marginLeft: "auto" }}
-                  onClick={() => onDelete(e.id)}><Trash2 size={14} /> Slet</button>
+                {!e.fratraadtDato && (
+                  <button style={{ ...styles.secondaryBtn, color: "#B91C1C", borderColor: "#FCA5A5", marginLeft: "auto" }}
+                    onClick={() => onDelete(e.id)}><LogOut size={14} /> Fratræd</button>
+                )}
               </div>
               <div style={styles.empSkills}>
                 {Object.entries(e.skills || {}).map(([s, lvl]) => (
@@ -5202,7 +5254,17 @@ function EmployeesView({ employees, onAdd, onEdit, onDelete, supabase, skills, o
                 </div>
               </div>
 
-              {/* Brugeradgang */}
+              {/* Brugeradgang. Vises ikke for en fratraadt: login'et er slettet, og et
+                  felt der inviterer til at oprette et nyt ville modsige beslutningen.
+                  Skal hun tilbage, ryddes fratraedelsesdatoen under Redigér foerst. */}
+              {e.fratraadtDato ? (
+                <div style={{ borderTop: "1px solid #F1F5F9", marginTop: 10, paddingTop: 10,
+                              fontSize: 12.5, color: "#64748B", lineHeight: 1.6 }}>
+                  Fratrådt {new Date(e.fratraadtDato).toLocaleDateString("da-DK", { day: "numeric", month: "long", year: "numeric" })}.
+                  Login’et er slettet, og hun indgår ikke i planlægningen.
+                  Lønhistorik og kørsel er bevaret.
+                </div>
+              ) : (
               <div style={{ borderTop: "1px solid #F1F5F9", marginTop: 10, paddingTop: 10 }}>
                 {/* Status + mail + luk-knap på én linje */}
                 <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8, flexWrap: "wrap" }}>
@@ -5245,6 +5307,7 @@ function EmployeesView({ employees, onAdd, onEdit, onDelete, supabase, skills, o
                 {status === "deactivated" && <div style={{ fontSize: 12, color: "#DC2626", marginTop: 4 }}>Adgang lukket</div>}
                 {status?.startsWith("error") && <div style={{ fontSize: 12, color: "#DC2626", marginTop: 4 }}>{status}</div>}
               </div>
+              )}
 
               {/* Medarbejderprodukter — kun historik */}
               <div style={{ borderTop: "1px solid #F1F5F9", marginTop: 10, paddingTop: 10 }}>
@@ -5515,8 +5578,8 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
     .filter((t) => !invoiceOnly || showDineroExported || !t.dineroExported)
     .sort((a, b) => {
       if (a.week !== b.week) return a.week - b.week;
-      const aEmp = (a.assignees || []).map((id) => employees.find((e) => e.id === id)?.name || "").sort().join(", ") || "\uffff";
-      const bEmp = (b.assignees || []).map((id) => employees.find((e) => e.id === id)?.name || "").sort().join(", ") || "\uffff";
+      const aEmp = (a.assignees || []).map((id) => employees.find((e) => e.id === id)?.name || "").sort().join(", ") || "￿";
+      const bEmp = (b.assignees || []).map((id) => employees.find((e) => e.id === id)?.name || "").sort().join(", ") || "￿";
       if (aEmp !== bEmp) return aEmp.localeCompare(bEmp, "da");
       const aDay = a.day ? ALL_DAYS.findIndex((d) => d.key === a.day) : 99;
       const bDay = b.day ? ALL_DAYS.findIndex((d) => d.key === b.day) : 99;
@@ -5899,14 +5962,14 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
   );
 }
 
-// Kundetimer: hvorn\u00e5r blev der brugt en anden tid end aftalt, og hvorfor.
+// Kundetimer: hvornår blev der brugt en anden tid end aftalt, og hvorfor.
 //
-// Skaermen har \u00e9n situation for oeje: kunden ringer og spoerger hvorfor der er brugt
+// Skaermen har én situation for oeje: kunden ringer og spoerger hvorfor der er brugt
 // mere tid, og planlaeggeren skal kunne svare med det samme. Derfor staar der KUN
-// afvigelser og begrundelser. Opgaver der passede, fylder ikke \u2014 dem er der ikke
+// afvigelser og begrundelser. Opgaver der passede, fylder ikke — dem er der ikke
 // noget at forklare ved.
 //
-// Kun UDF\u00d8RTE opgaver taeller. En opgave der ikke er koert endnu, er ikke en
+// Kun UDFØRTE opgaver taeller. En opgave der ikke er koert endnu, er ikke en
 // afvigelse; regnede vi den med, ville hver eneste kunde se ud til at mangle timer den
 // foerste i maaneden, og listen ville vaere ubrugelig praecis naar man kigger paa den.
 //
@@ -5920,13 +5983,13 @@ function CustomerHoursView({ instances }) {
   const MONTHS = ["Januar","Februar","Marts","April","Maj","Juni","Juli","August","September","Oktober","November","December"];
   const years = [now.getFullYear() - 1, now.getFullYear(), now.getFullYear() + 1];
 
-  // \u00c9n linje pr. bes\u00f8g, ikke pr. medarbejder. To medarbejdere paa samme bes\u00f8g er \u00e9t
-  // bes\u00f8g set fra kundens side, og deres minutter laegges sammen.
+  // Én linje pr. besøg, ikke pr. medarbejder. To medarbejdere paa samme besøg er ét
+  // besøg set fra kundens side, og deres minutter laegges sammen.
   const alle = [];
   instances
     .filter((t) => !BLOCK_TYPES.includes(t.type) && t.type !== "aktivitet")
     .filter((t) => (t.customerName || "").trim())
-    .filter((t) => t.status === "udf\u00f8rt")
+    .filter((t) => t.status === "udført")
     .forEach((t) => {
       const { month, year } = instanceMonthYear(t, filterYear);
       if (month !== filterMonth || year !== filterYear) return;
@@ -5936,7 +5999,7 @@ function CustomerHoursView({ instances }) {
         kunde: t.customerName.trim(),
         week: t.week,
         dato: instanceDateString(t),
-        dayLabel: ALL_DAYS.find((d) => d.key === t.day)?.label || t.day || "\u2014",
+        dayLabel: ALL_DAYS.find((d) => d.key === t.day)?.label || t.day || "—",
         titel: t.title,
         planlagt: t.duration || 0,
         registreret,
@@ -5970,10 +6033,10 @@ function CustomerHoursView({ instances }) {
   const mindreforbrug = skaeve.reduce((s, b) => s + (b.afvigelse < 0 ? -b.afvigelse : 0), 0);
   const udenBegrundelse = skaeve.filter((b) => b.afvigelse > 0 && !b.begrundelse).length;
 
-  const fortegn = (m) => (m > 0 ? "+" : m < 0 ? "\u2212" : "");
+  const fortegn = (m) => (m > 0 ? "+" : m < 0 ? "−" : "");
   const afvig = (m) => fortegn(m) + fmtMin(Math.abs(m));
   const farve = (m) => (m > 0 ? "#B45309" : m < 0 ? "#2563EB" : "#CBD5E1");
-  // Overskrift, kundelinje og bes\u00f8gslinjer er tre selvstaendige gitre. Faar de ikke
+  // Overskrift, kundelinje og besøgslinjer er tre selvstaendige gitre. Faar de ikke
   // praecis samme definition, staar tallene forskudt for deres egen overskrift.
   const KOL = "1fr 120px 120px 120px";
 
@@ -5988,12 +6051,12 @@ function CustomerHoursView({ instances }) {
         b.planlagt, b.registreret, b.afvigelse, (b.afvigelse / 60).toFixed(2),
         b.begrundelse || "",
       ]));
-      data.push([`${k.navn} \u2014 i alt`, "", "", "", "", "", "",
+      data.push([`${k.navn} — i alt`, "", "", "", "", "", "",
         k.afvigelse, (k.afvigelse / 60).toFixed(2), ""]);
     });
     const csv = [header, ...data]
       .map((row) => row.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
-    // BOM foran, ellers viser Excel \u00e6\u00f8\u00e5 som volapyk.
+    // BOM foran, ellers viser Excel æøå som volapyk.
     const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -6011,7 +6074,7 @@ function CustomerHoursView({ instances }) {
           <div style={styles.statBox}><div style={{ ...styles.statValue, color: "#2563EB" }}>{fmtMin(mindreforbrug)}</div><div style={styles.statLabel}>Brugt mindre</div></div>
         </div>
         <div style={{ ...styles.statBlock, borderLeft: "3px solid #64748B" }}>
-          <div><div style={{ ...styles.statValue, color: "#111111" }}>{skaeve.length}</div><div style={styles.statLabel}>Bes\u00f8g med afvigelse</div></div>
+          <div><div style={{ ...styles.statValue, color: "#111111" }}>{skaeve.length}</div><div style={styles.statLabel}>Besøg med afvigelse</div></div>
           {/* Et merforbrug uden begrundelse er det man IKKE kan svare kunden paa.
               Derfor staar tallet her og ikke gemt nede i listen. */}
           <div style={styles.statBox}>
@@ -6028,12 +6091,12 @@ function CustomerHoursView({ instances }) {
           </select>
         </div>
         <input style={{ ...styles.inputSm, fontSize: 13, minWidth: 190 }} value={soeg}
-          placeholder="S\u00f8g kunde\u2026" onChange={(e) => setSoeg(e.target.value)} />
+          placeholder="Søg kunde…" onChange={(e) => setSoeg(e.target.value)} />
         <div style={styles.toolbarSpacer} />
         <button style={styles.primaryBtn} onClick={eksporter}><Download size={16} /> Eksporter CSV</button>
       </div>
 
-      {/* Alt er foldet ud. Kunden staar i telefonen \u2014 der skal ikke klikkes foerst. */}
+      {/* Alt er foldet ud. Kunden staar i telefonen — der skal ikke klikkes foerst. */}
       {vist.map((k) => (
         <div key={k.navn} style={{ background: "#fff", borderRadius: 10, marginBottom: 10,
                                    boxShadow: "0 1px 3px rgba(0,0,0,0.06)", overflow: "hidden" }}>
@@ -6067,7 +6130,7 @@ function CustomerHoursView({ instances }) {
                 </span>
               </div>
               {/* Begrundelsen staar i fuld bredde under tallene. Den er tit en hel
-                  saetning, og klemt ned i en kolonne ville den blive klippet af \u2014
+                  saetning, og klemt ned i en kolonne ville den blive klippet af —
                   netop den tekst man skal laese hoejt for kunden. */}
               {b.begrundelse ? (
                 <div style={{ fontSize: 13, color: "#B45309", marginTop: 4, lineHeight: 1.5 }}>{b.begrundelse}</div>
@@ -6081,8 +6144,8 @@ function CustomerHoursView({ instances }) {
 
       {vist.length === 0 && (
         <div style={{ ...styles.emptyCol, padding: 40, background: "#fff", borderRadius: 10 }}>
-          {q ? "Ingen kunde med det navn har en afvigelse i denne m\u00e5ned"
-             : "Ingen afvigelser i denne m\u00e5ned \u2014 alt udf\u00f8rt arbejde matcher den aftalte tid"}
+          {q ? "Ingen kunde med det navn har en afvigelse i denne måned"
+             : "Ingen afvigelser i denne måned — alt udført arbejde matcher den aftalte tid"}
         </div>
       )}
     </div>
@@ -7157,49 +7220,73 @@ function DayPills({ days }) {
 // Dialogen der markerer en aftale som udgaaet. Kraever baade en aarsag, en
 // sidste gyldig dag og en udtrykkelig bekraeftelse, fordi handlingen ikke kan
 // fortrydes i appen.
-// Bekraeftelse foer en medarbejder slettes. Foer skete det ved ét klik: hun forsvandt,
-// og alle hendes opgaver blev sat tilbage til "ikke tildelt" uden at nogen fik besked.
-// Bemaerk at "Luk adgang" i forvejen spurgte — sletningen var det farligste og det
-// eneste sted uden spoergsmaal.
-function DeleteEmployeeModal({ emp, instances, onClose, onConfirm }) {
+// Naar en medarbejder fratraeder.
+//
+// Foer var den eneste vej ud en sletning, og den gjorde praecis det forkerte: den tog
+// loenhistorik og koerselslog med sig (begge staar med kaskade i databasen), mens
+// login'et blev staaende, saa personen kunne logge ind dagen efter. Nu er det omvendt.
+function FratraedModal({ emp, instances, onClose, onConfirm }) {
+  const idag = new Date();
+  const iso = idag.getFullYear() + "-" + String(idag.getMonth() + 1).padStart(2, "0")
+            + "-" + String(idag.getDate()).padStart(2, "0");
+  const [dato, setDato] = useState(iso);
   const [accepted, setAccepted] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [fejl, setFejl] = useState("");
   if (!emp) return null;
+
   // Hvor meget rammer det? Tal frem for en advarsel i almindelighed — planlaeggeren
   // skal kunne se om det er to opgaver eller halvfems der bliver hjemloese.
   const paavirkede = (instances || []).filter((t) => (t.assignees || []).includes(emp.id));
   const kommende = paavirkede.filter((t) => t.status !== "udført");
   const udfoerte = paavirkede.length - kommende.length;
   const blocked = !accepted || busy;
+
+  async function bekraeft() {
+    setBusy(true); setFejl("");
+    const svar = await onConfirm(emp.id, dato);
+    setBusy(false);
+    if (svar?.ok) { onClose(); return; }
+    setFejl(svar?.besked || "Det kunne ikke gennemføres. Prøv igen.");
+  }
+
   return (
     <div style={styles.overlay} onClick={onClose}>
       <div style={styles.modal} onClick={(e) => e.stopPropagation()}>
-        <div style={styles.modalTitle}>Slet {emp.name}?</div>
+        <div style={styles.modalTitle}>Registrér {emp.name} som fratrådt?</div>
+
+        <label style={styles.label}>Fratrædelsesdato</label>
+        <input type="date" style={styles.input} value={dato} onChange={(e) => setDato(e.target.value)} />
+
+        <div style={{ ...styles.hint, color: "#B91C1C", marginTop: 10 }}>
+          Hendes login bliver <b>slettet</b>. Står appen åben på hendes telefon, bliver hun
+          logget ud med det samme.
+        </div>
         <div style={styles.hint}>
           {kommende.length > 0
             ? `${kommende.length} kommende opgave${kommende.length === 1 ? "" : "r"} mister hende og går tilbage til "Ikke tildelt". Du skal selv planlægge dem på ny.`
             : "Hun står ikke på nogen kommende opgaver."}
         </div>
-        {udfoerte > 0 && (
-          <div style={styles.hint}>
-            {udfoerte} udført{udfoerte === 1 ? " opgave" : "e opgaver"} beholder hendes navn og
-            tidsregistrering, så historik og fakturagrundlag ikke ændrer sig.
-          </div>
-        )}
-        <div style={{ ...styles.hint, color: "#B91C1C" }}>
-          Hendes login til medarbejder-appen fjernes ikke af dette. Brug «Luk adgang» først,
-          hvis hun ikke længere skal kunne logge ind.
+        <div style={styles.hint}>
+          {udfoerte > 0 ? `${udfoerte} udført${udfoerte === 1 ? " opgave beholder" : "e opgaver beholder"} hendes navn og tidsregistrering. ` : ""}
+          Lønhistorik og kørselslog bevares, så du kan dokumentere hvad hun har fået
+          udbetalt og kørt — også om flere år.
         </div>
+
         <label style={{ display: "flex", gap: 8, alignItems: "flex-start", marginTop: 12, fontSize: 13, cursor: "pointer" }}>
           <input type="checkbox" checked={accepted} onChange={(e) => setAccepted(e.target.checked)} />
-          <span>Jeg er klar over at det <b>ikke kan fortrydes</b> i appen.</span>
+          <span>Jeg er klar over at <b>login’et slettes</b> og ikke kan gendannes. Skal hun tilbage,
+            oprettes en ny adgang.</span>
         </label>
+
+        {fejl && <div style={{ color: "#B91C1C", fontSize: 13, marginTop: 10 }}>{fejl}</div>}
+
         <div style={{ display: "flex", gap: 8, marginTop: 18, justifyContent: "flex-end" }}>
           <button type="button" style={styles.secondaryBtn} onClick={onClose}>Annullér</button>
           <button type="button" disabled={blocked}
             style={{ ...styles.primaryBtn, background: blocked ? "#CBD5E1" : "#B91C1C", cursor: blocked ? "not-allowed" : "pointer" }}
-            onClick={() => { setBusy(true); onConfirm(emp.id); onClose(); }}>
-            Slet medarbejderen
+            onClick={bekraeft}>
+            {busy ? "Lukker…" : "Registrér som fratrådt"}
           </button>
         </div>
       </div>
@@ -9605,7 +9692,7 @@ function InventoryView({ supabase, employees, currentUserName, onInventoryChange
 
       {/* Udleveringen staar oeverst, fordi den er en daglig handling — modsat resten af
           siden, der er vedligehold af produktkartoteket. */}
-      <UdleveringPanel supabase={supabase} employees={employees} items={items}
+      <UdleveringPanel supabase={supabase} employees={employees.filter((e) => !e.fratraadtDato)} items={items}
         onOpdateret={async () => {
           // Lageret er lige blevet trukket i databasen. Uden en genindlaesning ville
           // beholdningen paa skaermen vise det gamle tal, og planlaeggeren ville tro
