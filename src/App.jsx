@@ -1548,6 +1548,12 @@ const MODULE_HELP = {
         "Kunden får sin egen adresse med sit navn på, og hun ser kun sine egne data. Det er håndhævet i databasen, ikke i skærmbilledet.",
         "Vælg Basis. Udvidet er ikke bygget endnu — vælger du den, får kunden det samme som basis indtil videre.",
         "Inviter derefter den første bruger. Hun bliver administrator og kan selv invitere kolleger hos kunden, men kun hos sin egen."] },
+    { h: "Sådan logger kunden ind", p: [
+        "Invitationsmailen indeholder ikke et login — kun adressen på kundens egen portalside. Der skriver hun sin mail og får en sekscifret kode tilsendt.",
+        "Koden virker én gang og udløber efter en time. Hun kan selv bede om en ny på siden, så længe portalen er tændt og hun står som aktiv bruger.",
+        "Ringer en kunde og siger at hun ikke kan komme ind, så bed hende tjekke at koden er den nyeste. Beder man om flere koder, er det kun den sidste der virker.",
+        "Vi sender en kode og ikke et link, fordi firmamail scanner links ved at åbne dem automatisk. Det brugte engangslinket op, før kunden selv nåede at trykke — hun endte på login-siden igen uden forklaring.",
+        "Spørg aldrig en kunde om hendes kode, og send den aldrig videre. Har hun brug for adgang, beder hun selv om en ny på siden."] },
     { h: "Når portalen lukkes", p: [
         "«Luk portalen» stopper adgangen med det samme for alle kundens brugere. Du behøver ikke slette dem enkeltvis.",
         "Det korte navn bliver stående, så portalen kan tændes igen senere og det gamle link virker."] },
