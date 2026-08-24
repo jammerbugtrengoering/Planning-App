@@ -1549,7 +1549,7 @@ const MODULE_HELP = {
         "Vælg Basis. Udvidet er ikke bygget endnu — vælger du den, får kunden det samme som basis indtil videre.",
         "Inviter derefter den første bruger. Hun bliver administrator og kan selv invitere kolleger hos kunden, men kun hos sin egen."] },
     { h: "Sådan logger kunden ind", p: [
-        "Invitationsmailen indeholder ikke et login — kun adressen på kundens egen portalside. Der skriver hun sin mail og får en sekscifret kode tilsendt.",
+        "Invitationsmailen indeholder ikke et login — kun adressen på kundens egen portalside. Der skriver hun sin mail og får en kode tilsendt.",
         "Koden virker én gang og udløber efter en time. Hun kan selv bede om en ny på siden, så længe portalen er tændt og hun står som aktiv bruger.",
         "Ringer en kunde og siger at hun ikke kan komme ind, så bed hende tjekke at koden er den nyeste. Beder man om flere koder, er det kun den sidste der virker.",
         "Vi sender en kode og ikke et link, fordi firmamail scanner links ved at åbne dem automatisk. Det brugte engangslinket op, før kunden selv nåede at trykke — hun endte på login-siden igen uden forklaring.",
