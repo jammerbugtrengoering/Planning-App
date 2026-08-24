@@ -1554,6 +1554,21 @@ const MODULE_HELP = {
         "Ringer en kunde og siger at hun ikke kan komme ind, så bed hende tjekke at koden er den nyeste. Beder man om flere koder, er det kun den sidste der virker.",
         "Vi sender en kode og ikke et link, fordi firmamail scanner links ved at åbne dem automatisk. Det brugte engangslinket op, før kunden selv nåede at trykke — hun endte på login-siden igen uden forklaring.",
         "Spørg aldrig en kunde om hendes kode, og send den aldrig videre. Har hun brug for adgang, beder hun selv om en ny på siden."] },
+    { h: "Basis og Udvidet", p: [
+        "Basis giver kunden sine opgaver og sine fakturaer. Det er den de fleste skal have.",
+        "Udvidet lægger en Bestil-fane oveni, hvor kunden kan bestille ekstra arbejde. Fanen vises kun ved Udvidet, og databasen afviser en bestilling fra en basis-kunde uanset hvad.",
+        "Du kan skifte option senere. Slår du Udvidet fra, forsvinder fanen, men allerede afgivne bestillinger bliver stående."] },
+    { h: "Når kunden bestiller", p: [
+        "Kunden vælger en ydelse fra listen eller skriver sit eget ønske, med ønsket dato og eventuelt en anden adresse.",
+        "Bestillingen bliver IKKE til en opgave af sig selv. Den lægger sig i en blå boks øverst i Ugeplan, og du får en mail.",
+        "«Godkend og opret opgave» laver en fleksibel opgave i Ikke tildelt i den ønskede uge. Varigheden sættes til én time, fordi kunden ikke har oplyst noget — ret den når du planlægger.",
+        "Har kunden skrevet fritekst, står den som advarsel på opgaven, så du kan se hvad der blev bestilt uden at gå tilbage i portalen.",
+        "«Afvis» kræver en begrundelse, som sendes til kunden på mail.",
+        "Kunden ser ingen pris i portalen, og der trækkes ingen betaling. Godkendt arbejde faktureres på registreret tid som alt andet."] },
+    { h: "Hvad kunden kan bestille", p: [
+        "Listen af ydelser er din — den ligger i portal_ydelser og er ikke det samme som tjeklisterne.",
+        "Tjeklisterne hedder ting som «Ældreloven (2)» og «Kommunal Rengøring (Nexus)1». De er interne arbejdssedler, og en kunde ville hverken forstå dem eller have godt af at se dem.",
+        "Kunden kan altid skrive frit ved siden af listen, så et usædvanligt ønske ikke falder på gulvet."] },
     { h: "Når portalen lukkes", p: [
         "«Luk portalen» stopper adgangen med det samme for alle kundens brugere. Du behøver ikke slette dem enkeltvis.",
         "Det korte navn bliver stående, så portalen kan tændes igen senere og det gamle link virker."] },
@@ -1714,6 +1729,70 @@ function ModuleHelp({ view, onClose }) {
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+// En bestilling i banneret. Afvisning kraever en begrundelse, saa knappen folder et
+// felt ud i stedet for at afvise med det samme.
+function BestillingRaekke({ b, kunde, onGodkend, onAfvis }) {
+  const [afviser, setAfviser] = useState(false);
+  const [note, setNote] = useState("");
+  const [arbejder, setArbejder] = useState(false);
+
+  const dato = b.oensket_dato
+    ? new Date(b.oensket_dato).toLocaleDateString("da-DK", { day: "numeric", month: "short", year: "numeric" })
+    : "ingen ønsket dato";
+
+  return (
+    <div style={{ padding: "12px 14px", borderTop: "1px solid #DBEAFE" }}>
+      <div style={{ fontSize: 14, fontWeight: 700, color: "#111111" }}>
+        {kunde?.name || "Ukendt kunde"} · {b.ydelse_titel || "Egen beskrivelse"}
+      </div>
+      {b.fritekst && (
+        <div style={{ fontSize: 13.5, color: "#334155", lineHeight: 1.55, marginTop: 4 }}>
+          {b.fritekst}
+        </div>
+      )}
+      <div style={{ fontSize: 12.5, color: "#64748B", marginTop: 6 }}>
+        Ønsket {dato}
+        {b.adresse ? ` · ${b.adresse}` : ""}
+        {b.bestilt_af_navn ? ` · bestilt af ${b.bestilt_af_navn}` : ""}
+      </div>
+      {b.bemaerkning && (
+        <div style={{ fontSize: 12.5, color: "#64748B", marginTop: 4 }}>
+          Bemærkning: {b.bemaerkning}
+        </div>
+      )}
+
+      {!afviser ? (
+        <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
+          <button style={{ ...styles.primaryBtn, padding: "8px 14px", fontSize: 13 }}
+            disabled={arbejder}
+            onClick={async () => { setArbejder(true); await onGodkend(); setArbejder(false); }}>
+            {arbejder ? "Opretter…" : "Godkend og opret opgave"}
+          </button>
+          <button style={{ ...styles.secondaryBtn, padding: "8px 14px", fontSize: 13 }}
+            onClick={() => setAfviser(true)}>Afvis</button>
+        </div>
+      ) : (
+        <div style={{ marginTop: 10 }}>
+          <input style={styles.input} value={note} autoFocus maxLength={500}
+            placeholder="Hvorfor kan det ikke lade sig gøre? Kunden får teksten på mail."
+            onChange={(e) => setNote(e.target.value)} />
+          <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+            <button style={{ ...styles.primaryBtn, background: "#B91C1C",
+                             padding: "8px 14px", fontSize: 13,
+                             opacity: note.trim() ? 1 : 0.5 }}
+              disabled={!note.trim() || arbejder}
+              onClick={async () => { setArbejder(true); await onAfvis(note.trim()); setArbejder(false); }}>
+              {arbejder ? "Sender…" : "Send afvisning"}
+            </button>
+            <button style={{ ...styles.secondaryBtn, padding: "8px 14px", fontSize: 13 }}
+              onClick={() => { setAfviser(false); setNote(""); }}>Fortryd</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1897,6 +1976,7 @@ function PlanningApp({ session, onSignOut }) {
         { data: tplSkillsData },
         { data: instData },
       { data: onskerData },
+      { data: bestillingerData },
       { data: noterData },
       { data: wageData },
       { data: homeData },
@@ -1919,6 +1999,7 @@ function PlanningApp({ session, onSignOut }) {
       // paa én gang, uden at hvert modul skal huske at filtrere.
       fetchAllRows("instances", "*", (q) => q.is("deleted_at", null)).then((data) => ({ data })),
       hentMedFornyelse("ønsker om ny tid", () => supabase.from("reschedule_requests").select("*").eq("status", "afventer")),
+      hentMedFornyelse("bestillinger fra kunder", () => supabase.from("portal_bestillinger").select("*").eq("status", "ny").order("oprettet")),
       hentMedFornyelse("kommentarer og billeder", () => supabase.from("task_notes").select("*").order("created_at", { ascending: false })),
       // Timeloen. Politikken slipper kun administratorer ind, saa for alle andre
       // kommer der en tom liste tilbage — helt uden fejl, og uden at loennen laekker.
@@ -2121,6 +2202,7 @@ function PlanningApp({ session, onSignOut }) {
         // Den viste uge kan ligge uden for horisonten (hvis planlaeggeren har bladret).
         allInst = ensureWeekInstances(currentWeek, currentYear, allInst, mapped, empAktive, areasData || [], empAreasData || [], travelSettings);
         setNyTidOnsker(onskerData || []);
+        setBestillinger(bestillingerData || []);
         setOpgaveNoter(grupperNoter(noterData));
         setInstances(allInst);
         syncHealedAssignments(existingInst, allInst);
@@ -2159,6 +2241,7 @@ function PlanningApp({ session, onSignOut }) {
           onSchedule: i.on_schedule ?? false,
         })));
         setNyTidOnsker(onskerData || []);
+        setBestillinger(bestillingerData || []);
         setOpgaveNoter(grupperNoter(noterData));
       }
 
@@ -2187,6 +2270,9 @@ function PlanningApp({ session, onSignOut }) {
   // Oensker om ny tid fra medarbejderne. De aendrer ikke selv planen — de beder om
   // en aendring, og backoffice afgoer og planlaegger den.
   const [nyTidOnsker, setNyTidOnsker] = useState([]);
+  // Bestillinger fra kundeportalen paa Udvidet. Behandles som oensker, ikke som
+  // opgaver: kunden har spurgt, og foerst naar kontoret siger ja, opstaar arbejdet.
+  const [bestillinger, setBestillinger] = useState([]);
   // Medarbejdernes kommentarer og billeder. Hentes samlet og lægges i et opslag pr.
   // opgave, saa hverken ugeplanen eller faktureringen skal spoerge databasen pr. linje.
   const [opgaveNoter, setOpgaveNoter] = useState({});
@@ -3394,6 +3480,74 @@ function PlanningApp({ session, onSignOut }) {
     }
     notify("Ønsket er afvist" + (rk?.app_email ? " og medarbejderen har fået besked" : ""));
   }
+  // ── Bestillinger fra kundeportalen ─────────────────────────────────────────
+  //
+  // Kunden har spurgt, ikke bestemt. Derfor bliver en bestilling ikke til en opgave
+  // af sig selv: den ligger i banneret oeverst i Ugeplan, indtil kontoret tager
+  // stilling. Foerst ved Godkend opstaar arbejdet — som en fleksibel opgave i
+  // "Ikke tildelt" paa den oenskede uge, saa den skal planlaegges som alt andet.
+  //
+  // Der er ingen betaling i portalen. Godkendt arbejde faktureres paa registreret
+  // tid ad samme vej som resten, og derfor saettes hverken fast pris eller beloeb her.
+  async function godkendBestilling(b) {
+    const kunde = customers.find((k) => k.dinero_contact_guid === b.dinero_contact_guid);
+    const dato = b.oensket_dato ? new Date(b.oensket_dato) : new Date();
+    const { week, year } = isoWeekInfo(dato);
+    const titel = b.ydelse_titel || "Bestilling fra kunden";
+
+    const nyOpgave = {
+      id: uid("i"), title: titel, requiredSkills: [],
+      // En time er et gaet. Kontoret retter varigheden naar opgaven planlaegges —
+      // kunden har ikke oplyst noget tidsforbrug, og et gaet er bedre end nul,
+      // fordi nul ville lade den fylde ingenting i kapacitetsregnskabet.
+      duration: 60,
+      assignees: [], status: "unscheduled", timeLog: [],
+      week, year, checklist: [], checklistTemplateIds: [], extraItems: [],
+      videoUrl: "",
+      customerName: kunde?.name || "",
+      address: b.adresse || kunde?.address || "",
+      poNumber: "",
+      accessInstructions: b.bemaerkning || kunde?.access_instructions || "",
+      needsKeyPickup: false,
+      contractType: "erhverv",
+      dineroSynced: false,
+      pricingType: "hourly", fixedPrice: null,
+      dinero_contact_guid: b.dinero_contact_guid,
+      type: "adhoc", day: null, deadline: null, scheduledTime: null,
+      includeInAuto: true,
+      // Fritekstens indhold er det eneste sted kundens egne ord staar. Uden den her
+      // ville planlaeggeren skulle tilbage i portalen for at se hvad der var bestilt.
+      warning: b.fritekst ? `Bestilt af kunden: ${b.fritekst}` : null,
+    };
+
+    setInstances((prev) => [...prev, nyOpgave]);
+    syncInstance(nyOpgave);
+
+    const { error } = await supabase.from("portal_bestillinger")
+      .update({ status: "godkendt", instance_id: nyOpgave.id, behandlet: new Date().toISOString() })
+      .eq("id", b.id);
+    if (error) { notify("Opgaven er oprettet, men bestillingen kunne ikke lukkes: " + error.message); return; }
+    setBestillinger((prev) => prev.filter((x) => x.id !== b.id));
+
+    // Mailen maa ikke kunne vaelte godkendelsen. Opgaven ER oprettet.
+    supabase.functions.invoke("bestilling-besked",
+      { body: { handling: "svar", id: b.id, status: "godkendt" } }).catch(() => {});
+    notify(`${titel} er oprettet i Ikke tildelt${b.oensket_dato ? " i uge " + week : ""} — kunden har fået besked`);
+  }
+
+  // Afvis kraever en begrundelse, for kunden har spurgt om noget konkret og skal
+  // kunne forstaa svaret uden at ringe.
+  async function afvisBestilling(b, note) {
+    const { error } = await supabase.from("portal_bestillinger")
+      .update({ status: "afvist", planlaegger_note: note || null, behandlet: new Date().toISOString() })
+      .eq("id", b.id);
+    if (error) { notify("Kunne ikke afvise bestillingen: " + error.message); return; }
+    setBestillinger((prev) => prev.filter((x) => x.id !== b.id));
+    supabase.functions.invoke("bestilling-besked",
+      { body: { handling: "svar", id: b.id, status: "afvist", note: note || "" } }).catch(() => {});
+    notify("Bestillingen er afvist og kunden har fået besked");
+  }
+
   function unplace(taskId) {
     updateInstance(taskId, (t) => ({
       ...t,
@@ -4049,6 +4203,25 @@ function PlanningApp({ session, onSignOut }) {
           onClose={() => setCancelTarget(null)}
           onConfirm={cancelTemplate}
         />
+      )}
+
+      {/* Bestillinger fra kundeportalen. Ligger over oenskerne, fordi det er en KUNDE
+          der venter paa svar — og fordi et ubesvaret oenske hos os er en kunde der
+          tror vi har sagt ja. */}
+      {view === "uge" && bestillinger.length > 0 && (
+        <div style={{ margin: "0 0 12px", border: "1px solid #93C5FD", background: "#EFF6FF",
+                      borderRadius: 12, overflow: "hidden" }}>
+          <div style={{ padding: "10px 14px", fontWeight: 800, color: "#1E40AF", fontSize: 14,
+                        borderBottom: "1px solid #BFDBFE" }}>
+            {bestillinger.length} bestilling{bestillinger.length === 1 ? "" : "er"} fra kunder
+          </div>
+          {bestillinger.map((b) => (
+            <BestillingRaekke key={b.id} b={b}
+              kunde={customers.find((k) => k.dinero_contact_guid === b.dinero_contact_guid)}
+              onGodkend={() => godkendBestilling(b)}
+              onAfvis={(note) => afvisBestilling(b, note)} />
+          ))}
+        </div>
       )}
 
       {/* Oensker om ny tid fra medarbejderne. Ligger oeverst i ugeplanen, saa de
@@ -8248,7 +8421,7 @@ function PortalAfsnit({ supabase, kunde, currentEmployeeId, onAendret }) {
             <label style={styles.label}>Option</label>
             <select style={styles.input} value={option} onChange={(e) => setOption(e.target.value)}>
               <option value="basis">Basis — faktura og opgaver</option>
-              <option value="udvidet">Udvidet — bestilling</option>
+              <option value="udvidet">Udvidet — kunden kan bestille</option>
             </select>
           </div>
           <button style={styles.primaryBtn} disabled={!!arbejder} onClick={taend}>
@@ -8256,8 +8429,9 @@ function PortalAfsnit({ supabase, kunde, currentEmployeeId, onAendret }) {
           </button>
         </div>
         {option === "udvidet" && (
-          <div style={{ ...styles.hint, color: "#B45309" }}>
-            Udvidet er ikke bygget endnu. Kunden får det samme som basis indtil da.
+          <div style={styles.hint}>
+            Kunden får en Bestil-fane, hvor hun kan bestille ekstra arbejde.
+            Bestillinger skal godkendes i Ugeplan, før de bliver til opgaver.
           </div>
         )}
         {fejl && <div style={{ color: "#B91C1C", fontSize: 13, marginTop: 8 }}>{fejl}</div>}
