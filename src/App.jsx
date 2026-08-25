@@ -1651,6 +1651,8 @@ const MODULE_HELP = {
         "Ændrer du en sats, bliver du spurgt hvornår den gælder fra. Skal stigningen gælde bagud, sætter du bare datoen tilbage, og de berørte måneder regner om af sig selv.",
         "Står der en streg i stedet for et beløb, fandtes der ingen sats den dag. Det sker kun hvis opgaven ligger før medarbejderens første sats.",
         "«Planlagt løn» er den afsatte tid gange medarbejderens sats. «Registreret løn» er den tid hun faktisk har registreret.",
+        "Under Lønarter sætter du de koder, Danløn skal bruge — én for timer og én for kilometer. De står i jeres egen Danløn-opsætning, ikke i denne app.",
+        "Samme sted står, hvem der mangler et Danløn-nummer. En medarbejder uden nummer kommer ikke med i løneksporten, og nummeret sættes på hendes stamkort under Medarbejdere.",
         "Øverst står de to summer for hele måneden: planlagt lønsum og registreret lønsum.",
         "Er registreret lønsum meget lavere end planlagt, er det som regel manglende tidsregistrering — ikke sparede lønkroner. Kig i kolonnen «Registreret» først.",
         "Satsen bruges kun her. Den indgår ikke i fakturering eller rapportering, som regner med timepriser over for kunden."] },
@@ -2066,6 +2068,7 @@ function PlanningApp({ session, onSignOut }) {
           weekendOk: e.weekend_ok ?? false,
           fratraadtDato: e.fratraadt_dato || null,
           startTime: e.start_time || null,
+          danloenNr: e.danloen_nr || null,
           // Er man ikke administrator, giver politikken paa satshistorikken ingen
           // raekker, og satsen bliver null. Eksporten viser da en streg i stedet for
           // et forkert beloeb — den maa ikke gaette paa standardsatsen.
@@ -2468,7 +2471,7 @@ function PlanningApp({ session, onSignOut }) {
   const custAccessRef = useRef({});
   const syncEmployee = useCallback(async (emp) => {
     const { data: skillRows_db } = await supabase.from("skills").select("id, name");
-    const { error: empErr } = await supabase.from("employees").upsert({ id: emp.id, name: emp.name, color: emp.color, is_admin: emp.isAdmin ?? false, weekend_ok: emp.weekendOk ?? false, start_time: emp.startTime || null }, { onConflict: "id" });
+    const { error: empErr } = await supabase.from("employees").upsert({ id: emp.id, name: emp.name, color: emp.color, is_admin: emp.isAdmin ?? false, weekend_ok: emp.weekendOk ?? false, start_time: emp.startTime || null, danloen_nr: emp.danloenNr ?? null }, { onConflict: "id" });
     if (dbFail(empErr, "gemme medarbejderen")) return;
     // Timeloennen skrives kun hvis den er sat. Er man ikke administrator, kunne den
     // ikke laeses ved indlaesningen, og et blindt gem ville overskrive den rigtige
@@ -6563,8 +6566,11 @@ function EmployeeExportView({ instances, employees, satsHistorik }) {
       <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
         <button onClick={() => setExportTab("hours")} style={{ padding: "8px 16px", borderRadius: 8, border: "none", fontWeight: 600, fontSize: 13, cursor: "pointer", background: exportTab === "hours" ? "#111111" : "#E5E7EB", color: exportTab === "hours" ? "#fff" : "#374151" }}>Timeopgørelse</button>
         <button onClick={() => setExportTab("km")} style={{ padding: "8px 16px", borderRadius: 8, border: "none", fontWeight: 600, fontSize: 13, cursor: "pointer", background: exportTab === "km" ? "#111111" : "#E5E7EB", color: exportTab === "km" ? "#fff" : "#374151" }}>KM-opgørelse</button>
+        <button onClick={() => setExportTab("loenarter")} style={{ padding: "8px 16px", borderRadius: 8, border: "none", fontWeight: 600, fontSize: 13, cursor: "pointer", background: exportTab === "loenarter" ? "#111111" : "#E5E7EB", color: exportTab === "loenarter" ? "#fff" : "#374151" }}>Lønarter</button>
       </div>
-      {exportTab === "km" ? (
+      {exportTab === "loenarter" ? (
+        <LoenarterSection employees={employees} />
+      ) : exportTab === "km" ? (
         <KmExportSection employees={employees} filterMonth={filterMonth} filterYear={filterYear} setFilterMonth={setFilterMonth} setFilterYear={setFilterYear} years={years} MONTHS={MONTHS} />
       ) : (
       <>
@@ -6594,7 +6600,7 @@ function EmployeeExportView({ instances, employees, satsHistorik }) {
         <button style={styles.primaryBtn} onClick={exportRowsCSV}><Download size={16} /> Eksporter CSV</button>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: kolonner, gap: 0, background: "#F8FAFC", borderRadius: "10px 10px 0 0", padding: "8px 14px", fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+      <div style={{ display: "grid", gridTemplateColumns: kolonner, gap: "0 14px", background: "#F8FAFC", borderRadius: "10px 10px 0 0", padding: "8px 14px", fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.04em" }}>
         <span>Medarbejder</span><span>Uge</span><span>Dag</span><span>Opgave</span>
         {/* Timer og kroner staar parvis: planlagt tid ved siden af planlagt loen,
             registreret tid ved siden af registreret loen. Med alle fire tal i
@@ -6604,11 +6610,11 @@ function EmployeeExportView({ instances, employees, satsHistorik }) {
         {harLoen && <span style={{ textAlign: "right" }}>Planlagt løn</span>}
         <span style={{ textAlign: "right" }}>Registreret</span>
         {harLoen && <span style={{ textAlign: "right" }}>Registreret løn</span>}
-        <span>Afvigelse</span>
+        <span style={{ textAlign: "right" }}>Afvigelse</span>
       </div>
       <div style={{ background: "#fff", borderRadius: "0 0 10px 10px", boxShadow: "0 1px 3px rgba(0,0,0,0.06)", overflow: "hidden" }}>
         {rows.map((r, idx) => (
-          <div key={idx} style={{ display: "grid", gridTemplateColumns: kolonner, gap: 0, padding: "10px 14px", borderBottom: idx < rows.length - 1 ? "1px solid #F1F5F9" : "none", alignItems: "center" }}>
+          <div key={idx} style={{ display: "grid", gridTemplateColumns: kolonner, gap: "0 14px", padding: "10px 14px", borderBottom: idx < rows.length - 1 ? "1px solid #F1F5F9" : "none", alignItems: "center" }}>
             <span style={{ fontSize: 13, fontWeight: 600, color: "#111111" }}>{r.empName}</span>
             <span style={{ fontSize: 12, color: "#94A3B8" }}>{r.week}</span>
             <span style={{ fontSize: 12, color: "#64748B" }}>{r.dayLabel}</span>
@@ -6625,13 +6631,114 @@ function EmployeeExportView({ instances, employees, satsHistorik }) {
                 {r.registeredWage == null ? "—" : kr(r.registeredWage)}
               </span>
             )}
-            <span style={{ fontSize: 12, color: r.deviationText ? "#D97706" : "#CBD5E1" }}>{r.deviationText || "—"}</span>
+            <span style={{ fontSize: 12, textAlign: "right", color: r.deviationText ? "#D97706" : "#CBD5E1" }}>{r.deviationText || "—"}</span>
           </div>
         ))}
         {rows.length === 0 && <div style={{ ...styles.emptyCol, padding: 40 }}>Ingen registreringer for denne maaned</div>}
       </div>
       </>
       )}
+    </div>
+  );
+}
+
+// Loenarter til Danloen.
+//
+// Danloen skal vide om en linje er almindelige arbejdstimer eller skattefri
+// koerselsgodtgoerelse, og koderne kommer fra JERES egen Danloen-opsaetning - de kan
+// ikke gaettes eller slaas op. Derfor staar de som noegle/vaerdi i databasen og ikke
+// i koden: der kommer flere til (overtid, weekendtillaeg, feriefri), og de skal
+// kunne rettes uden en ny udgave af appen.
+//
+// Afsnittet viser samtidig hvor mange medarbejdere der mangler et Danloen-nummer.
+// Uden nummeret kommer de ikke med i eksporten, og det opdager man ellers foerst
+// naar loennen er koert.
+function LoenarterSection({ employees }) {
+  const [raekker, setRaekker] = useState(null);
+  const [kladde, setKladde] = useState({});
+  const [gemmer, setGemmer] = useState(false);
+  const [fejl, setFejl] = useState("");
+  const [besked, setBesked] = useState("");
+
+  useEffect(() => {
+    (async () => {
+      const { data, error } = await supabase.from("loen_indstillinger")
+        .select("*").order("raekkefoelge");
+      if (error) { setFejl(error.message); setRaekker([]); return; }
+      setRaekker(data || []);
+      setKladde(Object.fromEntries((data || []).map((r) => [r.noegle, r.vaerdi ?? ""])));
+    })();
+  }, []);
+
+  async function gem() {
+    setGemmer(true); setFejl(""); setBesked("");
+    const opdateringer = (raekker || []).map((r) => ({
+      noegle: r.noegle,
+      vaerdi: (kladde[r.noegle] ?? "").trim() || null,
+      beskrivelse: r.beskrivelse,
+      raekkefoelge: r.raekkefoelge,
+      aendret: new Date().toISOString(),
+    }));
+    const { error } = await supabase.from("loen_indstillinger")
+      .upsert(opdateringer, { onConflict: "noegle" });
+    setGemmer(false);
+    if (error) { setFejl(error.message); return; }
+    setBesked("Gemt.");
+  }
+
+  const udenNummer = (employees || []).filter((e) => !e.fratraadtDato && !e.danloenNr);
+  const aendret = (raekker || []).some((r) => (kladde[r.noegle] ?? "") !== (r.vaerdi ?? ""));
+
+  return (
+    <div style={{ maxWidth: 620 }}>
+      <div style={{ background: "#fff", borderRadius: 10, padding: "16px 18px",
+                    boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
+        <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>Lønarter til Danløn</div>
+        <div style={{ ...styles.hint, marginTop: 0, marginBottom: 14 }}>
+          Koderne står i jeres egen Danløn-opsætning. Er du i tvivl, så spørg jeres
+          lønadministrator — et forkert nummer sender timerne på den forkerte lønart.
+        </div>
+
+        {raekker === null && <div style={{ fontSize: 13, color: "#94A3B8" }}>Henter…</div>}
+
+        {(raekker || []).map((r) => (
+          <div key={r.noegle} style={{ marginBottom: 12 }}>
+            <label style={styles.label}>{r.beskrivelse}</label>
+            <input style={{ ...styles.input, maxWidth: 200 }} value={kladde[r.noegle] ?? ""}
+              placeholder="fx 1000" maxLength={20}
+              onChange={(e) => { setKladde({ ...kladde, [r.noegle]: e.target.value }); setBesked(""); }} />
+          </div>
+        ))}
+
+        {fejl && <div style={{ color: "#B91C1C", fontSize: 12.5, marginTop: 8 }}>{fejl}</div>}
+        {besked && <div style={{ color: "#166534", fontSize: 12.5, marginTop: 8 }}>{besked}</div>}
+
+        <button style={{ ...styles.primaryBtn, marginTop: 12, opacity: aendret ? 1 : 0.5 }}
+          disabled={!aendret || gemmer} onClick={gem}>
+          {gemmer ? "Gemmer…" : "Gem lønarter"}
+        </button>
+      </div>
+
+      {/* Manglende numre er den anden halvdel af det samme problem. */}
+      <div style={{ background: udenNummer.length ? "#FFFBEB" : "#F0FDF4",
+                    border: `1px solid ${udenNummer.length ? "#FDE68A" : "#BBF7D0"}`,
+                    borderRadius: 10, padding: "14px 16px", marginTop: 12 }}>
+        <div style={{ fontSize: 13.5, fontWeight: 700,
+                      color: udenNummer.length ? "#92400E" : "#166534", marginBottom: 4 }}>
+          {udenNummer.length === 0
+            ? "Alle aktive medarbejdere har et Danløn-nummer"
+            : `${udenNummer.length} medarbejder${udenNummer.length === 1 ? "" : "e"} mangler Danløn-nummer`}
+        </div>
+        {udenNummer.length > 0 && (
+          <div style={{ fontSize: 12.5, color: "#92400E", lineHeight: 1.6 }}>
+            De kommer ikke med i løneksporten. Nummeret sættes på medarbejderens
+            stamkort under Medarbejdere.
+            <div style={{ marginTop: 6 }}>
+              {udenNummer.map((e) => e.name).join(" · ")}
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -10442,6 +10549,10 @@ function TravelSettingsModal({ settings, onClose, onSave }) {
 function EmployeeModal({ emp, onClose, onSave, skills: skillList, satsHistorik }) {
   const [name, setName] = useState(emp?.name || "");
   const [startTime, setStartTime] = useState(emp?.startTime || "");
+  // Medarbejderens nummer i Danloen. Navne duer ikke som noegle - to kan hedde det
+  // samme, og folk skifter efternavn. Er feltet tomt, kommer medarbejderen slet
+  // ikke med i loeneksporten; det er bedre end at gaette paa hvem hun er.
+  const [danloenNr, setDanloenNr] = useState(emp?.danloenNr || "");
   // Standardsatsen bruges paa nye medarbejdere, saa loensummen i eksporten aldrig
   // staar tom fordi nogen glemte at udfylde et felt.
   const [hourlyWage, setHourlyWage] = useState(
@@ -10508,6 +10619,15 @@ function EmployeeModal({ emp, onClose, onSave, skills: skillList, satsHistorik }
           <div style={styles.hint}>
             Bruges til at beregne hvornår dagens første opgave kan starte.
             {travelInWorktime && " Da kørslen er en del af hendes arbejdstid, er det tidspunktet hun tager hjemmefra."}
+          </div>
+
+          <label style={styles.label}>Medarbejdernummer i Danløn</label>
+          <input style={styles.input} value={danloenNr} maxLength={20}
+            placeholder="Tomt = kommer ikke med i løneksporten"
+            onChange={(e) => setDanloenNr(e.target.value)} />
+          <div style={styles.hint}>
+            Nummeret hun står med i Danløn. Uden det kan hendes timer og kørsel ikke
+            sendes til løn — navne er ikke sikre nok, når to kan hedde det samme.
           </div>
         </div>
       </div>
@@ -10669,7 +10789,7 @@ function EmployeeModal({ emp, onClose, onSave, skills: skillList, satsHistorik }
 
       <div style={styles.modalActions}>
         <button style={styles.secondaryBtn} onClick={onClose}>Annuller</button>
-        <button style={styles.primaryBtn} disabled={!name.trim()} onClick={() => onSave({ id: emp?.id || uid("e"), name: name.trim(), skills: empSkills, color: emp?.color || color, capacity, isAdmin, weekendOk, startTime: startTime || null, hourlyWage: hourlyWage === "" ? STANDARD_TIMELOEN : Math.max(0, Number(hourlyWage)), wageFrom: satsErAendret || !emp ? wageFrom : null, homeAddress: homeAddress.trim() || null, travelInWorktime })}>Gem medarbejder</button>
+        <button style={styles.primaryBtn} disabled={!name.trim()} onClick={() => onSave({ id: emp?.id || uid("e"), name: name.trim(), skills: empSkills, color: emp?.color || color, capacity, isAdmin, weekendOk, startTime: startTime || null, hourlyWage: hourlyWage === "" ? STANDARD_TIMELOEN : Math.max(0, Number(hourlyWage)), wageFrom: satsErAendret || !emp ? wageFrom : null, homeAddress: homeAddress.trim() || null, travelInWorktime, danloenNr: danloenNr.trim() || null })}>Gem medarbejder</button>
       </div>
     </Modal>
   );
