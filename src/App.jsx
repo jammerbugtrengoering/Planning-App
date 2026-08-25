@@ -1653,9 +1653,12 @@ const MODULE_HELP = {
         "«Planlagt løn» er den afsatte tid gange medarbejderens sats. «Registreret løn» er den tid hun faktisk har registreret.",
         "Under Lønarter sætter du de koder, Danløn skal bruge — én for timer og én for kilometer. De står i jeres egen Danløn-opsætning, ikke i denne app.",
         "Samme sted står, hvem der mangler et Danløn-nummer. En medarbejder uden nummer kommer ikke med i løneksporten, og nummeret sættes på hendes stamkort under Medarbejdere.",
-        "Øverst står de to summer for hele måneden: planlagt lønsum og registreret lønsum.",
-        "Er registreret lønsum meget lavere end planlagt, er det som regel manglende tidsregistrering — ikke sparede lønkroner. Kig i kolonnen «Registreret» først.",
-        "Satsen bruges kun her. Den indgår ikke i fakturering eller rapportering, som regner med timepriser over for kunden."] },
+        "Fluebenet foran hver linje betyder «godkendt til løn». Kun linjer med flueben kommer med i Danløn-filen — hverken timer eller kilometer sendes automatisk.",
+        "Det er med vilje. Timerne i systemet er registreret tid fra marken; løn er betalt tid. Et besøg med dobbelt tidsforbrug og en begrundelse på tre bogstaver skal ses af et menneske, før det bliver til penge.",
+        "«Godkend alle viste» sætter flueben på alt i den valgte måned. Fortryder du, skifter knappen til at fjerne dem igen.",
+        "En linje uden registreret tid kan ikke godkendes — der er ingenting at udbetale. Det samme gælder en kørselstur, hvor ruten ikke kunne beregnes; den skal rettes i stedet.",
+        "«Godkendt lønsum» øverst er det beløb, der faktisk bliver udbetalt. «Registreret lønsum» er alt, uanset om det er godkendt.",
+        "Danløn-filen har to linjer pr. medarbejder: én med timer og beløb, én med kilometer. Kilometerlinjen har intet beløb — satsen for skattefri kørselsgodtgørelse sættes i Danløn, fordi den ændres ved lov hvert år."] },
     { h: "Hvis tallene ikke passer", p: ["Timer mangler — medarbejderen har ikke registreret.",
         "Kørsel mangler — der er ikke registreret tid, eller adresserne mangler.",
         "Weekendtimer er 0 — tjek weekendaftalen, og at opgaven lå lørdag eller søndag."] },
@@ -6448,8 +6451,180 @@ function EmployeeExportView({ instances, employees, satsHistorik }) {
   const [filterYear, setFilterYear] = useState(now.getFullYear());
   const [exportTab, setExportTab] = useState("hours");
 
+  // Godkendelser. Holdes som et Set af "empId|reference", saa opslaget pr. linje er
+  // konstant - listen kan blive lang, og en find() pr. raekke ville koste paa en
+  // maaned med mange registreringer.
+  const [godkendt, setGodkendt] = useState(() => new Set());
+  const [godkFejl, setGodkFejl] = useState("");
+
+  useEffect(() => {
+    (async () => {
+      const { data, error } = await supabase.from("loen_godkendelser")
+        .select("slags, employee_id, reference");
+      if (error) { setGodkFejl("Kunne ikke hente godkendelser: " + error.message); return; }
+      setGodkendt(new Set((data || []).map((r) => `${r.slags}|${r.employee_id}|${r.reference}`)));
+    })();
+  }, []);
+
+  const erGodkendt = (slags, empId, ref) => godkendt.has(`${slags}|${empId}|${ref}`);
+
+  // Skriver til databasen FOERST og opdaterer skaermen bagefter.
+  //
+  // Omvendt raekkefoelge - skaerm foerst, database bagefter - ville vise et flueben
+  // der ikke var gemt, hvis netvaerket svigtede. Og et flueben ved siden af nogens
+  // loen skal betyde at det ER godkendt, ikke at det saa saadan ud et oejeblik.
+  async function saetGodkendt(slags, empId, ref, til) {
+    setGodkFejl("");
+    if (til) {
+      const { error } = await supabase.from("loen_godkendelser")
+        .upsert({ slags, employee_id: empId, reference: ref }, { onConflict: "slags,employee_id,reference" });
+      if (error) { setGodkFejl(error.message); return; }
+    } else {
+      const { error } = await supabase.from("loen_godkendelser").delete()
+        .eq("slags", slags).eq("employee_id", empId).eq("reference", ref);
+      if (error) { setGodkFejl(error.message); return; }
+    }
+    setGodkendt((f) => {
+      const n = new Set(f);
+      const noegle = `${slags}|${empId}|${ref}`;
+      if (til) n.add(noegle); else n.delete(noegle);
+      return n;
+    });
+  }
+
+  // Flere ad gangen. Bruges til "godkend alle viste" - ét kald i stedet for hundrede.
+  async function saetGodkendtFlere(slags, liste, til) {
+    if (!liste.length) return;
+    setGodkFejl("");
+    if (til) {
+      const { error } = await supabase.from("loen_godkendelser").upsert(
+        liste.map(({ empId, ref }) => ({ slags, employee_id: empId, reference: ref })),
+        { onConflict: "slags,employee_id,reference" });
+      if (error) { setGodkFejl(error.message); return; }
+    } else {
+      // Slettes i portioner. En or-filter med hundredvis af led bliver til en URL
+      // der er for lang, og saa fejler kaldet uden nogen tydelig grund.
+      for (let i = 0; i < liste.length; i += 50) {
+        const del = liste.slice(i, i + 50);
+        const { error } = await supabase.from("loen_godkendelser").delete()
+          .eq("slags", slags)
+          .in("reference", del.map((d) => d.ref))
+          .in("employee_id", del.map((d) => d.empId));
+        if (error) { setGodkFejl(error.message); return; }
+      }
+    }
+    setGodkendt((f) => {
+      const n = new Set(f);
+      liste.forEach(({ empId, ref }) => {
+        const noegle = `${slags}|${empId}|${ref}`;
+        if (til) n.add(noegle); else n.delete(noegle);
+      });
+      return n;
+    });
+  }
+
   const MONTHS = ["Januar","Februar","Marts","April","Maj","Juni","Juli","August","September","Oktober","November","December"];
   const years = [now.getFullYear() - 1, now.getFullYear(), now.getFullYear() + 1];
+
+  // ── Danloen-filen ─────────────────────────────────────────────────────────
+  //
+  // TO LINJER PR. MEDARBEJDER: én for timer med beloeb, én for kilometer. Hver med
+  // sin egen loenart i samme kolonne. Det er den form loensystemer forventer, og der
+  // er plads til flere loenarter senere uden at filen skal bygges om.
+  //
+  // Tre ting holdes UDE, og alle tre med vilje:
+  //   - linjer der ikke er godkendt
+  //   - medarbejdere uden Danloen-nummer
+  //   - medarbejdere hvis samlede tal ender paa nul
+  //
+  // Den midterste er den vigtigste. Uden et nummer ved vi ikke hvem linjen hoerer
+  // til i Danloen, og et gaet paa navnet ville udbetale den enes timer til den anden.
+  const [danloenFejl, setDanloenFejl] = useState("");
+  const [danloenArbejder, setDanloenArbejder] = useState(false);
+
+  async function eksporterDanloen() {
+    setDanloenArbejder(true); setDanloenFejl("");
+    try {
+      const { data: indst, error: iFejl } = await supabase
+        .from("loen_indstillinger").select("noegle, vaerdi");
+      if (iFejl) throw new Error(iFejl.message);
+      const loenart = Object.fromEntries((indst || []).map((r) => [r.noegle, (r.vaerdi || "").trim()]));
+      if (!loenart.loenart_timer && !loenart.loenart_km) {
+        throw new Error("Lønarterne er ikke sat. Udfyld dem under fanen Lønarter først.");
+      }
+
+      // Timer og loen fra de godkendte raekker.
+      const pr = new Map();
+      const sikr = (emp) => {
+        if (!pr.has(emp.id)) {
+          pr.set(emp.id, { nr: emp.danloenNr, navn: emp.name, minutter: 0, loen: 0, km: 0 });
+        }
+        return pr.get(emp.id);
+      };
+      rows.forEach((r) => {
+        if (!erGodkendt("timer", r.empId, r.instanceId)) return;
+        const emp = employees.find((e) => e.id === r.empId);
+        if (!emp?.danloenNr) return;
+        const g = sikr(emp);
+        g.minutter += r.registered || 0;
+        g.loen += r.registeredWage || 0;
+      });
+
+      // Kilometer fra de godkendte ture i samme maaned.
+      const start = `${filterYear}-${String(filterMonth + 1).padStart(2, "0")}-01`;
+      const slutM = filterMonth === 11 ? 0 : filterMonth + 1;
+      const slutAar = filterMonth === 11 ? filterYear + 1 : filterYear;
+      const slut = `${slutAar}-${String(slutM + 1).padStart(2, "0")}-01`;
+      const { data: kmRaekker, error: kFejl } = await supabase
+        .from("km_log").select("id, employee_id, km")
+        .gte("work_date", start).lt("work_date", slut);
+      if (kFejl) throw new Error(kFejl.message);
+      (kmRaekker || []).forEach((r) => {
+        if (r.km == null) return;
+        if (!erGodkendt("km", r.employee_id, String(r.id))) return;
+        const emp = employees.find((e) => e.id === r.employee_id);
+        if (!emp?.danloenNr) return;
+        sikr(emp).km += Number(r.km) || 0;
+      });
+
+      // Dansk decimalkomma. Danloen laeser danske tal, og et punktum ville blive
+      // laest som tusindtalsskilletegn — 45.50 timer ville blive til 4550.
+      const tal = (n, d) => Number(n).toFixed(d).replace(".", ",");
+      const linjer = [];
+      [...pr.values()]
+        .sort((a, b) => String(a.nr).localeCompare(String(b.nr), "da", { numeric: true }))
+        .forEach((g) => {
+          if (loenart.loenart_timer && g.minutter > 0) {
+            linjer.push([g.nr, g.navn, loenart.loenart_timer, tal(g.minutter / 60, 2), tal(g.loen, 2)]);
+          }
+          if (loenart.loenart_km && g.km > 0) {
+            // Ingen beloeb paa km-linjen. Satsen for skattefri koerselsgodtgoerelse
+            // saettes i Danloen, ikke her — den aendres ved lov hvert aar, og to
+            // steder med hver sin sats bliver til to forskellige udbetalinger.
+            linjer.push([g.nr, g.navn, loenart.loenart_km, tal(g.km, 1), ""]);
+          }
+        });
+
+      if (linjer.length === 0) {
+        throw new Error("Ingen godkendte linjer med et Danløn-nummer i denne måned.");
+      }
+
+      const hoved = ["medarbejdernr", "navn", "loenart", "antal", "beloeb"];
+      // Semikolon, ikke komma: tallene indeholder selv komma.
+      const csv = [hoved, ...linjer]
+        .map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(";")).join("\n");
+      const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `danloen-${MONTHS[filterMonth].toLowerCase()}-${filterYear}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setDanloenFejl(String(e?.message || e));
+    }
+    setDanloenArbejder(false);
+  }
 
   // En raekke pr. medarbejder pr. opgave - en opgave med flere medarbejdere
   // giver en linje for hver af dem, med deres egne registrerede minutter og
@@ -6478,6 +6653,11 @@ function EmployeeExportView({ instances, employees, satsHistorik }) {
           .map((l) => l.note.trim())
           .join(" / ");
         rows.push({
+          // Noeglen til godkendelsen. Én opgave med to medarbejdere er TO linjer,
+          // der skal kunne godkendes hver for sig.
+          empId,
+          instanceId: t.id,
+          danloenNr: emp.danloenNr || null,
           empName: emp.name,
           week: t.week,
           day: t.day,
@@ -6513,13 +6693,16 @@ function EmployeeExportView({ instances, employees, satsHistorik }) {
   const harLoen = rows.some((r) => r.hourlyWage != null);
   const totalPlannedWage = rows.reduce((s, r) => s + (r.plannedWage || 0), 0);
   const totalRegisteredWage = rows.reduce((s, r) => s + (r.registeredWage || 0), 0);
+  const godkendtLoensum = rows
+    .filter((r) => erGodkendt("timer", r.empId, r.instanceId))
+    .reduce((s2, r) => s2 + (r.registeredWage || 0), 0);
   const kr = (v) => Math.round(v).toLocaleString("da-DK") + " kr";
   // Ét sted for kolonnebredderne. Overskriften og raekkerne er to selvstaendige
   // gitre, saa hvis de ikke faar praecis samme definition, staar tallene forskudt
   // for deres egen overskrift — og det opdager man foerst naar nogen brokker sig.
   const kolonner = harLoen
-    ? "150px 50px 80px 1fr 90px 105px 95px 115px 1fr"
-    : "160px 60px 90px 1fr 100px 100px 1fr";
+    ? "34px 150px 50px 80px 1fr 90px 105px 95px 115px 1fr"
+    : "34px 160px 60px 90px 1fr 100px 100px 1fr";
 
   function exportRowsCSV() {
     // Loenkolonnerne kommer kun med naar satserne faktisk kunne laeses. Ellers ville
@@ -6569,9 +6752,10 @@ function EmployeeExportView({ instances, employees, satsHistorik }) {
         <button onClick={() => setExportTab("loenarter")} style={{ padding: "8px 16px", borderRadius: 8, border: "none", fontWeight: 600, fontSize: 13, cursor: "pointer", background: exportTab === "loenarter" ? "#111111" : "#E5E7EB", color: exportTab === "loenarter" ? "#fff" : "#374151" }}>Lønarter</button>
       </div>
       {exportTab === "loenarter" ? (
-        <LoenarterSection employees={employees} />
+        <LoenarterSection employees={employees} onEksporter={eksporterDanloen}
+          arbejder={danloenArbejder} fejl={danloenFejl} maaned={`${MONTHS[filterMonth]} ${filterYear}`} />
       ) : exportTab === "km" ? (
-        <KmExportSection employees={employees} filterMonth={filterMonth} filterYear={filterYear} setFilterMonth={setFilterMonth} setFilterYear={setFilterYear} years={years} MONTHS={MONTHS} />
+        <KmExportSection employees={employees} filterMonth={filterMonth} filterYear={filterYear} setFilterMonth={setFilterMonth} setFilterYear={setFilterYear} years={years} MONTHS={MONTHS} erGodkendt={erGodkendt} saetGodkendt={saetGodkendt} saetGodkendtFlere={saetGodkendtFlere} />
       ) : (
       <>
       <div style={styles.toolbar}>
@@ -6586,6 +6770,11 @@ function EmployeeExportView({ instances, employees, satsHistorik }) {
           <div style={{ ...styles.statBlock, borderLeft: "3px solid #4F46E5" }}>
             <div><div style={{ ...styles.statValue, color: "#64748B" }}>{kr(totalPlannedWage)}</div><div style={styles.statLabel}>Planlagt lønsum</div></div>
             <div style={styles.statBox}><div style={{ ...styles.statValue, color: "#4F46E5" }}>{kr(totalRegisteredWage)}</div><div style={styles.statLabel}>Registreret lønsum</div></div>
+            {/* Det er DEN her sum der bliver udbetalt — ikke den registrerede. */}
+            <div style={styles.statBox}>
+              <div style={{ ...styles.statValue, color: "#16A34A" }}>{kr(godkendtLoensum)}</div>
+              <div style={styles.statLabel}>Godkendt lønsum</div>
+            </div>
           </div>
         )}
         <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
@@ -6597,10 +6786,34 @@ function EmployeeExportView({ instances, employees, satsHistorik }) {
           </select>
         </div>
         <div style={styles.toolbarSpacer} />
+        {/* Hvor langt er man. Uden det tal ved man foerst at noget mangler, naar
+            loenfilen er kortere end forventet. */}
+        {(() => {
+          const kanGodkendes = rows.filter((r) => r.registered > 0);
+          const godkendteRaekker = kanGodkendes.filter((r) => erGodkendt("timer", r.empId, r.instanceId));
+          const mangler = kanGodkendes.length - godkendteRaekker.length;
+          const liste = kanGodkendes.map((r) => ({ empId: r.empId, ref: r.instanceId }));
+          return (
+            <>
+              <div style={{ fontSize: 12.5, color: mangler ? "#B45309" : "#166534", fontWeight: 600 }}>
+                {kanGodkendes.length === 0 ? "Intet at godkende"
+                  : mangler === 0 ? `Alle ${godkendteRaekker.length} linjer godkendt`
+                  : `${godkendteRaekker.length} af ${kanGodkendes.length} godkendt`}
+              </div>
+              {kanGodkendes.length > 0 && (
+                <button style={styles.secondaryBtn}
+                  onClick={() => saetGodkendtFlere("timer", liste, mangler > 0)}>
+                  {mangler > 0 ? "Godkend alle viste" : "Fjern alle godkendelser"}
+                </button>
+              )}
+            </>
+          );
+        })()}
         <button style={styles.primaryBtn} onClick={exportRowsCSV}><Download size={16} /> Eksporter CSV</button>
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: kolonner, gap: "0 14px", background: "#F8FAFC", borderRadius: "10px 10px 0 0", padding: "8px 14px", fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+        <span title="Godkendt til løn">✓</span>
         <span>Medarbejder</span><span>Uge</span><span>Dag</span><span>Opgave</span>
         {/* Timer og kroner staar parvis: planlagt tid ved siden af planlagt loen,
             registreret tid ved siden af registreret loen. Med alle fire tal i
@@ -6615,6 +6828,13 @@ function EmployeeExportView({ instances, employees, satsHistorik }) {
       <div style={{ background: "#fff", borderRadius: "0 0 10px 10px", boxShadow: "0 1px 3px rgba(0,0,0,0.06)", overflow: "hidden" }}>
         {rows.map((r, idx) => (
           <div key={idx} style={{ display: "grid", gridTemplateColumns: kolonner, gap: "0 14px", padding: "10px 14px", borderBottom: idx < rows.length - 1 ? "1px solid #F1F5F9" : "none", alignItems: "center" }}>
+            {/* Kun registreret tid kan godkendes. En linje uden registrering har
+                ingenting at udbetale, og et flueben paa den ville vaere vildledende. */}
+            <input type="checkbox" style={{ width: 17, height: 17, cursor: r.registered > 0 ? "pointer" : "not-allowed", accentColor: "#16A34A" }}
+              disabled={r.registered === 0}
+              title={r.registered === 0 ? "Ingen registreret tid at godkende" : "Godkendt til løn"}
+              checked={erGodkendt("timer", r.empId, r.instanceId)}
+              onChange={(e) => saetGodkendt("timer", r.empId, r.instanceId, e.target.checked)} />
             <span style={{ fontSize: 13, fontWeight: 600, color: "#111111" }}>{r.empName}</span>
             <span style={{ fontSize: 12, color: "#94A3B8" }}>{r.week}</span>
             <span style={{ fontSize: 12, color: "#64748B" }}>{r.dayLabel}</span>
@@ -6653,7 +6873,7 @@ function EmployeeExportView({ instances, employees, satsHistorik }) {
 // Afsnittet viser samtidig hvor mange medarbejdere der mangler et Danloen-nummer.
 // Uden nummeret kommer de ikke med i eksporten, og det opdager man ellers foerst
 // naar loennen er koert.
-function LoenarterSection({ employees }) {
+function LoenarterSection({ employees, onEksporter, arbejder, fejl: eksportFejl, maaned }) {
   const [raekker, setRaekker] = useState(null);
   const [kladde, setKladde] = useState({});
   const [gemmer, setGemmer] = useState(false);
@@ -6719,6 +6939,28 @@ function LoenarterSection({ employees }) {
         </button>
       </div>
 
+      <div style={{ background: "#fff", borderRadius: 10, padding: "16px 18px", marginTop: 12,
+                    boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
+        <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>Løndata til Danløn</div>
+        <div style={{ ...styles.hint, marginTop: 0, marginBottom: 14 }}>
+          To linjer pr. medarbejder for <strong>{maaned}</strong> — én med timer og løn,
+          én med kilometer. Kun godkendte linjer kommer med, og kun medarbejdere der
+          har et Danløn-nummer.
+        </div>
+        {eksportFejl && (
+          <div style={{ fontSize: 12.5, color: "#B91C1C", marginBottom: 10, lineHeight: 1.5 }}>{eksportFejl}</div>
+        )}
+        <button style={{ ...styles.primaryBtn, opacity: arbejder ? 0.6 : 1 }}
+          disabled={arbejder} onClick={onEksporter}>
+          <Download size={16} /> {arbejder ? "Henter…" : "Hent Danløn-fil"}
+        </button>
+        <div style={styles.hint}>
+          Kilometerlinjen har ingen beløb. Satsen for skattefri kørselsgodtgørelse
+          sættes i Danløn — den ændres ved lov hvert år, og to steder med hver sin
+          sats bliver til to forskellige udbetalinger.
+        </div>
+      </div>
+
       {/* Manglende numre er den anden halvdel af det samme problem. */}
       <div style={{ background: udenNummer.length ? "#FFFBEB" : "#F0FDF4",
                     border: `1px solid ${udenNummer.length ? "#FDE68A" : "#BBF7D0"}`,
@@ -6743,7 +6985,7 @@ function LoenarterSection({ employees }) {
   );
 }
 
-function KmExportSection({ employees, filterMonth, filterYear, setFilterMonth, setFilterYear, years, MONTHS }) {
+function KmExportSection({ employees, filterMonth, filterYear, setFilterMonth, setFilterYear, years, MONTHS, erGodkendt, saetGodkendt, saetGodkendtFlere }) {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -6762,7 +7004,7 @@ function KmExportSection({ employees, filterMonth, filterYear, setFilterMonth, s
       const endDate = `${endYear}-${String(endMonth + 1).padStart(2, "0")}-01`;
       const { data, error } = await supabase
         .from("km_log")
-        .select("employee_id, work_date, leg_order, from_address, to_address, km, minutes")
+        .select("id, employee_id, work_date, leg_order, from_address, to_address, km, minutes")
         .gte("work_date", startDate)
         .lt("work_date", endDate)
         .order("employee_id", { ascending: true })
@@ -6849,6 +7091,32 @@ function KmExportSection({ employees, filterMonth, filterYear, setFilterMonth, s
         <button style={{ ...styles.secondaryBtn, opacity: recomputing ? 0.7 : 1 }} onClick={recomputeMonth} disabled={recomputing} title="Genberegn km for alle dage i den valgte maaned - retter ogsaa adresser der tidligere fejlede eller fik urealistisk lang rute">
           <Repeat size={16} /> {recomputing ? `Genberegner (${recomputeProgress ? recomputeProgress.done : 0}/${recomputeProgress ? recomputeProgress.total : 0})` : "Genberegn måned"}
         </button>
+        {/* Én tur ad gangen ville vaere uoverskueligt — en maaned har hundredvis af
+            ben. Knappen godkender alt der er beregnet i den viste maaned. */}
+        {(() => {
+          const kanGodkendes = rows.filter((r) => r.km != null);
+          const antalGodkendt = kanGodkendes.filter((r) => erGodkendt("km", r.employee_id, String(r.id))).length;
+          const mangler = kanGodkendes.length - antalGodkendt;
+          const liste = kanGodkendes.map((r) => ({ empId: r.employee_id, ref: String(r.id) }));
+          const godkendteKm = kanGodkendes
+            .filter((r) => erGodkendt("km", r.employee_id, String(r.id)))
+            .reduce((sum, r) => sum + (Number(r.km) || 0), 0);
+          return (
+            <>
+              <div style={{ fontSize: 12.5, fontWeight: 600, color: mangler ? "#B45309" : "#166534" }}>
+                {kanGodkendes.length === 0 ? "Intet at godkende"
+                  : mangler === 0 ? `Alle ${antalGodkendt} ture godkendt · ${godkendteKm.toFixed(1)} km`
+                  : `${antalGodkendt} af ${kanGodkendes.length} godkendt · ${godkendteKm.toFixed(1)} km`}
+              </div>
+              {kanGodkendes.length > 0 && (
+                <button style={styles.secondaryBtn}
+                  onClick={() => saetGodkendtFlere("km", liste, mangler > 0)}>
+                  {mangler > 0 ? "Godkend alle viste" : "Fjern alle godkendelser"}
+                </button>
+              )}
+            </>
+          );
+        })()}
         <button style={styles.primaryBtn} onClick={exportCSV}><Download size={16} /> Eksporter CSV</button>
       </div>
 
@@ -6857,14 +7125,23 @@ function KmExportSection({ employees, filterMonth, filterYear, setFilterMonth, s
 
       {!loading && !error && (
         <>
-          <div style={{ display: "grid", gridTemplateColumns: "160px 100px 1fr 1fr 80px 80px", gap: 0, background: "#F8FAFC", borderRadius: "10px 10px 0 0", padding: "8px 14px", fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "34px 160px 100px 1fr 1fr 80px 80px", gap: 0, background: "#F8FAFC", borderRadius: "10px 10px 0 0", padding: "8px 14px", fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+            <span title="Godkendt til løn">✓</span>
             <span>Medarbejder</span><span>Dato</span><span>Fra</span><span>Til</span>
             <span style={{ textAlign: "right" }}>Km</span>
             <span style={{ textAlign: "right" }}>Min</span>
           </div>
           <div style={{ background: "#fff", borderRadius: "0 0 10px 10px", boxShadow: "0 1px 3px rgba(0,0,0,0.06)", overflow: "hidden" }}>
             {rows.map((r, idx) => (
-              <div key={r.employee_id + r.work_date + r.leg_order} style={{ display: "grid", gridTemplateColumns: "160px 100px 1fr 1fr 80px 80px", gap: 0, padding: "10px 14px", borderBottom: idx < rows.length - 1 ? "1px solid #F1F5F9" : "none", alignItems: "center" }}>
+              <div key={r.employee_id + r.work_date + r.leg_order} style={{ display: "grid", gridTemplateColumns: "34px 160px 100px 1fr 1fr 80px 80px", gap: 0, padding: "10px 14px", borderBottom: idx < rows.length - 1 ? "1px solid #F1F5F9" : "none", alignItems: "center" }}>
+                {/* En tur uden km er enten en fejlet adresse eller en rute der ikke
+                    kunne beregnes. Der er ingenting at udbetale, saa den kan ikke
+                    godkendes — den skal rettes i stedet. */}
+                <input type="checkbox" style={{ width: 17, height: 17, cursor: r.km != null ? "pointer" : "not-allowed", accentColor: "#16A34A" }}
+                  disabled={r.km == null}
+                  title={r.km == null ? "Ingen km beregnet — kan ikke godkendes" : "Godkendt til løn"}
+                  checked={erGodkendt("km", r.employee_id, String(r.id))}
+                  onChange={(e) => saetGodkendt("km", r.employee_id, String(r.id), e.target.checked)} />
                 <span style={{ fontSize: 13, fontWeight: 600, color: "#111111" }}>{empName(r.employee_id)}</span>
                 <span style={{ fontSize: 12, color: "#64748B" }}>{r.work_date}</span>
                 <span style={{ fontSize: 12, color: "#374151", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.from_address}</span>
