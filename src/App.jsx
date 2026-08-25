@@ -10570,7 +10570,15 @@ function InventoryView({ supabase, employees, currentUserName, onInventoryChange
               <div key={tx.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", borderBottom: "1px solid #F1F5F9" }}>
                 <div>
                   <div style={{ fontSize: 13, fontWeight: 600, color: "#111111" }}>{tx.inventory_items?.name}</div>
-                  <div style={{ fontSize: 11, color: "#64748B" }}>{tx.reason || (tx.type === "in" ? "Tilgang" : "Afgang")} {tx.employees?.name ? `· ${tx.employees.name}` : ""}</div>
+                  <div style={{ fontSize: 11, color: "#64748B" }}>{(() => {
+                    const grund = tx.reason || (tx.type === "in" ? "Tilgang" : "Afgang");
+                    const navn = tx.employees?.name;
+                    // Raekker fra foer 25.8.2026 har navnet bagt ind i teksten
+                    // ("Bestilt af Nadine Bremholm"). Nyere har det kun i
+                    // employee_id. Uden det her tjek staar navnet to gange paa de
+                    // gamle — og de bliver staaende i historikken for altid.
+                    return navn && !grund.includes(navn) ? `${grund} · ${navn}` : grund;
+                  })()}</div>
                 </div>
                 <div style={{ fontSize: 15, fontWeight: 700, color: tx.quantity > 0 ? "#16A34A" : "#DC2626" }}>
                   {tx.quantity > 0 ? "+" : ""}{tx.quantity} {tx.inventory_items?.unit || "stk"}
