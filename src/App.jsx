@@ -212,8 +212,13 @@ function instanceDateString(t) {
 const MENU_GRUPPER = [
   { key: "drift",     navn: "Ugeplan",    sider: [["uge", "Ugeplan"]] },
   { key: "salg",      navn: "Salg",       sider: [["kunder", "Kunder"], ["tilbud", "Tilbud"], ["contracts", "Aftaler"]] },
+  // Lager er sin egen gruppe og ikke en fane under Opsaetning. Det er drift, ikke
+  // opsaetning: beholdningen roeres i loebet af ugen, mens medarbejdere og
+  // tjeklister saettes op én gang og saa staar. At skulle gennem Opsaetning for at
+  // se om der er saebe nok, var et led for meget.
+  { key: "lager",     navn: "Lager",      sider: [["inventory", "Lager"]] },
   { key: "oekonomi",  navn: "Økonomi",     sider: [["time", "Fakturering"], ["kundetimer", "Kundetimer"], ["reports", "Rapportering"], ["medExport", "Løn data"]] },
-  { key: "opsaetning", navn: "Opsætning", sider: [["employees", "Medarbejdere"], ["checklists", "Tjeklister"], ["inventory", "Lager"]] },
+  { key: "opsaetning", navn: "Opsætning", sider: [["employees", "Medarbejdere"], ["checklists", "Tjeklister"]] },
 ];
 function gruppeFor(view) {
   return MENU_GRUPPER.find((g) => g.sider.some(([k]) => k === view)) || MENU_GRUPPER[0];
