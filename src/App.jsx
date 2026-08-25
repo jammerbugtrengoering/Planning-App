@@ -6972,7 +6972,7 @@ function LoenarterSection({ employees, onEksporter, arbejder, fejl: eksportFejl,
           <div key={r.noegle} style={{ marginBottom: 12 }}>
             <label style={styles.label}>{r.beskrivelse}</label>
             <input style={{ ...styles.input, maxWidth: 200 }} value={kladde[r.noegle] ?? ""}
-              placeholder="fx 1000" maxLength={20}
+              placeholder={r.noegle.includes("_pct") ? "fx 50" : "fx 1000"} maxLength={20}
               onChange={(e) => { setKladde({ ...kladde, [r.noegle]: e.target.value }); setBesked(""); }} />
           </div>
         ))}
@@ -6990,9 +6990,10 @@ function LoenarterSection({ employees, onEksporter, arbejder, fejl: eksportFejl,
                     boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
         <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>Løndata til Danløn</div>
         <div style={{ ...styles.hint, marginTop: 0, marginBottom: 14 }}>
-          To linjer pr. medarbejder for <strong>{maaned}</strong> — én med timer og løn,
-          én med kilometer. Kun godkendte linjer kommer med, og kun medarbejdere der
-          har et Danløn-nummer.
+          Op til fire linjer pr. medarbejder for <strong>{maaned}</strong>: timer med løn,
+          weekendtillæg, kilometer og søn- og helligdagsbetaling. Der sendes kun de
+          linjer, der er noget at sende på — og kun godkendte linjer fra medarbejdere,
+          der har et Danløn-nummer.
         </div>
         {eksportFejl && (
           <div style={{ fontSize: 12.5, color: "#B91C1C", marginBottom: 10, lineHeight: 1.5 }}>{eksportFejl}</div>
