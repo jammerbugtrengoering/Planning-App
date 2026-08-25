@@ -6191,11 +6191,29 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
 // foerste i maaneden, og listen ville vaere ubrugelig praecis naar man kigger paa den.
 //
 // Ingen priser. Skal der kroner paa, ligger de under Fakturering.
+// Et tal oeverst i Kundetimer der ogsaa filtrerer listen.
+function StatKnap({ aktiv, onClick, vaerdi, tekst, farve }) {
+  return (
+    <button onClick={onClick} title={aktiv ? "Vis alle igen" : `Vis kun: ${tekst.toLowerCase()}`}
+      style={{ ...styles.statBlock, borderLeft: `3px solid ${aktiv ? farve : "#E2E8F0"}`,
+               background: aktiv ? "#FFF6FA" : "#fff", cursor: "pointer", textAlign: "left",
+               border: `1px solid ${aktiv ? "#D6247A" : "#E2E8F0"}`,
+               borderLeftWidth: 3, borderLeftColor: aktiv ? farve : "#E2E8F0" }}>
+      <div>
+        <div style={{ ...styles.statValue, color: farve }}>{vaerdi}</div>
+        <div style={styles.statLabel}>{tekst}</div>
+      </div>
+    </button>
+  );
+}
+
 function CustomerHoursView({ instances }) {
   const now = new Date();
   const [filterMonth, setFilterMonth] = useState(now.getMonth());
   const [filterYear, setFilterYear] = useState(now.getFullYear());
   const [soeg, setSoeg] = useState("");
+  // alle | uden | over | under
+  const [visning, setVisning] = useState("alle");
 
   const MONTHS = ["Januar","Februar","Marts","April","Maj","Juni","Juli","August","September","Oktober","November","December"];
   const years = [now.getFullYear() - 1, now.getFullYear(), now.getFullYear() + 1];
@@ -6230,21 +6248,53 @@ function CustomerHoursView({ instances }) {
 
   const skaeve = alle.filter((b) => b.afvigelse !== 0);
 
+  // Over- og underforbrug taelles HVER FOR SIG.
+  //
+  // Foer blev fortegnene lagt sammen: k.afvigelse += b.afvigelse. En kunde med +4t paa
+  // ét besoeg og −4t paa et andet endte paa nul og landede midt i listen, som om alt
+  // passede — selvom der laa to store afvigelser at forklare. Det var netop den kunde
+  // der ringede.
+  //
+  // Nettoresultatet staar der stadig, for det er det tal der betyder noget for
+  // maanedens timeregnskab. Men det er ikke laengere det, listen sorteres efter.
   const kunder = [];
   skaeve.forEach((b) => {
     let k = kunder.find((x) => x.navn === b.kunde);
-    if (!k) { k = { navn: b.kunde, afvigelse: 0, planlagt: 0, registreret: 0, besoeg: [] }; kunder.push(k); }
-    k.afvigelse += b.afvigelse;
+    if (!k) {
+      k = { navn: b.kunde, over: 0, under: 0, netto: 0,
+            planlagt: 0, registreret: 0, udenBegrundelse: 0, besoeg: [] };
+      kunder.push(k);
+    }
+    if (b.afvigelse > 0) k.over += b.afvigelse; else k.under += -b.afvigelse;
+    k.netto += b.afvigelse;
     k.planlagt += b.planlagt;
     k.registreret += b.registreret;
+    if (b.afvigelse > 0 && !b.begrundelse) k.udenBegrundelse++;
     k.besoeg.push(b);
   });
   kunder.forEach((k) => k.besoeg.sort((a, b) => String(a.dato).localeCompare(String(b.dato))));
-  // Mest overforbrug oeverst. Det er den samtale der kommer.
-  kunder.sort((a, b) => b.afvigelse - a.afvigelse || a.navn.localeCompare(b.navn, "da"));
+  // Stoerst samlet afvigelse oeverst — uanset hvilken vej den gaar. En kunde hvor der
+  // baade er brugt for meget og for lidt, har mest at forklare, ikke mindst.
+  kunder.sort((a, b) => (b.over + b.under) - (a.over + a.under)
+                     || a.navn.localeCompare(b.navn, "da"));
 
   const q = soeg.trim().toLowerCase();
-  const vist = q ? kunder.filter((k) => k.navn.toLowerCase().includes(q)) : kunder;
+  let vist = q ? kunder.filter((k) => k.navn.toLowerCase().includes(q)) : kunder;
+
+  // Tallene oeverst er ogsaa knapper. "Uden begrundelse" er det man IKKE kan svare
+  // kunden paa, og foer skulle det tal findes i haanden nede i listen bagefter.
+  //
+  // Filtret skaerer i BESOEGENE og ikke kun i kunderne. Ellers ville man trykke
+  // "uden begrundelse" og stadig sidde med alle kundens oevrige linjer at lede i.
+  if (visning !== "alle") {
+    const passer = (b) =>
+      visning === "uden"  ? (b.afvigelse > 0 && !b.begrundelse)
+    : visning === "over"  ? b.afvigelse > 0
+    :                       b.afvigelse < 0;
+    vist = vist
+      .map((k) => ({ ...k, besoeg: k.besoeg.filter(passer) }))
+      .filter((k) => k.besoeg.length > 0);
+  }
 
   const merforbrug = skaeve.reduce((s, b) => s + (b.afvigelse > 0 ? b.afvigelse : 0), 0);
   const mindreforbrug = skaeve.reduce((s, b) => s + (b.afvigelse < 0 ? -b.afvigelse : 0), 0);
@@ -6286,19 +6336,19 @@ function CustomerHoursView({ instances }) {
   return (
     <div style={styles.page}>
       <div style={styles.toolbar}>
-        <div style={{ ...styles.statBlock, borderLeft: "3px solid #B45309" }}>
-          <div><div style={{ ...styles.statValue, color: "#B45309" }}>{fmtMin(merforbrug)}</div><div style={styles.statLabel}>Brugt mere end aftalt</div></div>
-          <div style={styles.statBox}><div style={{ ...styles.statValue, color: "#2563EB" }}>{fmtMin(mindreforbrug)}</div><div style={styles.statLabel}>Brugt mindre</div></div>
-        </div>
-        <div style={{ ...styles.statBlock, borderLeft: "3px solid #64748B" }}>
-          <div><div style={{ ...styles.statValue, color: "#111111" }}>{skaeve.length}</div><div style={styles.statLabel}>Besøg med afvigelse</div></div>
-          {/* Et merforbrug uden begrundelse er det man IKKE kan svare kunden paa.
-              Derfor staar tallet her og ikke gemt nede i listen. */}
-          <div style={styles.statBox}>
-            <div style={{ ...styles.statValue, color: udenBegrundelse ? "#B91C1C" : "#94A3B8" }}>{udenBegrundelse}</div>
-            <div style={styles.statLabel}>Uden begrundelse</div>
-          </div>
-        </div>
+        {/* Tallene er knapper. Trykker man paa ét af dem, skaeres listen ned til
+            netop de besoeg — foer skulle man laese sig frem til dem i haanden. */}
+        <StatKnap aktiv={visning === "over"} onClick={() => setVisning(visning === "over" ? "alle" : "over")}
+          vaerdi={fmtMin(merforbrug)} tekst="Brugt mere end aftalt" farve="#B45309" />
+        <StatKnap aktiv={visning === "under"} onClick={() => setVisning(visning === "under" ? "alle" : "under")}
+          vaerdi={fmtMin(mindreforbrug)} tekst="Brugt mindre" farve="#2563EB" />
+        <StatKnap aktiv={visning === "alle"} onClick={() => setVisning("alle")}
+          vaerdi={String(skaeve.length)} tekst="Besøg med afvigelse" farve="#111111" />
+        {/* Et merforbrug uden begrundelse er det man IKKE kan svare kunden paa.
+            Derfor staar tallet her og ikke gemt nede i listen. */}
+        <StatKnap aktiv={visning === "uden"} onClick={() => setVisning(visning === "uden" ? "alle" : "uden")}
+          vaerdi={String(udenBegrundelse)} tekst="Uden begrundelse"
+          farve={udenBegrundelse ? "#B91C1C" : "#94A3B8"} />
         <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
           <select style={{ ...styles.inputSm, fontSize: 13, fontWeight: 600 }} value={filterMonth} onChange={(e) => setFilterMonth(Number(e.target.value))}>
             {MONTHS.map((m, i) => <option key={i} value={i}>{m}</option>)}
@@ -6319,10 +6369,30 @@ function CustomerHoursView({ instances }) {
                                    boxShadow: "0 1px 3px rgba(0,0,0,0.06)", overflow: "hidden" }}>
           <div style={{ display: "grid", gridTemplateColumns: KOL, gap: 0, alignItems: "center",
                         padding: "11px 16px", background: "#F8FAFC" }}>
-            <span style={{ fontSize: 14, fontWeight: 700, color: "#111111" }}>{k.navn}</span>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: "#111111" }}>{k.navn}</div>
+              <div style={{ fontSize: 12, color: "#94A3B8" }}>
+                {k.besoeg.length} besøg
+                {k.udenBegrundelse > 0 && (
+                  <span style={{ color: "#B91C1C" }}> · {k.udenBegrundelse} uden begrundelse</span>
+                )}
+              </div>
+            </div>
             <span style={{ fontSize: 13, color: "#64748B", textAlign: "right" }}>{fmtMin(k.planlagt)}</span>
             <span style={{ fontSize: 13, fontWeight: 600, color: "#111111", textAlign: "right" }}>{fmtMin(k.registreret)}</span>
-            <span style={{ fontSize: 14, fontWeight: 700, color: farve(k.afvigelse), textAlign: "right" }}>{afvig(k.afvigelse)}</span>
+            {/* Gaar afvigelserne hver sin vej, vises de hver for sig. Ét sammenlagt
+                tal ville sige "nul" om en kunde med to store afvigelser. */}
+            <span style={{ textAlign: "right", lineHeight: 1.35 }}>
+              {k.over > 0 && (
+                <div style={{ fontSize: 14, fontWeight: 700, color: "#B45309" }}>+{fmtMin(k.over)}</div>
+              )}
+              {k.under > 0 && (
+                <div style={{ fontSize: 14, fontWeight: 700, color: "#2563EB" }}>−{fmtMin(k.under)}</div>
+              )}
+              {k.over > 0 && k.under > 0 && (
+                <div style={{ fontSize: 11.5, color: "#94A3B8" }}>i alt {afvig(k.netto)}</div>
+              )}
+            </span>
           </div>
           <div style={{ display: "grid", gridTemplateColumns: KOL, gap: 0, padding: "6px 16px",
                         fontSize: 10, fontWeight: 700, color: "#94A3B8", textTransform: "uppercase",
