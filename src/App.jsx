@@ -1352,6 +1352,14 @@ const MODULE_HELP = {
         "Weekender planlægges kun for medarbejdere der har weekendarbejde sat på. For dem er der ingen timegrænse, da det altid er en aftale.",
         "Kørslen mellem to opgaver beregnes som den faktiske rutetid mellem de to adresser og vises på tidslinjen. Den tæller ikke med i medarbejderens kapacitet, da kørsel afregnes med kilometerpenge og ikke som arbejdstid.",
         "Sygdom og ferie fjerner automatisk medarbejderen fra opgaverne i perioden. Er der ingen tilbage, ryger opgaven i Ikke tildelt."] },
+    { h: "Beskeder på medarbejdernes telefoner", p: [
+        "Medarbejderne kan få besked på telefonen om manglende registrering, ændringer i deres plan, og svar på ønsker om ny tid. De slår det selv til under deres profil i Worklist.",
+        "Ændringer samles og sendes højst hvert kvarter. Rydder du op i ugeplanen og flytter ti opgaver, får medarbejderen én besked — ikke ti.",
+        "Svarer du på et ønske om ny tid, går beskeden derimod af sted med det samme. Hun har givet kunden et løfte og venter på svar.",
+        "Om aftenen får hver medarbejder en besked om, hvad der venter i morgen.",
+        "Mailen sendes stadig som før. Beskeden på telefonen kommer oveni, ikke i stedet for.",
+        "Siger en medarbejder at hun ikke får beskeder: har hun en iPhone, skal appen ligge på hjemmeskærmen. En fane i Safari kan ikke modtage beskeder — det er Apples regel. Hun skal trykke Del i Safari og vælge «Føj til hjemmeskærm».",
+        "Skifter hun telefon, skal hun slå beskeder til igen på den nye."] },
     { h: "Ønsker om ny tid fra medarbejderne", p: [
         "Aftaler en medarbejder en ny tid med kunden, flytter hun ikke selv opgaven. Hun sender et ønske, og du planlægger ændringen.",
         "Ønskerne står øverst i Ugeplan i en gul boks, og du får samtidig en mail. Der står hvem der spørger, hvilken opgave og kunde, fra hvad til hvad, og hvorfor.",
@@ -3441,6 +3449,10 @@ function PlanningApp({ session, onSignOut }) {
   // Medarbejderen bliver paa opgaven — det er hende der har lavet aftalen. Passer
   // det nye tidspunkt ikke i hendes dag, dukker det op som en tidskonflikt i ugeplanen,
   // og saa kan planlaeggeren flytte videre derfra.
+  function opgaveTitel(onske) {
+    return instances.find((x) => x.id === onske.instance_id)?.title || "Opgaven";
+  }
+
   async function godkendNyTid(onske) {
     const t = instances.find((x) => x.id === onske.instance_id);
     if (!t) { notify("Opgaven findes ikke længere"); return; }
@@ -3457,6 +3469,21 @@ function PlanningApp({ session, onSignOut }) {
       .update({ status: "godkendt", decided_at: new Date().toISOString() }).eq("id", onske.id);
     if (error) { notify("Opgaven er flyttet, men ønsket kunne ikke lukkes: " + error.message); return; }
     setNyTidOnsker((prev) => prev.filter((r) => r.id !== onske.id));
+    // Push til medarbejderen. Hun har givet kunden et loefte og venter paa svar -
+    // det er den besked der haster mest af dem alle. Mailen er uaendret.
+    //
+    // Traegeren paa instances laegger ogsaa en "flyttet" i planaendrings-koeen. Den
+    // samles og sendes op til et kvarter senere, saa hun faar denne foerst, og den
+    // fortaeller hende det hun venter paa.
+    if (onske.employee_id) {
+      supabase.functions.invoke("send-push", { body: {
+        medarbejdere: [onske.employee_id],
+        titel: "Din ønskede tid er godkendt",
+        tekst: `${opgaveTitel(onske)} er flyttet til ${onske.requested_date}`
+             + `${onske.requested_time ? " kl. " + String(onske.requested_time).slice(0,5) : ""}.`,
+        maerke: "nytid",
+      }}).catch(() => {});
+    }
     notify(`Flyttet til ${onske.requested_date}${onske.requested_time ? " kl. " + String(onske.requested_time).slice(0,5) : ""}`);
   }
   // Afvis: medarbejderen skal vide det, for hun har givet kunden et loefte.
@@ -3478,6 +3505,16 @@ function PlanningApp({ session, onSignOut }) {
               `<p><b>Besked fra kontoret:</b><br/>${note || "Ingen begrundelse angivet."}</p>` +
               `<p>Opgaven står stadig som planlagt. Kontakt kunden og aftal en ny tid.</p>`,
       }});
+    }
+    if (onske.employee_id) {
+      supabase.functions.invoke("send-push", { body: {
+        medarbejdere: [onske.employee_id],
+        titel: "Din ønskede tid kunne ikke lade sig gøre",
+        // Begrundelsen med i selve beskeden. Uden den ville hun skulle aabne appen
+        // for at finde ud af HVORFOR - og hun skal ringe til kunden med det samme.
+        tekst: note || "Ring til kontoret, så finder vi ud af det.",
+        maerke: "nytid",
+      }}).catch(() => {});
     }
     notify("Ønsket er afvist" + (rk?.app_email ? " og medarbejderen har fået besked" : ""));
   }
