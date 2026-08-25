@@ -58,7 +58,15 @@ body {
   width: 1126px;
   max-width: 100%;
   margin: 0 auto;
-  text-align: center;
+  /* Venstrestillet. Der stod text-align: center her — det er en rest fra Vites
+     React-skabelon, som ingen har rørt siden appen blev sat op.
+     Reglen arves ned i HVER eneste skærm, og derfor stod kundenavne, opgavetitler
+     og kolonneoverskrifter midt i deres kolonne med tomrum i begge sider. Det så
+     ud som et layoutproblem i de enkelte visninger og blev lappet med
+     textAlign: "left" ét sted ad gangen, men fejlen har hele tiden ligget her.
+     Skal noget midtstilles, siger den enkelte komponent det selv — 24 steder gør
+     det allerede. */
+  text-align: left;
   border-inline: 1px solid var(--border);
   min-height: 100svh;
   display: flex;
