@@ -8254,18 +8254,25 @@ function FakturaRaekke({ supabase, guid, faktura: f }) {
   const kr = (n) => Math.round(Number(n) || 0).toLocaleString("da-DK") + " kr";
 
   return (
-    <div style={{ borderTop: "1px solid #F1F5F9" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 10,
-                    padding: "6px 0", fontSize: 14, alignItems: "center" }}>
+    <div style={{ borderTop: "1px solid #F1F5F9", textAlign: "left" }}>
+      {/* Faste spor i stedet for flex. Med flex og space-between blev afstanden mellem
+          fakturanummer og beloeb saa stor paa en bred skaerm, at man skulle foelge en
+          usynlig linje tvaers over kortet for at se hvad der hoerte sammen. */}
+      <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) 130px 78px",
+                    gap: 12, padding: "4px 0", fontSize: 14, alignItems: "center" }}>
         {/* Hele venstre side er trykflade, ikke bare trekanten. Paa en iPad skal
             man kunne ramme den med en finger uden at sigte. */}
-        <div onClick={fold} style={{ cursor: "pointer", flex: 1, minWidth: 0,
+        <div onClick={fold} style={{ cursor: "pointer", minWidth: 0,
                                      padding: "10px 0", minHeight: 44 }}>
-          <b>{aaben ? "▾" : "▸"} {fakturaNummer(f)}</b>
-          <span style={{ color: "#64748B" }}>
-            {f.Date ? ` · ${new Date(f.Date).toLocaleDateString("da-DK")}` : ""}
-            {f.Description ? ` · ${f.Description}` : ""}
-          </span>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 7 }}>
+            <span style={{ color: "#94A3B8", fontSize: 12 }}>{aaben ? "▾" : "▸"}</span>
+            <b style={{ whiteSpace: "nowrap" }}>{fakturaNummer(f)}</b>
+            <span style={{ color: "#64748B", fontSize: 13, overflow: "hidden",
+                           textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {f.Date ? new Date(f.Date).toLocaleDateString("da-DK") : ""}
+              {f.Description ? ` · ${f.Description}` : ""}
+            </span>
+          </div>
         </div>
         <div style={{ textAlign: "right", whiteSpace: "nowrap" }}>
           <b>{kr(f.TotalInclVat)}</b>
@@ -8276,9 +8283,9 @@ function FakturaRaekke({ supabase, guid, faktura: f }) {
           </div>
         </div>
         <button onClick={aabnPdf} disabled={pdfHenter}
-          style={{ ...styles.secondaryBtn, padding: "11px 16px", fontSize: 13.5,
-                   flexShrink: 0, minHeight: 44 }}>
-          {pdfHenter ? "Henter…" : "PDF"}
+          style={{ ...styles.secondaryBtn, padding: "11px 0", fontSize: 13,
+                   justifyContent: "center", minHeight: 44, width: "100%" }}>
+          {pdfHenter ? "…" : "PDF"}
         </button>
       </div>
 
@@ -8383,13 +8390,16 @@ function KoblTilDinero({ supabase, kunde, onKoblet }) {
 
 function KundeFakturaer({ supabase, guid }) {
   const [raekker, setRaekker] = useState(null);
+  const [aaben, setAaben] = useState(false);
   const [henter, setHenter] = useState(false);
   const [fejl, setFejl] = useState("");
 
-  // Hentes med det samme naar kunden foldes ud. Komponenten vises foerst der, saa det
-  // er stadig ét opslag pr. kunde og ikke sytten ved hver indlaesning.
-  useEffect(() => { hent(); }, [guid]);
-
+  // Hentes FOERST naar listen foldes ud.
+  //
+  // Foer skete det med det samme, kunden blev foldet ud. En kunde med 52 opgaver har
+  // ogsaa et halvt hundrede fakturaer, og de blev hentet fra Dinero og skrevet ud i
+  // fuld laengde, hver gang man ville se noget helt andet paa kortet — fx portalen,
+  // der ligger nedenunder. Nu koster det ét klik at se dem, og ingenting at lade vaere.
   async function hent() {
     setHenter(true); setFejl("");
     const { data, error } = await supabase.functions.invoke("dinero", {
@@ -8401,30 +8411,65 @@ function KundeFakturaer({ supabase, guid }) {
     setRaekker(data?.fakturaer || []);
   }
 
-  if (raekker === null) {
-    return (
-      <div style={{ marginTop: 12 }}>
-        {henter
-          ? <div style={{ fontSize: 13, color: "#94A3B8" }}>Henter fakturaer fra Dinero…</div>
-          : <button style={styles.secondaryBtn} onClick={hent}>Prøv igen</button>}
-        {fejl && <pre style={{ color: "#B91C1C", fontSize: 11.5, marginTop: 8, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{fejl}</pre>}
-      </div>
-    );
+  function fold() {
+    const nu = !aaben;
+    setAaben(nu);
+    if (nu && raekker === null && !henter) hent();
   }
 
-  if (raekker.length === 0) {
-    return <div style={{ fontSize: 13, color: "#94A3B8", marginTop: 12 }}>Ingen fakturaer i Dinero endnu.</div>;
-  }
+  const kr = (n) => Math.round(Number(n) || 0).toLocaleString("da-DK") + " kr";
+  // Det tal planlaeggeren leder efter: hvad skylder kunden lige nu. Kladder taeller
+  // ikke med — de er ikke sendt endnu og kan stadig naa at blive lavet om.
+  const udestaaende = (raekker || [])
+    .filter((f) => f.Status === "Booked" || f.Status === "Overdue")
+    .reduce((sum, f) => sum + (Number(f.TotalInclVat) || 0), 0);
+  const forfaldne = (raekker || []).filter((f) => f.Status === "Overdue").length;
 
   return (
-    <div style={{ marginTop: 12 }}>
-      <div style={{ fontSize: 11.5, fontWeight: 700, textTransform: "uppercase",
-                    letterSpacing: ".04em", color: "#9C1B5D", marginBottom: 4 }}>
-        Fakturaer i Dinero
-      </div>
-      {raekker.map((f) => (
-        <FakturaRaekke key={f.Guid} supabase={supabase} guid={guid} faktura={f} />
-      ))}
+    <div style={{ marginTop: 12, textAlign: "left" }}>
+      <button onClick={fold}
+        style={{ width: "100%", display: "flex", alignItems: "center", gap: 10,
+                 padding: "10px 12px", minHeight: 44, textAlign: "left",
+                 background: aaben ? "#FFF6FA" : "#fff", cursor: "pointer",
+                 border: "1px solid #E2E8F0", borderRadius: 9 }}>
+        <span style={{ color: "#9C1B5D", fontSize: 12, width: 12, flexShrink: 0 }}>
+          {aaben ? "▾" : "▸"}
+        </span>
+        <span style={{ fontSize: 13, fontWeight: 700, color: "#9C1B5D", flexShrink: 0 }}>
+          Fakturaer i Dinero
+        </span>
+        <span style={{ flex: 1 }} />
+        {/* Sammendraget staar i selve knappen, saa man kan blive siddende med listen
+            lukket og alligevel vide om der er noget at tage fat i. */}
+        {raekker !== null && (
+          <span style={{ fontSize: 12.5, color: "#64748B", whiteSpace: "nowrap" }}>
+            {raekker.length === 0 ? "ingen endnu" : (
+              <>
+                {raekker.length} stk
+                {udestaaende > 0 && <> · <b style={{ color: "#B45309" }}>{kr(udestaaende)} udestående</b></>}
+                {forfaldne > 0 && <> · <b style={{ color: "#B91C1C" }}>{forfaldne} forfalden{forfaldne === 1 ? "" : "e"}</b></>}
+              </>
+            )}
+          </span>
+        )}
+        {henter && <span style={{ fontSize: 12.5, color: "#94A3B8" }}>Henter…</span>}
+      </button>
+
+      {fejl && (
+        <div style={{ marginTop: 8 }}>
+          <div style={{ fontSize: 12.5, color: "#B91C1C", marginBottom: 6 }}>{fejl}</div>
+          <button style={styles.secondaryBtn} onClick={hent}>Prøv igen</button>
+        </div>
+      )}
+
+      {aaben && raekker !== null && raekker.length > 0 && (
+        <div style={{ border: "1px solid #F1F5F9", borderTop: "none",
+                      borderRadius: "0 0 9px 9px", padding: "0 12px" }}>
+          {raekker.map((f) => (
+            <FakturaRaekke key={f.Guid} supabase={supabase} guid={guid} faktura={f} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -8722,7 +8767,8 @@ function KunderView({ supabase, currentEmployeeId }) {
 
             {erAaben && (
               <div style={{ borderTop: "1px solid #F1F5F9", padding: "14px 15px", background: "#FCFCFD" }}>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(130px,1fr))", gap: 10, marginBottom: 14 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0,1fr))",
+                              gap: 10, marginBottom: 14, maxWidth: 560 }}>
                   {[
                     ["Opgaver i alt", k.opgaver_i_alt],
                     ["Udført", k.udfoerte],
