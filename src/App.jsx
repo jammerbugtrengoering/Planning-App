@@ -1536,6 +1536,10 @@ const MODULE_HELP = {
         "«Nyt produkt» opretter en vare — husk varenummer og pris på kundeprodukter.",
         "Varer under minimumbeholdning fremhæves.",
         "Bestillinger skal godkendes, før de trækkes fra lageret."] },
+    { h: "Seneste bevægelser", p: [
+        "Under listen står hvem der bestilte, hvem der udleverede, og hvornår begge dele skete.",
+        "Spørger en medarbejder hvornår hun sidst fik handsker, står svaret her.",
+        "Står der «uden navn» på en udlevering, er den godkendt før vi begyndte at gemme hvem der gjorde det. Det gælder kun gamle linjer."] },
     { h: "Udlevering til kunde", p: [
         "Produkter udleveres her på kontoret. Medarbejderne kører i privat bil og har aldrig lagervarer med, så varen forlader hylden i det øjeblik du giver den fra dig — og der trækkes lageret.",
         "Tryk «Udlever produkter», vælg medarbejder, kunde, dato og varer. Kundelisten er dem der har opgaver — ikke et opslag i Dinero. Vælger du en kunde uden opgaver, ville udleveringen aldrig komme til syne hos nogen.",
@@ -10570,14 +10574,38 @@ function InventoryView({ supabase, employees, currentUserName, onInventoryChange
               <div key={tx.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", borderBottom: "1px solid #F1F5F9" }}>
                 <div>
                   <div style={{ fontSize: 13, fontWeight: 600, color: "#111111" }}>{tx.inventory_items?.name}</div>
-                  <div style={{ fontSize: 11, color: "#64748B" }}>{(() => {
+                  {/* To linjer: hvad der skete, og hvem der stod bag hvornaar.
+                      Felterne har ligget i databasen hele tiden — approved_by,
+                      approved_at, udleveret_af — men blev aldrig vist. Naar en
+                      medarbejder spoerger "hvornaar fik jeg de handsker", skal
+                      svaret staa her og ikke kraeve et opslag i databasen. */}
+                  <div style={{ fontSize: 11.5, color: "#475569" }}>{(() => {
                     const grund = tx.reason || (tx.type === "in" ? "Tilgang" : "Afgang");
                     const navn = tx.employees?.name;
                     // Raekker fra foer 25.8.2026 har navnet bagt ind i teksten
                     // ("Bestilt af Nadine Bremholm"). Nyere har det kun i
                     // employee_id. Uden det her tjek staar navnet to gange paa de
                     // gamle — og de bliver staaende i historikken for altid.
-                    return navn && !grund.includes(navn) ? `${grund} · ${navn}` : grund;
+                    const tekst = navn && !grund.includes(navn) ? `${grund} · ${navn}` : grund;
+                    return tx.til_kunde_navn ? `${tekst} · til ${tx.til_kunde_navn}` : tekst;
+                  })()}</div>
+                  <div style={{ fontSize: 11, color: "#94A3B8", marginTop: 2 }}>{(() => {
+                    const naar = (t) => t && new Date(t).toLocaleString("da-DK",
+                      { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+                    const dele = [`Bestilt ${naar(tx.created_at)}`];
+                    // Hvem der gav den ud, og hvornaar. Er den godkendt uden at nogen
+                    // staar paa, siges det ligeud — en tom plads ville ligne at
+                    // oplysningen ikke fandtes.
+                    if (tx.status === "approved" || tx.udleveret_af) {
+                      const af = tx.udleveret_af || tx.approved_by;
+                      const tid = tx.leveret_at || tx.approved_at;
+                      dele.push(af
+                        ? `Udleveret af ${af}${tid ? " " + naar(tid) : ""}`
+                        : `Udleveret${tid ? " " + naar(tid) : ""} — uden navn`);
+                    }
+                    if (tx.status === "pending") dele.push("Afventer godkendelse");
+                    if (tx.status === "rejected") dele.push("Afvist");
+                    return dele.join(" · ");
                   })()}</div>
                 </div>
                 <div style={{ fontSize: 15, fontWeight: 700, color: tx.quantity > 0 ? "#16A34A" : "#DC2626" }}>
