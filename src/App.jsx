@@ -1658,7 +1658,12 @@ const MODULE_HELP = {
         "«Godkend alle viste» sætter flueben på alt i den valgte måned. Fortryder du, skifter knappen til at fjerne dem igen.",
         "En linje uden registreret tid kan ikke godkendes — der er ingenting at udbetale. Det samme gælder en kørselstur, hvor ruten ikke kunne beregnes; den skal rettes i stedet.",
         "«Godkendt lønsum» øverst er det beløb, der faktisk bliver udbetalt. «Registreret lønsum» er alt, uanset om det er godkendt.",
-        "Danløn-filen har to linjer pr. medarbejder: én med timer og beløb, én med kilometer. Kilometerlinjen har intet beløb — satsen for skattefri kørselsgodtgørelse sættes i Danløn, fordi den ændres ved lov hvert år."] },
+        "Danløn-filen har op til fire linjer pr. medarbejder: timer med beløb, weekendtillæg, kilometer og søn- og helligdagsbetaling. Kun de linjer der er noget at sende på.",
+        "Kilometerlinjen har intet beløb — satsen for skattefri kørselsgodtgørelse sættes i Danløn, fordi den ændres ved lov hvert år. Danløn skifter også selv til den lave sats, når en medarbejder passerer 20.000 km på et år.",
+        "Weekendtillægget beregnes af lønnen for timerne lørdag og søndag — ikke af hele måneden.",
+        "Søn- og helligdagsbetalingen beregnes af månedens godkendte løn med weekendtillægget lagt til. Kilometerpenge tæller ikke med: de er en skattefri godtgørelse af en udgift, ikke løn for arbejde.",
+        "Et eksempel: 38,25 timer à 170 kr giver 6.502,50 kr. Er 6 af timerne i weekenden og tillægget 50 %, bliver det 1.020 × 50 % = 510 kr. Med 4 % SH af 7.012,50 kr bliver det 280,50 kr — i alt 7.293 kr.",
+        "Satserne står under Lønarter og gælder alle. Har en medarbejder sin egen procent på stamkortet, vinder den. Er ingen af dem sat, springes linjen over — der sendes aldrig et nul."] },
     { h: "Hvis tallene ikke passer", p: ["Timer mangler — medarbejderen har ikke registreret.",
         "Kørsel mangler — der er ikke registreret tid, eller adresserne mangler.",
         "Weekendtimer er 0 — tjek weekendaftalen, og at opgaven lå lørdag eller søndag."] },
@@ -2072,6 +2077,11 @@ function PlanningApp({ session, onSignOut }) {
           fratraadtDato: e.fratraadt_dato || null,
           startTime: e.start_time || null,
           danloenNr: e.danloen_nr || null,
+          weekendTillaeg: e.weekend_tillaeg ?? false,
+          shBetaling: e.sh_betaling ?? false,
+          // null betyder "brug den faelles sats", ikke "nul procent".
+          weekendPctEgen: e.weekend_pct_egen ?? null,
+          shPctEgen: e.sh_pct_egen ?? null,
           // Er man ikke administrator, giver politikken paa satshistorikken ingen
           // raekker, og satsen bliver null. Eksporten viser da en streg i stedet for
           // et forkert beloeb — den maa ikke gaette paa standardsatsen.
@@ -2474,7 +2484,9 @@ function PlanningApp({ session, onSignOut }) {
   const custAccessRef = useRef({});
   const syncEmployee = useCallback(async (emp) => {
     const { data: skillRows_db } = await supabase.from("skills").select("id, name");
-    const { error: empErr } = await supabase.from("employees").upsert({ id: emp.id, name: emp.name, color: emp.color, is_admin: emp.isAdmin ?? false, weekend_ok: emp.weekendOk ?? false, start_time: emp.startTime || null, danloen_nr: emp.danloenNr ?? null }, { onConflict: "id" });
+    const { error: empErr } = await supabase.from("employees").upsert({ id: emp.id, name: emp.name, color: emp.color, is_admin: emp.isAdmin ?? false, weekend_ok: emp.weekendOk ?? false, start_time: emp.startTime || null, danloen_nr: emp.danloenNr ?? null,
+      weekend_tillaeg: emp.weekendTillaeg ?? false, sh_betaling: emp.shBetaling ?? false,
+      weekend_pct_egen: emp.weekendPctEgen ?? null, sh_pct_egen: emp.shPctEgen ?? null }, { onConflict: "id" });
     if (dbFail(empErr, "gemme medarbejderen")) return;
     // Timeloennen skrives kun hvis den er sat. Er man ikke administrator, kunne den
     // ikke laeses ved indlaesningen, og et blindt gem ville overskrive den rigtige
@@ -6549,7 +6561,8 @@ function EmployeeExportView({ instances, employees, satsHistorik }) {
         .from("loen_indstillinger").select("noegle, vaerdi");
       if (iFejl) throw new Error(iFejl.message);
       const loenart = Object.fromEntries((indst || []).map((r) => [r.noegle, (r.vaerdi || "").trim()]));
-      if (!loenart.loenart_timer && !loenart.loenart_km) {
+      if (!loenart.loenart_timer && !loenart.loenart_km
+          && !loenart.loenart_weekend && !loenart.loenart_sh) {
         throw new Error("Lønarterne er ikke sat. Udfyld dem under fanen Lønarter først.");
       }
 
@@ -6557,7 +6570,8 @@ function EmployeeExportView({ instances, employees, satsHistorik }) {
       const pr = new Map();
       const sikr = (emp) => {
         if (!pr.has(emp.id)) {
-          pr.set(emp.id, { nr: emp.danloenNr, navn: emp.name, minutter: 0, loen: 0, km: 0 });
+          pr.set(emp.id, { nr: emp.danloenNr, navn: emp.name, minutter: 0, loen: 0, km: 0,
+                           weekendLoen: 0, weekendMinutter: 0, tillaeg: 0, emp });
         }
         return pr.get(emp.id);
       };
@@ -6568,6 +6582,10 @@ function EmployeeExportView({ instances, employees, satsHistorik }) {
         const g = sikr(emp);
         g.minutter += r.registered || 0;
         g.loen += r.registeredWage || 0;
+        // Weekendtimernes loen holdes for sig. Tillaegget regnes KUN af dem —
+        // ikke af hele maaneden.
+        if (r.isWeekend) g.weekendLoen += r.registeredWage || 0;
+        if (r.isWeekend) g.weekendMinutter += r.registered || 0;
       });
 
       // Kilometer fra de godkendte ture i samme maaned.
@@ -6597,11 +6615,40 @@ function EmployeeExportView({ instances, employees, satsHistorik }) {
           if (loenart.loenart_timer && g.minutter > 0) {
             linjer.push([g.nr, g.navn, loenart.loenart_timer, tal(g.minutter / 60, 2), tal(g.loen, 2)]);
           }
+          // Weekendtillaeg: procent af loennen for timerne loerdag og soendag.
+          // Medarbejderens egen procent vinder over den faelles; er ingen af dem
+          // sat, springes linjen over frem for at sende et nul.
+          const wPct = g.emp.weekendPctEgen != null
+            ? Number(g.emp.weekendPctEgen)
+            : Number(String(loenart.weekend_pct || "").replace(",", "."));
+          if (loenart.loenart_weekend && g.emp.weekendTillaeg && g.weekendLoen > 0
+              && Number.isFinite(wPct) && wPct > 0) {
+            const bel = g.weekendLoen * (wPct / 100);
+            linjer.push([g.nr, g.navn, loenart.loenart_weekend, tal(g.weekendMinutter / 60, 2), tal(bel, 2)]);
+            g.tillaeg += bel;
+          }
+
           if (loenart.loenart_km && g.km > 0) {
             // Ingen beloeb paa km-linjen. Satsen for skattefri koerselsgodtgoerelse
             // saettes i Danloen, ikke her — den aendres ved lov hvert aar, og to
             // steder med hver sin sats bliver til to forskellige udbetalinger.
             linjer.push([g.nr, g.navn, loenart.loenart_km, tal(g.km, 1), ""]);
+          }
+
+          // Soen- og helligdagsbetaling: procent af MAANEDENS loen. Grundlaget er
+          // timeloennen plus weekendtillaegget - altsaa det hun faktisk tjener i
+          // maaneden. Kilometerpenge er IKKE med: de er en skattefri godtgoerelse
+          // af en udgift, ikke loen for arbejde.
+          //
+          // Regnes til sidst, saa weekendtillaegget allerede er lagt til.
+          const sPct = g.emp.shPctEgen != null
+            ? Number(g.emp.shPctEgen)
+            : Number(String(loenart.sh_pct || "").replace(",", "."));
+          if (loenart.loenart_sh && g.emp.shBetaling && Number.isFinite(sPct) && sPct > 0) {
+            const grundlag = g.loen + g.tillaeg;
+            if (grundlag > 0) {
+              linjer.push([g.nr, g.navn, loenart.loenart_sh, "", tal(grundlag * (sPct / 100), 2)]);
+            }
           }
         });
 
@@ -10830,6 +10877,14 @@ function EmployeeModal({ emp, onClose, onSave, skills: skillList, satsHistorik }
   // samme, og folk skifter efternavn. Er feltet tomt, kommer medarbejderen slet
   // ikke med i loeneksporten; det er bedre end at gaette paa hvem hun er.
   const [danloenNr, setDanloenNr] = useState(emp?.danloenNr || "");
+  const [weekendTillaeg, setWeekendTillaeg] = useState(emp?.weekendTillaeg ?? false);
+  const [shBetaling, setShBetaling] = useState(emp?.shBetaling ?? false);
+  // Tomt felt = brug den faelles sats. Derfor tekst og ikke tal: "0" og "ikke sat"
+  // skal kunne skelnes, og et talfelt kan ikke rumme forskellen.
+  const [weekendPctEgen, setWeekendPctEgen] = useState(
+    emp?.weekendPctEgen != null ? String(emp.weekendPctEgen) : "");
+  const [shPctEgen, setShPctEgen] = useState(
+    emp?.shPctEgen != null ? String(emp.shPctEgen) : "");
   // Standardsatsen bruges paa nye medarbejdere, saa loensummen i eksporten aldrig
   // staar tom fordi nogen glemte at udfylde et felt.
   const [hourlyWage, setHourlyWage] = useState(
@@ -10905,6 +10960,45 @@ function EmployeeModal({ emp, onClose, onSave, skills: skillList, satsHistorik }
           <div style={styles.hint}>
             Nummeret hun står med i Danløn. Uden det kan hendes timer og kørsel ikke
             sendes til løn — navne er ikke sikre nok, når to kan hedde det samme.
+          </div>
+
+          {/* Tillaeg. Fluebenet siger OM hun faar det; feltet ved siden af siger
+              hvor meget, og staar det tomt, bruges den faelles sats fra Loenarter.
+              De to er adskilt med vilje - ellers ville en glemt sats se ud som et
+              fravalg, og tillaegget ville stille forsvinde fra hendes loen. */}
+          <label style={styles.label}>Tillæg</label>
+          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13.5,
+                          color: "#334155", cursor: "pointer", minHeight: 36 }}>
+            <input type="checkbox" style={{ width: 16, height: 16, accentColor: "#D6247A" }}
+              checked={weekendTillaeg} onChange={(e) => setWeekendTillaeg(e.target.checked)} />
+            Weekendtillæg
+            {weekendTillaeg && (
+              <>
+                <input style={{ ...styles.input, width: 74, marginLeft: "auto" }}
+                  value={weekendPctEgen} placeholder="fælles" inputMode="decimal"
+                  onChange={(e) => setWeekendPctEgen(e.target.value)} />
+                <span style={{ color: "#94A3B8" }}>%</span>
+              </>
+            )}
+          </label>
+          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13.5,
+                          color: "#334155", cursor: "pointer", minHeight: 36 }}>
+            <input type="checkbox" style={{ width: 16, height: 16, accentColor: "#D6247A" }}
+              checked={shBetaling} onChange={(e) => setShBetaling(e.target.checked)} />
+            Søn- og helligdagsbetaling
+            {shBetaling && (
+              <>
+                <input style={{ ...styles.input, width: 74, marginLeft: "auto" }}
+                  value={shPctEgen} placeholder="fælles" inputMode="decimal"
+                  onChange={(e) => setShPctEgen(e.target.value)} />
+                <span style={{ color: "#94A3B8" }}>%</span>
+              </>
+            )}
+          </label>
+          <div style={styles.hint}>
+            Weekendtillægget beregnes af lønnen for hendes timer lørdag og søndag.
+            Søn- og helligdagsbetalingen af hele månedens godkendte løn, tillægget
+            iberegnet. Står procentfeltet tomt, bruges den fælles sats under Lønarter.
           </div>
         </div>
       </div>
@@ -11066,7 +11160,10 @@ function EmployeeModal({ emp, onClose, onSave, skills: skillList, satsHistorik }
 
       <div style={styles.modalActions}>
         <button style={styles.secondaryBtn} onClick={onClose}>Annuller</button>
-        <button style={styles.primaryBtn} disabled={!name.trim()} onClick={() => onSave({ id: emp?.id || uid("e"), name: name.trim(), skills: empSkills, color: emp?.color || color, capacity, isAdmin, weekendOk, startTime: startTime || null, hourlyWage: hourlyWage === "" ? STANDARD_TIMELOEN : Math.max(0, Number(hourlyWage)), wageFrom: satsErAendret || !emp ? wageFrom : null, homeAddress: homeAddress.trim() || null, travelInWorktime, danloenNr: danloenNr.trim() || null })}>Gem medarbejder</button>
+        <button style={styles.primaryBtn} disabled={!name.trim()} onClick={() => onSave({ id: emp?.id || uid("e"), name: name.trim(), skills: empSkills, color: emp?.color || color, capacity, isAdmin, weekendOk, startTime: startTime || null, hourlyWage: hourlyWage === "" ? STANDARD_TIMELOEN : Math.max(0, Number(hourlyWage)), wageFrom: satsErAendret || !emp ? wageFrom : null, homeAddress: homeAddress.trim() || null, travelInWorktime, danloenNr: danloenNr.trim() || null,
+          weekendTillaeg, shBetaling,
+          weekendPctEgen: weekendPctEgen.trim() === "" ? null : Number(weekendPctEgen.replace(",", ".")),
+          shPctEgen: shPctEgen.trim() === "" ? null : Number(shPctEgen.replace(",", ".")) })}>Gem medarbejder</button>
       </div>
     </Modal>
   );
