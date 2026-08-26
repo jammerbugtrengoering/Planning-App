@@ -14,7 +14,7 @@ serve(async (req) => {
 
   try {
     const { email, name, subject, html } = await req.json();
-    const brevoKey = Deno.env.get("VITE_BREVO_API_KEY");
+    const brevoKey = Deno.env.get("BREVO_API_KEY") ?? Deno.env.get("VITE_BREVO_API_KEY");
 
     console.log("📧 Email request:", { email, name, subject });
 

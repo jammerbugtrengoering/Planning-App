@@ -17,7 +17,7 @@ export default async (req) => {
     }
     
     const { email, name, subject, html } = bodyData;
-    const brevoKey = process.env.VITE_BREVO_API_KEY;
+    const brevoKey = process.env.BREVO_API_KEY ?? process.env.VITE_BREVO_API_KEY;
 
     if (!brevoKey) {
       return new Response(JSON.stringify({ error: 'API key missing' }), { status: 500 });
