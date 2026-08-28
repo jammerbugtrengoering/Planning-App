@@ -1651,6 +1651,12 @@ const MODULE_HELP = {
   ], warn: "Linket til kunden er selve adgangen til dokumentet — der er ingen adgangskode. Send det til den rigtige mailadresse, og husk at det virker indtil tilbuddet er accepteret eller udløbet." },
 
   contracts: { title: "Aftaler", intro: "De faste kundeaftaler, sorteret så den der udløber først står øverst.", blocks: [
+    { h: "Nexus og Ældrelov kræver borgerens navn", p: [
+        "På de to aftaletyper er kunden kommunen, der får regningen — arbejdet foregår hjemme hos en borger.",
+        "Borgerens navn skrives i «Fakturabeskrivelse». Det er dét navn, medarbejderen ser på opgaven, både i ugeplanen og i Worklist.",
+        "Er feltet tomt, når du godkender aftalen, spørger systemet, om du vil fortsætte uden. Du kan godt — der er tilfælde, hvor navnet endnu ikke kendes — men så ser medarbejderen kun en adresse.",
+        "Som kladde spørges der ikke. En kladde danner ingen opgaver, og det er netop dér, tingene må være ufærdige.",
+        "Retter du feltet på en eksisterende aftale, slår det igennem på de opgaver, der oprettes fremover — ikke på dem, der allerede ligger i planen."] },
     { h: "Sådan læses den", p: ["Kontraktsum er forventet omsætning over hele perioden ud fra planlagte timer.",
         "Realiseret er hvad der faktisk er registreret.", "Dage tilbage viser hvor længe der er til aftalen udløber."] },
     { h: "Gentagelse", p: ["En aftale kan gentages hver uge, hver 14. dag, hver måned eller hvert kvartal."] }, { h: "Under udarbejdelse", p: ["Er du ikke færdig med en ny aftale, så tryk «Gem som kladde» i stedet for «Gem og planlæg».", "En kladde opretter ingen opgaver. Den ligger og venter, og du kan rette alle felter i den så mange gange du vil.", "Find den igen med filteret «Under udarbejdelse» øverst her på siden. Tallet i knappen viser hvor mange der ligger.", "Tryk «Åbn og godkend» for at rette videre. Inde i aftalen vælger du så «Gem kladde» hvis du stadig ikke er færdig, eller «Godkend og planlæg» når den er klar.", "Først ved godkendelsen oprettes opgaverne — fra startdatoen og frem til udløbsdatoen. Det kan være mange på én gang, så tjek datoerne inden du godkender.", "Startdatoen kan ikke ligge i fortiden. Har en kladde ligget så længe at datoen er løbet fra dig, skal den rettes før du kan godkende."] }, { h: "Filtre", p: ["Den øverste række filtrerer på status, den nederste på kontrakttype. De virker sammen, så du kan fx se alle udgåede Nexus-aftaler."] },
@@ -7771,8 +7777,22 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
             placeholder="Vejnavn 1, 9000 Aalborg" />
         </div>
         <div>
-          <label style={styles.label}>Fakturabeskrivelse (PO, navn m.v.)</label>
-          <input style={styles.input} value={poNumber} onChange={(e) => setPoNumber(e.target.value)} placeholder="F.eks. PO-2026-0311 eller Att. Hanne Nielsen" />
+          <label style={styles.label}>
+            Fakturabeskrivelse (PO, navn m.v.)
+            {BETALER_ER_IKKE_STEDET.includes(contractType) && (
+              <span style={{ color: "#B45309", fontWeight: 700 }}> · borgerens navn</span>
+            )}
+          </label>
+          <input style={styles.input} value={poNumber} onChange={(e) => setPoNumber(e.target.value)}
+            placeholder={BETALER_ER_IKKE_STEDET.includes(contractType)
+              ? "Borgerens navn, f.eks. Louise Carstensen Pedersen"
+              : "F.eks. PO-2026-0311 eller Att. Hanne Nielsen"} />
+          {BETALER_ER_IKKE_STEDET.includes(contractType) && (
+            <div style={{ ...styles.hint, color: poNumber.trim() ? "#64748B" : "#B45309" }}>
+              Kommunen får regningen, men arbejdet foregår hos en borger. Navnet her er
+              det, medarbejderen ser på opgaven — både i ugeplanen og i Worklist.
+            </div>
+          )}
         </div>
       </div>
 
@@ -7953,7 +7973,29 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
           style={styles.primaryBtn}
           disabled={!title.trim() || manglerDineroKunde || (type === "fixed" && days.length === 0) || requiredSkills.length === 0 || (type === "fixed" && !!startDate && startDate < todayIso())}
           title={manglerDineroKunde ? "Vælg kunden i Dinero-listen først" : undefined}
-          onClick={() => onSave(buildPayload(false), editId)}>
+          onClick={() => {
+            // Paa Nexus og AEldrelov er kunden den der faar REGNINGEN — kommunen.
+            // Arbejdet foregaar hjemme hos en borger, og borgerens navn staar i
+            // fakturabeskrivelsen. Er den tom, ser medarbejderen kun en adresse i
+            // Worklist, og planlaeggeren kan ikke se hvem opgaven handler om.
+            //
+            // Det spaerrer ikke — der er tilfaelde hvor navnet endnu ikke kendes.
+            // Men det skal vaere et valg, ikke en forglemmelse: fire aktive
+            // Nexus-aftaler mangler den i dag, og de giver 381 opgaver uden navn.
+            //
+            // Kladder gaar fri. De danner ingen opgaver og er netop det ufaerdige.
+            if (BETALER_ER_IKKE_STEDET.includes(contractType) && !poNumber.trim()) {
+              const type = contractType === "nexus" ? "Nexus" : "Ældrelov";
+              if (!window.confirm(
+                `Fakturabeskrivelsen er tom.\n\n`
+                + `På en ${type}-aftale er kunden kommunen, der får regningen, mens arbejdet `
+                + `foregår hjemme hos en borger. Borgerens navn skrives i fakturabeskrivelsen.\n\n`
+                + `Uden den ser medarbejderen kun adressen — hverken i ugeplanen eller i `
+                + `Worklist står der, hvem opgaven handler om.\n\n`
+                + `Vil du fortsætte uden?`)) return;
+            }
+            onSave(buildPayload(false), editId);
+          }}>
           {editId ? "Godkend og planlæg" : "Gem og planlæg"}
         </button>
         {/* Kladde giver kun mening paa en fast aftale. En fleksibel opgave er en
