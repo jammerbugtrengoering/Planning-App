@@ -1450,7 +1450,10 @@ const MODULE_HELP = {
         "Du kan trække en opgave fra «Ikke tildelt» ned på et klokkeslæt i tidslinjen. Tidspunktet rundes til nærmeste kvarter og sættes som aftalt tid — der kommer aldrig til at stå 09:47 på en aftale.",
         "Opgaver kan også trækkes rundt inde i tidslinjen. Overståede dage er skraveret og tager ikke imod.",
         "Fuldt optrukket kant betyder aftalt klokkeslæt. Stiplet betyder, at tiden er regnet ud fra hvornår dagen begynder — skrider dagen, skrider den med. Der står også «ikke aftalt tid» på blokken, når der er plads.",
-        "På blokken står klokkeslæt og navn øverst, adressen under, og nederst opgavens art, varighed og hvor mange tjeklistepunkter der er. Korte opgaver viser kun det, der kan være — en afklippet adresse er værre end ingen.",
+        "Blokken viser det samme som brikken i gitteret: klokkeslæt, navn, adresse, opgavens art, varighed, tjeklistepunkter og hvem der har udført den hvornår. Korte opgaver viser kun det, der kan være — en afklippet adresse er værre end ingen. Hold musen over for at få det hele.",
+        "En udført opgave bliver grøn med «Udført af …» og tidspunktet, ligesom i gitteret.",
+        "🎯 betyder at den aftalte tid ikke kan nås — hun kan tidligst være fremme senere. «⏱ for sent» siger hvor meget.",
+        "Over hver dag står belægningen med samme regnestykke som i gitteret, så de to visninger ikke kan vise forskelligt for den samme dag.",
         "⚠️ betyder planlagt uden for aftalen, 📍 uden for medarbejderens område. Hold musen over blokken for at få det hele.",
         "Det er præcis den samme dag, medarbejderen selv ser i Worklist. De to kan ikke vise forskellige tider, fordi de regnes af den samme funktion.",
         "Ugedagene står øverst i tidslinjen og bliver stående, når du scroller. En overstået dag har en hængelås.",
@@ -5065,7 +5068,12 @@ function WeekView({ employees, instances, unplaced, onAdd, onAuto, onScheduleWee
             et tomt gitter for at naa den, og opgaverne i backloggen var ude af syne
             netop naar man skulle traekke dem ned paa et klokkeslaet. */}
         {ugeVisning === "tid" && (
-          <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 12 }}>
+          // Samme rullefelt som gitteret. Det er dét der faar ugedagene til at blive
+          // staaende i toppen: position:sticky virker i forhold til det naermeste
+          // element der kan rulle, og uden det her ville overskrifterne forsvinde op
+          // bag vaerktoejslinjen i stedet for at blive hængende.
+          <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 12,
+                        overflowY: "auto", maxHeight: "calc(100vh - 180px)" }}>
             {visibleEmployees.map((emp) => (
         <div key={emp.id} className="tidslinje-side"
           // Paa skaermen kun naar tidslinjen er valgt. Ved print altid — en udskrift
@@ -5075,7 +5083,8 @@ function WeekView({ employees, instances, unplaced, onAdd, onAuto, onScheduleWee
           <UgeTidslinje
             emp={emp} dage={visibleDays} instances={instances}
             travelSettings={travelSettings} weekOffset={weekOffset} weekYear={weekYear}
-            onOpenTask={onOpenTask} dragId={dragId} setDragId={setDragId} onPlace={onPlace} />
+            onOpenTask={onOpenTask} dragId={dragId} setDragId={setDragId} onPlace={onPlace}
+            alleMedarbejdere={employees} />
         </div>
             ))}
           </div>
@@ -8157,7 +8166,7 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
 const TL_PX_PR_MIN = 1.6;
 
 function UgeTidslinje({ emp, dage, instances, travelSettings, weekOffset, weekYear,
-                        onOpenTask, dragId, setDragId, onPlace }) {
+                        onOpenTask, dragId, setDragId, onPlace, alleMedarbejdere }) {
   const perDag = dage.map((d) => {
     const dayTasks = instances.filter(
       (t) => t.day === d.key && (t.assignees || []).includes(emp.id)
@@ -8202,11 +8211,30 @@ function UgeTidslinje({ emp, dage, instances, travelSettings, weekOffset, weekYe
                       gap: 6, flex: 1 }}>
           {dage.map((d) => {
             const laast = dagErOverstaaet(d.key, weekOffset, weekYear);
+            // Samme regnestykke som dagcellerne i gitteret, saa de to visninger ikke
+            // kan vise forskellig belaegning for den samme dag.
+            const brugt = belastning([emp], instances, emp.id, d.key, travelSettings);
+            const kap = (emp.capacity && emp.capacity[d.key]) || 0;
+            const pct = kap ? Math.min((brugt / kap) * 100, 100) : 0;
+            const over = brugt > kap;
             return (
-              <div key={d.key} style={{ textAlign: "center", fontSize: 11.5, fontWeight: 700,
-                                        padding: "3px 0",
-                                        color: laast ? "#CBD5E1" : "#111111" }}>
-                {d.label}{laast && <span title="Dagen er overstået"> 🔒</span>}
+              <div key={d.key} style={{ textAlign: "center", padding: "2px 0 4px" }}>
+                <div style={{ fontSize: 11.5, fontWeight: 700,
+                              color: laast ? "#CBD5E1" : "#111111" }}>
+                  {d.label}{laast && <span title="Dagen er overstået"> 🔒</span>}
+                </div>
+                {kap > 0 && (
+                  <>
+                    <div style={{ height: 3, background: "#F1F5F9", borderRadius: 2, margin: "3px 4px 2px" }}>
+                      <div style={{ width: `${pct}%`, height: "100%", borderRadius: 2,
+                                    background: over ? "#DC2626" : "#D6247A" }} />
+                    </div>
+                    <div style={{ fontSize: 9.5, color: over ? "#DC2626" : "#94A3B8" }}>
+                      {over ? `${fmtMin(brugt - kap)} over`
+                            : `${Math.round(pct)}% · ${fmtMin(Math.max(kap - brugt, 0))} ledig`}
+                    </div>
+                  </>
+                )}
               </div>
             );
           })}
@@ -8257,11 +8285,18 @@ function UgeTidslinje({ emp, dage, instances, travelSettings, weekOffset, weekYe
                   const top = (sg.start - fra) * TL_PX_PR_MIN;
                   if (sg.type === "transport") {
                     return (
-                      <div key={sg.key} title={`Kørsel ${fmtMin(sg.minutes)}`}
+                      <div key={sg.key} title={`${fmtClock(sg.start)} · Transport ${fmtMin(sg.minutes)}`}
                         style={{ position: "absolute", left: 2, right: 2, top,
                                  height: Math.max(sg.minutes * TL_PX_PR_MIN, 6),
                                  background: "repeating-linear-gradient(45deg,#EEF2FF,#EEF2FF 4px,#E0E7FF 4px,#E0E7FF 8px)",
-                                 borderRadius: 3 }} />
+                                 borderRadius: 3, overflow: "hidden",
+                                 display: "flex", alignItems: "center", gap: 3, padding: "0 4px" }}>
+                        {sg.minutes * TL_PX_PR_MIN >= 16 && (
+                          <span style={{ fontSize: 9, color: "#4F46E5", whiteSpace: "nowrap" }}>
+                            🚗 {fmtMin(sg.minutes)}
+                          </span>
+                        )}
+                      </div>
                     );
                   }
                   const t = sg.task;
@@ -8270,42 +8305,66 @@ function UgeTidslinje({ emp, dage, instances, travelSettings, weekOffset, weekYe
                   const h = Math.max((t.duration || 0) * TL_PX_PR_MIN, 26);
                   const m = TYPE_META[t.type] || TYPE_META.fixed;
                   const tjek = checklistProgress(t);
+                  const udfoert = completionInfo(t, alleMedarbejdere || []);
+                  const forSent = sg.lateBy || 0;
                   const enLinje = { whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" };
+                  const Ikon = m.icon;
                   return (
                     <button key={t.id} onClick={() => onOpenTask(t.id)}
                       draggable={!laast}
                       onDragStart={(e) => { if (laast) return; e.stopPropagation(); setDragId?.(t.id); }}
-                      title={[id.primaer || t.title, id.sekundaer, fmtMin(t.duration),
+                      title={[id.primaer || t.title, id.sekundaer, t.title, fmtMin(t.duration),
                               aftalt ? `aftalt kl. ${t.scheduledTime}` : "beregnet tid — ikke aftalt",
+                              forSent > 0 ? `${fmtMin(forSent)} for sent` : null,
+                              udfoert ? `${udfoert.label}${udfoert.when ? " · " + udfoert.when : ""}` : null,
                               t.offSchedule ? "planlagt uden for aftalen" : null,
                               t.outsideArea ? "uden for medarbejderens område" : null,
                              ].filter(Boolean).join(" · ")}
                       style={{ position: "absolute", left: 2, right: 2, top, height: h,
                                textAlign: "left", overflow: "hidden", cursor: "pointer",
-                               padding: "3px 6px", borderRadius: 5, background: m.bg, color: m.color,
-                               border: aftalt ? `1px solid ${m.color}` : `1px dashed ${m.color}`,
+                               padding: "3px 6px", borderRadius: 5,
+                               background: udfoert ? "#F0FDF4" : m.bg,
+                               color: udfoert ? "#166534" : m.color,
+                               border: aftalt ? `1px solid ${udfoert ? "#86EFAC" : m.color}`
+                                              : `1px dashed ${udfoert ? "#86EFAC" : m.color}`,
                                fontSize: 10.5, lineHeight: 1.3 }}>
-                      {/* Foerste linje er altid der: hvornaar og hvem. Resten kommer
-                          til efterhaanden som blokken er hoej nok — en halv times
-                          opgave har ikke plads til fire linjer, og en afklippet
-                          adresse er vaerre end ingen. */}
-                      <div style={{ ...enLinje, fontWeight: 700 }}>
-                        {aftalt
-                          ? <span title={`Aftalt kl. ${t.scheduledTime}`}>{t.scheduledTime}</span>
-                          : <span style={{ opacity: 0.75 }}>{fmtClock(sg.start)}</span>}
-                        {" "}{id.primaer || t.title}
-                        {t.offSchedule && <span title="Uden for aftalen"> ⚠️</span>}
-                        {t.outsideArea && <span title="Uden for området"> 📍</span>}
+                      {/* Foerste linje er altid der. Resten kommer til efterhaanden som
+                          blokken er hoej nok — en afklippet adresse er vaerre end ingen. */}
+                      <div style={{ ...enLinje, fontWeight: 700, display: "flex", alignItems: "center", gap: 3 }}>
+                        <Ikon size={9} style={{ flexShrink: 0 }} />
+                        <span>{aftalt ? t.scheduledTime : fmtClock(sg.start)}</span>
+                        {/* 🎯 naar den aftalte tid IKKE er den hun reelt kan naa frem. */}
+                        {aftalt && fmtClock(sg.start) !== t.scheduledTime && (
+                          <span title={`Aftalt ${t.scheduledTime}, kan tidligst ${fmtClock(sg.start)}`}>🎯</span>
+                        )}
+                        <span style={{ ...enLinje, flex: 1 }}>{id.primaer || t.title}</span>
+                        {t.offSchedule && <span title="Uden for aftalen">⚠️</span>}
+                        {t.outsideArea && <span title="Uden for området">📍</span>}
+                        {t.onSchedule && !t.offSchedule && !udfoert && <span title="På aftalt dag">✓</span>}
                       </div>
+
+                      {forSent > 0 && (
+                        <div style={{ ...enLinje, marginTop: 1 }}>
+                          <span style={{ fontSize: 9.5, fontWeight: 800, color: "#fff",
+                                         background: "#DC2626", borderRadius: 4, padding: "0 4px" }}>
+                            ⏱ {fmtMin(forSent)} for sent
+                          </span>
+                        </div>
+                      )}
+
                       {h >= 40 && id.sekundaer && (
-                        <div style={{ ...enLinje, opacity: 0.8 }}>{id.sekundaer}</div>
+                        <div style={{ ...enLinje, opacity: 0.85 }}>📍 {id.sekundaer}</div>
                       )}
                       {h >= 56 && (
                         <div style={{ ...enLinje, opacity: 0.75, fontSize: 10 }}>
-                          {t.title}
-                          {" · "}{fmtMin(t.duration)}
+                          {t.title} · {fmtMin(t.duration)}
                           {tjek && tjek.total > 0 ? ` · ${tjek.done}/${tjek.total}` : ""}
                           {!aftalt ? " · ikke aftalt tid" : ""}
+                        </div>
+                      )}
+                      {h >= 72 && udfoert && (
+                        <div style={{ ...enLinje, fontSize: 9.5, fontWeight: 700, marginTop: 1 }}>
+                          ✓ {udfoert.label}{udfoert.when ? ` · ${udfoert.when}` : ""}
                         </div>
                       )}
                     </button>
