@@ -254,6 +254,29 @@ function opgaveIdentitet(t) {
   return { primaer: kunde || adresse, sekundaer: adresse, daempet: reference, adresse };
 }
 
+// ── Solsikken ────────────────────────────────────────────────────────────────
+//
+// Et paaskeaeg. Charlotte og Jonna har bygget systemet sammen, og hendes navn faar
+// en solsikke — men kun paa deres to skaerme. Alle andre ser navnet som det staar.
+//
+// DEN MAA ALDRIG NAA DATA. Loenfilen til Danloen, CSV-eksporterne, mails og alt der
+// gaar til Dinero laeser navnet fra employees.name og roerer ikke den her funktion.
+// Solsikken saettes foerst i det oejeblik navnet TEGNES paa skaermen. Havde den
+// ligget i datalaget, var den foer eller siden endt i en faktura.
+const SOLSIKKE_NAVN = "Charlotte Thorsager Kronborg";
+const SOLSIKKE_SEERE = ["Charlotte Thorsager Kronborg", "Jonna Jensen IT"];
+
+// Hvem kigger. Saettes én gang naar appen ved hvem der er logget ind. Ligger her og
+// ikke som en prop, fordi navnet ellers skulle traekkes gennem ti komponenter for en
+// solsikkes skyld — og hver af dem ville se ud som om den havde et formaal.
+let solsikkeSeer = "";
+function saetSolsikkeSeer(navn) { solsikkeSeer = navn || ""; }
+
+function medSolsikke(navn) {
+  if (navn !== SOLSIKKE_NAVN) return navn;
+  return SOLSIKKE_SEERE.includes(solsikkeSeer) ? navn + " \u{1F33B}" : navn;
+}
+
 const CONTRACT_TYPES = [
   { key: "privat",    label: "Privat",   icon: "🏠", color: "#9C1B5D", bg: "#FFF6FA", chart: "#D6247A" },
   { key: "erhverv",   label: "Erhverv",  icon: "💼", color: "#0F766E", bg: "#F0FDFA", chart: "#0D9488" },
@@ -4189,6 +4212,8 @@ function PlanningApp({ session, onSignOut }) {
   // dér navnet paa en udfoert opgave slaas op.
   const aktiveEmployees = employees.filter((e) => !e.fratraadtDato);
   const isAdminUser = !!currentEmployeeForAuth?.isAdmin;
+  // Paaskeaegget: se medSolsikke().
+  saetSolsikkeSeer(currentEmployeeForAuth?.name);
   // syncEmployee er en useCallback med tomme deps og bliver defineret laenge foer
   // isAdminUser findes. Den kan derfor ikke laese variablen direkte — en closure med
   // tomme deps ville fastholde vaerdien fra foerste render, hvor medarbejderen endnu
@@ -4983,7 +5008,7 @@ function WeekView({ employees, instances, unplaced, onAdd, onAuto, onScheduleWee
                   title={`Rediger ${emp.name}`}
                 >
                   <span style={{ ...styles.avatar, background: emp.color }}>{initials(emp.name)}</span>
-                  <span style={{ fontSize: 14, fontWeight: 700, color: "#111111", textDecoration: "underline dotted", textUnderlineOffset: 3 }}>{emp.name}</span>
+                  <span style={{ fontSize: 14, fontWeight: 700, color: "#111111", textDecoration: "underline dotted", textUnderlineOffset: 3 }}>{medSolsikke(emp.name)}</span>
                 </div>
                 {visibleDays.map((d, i) => {
                   const dayTasks = instances.filter((t) => (t.assignees || []).includes(emp.id) && t.day === d.key);
@@ -5160,7 +5185,7 @@ function WeekView({ employees, instances, unplaced, onAdd, onAuto, onScheduleWee
                                   )}
                                   {addable.map((e) => (
                                     <button key={e.id} type="button" style={styles.chipAddMenuItem} onClick={() => { onPlace(t.id, d.key, e.id); setAddMenuTaskId(null); }}>
-                                      <span style={{ ...styles.chipAvatar, background: e.color }}>{initials(e.name)}</span> {e.name}
+                                      <span style={{ ...styles.chipAvatar, background: e.color }}>{initials(e.name)}</span> {medSolsikke(e.name)}
                                     </button>
                                   ))}
                                 </div>
@@ -5196,7 +5221,7 @@ function WeekView({ employees, instances, unplaced, onAdd, onAuto, onScheduleWee
               return (
                 <div key={emp.id} style={{ display: "flex", alignItems: "center", gap: 10 }}>
                   <span style={{ ...styles.avatar, background: emp.color, width: 24, height: 24, fontSize: 11, flexShrink: 0 }}>{initials(emp.name)}</span>
-                  <span style={{ fontSize: 12, color: "#111111", minWidth: 120, fontWeight: 500 }}>{emp.name}</span>
+                  <span style={{ fontSize: 12, color: "#111111", minWidth: 120, fontWeight: 500 }}>{medSolsikke(emp.name)}</span>
                   <div style={{ flex: 1, height: 6, background: "#E2E8F0", borderRadius: 99, overflow: "hidden" }}>
                     <div style={{ height: "100%", borderRadius: 99, background: over ? "#DC2626" : pct > 80 ? "#D97706" : "#D6247A", width: `${Math.min(100, pct)}%`, transition: "width 0.3s" }} />
                   </div>
@@ -5223,7 +5248,7 @@ function WeekView({ employees, instances, unplaced, onAdd, onAuto, onScheduleWee
           if (empDays.length === 0) return null;
           return (
             <div key={emp.id} style={{ marginBottom: 28, pageBreakAfter: "always" }}>
-              <div style={{ fontSize: 17, fontWeight: 700, borderBottom: "2px solid #111111", paddingBottom: 4, marginBottom: 10 }}>{emp.name}</div>
+              <div style={{ fontSize: 17, fontWeight: 700, borderBottom: "2px solid #111111", paddingBottom: 4, marginBottom: 10 }}>{medSolsikke(emp.name)}</div>
               {empDays.map((d) => {
                 const dayTasks = instances.filter((t) => (t.assignees || []).includes(emp.id) && t.day === d.key);
                 const schedule = computeDaySchedule(dayTasks, travelSettings, emp).filter((s) => s.type === "task");
@@ -5479,7 +5504,7 @@ function EmployeesView({ employees, onAdd, onEdit, onDelete, supabase, skills, o
                 onKeyDown={(ev) => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); skiftUdfoldet(e.id); } }}>
                 <span style={{ ...styles.avatar, background: e.color, width: 34, height: 34, fontSize: 13, flexShrink: 0 }}>{initials(e.name)}</span>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={styles.empName}>{e.name}</div>
+                  <div style={styles.empName}>{medSolsikke(e.name)}</div>
                   {/* Stamdata, ikke belaegning: det aftalte timetal og om weekend er med.
                       Hvor meget der er lagt paa i en given uge, staar i ugeplanen. */}
                   <div style={styles.empUnderNavn}>
