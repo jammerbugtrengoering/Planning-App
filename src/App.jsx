@@ -457,6 +457,27 @@ function mondayOfWeek(week, year) {
   monday.setDate(weekOneMonday.getDate() + (week - 1) * 7);
   return monday;
 }
+// Er dagen overstaaet?
+//
+// En dag der er passeret kan ikke planlaegges om. Arbejdet er enten udfoert eller
+// ikke, og at flytte en opgave ind eller ud af mandag naar det er onsdag aendrer
+// ikke virkeligheden — det aendrer kun regnskabet, og saa passer timerne ikke med
+// det medarbejderen faktisk har lavet.
+//
+// I DAG er ikke laast. Dagen er i gang, og planer aendrer sig hen over en dag.
+function dagErOverstaaet(dagNoegle, uge, aar) {
+  const idx = ALL_DAYS.findIndex((d) => d.key === dagNoegle);
+  if (idx < 0) return false;
+  const mandag = mondayOfWeek(uge, aar);
+  if (!mandag) return false;
+  const dagen = new Date(mandag);
+  dagen.setDate(mandag.getDate() + idx);
+  dagen.setHours(0, 0, 0, 0);
+  const idag = new Date();
+  idag.setHours(0, 0, 0, 0);
+  return dagen < idag;
+}
+
 // Beregner den faktiske kalendermåned/år en opgave-instans hører til, ud fra
 // dens rigtige dato (mandag i ugen + evt. den konkrete ugedag), i stedet for
 // at gætte ud fra ISO-ugenummeret alene. Bruges i Tid & Eksport og Rapportering
@@ -1418,6 +1439,17 @@ const MODULE_HELP = {
         "Mailen sendes stadig som før. Beskeden på telefonen kommer oveni, ikke i stedet for.",
         "Siger en medarbejder at hun ikke får beskeder: har hun en iPhone, skal appen ligge på hjemmeskærmen. En fane i Safari kan ikke modtage beskeder — det er Apples regel. Hun skal trykke Del i Safari og vælge «Føj til hjemmeskærm».",
         "Skifter hun telefon, skal hun slå beskeder til igen på den nye."] },
+    { h: "Overståede dage er låst", p: [
+        "Dage der ligger før i dag kan ikke planlægges om. De er skraveret, opgaverne kan ikke trækkes, og kryds og plus er væk.",
+        "I dag er ikke låst. Dagen er i gang, og planer ændrer sig hen over en dag.",
+        "Grunden er, at det ikke ændrer virkeligheden at flytte en opgave ind eller ud af mandag, når det er onsdag — det ændrer kun regnskabet, og så passer timerne ikke med det, medarbejderen faktisk har lavet.",
+        "Skal noget rettes bagud, gøres det på selve opgaven under Fakturering, hvor tid og begrundelse hører hjemme."] },
+    { h: "Detailplanlægning af én medarbejder", p: [
+        "Vælger du én medarbejder i listen øverst, kommer hendes uge som tidslinje under gitteret.",
+        "Der kan du se hvornår på dagen opgaverne ligger, hvor lang tid der er kørsel imellem, og hvor der er luft til mere.",
+        "Fuldt optrukket kant betyder aftalt klokkeslæt. Stiplet betyder, at tiden er regnet ud fra hvornår dagen begynder — skrider dagen, skrider den med.",
+        "Det er præcis den samme dag, medarbejderen selv ser i Worklist. De to kan ikke vise forskellige tider, fordi de regnes af den samme funktion.",
+        "Klik på en blok for at åbne serviceordren."] },
     { h: "Hvem står der på brikken", p: [
         "På private og erhvervsopgaver står kundens navn — det er også dér, arbejdet udføres.",
         "På Nexus- og Ældrelov-opgaver står borgerens navn i stedet. Kommunen er den, der får regningen, men arbejdet foregår hjemme hos borgeren, og det er den adresse medarbejderen skal finde.",
@@ -4921,6 +4953,15 @@ function WeekView({ employees, instances, unplaced, onAdd, onAuto, onScheduleWee
           {employees.map((e) => <option key={e.id} value={e.id}>🖨️ {e.name}</option>)}
         </select>
         <button style={styles.secondaryBtn} onClick={() => window.print()}>🖨️ Print ugeplan</button>
+
+        {/* Signaturforklaringen laa foer paa sin egen linje under vaerktoejslinjen og
+            aad en raekke af skaermhoejden. Den staar her nu, hvor der var plads. */}
+        <div style={{ display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
+          {Object.entries(TYPE_META).filter(([k]) => k !== "flexible").map(([k, m]) => (
+            <span key={k} style={{ ...styles.typeChip, color: m.color, background: m.bg }}>{m.label}</span>
+          ))}
+        </div>
+
         <div style={styles.toolbarSpacer} />
         <div style={styles.weekNav}>
           <button style={styles.weekNavBtn} onClick={onPrevWeek}><ChevronLeft size={16} /></button>
@@ -4934,9 +4975,6 @@ function WeekView({ employees, instances, unplaced, onAdd, onAuto, onScheduleWee
       </div>
 
       <div style={styles.legendRow}>
-        {Object.entries(TYPE_META).filter(([k]) => k !== "flexible").map(([k, m]) => (
-          <span key={k} style={{ ...styles.typeChip, color: m.color, background: m.bg, marginRight: 6 }}>{m.label}</span>
-        ))}
         <span style={styles.hint}>Træk en opgave tilbage til "Ikke tildelt" for at frigive den, eller klik + på en opgave for at sætte flere medarbejdere på.</span>
       </div>
 
@@ -5028,14 +5066,22 @@ function WeekView({ employees, instances, unplaced, onAdd, onAuto, onScheduleWee
                   // ingen mening der, saa baren fyldes ikke og teksten viser aftalen.
                   const pct = weekendCell ? 0 : (cap ? Math.min((used / cap) * 100, 100) : 0);
                   const over = weekendCell ? false : used > cap;
+                  // Se dagErOverstaaet(): i dag er IKKE laast, kun dage foer.
+                  const laastDag = dagErOverstaaet(d.key, weekOffset, weekYear);
                   return (
-                    <div key={d.key} style={{ ...styles.gridCell, borderRight: i < visibleDays.length - 1 ? "1px solid #CBD5E1" : "none", ...(["Sat","Sun"].includes(d.key) ? { background: "#FAFAFA" } : {}),
+                    <div key={d.key} title={laastDag ? "Dagen er overstået og kan ikke planlægges om" : undefined}
+                      style={{ ...styles.gridCell, borderRight: i < visibleDays.length - 1 ? "1px solid #CBD5E1" : "none", ...(["Sat","Sun"].includes(d.key) ? { background: "#FAFAFA" } : {}),
+                      // Overstaaet dag. Skraveret og daempet, saa det kan SES at der
+                      // ikke er noget at goere her — en celle der bare ikke reagerer
+                      // paa et slip, ligner en fejl i programmet.
+                      ...(laastDag ? { background: "repeating-linear-gradient(45deg,#F8FAFC,#F8FAFC 6px,#F1F5F9 6px,#F1F5F9 12px)", opacity: 0.75 } : {}),
                       // Overbookede dage markeres tydeligt: en dag med mere arbejde end
                       // kapacitet skubber de sidste opgaver ned under det synlige område,
                       // hvor de reelt bliver usynlige for planlæggeren.
                       ...(over ? { background: "#FEF2F2", boxShadow: "inset 3px 0 0 #DC2626" } : {}) }}
-                      onDragOver={(e) => e.preventDefault()}
+                      onDragOver={(e) => { if (!laastDag) e.preventDefault(); }}
                       onDrop={() => {
+                        if (laastDag) { setDragId(null); return; }
                         if (dragId) {
                           // Den trukne opgave kan stamme fra en anden uge (nu hvor "Ikke
                           // tildelt" viser opgaver på tværs af uger), så slå også op i
@@ -5091,7 +5137,8 @@ function WeekView({ employees, instances, unplaced, onAdd, onAuto, onScheduleWee
                         const done = t.status === "udført";
                         const completion = completionInfo(t, employees);
                         return (
-                          <div key={t.id} draggable onDragStart={() => setDragId(t.id)}
+                          <div key={t.id} draggable={!laastDag}
+                            onDragStart={() => { if (!laastDag) setDragId(t.id); }}
                             style={{ ...styles.taskChip, ...(t.offSchedule ? { borderLeft: "3px solid #F59E0B" } : t.onSchedule ? { borderLeft: "3px solid #22C55E" } : {}), ...(t.outsideArea ? { borderTop: "2px solid #7C3AED" } : {}),
                               // Udførte opgaver tones grønne, så man kan se med det samme
                               // hvad der er afsluttet — den gamle 6px prik var reelt usynlig.
@@ -5129,7 +5176,9 @@ function WeekView({ employees, instances, unplaced, onAdd, onAuto, onScheduleWee
                               {done
                                 ? <span style={styles.doneCheck} title={completion?.label}>✓</span>
                                 : <span style={{ ...styles.statusDot, background: statusColor(t.status) }} />}
-                              <button style={styles.chipXBtn} title="Fjern fra board" onClick={(e) => { e.stopPropagation(); onUnplace(t.id); }}><X size={11} /></button>
+                              {!laastDag && (
+                                <button style={styles.chipXBtn} title="Fjern fra board" onClick={(e) => { e.stopPropagation(); onUnplace(t.id); }}><X size={11} /></button>
+                              )}
                             </div>
                             <div style={styles.chipSubRow}>
                               {/* Se opgaveIdentitet(): paa nexus og aeldrelov er det
@@ -5166,7 +5215,7 @@ function WeekView({ employees, instances, unplaced, onAdd, onAuto, onScheduleWee
                                   {initials(a.name)}
                                 </button>
                               ))}
-                              {addable.length > 0 && (
+                              {addable.length > 0 && !laastDag && (
                                 <button type="button" style={styles.chipAddBtn} onClick={() => setAddMenuTaskId(menuOpen ? null : t.id)}><Plus size={10} /></button>
                               )}
                               {menuOpen && (
@@ -5202,6 +5251,15 @@ function WeekView({ employees, instances, unplaced, onAdd, onAuto, onScheduleWee
           </div>
         </div>
       </div>
+
+      {/* Tidslinje for den valgte medarbejder. Kun naar én er valgt — med tyve
+          ville skalaen blive ulaeselig, og der er ingen dag at detailplanlaegge. */}
+      {printEmployeeId !== "all" && visibleEmployees.length === 1 && (
+        <UgeTidslinje
+          emp={visibleEmployees[0]} dage={visibleDays} instances={instances}
+          travelSettings={travelSettings} weekOffset={weekOffset} weekYear={weekYear}
+          onOpenTask={onOpenTask} />
+      )}
 
       {/* Ugesammenfatning — kun i detail view */}
       {(
@@ -8036,6 +8094,118 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
         )}
       </div>
     </Modal>
+  );
+}
+
+// Ugen som tidslinje for ÉN medarbejder.
+//
+// Ugeplanens gitter viser HVAD der ligger paa hver dag, men ikke HVORNAAR og hvor
+// meget luft der er imellem. Skal en opgave klemmes ind om onsdagen, kan man ikke se
+// paa brikkerne om der er plads — kun at der ligger fire.
+//
+// Her tegnes de samme segmenter som medarbejderen selv ser i Worklist, med samme
+// funktion (computeDaySchedule), saa planlaeggeren og medarbejderen ikke kan komme
+// til at se to forskellige dage.
+//
+// Vises kun naar én medarbejder er valgt. Med tyve ville skalaen blive ulaeselig.
+const TL_PX_PR_MIN = 1.15;
+
+function UgeTidslinje({ emp, dage, instances, travelSettings, weekOffset, weekYear, onOpenTask }) {
+  const perDag = dage.map((d) => {
+    const dayTasks = instances.filter(
+      (t) => t.day === d.key && (t.assignees || []).includes(emp.id)
+        && t.week === weekOffset && t.year === weekYear);
+    return { dag: d, segs: computeDaySchedule(dayTasks, travelSettings, emp) };
+  });
+
+  const alle = perDag.flatMap((x) => x.segs);
+  if (alle.length === 0) {
+    return (
+      <div style={{ background: "#fff", borderRadius: 12, padding: 20, marginTop: 12,
+                    textAlign: "center", color: "#94A3B8", fontSize: 13 }}>
+        {emp.name} har ingen opgaver i uge {weekOffset}
+      </div>
+    );
+  }
+
+  const slut = (sg) => sg.start + (sg.type === "task" ? (sg.task.duration || 0) : sg.minutes);
+  const fraTime = Math.floor(Math.min(...alle.map((x) => x.start)) / 60);
+  const tilTime = Math.ceil(Math.max(...alle.map(slut)) / 60);
+  const fra = fraTime * 60;
+  const hoejde = (tilTime - fraTime) * 60 * TL_PX_PR_MIN;
+  const timer = [];
+  for (let t = fraTime; t <= tilTime; t++) timer.push(t);
+
+  return (
+    <div style={{ background: "#fff", borderRadius: 12, padding: "12px 10px", marginTop: 12 }}>
+      <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>
+        {medSolsikke(emp.name)} · uge {weekOffset}
+        <span style={{ fontWeight: 400, color: "#94A3B8", marginLeft: 8 }}>
+          Samme dag som hun selv ser i Worklist. Stiplet = ikke aftalt klokkeslæt.
+        </span>
+      </div>
+
+      <div style={{ display: "flex", gap: 8 }}>
+        <div style={{ width: 34, flexShrink: 0, position: "relative", height: hoejde }}>
+          {timer.map((t) => (
+            <div key={t} style={{ position: "absolute", top: (t * 60 - fra) * TL_PX_PR_MIN - 6,
+                                  right: 4, fontSize: 10.5, color: "#94A3B8" }}>
+              {String(t).padStart(2, "0")}
+            </div>
+          ))}
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: `repeat(${dage.length}, minmax(0,1fr))`,
+                      gap: 6, flex: 1 }}>
+          {perDag.map(({ dag, segs }) => {
+            const laast = dagErOverstaaet(dag.key, weekOffset, weekYear);
+            return (
+              <div key={dag.key} style={{ position: "relative", height: hoejde,
+                          borderLeft: "1px solid #F1F5F9",
+                          background: laast
+                            ? "repeating-linear-gradient(45deg,#F8FAFC,#F8FAFC 6px,#F1F5F9 6px,#F1F5F9 12px)"
+                            : "transparent" }}>
+                {timer.map((t) => (
+                  <div key={t} style={{ position: "absolute", left: 0, right: 0,
+                                        top: (t * 60 - fra) * TL_PX_PR_MIN,
+                                        borderTop: "1px solid #F8FAFC" }} />
+                ))}
+                {segs.map((sg) => {
+                  const top = (sg.start - fra) * TL_PX_PR_MIN;
+                  if (sg.type === "transport") {
+                    return (
+                      <div key={sg.key} title={`Kørsel ${fmtMin(sg.minutes)}`}
+                        style={{ position: "absolute", left: 2, right: 2, top,
+                                 height: Math.max(sg.minutes * TL_PX_PR_MIN, 6),
+                                 background: "repeating-linear-gradient(45deg,#EEF2FF,#EEF2FF 4px,#E0E7FF 4px,#E0E7FF 8px)",
+                                 borderRadius: 3 }} />
+                    );
+                  }
+                  const t = sg.task;
+                  const id = opgaveIdentitet(t);
+                  const aftalt = !!t.scheduledTime;
+                  const h = Math.max((t.duration || 0) * TL_PX_PR_MIN, 22);
+                  const m = TYPE_META[t.type] || TYPE_META.fixed;
+                  return (
+                    <button key={t.id} onClick={() => onOpenTask(t.id)}
+                      title={`${id.primaer || t.title} · ${fmtMin(t.duration)}${aftalt ? ` · aftalt kl. ${t.scheduledTime}` : " · beregnet tid"}`}
+                      style={{ position: "absolute", left: 2, right: 2, top, height: h,
+                               textAlign: "left", overflow: "hidden", cursor: "pointer",
+                               padding: "2px 5px", borderRadius: 5, background: m.bg, color: m.color,
+                               border: aftalt ? `1px solid ${m.color}` : `1px dashed ${m.color}`,
+                               fontSize: 10.5, fontWeight: 700, lineHeight: 1.25 }}>
+                      <div style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                        {fmtClock(sg.start)} {id.primaer || t.title}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -12203,7 +12373,11 @@ const styles = {
   secondaryBtn: { display: "flex", alignItems: "center", gap: 6, padding: "9px 14px", borderRadius: 8, border: "1px solid #CBD5E1", background: "#fff", color: "#334155", fontWeight: 500, fontSize: 13.5, cursor: "pointer" },
   legendRow: { marginBottom: 14, fontSize: 12 },
   typeChip: { display: "inline-flex", alignItems: "center", borderRadius: 999, fontWeight: 600, padding: "2px 8px", fontSize: 11 },
-  weekNav: { display: "flex", alignItems: "center", gap: 8, background: "#fff", padding: "6px 8px", borderRadius: 10, boxShadow: "0 1px 2px rgba(15,42,40,0.08)" },
+  // Ligger yderst til hoejre og krymper aldrig. Vaerktoejslinjen er i forvejen
+  // sticky i toppen, saa ugevaelgeren foelger med ned gennem hele ugeplanen.
+  // position:sticky paa den selv ville ikke goere noget — den sidder i en flex-raekke
+  // der ikke ruller vandret.
+  weekNav: { marginLeft: "auto", flexShrink: 0, display: "flex", alignItems: "center", gap: 8, background: "#fff", padding: "6px 8px", borderRadius: 10, boxShadow: "0 1px 2px rgba(15,42,40,0.08)" },
   weekNavBtn: { border: "none", background: "#FFF6FA", color: "#111111", borderRadius: 8, padding: 6, cursor: "pointer", display: "flex" },
   weekNavLabel: { fontSize: 13, color: "#334155", minWidth: 190, textAlign: "center" },
   weekNavStrong: { fontWeight: 700, color: "#111111" },
@@ -12219,7 +12393,14 @@ const styles = {
   warnChip: { display: "flex", alignItems: "center", gap: 4, color: "#B45309", fontSize: 11, fontWeight: 600, marginTop: 6 },
   gridWrap: { flex: 1, background: "#fff", borderRadius: 12, padding: 10, overflowX: "auto", overflowY: "auto", maxHeight: "calc(100vh - 180px)" },
   gridHeaderRow: { display: "grid", gap: 8, marginBottom: 6 },
-  gridHeaderCell: { fontWeight: 700, fontSize: 12.5, color: "#111111", textAlign: "center", padding: "4px 0" },
+  // Bliver staaende oeverst naar man scroller ned gennem medarbejderne. Uden det
+  // forsvandt "Mandag ... Fredag" efter den anden medarbejder, og saa maatte man
+  // taelle kolonner for at vide hvilken dag man trak en opgave hen paa.
+  //
+  // Baggrunden er nødvendig: uden den kan opgavebrikkerne ses igennem overskriften.
+  gridHeaderCell: { position: "sticky", top: 0, zIndex: 3, background: "#fff",
+                    fontWeight: 700, fontSize: 12.5, color: "#111111", textAlign: "center",
+                    padding: "8px 0 6px", boxShadow: "0 1px 0 #E2E8F0" },
   gridCornerCell: {},
   gridRow: { display: "grid", gap: 8, marginBottom: 8, alignItems: "start" },
   gridRowLabel: { display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, fontWeight: 600, padding: "8px 4px", borderRight: "1px solid #CBD5E1" },
