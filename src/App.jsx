@@ -1453,6 +1453,8 @@ const MODULE_HELP = {
         "På blokken står klokkeslæt og navn øverst, adressen under, og nederst opgavens art, varighed og hvor mange tjeklistepunkter der er. Korte opgaver viser kun det, der kan være — en afklippet adresse er værre end ingen.",
         "⚠️ betyder planlagt uden for aftalen, 📍 uden for medarbejderens område. Hold musen over blokken for at få det hele.",
         "Det er præcis den samme dag, medarbejderen selv ser i Worklist. De to kan ikke vise forskellige tider, fordi de regnes af den samme funktion.",
+        "Ugedagene står øverst i tidslinjen og bliver stående, når du scroller. En overstået dag har en hængelås.",
+        "En medarbejder uden opgaver får alligevel en tom arbejdsdag, du kan trække ned i — det er netop hende, du leder efter, når noget skal placeres.",
         "Dit valg af visning huskes til næste gang."] },
     { h: "Udskrift", p: [
         "«Print ugeplan» udskriver altid tidslinjen — også hvis du står i gitteret på skærmen. En seddel i bilen skal vise klokkeslæt.",
@@ -8164,18 +8166,16 @@ function UgeTidslinje({ emp, dage, instances, travelSettings, weekOffset, weekYe
   });
 
   const alle = perDag.flatMap((x) => x.segs);
-  if (alle.length === 0) {
-    return (
-      <div style={{ background: "#fff", borderRadius: 12, padding: 20, marginTop: 12,
-                    textAlign: "center", color: "#94A3B8", fontSize: 13 }}>
-        {medSolsikke(emp.name)} har ingen opgaver i uge {weekOffset}
-      </div>
-    );
-  }
+  const tom = alle.length === 0;
 
+  // En medarbejder uden opgaver fik foer bare en tom kasse med "ingen opgaver".
+  // Den kunne man ikke slippe noget paa — og det er praecis hende man leder efter,
+  // naar man staar med en opgave der skal placeres. Nu tegnes en almindelig
+  // arbejdsdag, som man kan traekke ned i.
+  const dagStart = parseTimeToMinutes(emp.startTime || travelSettings.dayStart);
   const slut = (sg) => sg.start + (sg.type === "task" ? (sg.task.duration || 0) : sg.minutes);
-  const fraTime = Math.floor(Math.min(...alle.map((x) => x.start)) / 60);
-  const tilTime = Math.ceil(Math.max(...alle.map(slut)) / 60);
+  const fraTime = tom ? Math.floor(dagStart / 60) : Math.floor(Math.min(...alle.map((x) => x.start)) / 60);
+  const tilTime = tom ? Math.floor(dagStart / 60) + 8 : Math.ceil(Math.max(...alle.map(slut)) / 60);
   const fra = fraTime * 60;
   const hoejde = (tilTime - fraTime) * 60 * TL_PX_PR_MIN;
   const timer = [];
@@ -8186,8 +8186,31 @@ function UgeTidslinje({ emp, dage, instances, travelSettings, weekOffset, weekYe
       <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>
         {medSolsikke(emp.name)} · uge {weekOffset}
         <span style={{ fontWeight: 400, color: "#94A3B8", marginLeft: 8 }}>
-          Samme dag som hun selv ser i Worklist. Stiplet = ikke aftalt klokkeslæt.
+          {tom
+            ? "Ingen opgaver i denne uge — træk en herned for at planlægge."
+            : "Samme dag som hun selv ser i Worklist. Stiplet = ikke aftalt klokkeslæt."}
         </span>
+      </div>
+
+      {/* Ugedagene. Kolonnerne er ellers unavngivne, og saa maa man taelle sig frem
+          til hvilken dag man slipper en opgave paa. Den tomme celle til venstre
+          holder overskrifterne ud for deres egen kolonne, forbi klokkeslaets-skalaen. */}
+      <div style={{ display: "flex", gap: 8, position: "sticky", top: 0, zIndex: 4,
+                    background: "#fff", paddingBottom: 4 }}>
+        <div style={{ width: 34, flexShrink: 0 }} />
+        <div style={{ display: "grid", gridTemplateColumns: `repeat(${dage.length}, minmax(0,1fr))`,
+                      gap: 6, flex: 1 }}>
+          {dage.map((d) => {
+            const laast = dagErOverstaaet(d.key, weekOffset, weekYear);
+            return (
+              <div key={d.key} style={{ textAlign: "center", fontSize: 11.5, fontWeight: 700,
+                                        padding: "3px 0",
+                                        color: laast ? "#CBD5E1" : "#111111" }}>
+                {d.label}{laast && <span title="Dagen er overstået"> 🔒</span>}
+              </div>
+            );
+          })}
+        </div>
       </div>
 
       <div style={{ display: "flex", gap: 8 }}>
