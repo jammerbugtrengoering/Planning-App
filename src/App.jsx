@@ -224,6 +224,36 @@ function gruppeFor(view) {
   return MENU_GRUPPER.find((g) => g.sider.some(([k]) => k === view)) || MENU_GRUPPER[0];
 }
 
+// Hvem staar paa opgaven — kunden eller borgeren?
+//
+// "Kunde" betyder to forskellige ting alt efter kontrakttypen:
+//
+//   privat, erhverv   Kunden ER stedet. Fru Jensen eller Davidsen A/S staar paa
+//                     doeren. Navnet foerst, adressen under.
+//
+//   nexus, aeldrelov  Kunden er den der faar REGNINGEN. Arbejdet foregaar hjemme hos
+//                     en borger, hvis navn staar i poNumber, mens kundenavnet er
+//                     "Jammerbugt Kommune" paa alle 548 opgaver. Stod kommunen
+//                     foerst, ville hver eneste brik i ugeplanen se ens ud.
+//
+// Samme regel og samme funktion som i Worklist, saa planlaeggeren og medarbejderen
+// ser det samme navn paa den samme opgave.
+const BETALER_ER_IKKE_STEDET = ["nexus", "aeldrelov"];
+
+function opgaveIdentitet(t) {
+  const kunde = (t.customerName || t.customer_name || "").trim();
+  const reference = (t.poNumber || t.po_number || "").trim();
+  const adresse = (t.address || t.address_text || "").trim();
+  const type = t.contractType || t.contract_type || "privat";
+
+  if (BETALER_ER_IKKE_STEDET.includes(type)) {
+    // Borgeren foerst. Mangler referencen, baerer adressen opgaven alene.
+    return { primaer: reference || adresse, sekundaer: reference ? adresse : "",
+             daempet: kunde, adresse };
+  }
+  return { primaer: kunde || adresse, sekundaer: adresse, daempet: reference, adresse };
+}
+
 const CONTRACT_TYPES = [
   { key: "privat",    label: "Privat",   icon: "🏠", color: "#9C1B5D", bg: "#FFF6FA", chart: "#D6247A" },
   { key: "erhverv",   label: "Erhverv",  icon: "💼", color: "#0F766E", bg: "#F0FDFA", chart: "#0D9488" },
@@ -1365,6 +1395,11 @@ const MODULE_HELP = {
         "Mailen sendes stadig som før. Beskeden på telefonen kommer oveni, ikke i stedet for.",
         "Siger en medarbejder at hun ikke får beskeder: har hun en iPhone, skal appen ligge på hjemmeskærmen. En fane i Safari kan ikke modtage beskeder — det er Apples regel. Hun skal trykke Del i Safari og vælge «Føj til hjemmeskærm».",
         "Skifter hun telefon, skal hun slå beskeder til igen på den nye."] },
+    { h: "Hvem står der på brikken", p: [
+        "På private og erhvervsopgaver står kundens navn — det er også dér, arbejdet udføres.",
+        "På Nexus- og Ældrelov-opgaver står borgerens navn i stedet. Kommunen er den, der får regningen, men arbejdet foregår hjemme hos borgeren, og det er den adresse medarbejderen skal finde.",
+        "Borgerens navn hentes fra referencefeltet på aftalen. Står det tomt, viser brikken adressen i stedet — aldrig kommunens navn alene, for så ligner alle opgaver hinanden.",
+        "Medarbejderne ser præcis det samme i Worklist, så I taler om den samme opgave med det samme navn."] },
     { h: "Ønsker om ny tid fra medarbejderne", p: [
         "Aftaler en medarbejder en ny tid med kunden, flytter hun ikke selv opgaven. Hun sender et ønske, og du planlægger ændringen.",
         "Ønskerne står øverst i Ugeplan i en gul boks, og du får samtidig en mail. Der står hvem der spørger, hvilken opgave og kunde, fra hvad til hvad, og hvorfor.",
@@ -4670,8 +4705,11 @@ function EmployeeAppView({ employees, instances, onLogMinutes, onSetStatus, onTo
                     <div style={styles.phoneAddressRow} onClick={(e) => e.stopPropagation()}>
                       <Building2 size={13} color="#9C1B5D" style={{ flexShrink: 0, marginTop: 1 }} />
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        {t.customerName && <div style={styles.phoneCustomerName}>{t.customerName}</div>}
-                        {t.address && <div style={styles.cardMeta}>{t.address}</div>}
+                        {(() => { const id = opgaveIdentitet(t); return (<>
+                          {id.primaer && <div style={styles.phoneCustomerName}>{id.primaer}</div>}
+                          {id.sekundaer && <div style={styles.cardMeta}>{id.sekundaer}</div>}
+                          {id.daempet && <div style={{ ...styles.cardMeta, color: "#94A3B8" }}>{id.daempet}</div>}
+                        </>); })()}
                       </div>
                       {t.address && (
                         <a href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(t.address)}`} target="_blank" rel="noreferrer" style={styles.navigateBtn}>
@@ -4900,8 +4938,11 @@ function WeekView({ employees, instances, unplaced, onAdd, onAuto, onScheduleWee
               <div key={t.id} draggable onDragStart={() => setDragId(t.id)} style={styles.backlogCard} onClick={() => onOpenTask(t.id)} title="Klik for at åbne serviceordren">
                 <TypeBadge type={t.type} />
                 <div style={styles.cardTitle}>{t.title}</div>
-                {t.customerName && <div style={styles.taskChipCustomer}>{t.customerName}</div>}
-                {t.address && <div style={styles.taskChipAddress}>📍 {t.address}</div>}
+                {(() => { const id = opgaveIdentitet(t); return (<>
+                  {id.primaer && <div style={styles.taskChipCustomer}>{id.primaer}</div>}
+                  {id.sekundaer && <div style={styles.taskChipAddress}>📍 {id.sekundaer}</div>}
+                  {id.daempet && <div style={{ ...styles.taskChipAddress, color: "#94A3B8" }}>{id.daempet}</div>}
+                </>); })()}
                 <div style={styles.cardMeta}>Uge {t.week}{t.day ? ` · ${ALL_DAYS.find((d) => d.key === t.day)?.label}` : ""} · {skillLabel(t)} · {fmtMin(t.duration)}{t.deadline ? ` · senest ${ALL_DAYS.find((d) => d.key === t.deadline)?.label}` : ""}{t.scheduledTime ? ` · ønsket kl. ${t.scheduledTime}` : ""}</div>
                 {liveNoSkill && <span style={styles.errorChip}><AlertTriangle size={12} /> Ingen har alle krævede kompetencer</span>}
                 {!liveNoSkill && t.warning === "no_slot" && <span style={styles.warnChip}><AlertTriangle size={12} /> Ingen ledig dag inden fristen</span>}
@@ -5060,7 +5101,11 @@ function WeekView({ employees, instances, unplaced, onAdd, onAuto, onScheduleWee
                               <button style={styles.chipXBtn} title="Fjern fra board" onClick={(e) => { e.stopPropagation(); onUnplace(t.id); }}><X size={11} /></button>
                             </div>
                             <div style={styles.chipSubRow}>
-                              {t.customerName && <span style={styles.taskChipCustomer}>{t.customerName}</span>}
+                              {/* Se opgaveIdentitet(): paa nexus og aeldrelov er det
+                                  borgeren der staar her, ikke kommunen. */}
+                              {opgaveIdentitet(t).primaer && (
+                                <span style={styles.taskChipCustomer}>{opgaveIdentitet(t).primaer}</span>
+                              )}
                               {prog.total > 0 && <span style={styles.taskChipDur}>{prog.done}/{prog.total}</span>}
                               <span style={styles.taskChipDur}>{fmtMin(t.duration)}</span>
                               {/* Forsinkelsen staar i anden raekke. I oeverste raekke var titlen det eneste
