@@ -1444,12 +1444,19 @@ const MODULE_HELP = {
         "I dag er ikke låst. Dagen er i gang, og planer ændrer sig hen over en dag.",
         "Grunden er, at det ikke ændrer virkeligheden at flytte en opgave ind eller ud af mandag, når det er onsdag — det ændrer kun regnskabet, og så passer timerne ikke med det, medarbejderen faktisk har lavet.",
         "Skal noget rettes bagud, gøres det på selve opgaven under Fakturering, hvor tid og begrundelse hører hjemme."] },
-    { h: "Detailplanlægning af én medarbejder", p: [
-        "Vælger du én medarbejder i listen øverst, kommer hendes uge som tidslinje under gitteret.",
-        "Der kan du se hvornår på dagen opgaverne ligger, hvor lang tid der er kørsel imellem, og hvor der er luft til mere.",
+    { h: "Gitter eller tidslinje", p: [
+        "Øverst kan du skifte mellem Gitter og Tidslinje. Gitteret viser HVAD der ligger på hver dag; tidslinjen viser HVORNÅR og hvor der er luft.",
+        "Tidslinjen er den du detailplanlægger i. Vælg én medarbejder i listen, så står hendes uge alene.",
+        "Du kan trække en opgave fra «Ikke tildelt» ned på et klokkeslæt i tidslinjen. Tidspunktet rundes til nærmeste kvarter og sættes som aftalt tid — der kommer aldrig til at stå 09:47 på en aftale.",
+        "Opgaver kan også trækkes rundt inde i tidslinjen. Overståede dage er skraveret og tager ikke imod.",
         "Fuldt optrukket kant betyder aftalt klokkeslæt. Stiplet betyder, at tiden er regnet ud fra hvornår dagen begynder — skrider dagen, skrider den med.",
         "Det er præcis den samme dag, medarbejderen selv ser i Worklist. De to kan ikke vise forskellige tider, fordi de regnes af den samme funktion.",
-        "Klik på en blok for at åbne serviceordren."] },
+        "Dit valg af visning huskes til næste gang."] },
+    { h: "Udskrift", p: [
+        "«Print ugeplan» udskriver altid tidslinjen — også hvis du står i gitteret på skærmen. En seddel i bilen skal vise klokkeslæt.",
+        "Der kommer én medarbejder pr. side, liggende A4. Vil du kun have én med, så vælg hende i listen først.",
+        "Menuer og knapper kommer ikke med."] },
+
     { h: "Hvem står der på brikken", p: [
         "På private og erhvervsopgaver står kundens navn — det er også dér, arbejdet udføres.",
         "På Nexus- og Ældrelov-opgaver står borgerens navn i stedet. Kommunen er den, der får regningen, men arbejdet foregår hjemme hos borgeren, og det er den adresse medarbejderen skal finde.",
@@ -3417,7 +3424,10 @@ function PlanningApp({ session, onSignOut }) {
     }
   }
 
-  function manualPlace(taskId, day, empId) {
+  // tidspunkt er valgfrit. Kommer det med — fordi opgaven blev sluppet paa et
+  // bestemt klokkeslaet i tidslinjen — saettes det som aftalt tid. Ellers roeres
+  // det ikke; en opgave uden aftalt tid skal blive ved med at flyde.
+  function manualPlace(taskId, day, empId, tidspunkt) {
     const task = instances.find((t) => t.id === taskId);
     if (!task) return;
 
@@ -3466,6 +3476,7 @@ function PlanningApp({ session, onSignOut }) {
         warning: null,
         offSchedule: isOffSchedule ? true : (t.offSchedule || false),
         onSchedule: !isOffSchedule,
+        scheduledTime: tidspunkt || t.scheduledTime,
       };
     });
   }
@@ -4892,6 +4903,9 @@ function scheduleWeekSimple(instances, employees, weekOffset, weekYear) {
 function WeekView({ employees, instances, unplaced, onAdd, onAuto, onScheduleWeek, onAutoAllWeeks, onPlace, onUnplace, onRemoveAssignee, onDelete, onOpenTask, onToggleInclude, onEditEmp, dragId, setDragId, weekLabel, weekNo, weekOffset, weekYear, onPrevWeek, onNextWeek, onTodayWeek, travelSettings, onOpenTravelSettings, currentIsoWeek, areas, employeeAreas, onOpenAddBlock, onOpenAddActivity, opgaveNoter }) {
   const [addMenuTaskId, setAddMenuTaskId] = useState(null);
   const [showWeekend, setShowWeekend] = useState(false);
+  // Gitter eller tidslinje. Huskes, saa man ikke skal vaelge hver morgen.
+  const [ugeVisning, setUgeVisning] = useState(() => localStorage.getItem("rp_ugevisning") || "gitter");
+  useEffect(() => { localStorage.setItem("rp_ugevisning", ugeVisning); }, [ugeVisning]);
   const [selectedAreaId, setSelectedAreaId] = useState("all"); // "all" eller area.id
   const [printEmployeeId, setPrintEmployeeId] = useState("all");
   const [unassignedFilter, setUnassignedFilter] = useState("current"); // "current" eller "all"
@@ -4952,6 +4966,16 @@ function WeekView({ employees, instances, unplaced, onAdd, onAuto, onScheduleWee
           <option value="all">🖨️ Alle medarbejdere</option>
           {employees.map((e) => <option key={e.id} value={e.id}>🖨️ {e.name}</option>)}
         </select>
+        {/* Gitteret viser HVAD der ligger paa hver dag. Tidslinjen viser HVORNAAR og
+            hvor der er luft — det er den man detailplanlaegger i. */}
+        <div style={{ display: "flex", gap: 0, border: "1px solid #E2E8F0", borderRadius: 8, overflow: "hidden" }}>
+          {[["gitter", "Gitter"], ["tid", "Tidslinje"]].map(([k, navn]) => (
+            <button key={k} onClick={() => setUgeVisning(k)}
+              style={{ padding: "9px 14px", border: "none", cursor: "pointer", fontSize: 13.5, fontWeight: 600,
+                       background: ugeVisning === k ? "#D6247A" : "#fff",
+                       color: ugeVisning === k ? "#fff" : "#334155" }}>{navn}</button>
+          ))}
+        </div>
         <button style={styles.secondaryBtn} onClick={() => window.print()}>🖨️ Print ugeplan</button>
 
         {/* Signaturforklaringen laa foer paa sin egen linje under vaerktoejslinjen og
@@ -5032,7 +5056,8 @@ function WeekView({ employees, instances, unplaced, onAdd, onAuto, onScheduleWee
           </div>
         </div>
 
-        <div style={styles.gridWrap}>
+        <div className="skjul-ved-print"
+          style={{ ...styles.gridWrap, display: ugeVisning === "tid" ? "none" : undefined }}>
           <div style={{ display: "grid", gridTemplateColumns: `repeat(${visibleDays.length}, minmax(0, 1fr))`, gap: 8 }}>
             {visibleDays.map((d, i) => (
               <div key={d.key} style={{ ...styles.gridHeaderCell, borderRight: i < visibleDays.length - 1 ? "1px solid #CBD5E1" : "none", ...(["Sat","Sun"].includes(d.key) ? { background: "#F8FAFC", color: "#94A3B8" } : {}) }}>{d.label}</div>
@@ -5252,16 +5277,22 @@ function WeekView({ employees, instances, unplaced, onAdd, onAuto, onScheduleWee
         </div>
       </div>
 
-      {/* Tidslinje for den valgte medarbejder. Kun naar én er valgt — med tyve
-          ville skalaen blive ulaeselig, og der er ingen dag at detailplanlaegge. */}
-      {printEmployeeId !== "all" && visibleEmployees.length === 1 && (
-        <UgeTidslinje
-          emp={visibleEmployees[0]} dage={visibleDays} instances={instances}
-          travelSettings={travelSettings} weekOffset={weekOffset} weekYear={weekYear}
-          onOpenTask={onOpenTask} />
-      )}
+      {/* Tidslinjen. Én pr. medarbejder, saa den ogsaa kan bruges naar alle vises —
+          og saa udskriften faar én medarbejder pr. side. */}
+      {visibleEmployees.map((emp) => (
+        <div key={emp.id} className="tidslinje-side"
+          // Paa skaermen kun naar tidslinjen er valgt. Ved print altid — en udskrift
+          // af ugeplanen skal vise klokkeslaettene, ellers er den ikke til at
+          // arbejde efter i bilen. CSS'en tvinger dem frem igen i @media print.
+          style={{ display: ugeVisning === "tid" ? undefined : "none" }}>
+          <UgeTidslinje
+            emp={emp} dage={visibleDays} instances={instances}
+            travelSettings={travelSettings} weekOffset={weekOffset} weekYear={weekYear}
+            onOpenTask={onOpenTask} dragId={dragId} setDragId={setDragId} onPlace={onPlace} />
+        </div>
+      ))}
 
-      {/* Ugesammenfatning — kun i detail view */}
+      {/* Ugesammenfatning — kun i detail view. Ikke paa papir. */}
       {(
         <div style={{ marginTop: 12, background: "#F8FAFC", borderRadius: 10, padding: "10px 14px" }}>
           <div style={{ fontSize: 12, fontWeight: 700, color: "#475569", marginBottom: 8 }}>📊 Ugebelægning{selectedAreaId !== "all" && areas ? ` — ${areas.find((a) => a.id === selectedAreaId)?.name}` : " — alle medarbejdere"}</div>
@@ -8110,7 +8141,8 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
 // Vises kun naar én medarbejder er valgt. Med tyve ville skalaen blive ulaeselig.
 const TL_PX_PR_MIN = 1.15;
 
-function UgeTidslinje({ emp, dage, instances, travelSettings, weekOffset, weekYear, onOpenTask }) {
+function UgeTidslinje({ emp, dage, instances, travelSettings, weekOffset, weekYear,
+                        onOpenTask, dragId, setDragId, onPlace }) {
   const perDag = dage.map((d) => {
     const dayTasks = instances.filter(
       (t) => t.day === d.key && (t.assignees || []).includes(emp.id)
@@ -8123,7 +8155,7 @@ function UgeTidslinje({ emp, dage, instances, travelSettings, weekOffset, weekYe
     return (
       <div style={{ background: "#fff", borderRadius: 12, padding: 20, marginTop: 12,
                     textAlign: "center", color: "#94A3B8", fontSize: 13 }}>
-        {emp.name} har ingen opgaver i uge {weekOffset}
+        {medSolsikke(emp.name)} har ingen opgaver i uge {weekOffset}
       </div>
     );
   }
@@ -8160,7 +8192,22 @@ function UgeTidslinje({ emp, dage, instances, travelSettings, weekOffset, weekYe
           {perDag.map(({ dag, segs }) => {
             const laast = dagErOverstaaet(dag.key, weekOffset, weekYear);
             return (
-              <div key={dag.key} style={{ position: "relative", height: hoejde,
+              <div key={dag.key}
+                // Slip en opgave paa et klokkeslaet. Y-positionen inde i kolonnen
+                // regnes om til minutter og rundes til naermeste kvarter — et
+                // klokkeslaet som 09:47 er ikke noget nogen har aftalt, det er bare
+                // der musen slap.
+                onDragOver={(e) => { if (!laast && dragId) e.preventDefault(); }}
+                onDrop={(e) => {
+                  if (laast || !dragId) { setDragId?.(null); return; }
+                  const kasse = e.currentTarget.getBoundingClientRect();
+                  const min = fra + Math.round(((e.clientY - kasse.top) / TL_PX_PR_MIN) / 15) * 15;
+                  const t = Math.max(0, Math.min(min, 23 * 60 + 45));
+                  const tid = `${String(Math.floor(t / 60)).padStart(2, "0")}:${String(t % 60).padStart(2, "0")}`;
+                  onPlace?.(dragId, dag.key, emp.id, tid);
+                  setDragId?.(null);
+                }}
+                style={{ position: "relative", height: hoejde,
                           borderLeft: "1px solid #F1F5F9",
                           background: laast
                             ? "repeating-linear-gradient(45deg,#F8FAFC,#F8FAFC 6px,#F1F5F9 6px,#F1F5F9 12px)"
@@ -8188,6 +8235,8 @@ function UgeTidslinje({ emp, dage, instances, travelSettings, weekOffset, weekYe
                   const m = TYPE_META[t.type] || TYPE_META.fixed;
                   return (
                     <button key={t.id} onClick={() => onOpenTask(t.id)}
+                      draggable={!laast}
+                      onDragStart={(e) => { if (laast) return; e.stopPropagation(); setDragId?.(t.id); }}
                       title={`${id.primaer || t.title} · ${fmtMin(t.duration)}${aftalt ? ` · aftalt kl. ${t.scheduledTime}` : " · beregnet tid"}`}
                       style={{ position: "absolute", left: 2, right: 2, top, height: h,
                                textAlign: "left", overflow: "hidden", cursor: "pointer",

@@ -117,3 +117,30 @@ code {
   padding: 4px 8px;
   background: var(--code-bg);
 }
+
+/* ── Udskrift af ugeplanen ──────────────────────────────────────────────────
+   Ugeplanen udskrives som tidslinje: den viser hvornaar paa dagen opgaverne
+   ligger, og det er dét en medarbejder skal bruge paa en seddel i bilen.
+   Gitteret viser kun HVAD der ligger paa dagen.
+
+   Én medarbejder pr. side. Uden det braekker en tidslinje midt over et sideskift,
+   og saa staar halvdelen af onsdagen paa den ene side og halvdelen paa den naeste. */
+@media print {
+  @page { size: A4 landscape; margin: 10mm; }
+
+  /* Skaerm-kromet hoerer ikke til paa papir. */
+  header, nav, .skjul-ved-print { display: none !important; }
+  button { display: none !important; }
+
+  /* Farverne paa opgaveblokkene ER informationen — uden dem er alle brikker hvide. */
+  * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+
+  /* Tidslinjerne staar skjult paa skaermen naar man har valgt gitteret. Paa papir
+     skal de frem uanset hvad — en udskrift uden klokkeslaet er ikke til at
+     arbejde efter. */
+  .tidslinje-side { display: block !important; break-inside: avoid; page-break-inside: avoid; }
+  .tidslinje-side + .tidslinje-side { break-before: page; page-break-before: always; }
+
+  /* Rullefelter skal foldes helt ud, ellers klippes alt under det synlige vaek. */
+  * { overflow: visible !important; max-height: none !important; }
+}
