@@ -1449,7 +1449,9 @@ const MODULE_HELP = {
         "Tidslinjen er den du detailplanlægger i. Vælg én medarbejder i listen, så står hendes uge alene.",
         "Du kan trække en opgave fra «Ikke tildelt» ned på et klokkeslæt i tidslinjen. Tidspunktet rundes til nærmeste kvarter og sættes som aftalt tid — der kommer aldrig til at stå 09:47 på en aftale.",
         "Opgaver kan også trækkes rundt inde i tidslinjen. Overståede dage er skraveret og tager ikke imod.",
-        "Fuldt optrukket kant betyder aftalt klokkeslæt. Stiplet betyder, at tiden er regnet ud fra hvornår dagen begynder — skrider dagen, skrider den med.",
+        "Fuldt optrukket kant betyder aftalt klokkeslæt. Stiplet betyder, at tiden er regnet ud fra hvornår dagen begynder — skrider dagen, skrider den med. Der står også «ikke aftalt tid» på blokken, når der er plads.",
+        "På blokken står klokkeslæt og navn øverst, adressen under, og nederst opgavens art, varighed og hvor mange tjeklistepunkter der er. Korte opgaver viser kun det, der kan være — en afklippet adresse er værre end ingen.",
+        "⚠️ betyder planlagt uden for aftalen, 📍 uden for medarbejderens område. Hold musen over blokken for at få det hele.",
         "Det er præcis den samme dag, medarbejderen selv ser i Worklist. De to kan ikke vise forskellige tider, fordi de regnes af den samme funktion.",
         "Dit valg af visning huskes til næste gang."] },
     { h: "Udskrift", p: [
@@ -5056,6 +5058,27 @@ function WeekView({ employees, instances, unplaced, onAdd, onAuto, onScheduleWee
           </div>
         </div>
 
+        {/* Tidslinjen staar hvor gitteret staar — samme plads, samme forhold til
+            "Ikke tildelt" ved siden af. Laa den nedenunder, skulle man scrolle forbi
+            et tomt gitter for at naa den, og opgaverne i backloggen var ude af syne
+            netop naar man skulle traekke dem ned paa et klokkeslaet. */}
+        {ugeVisning === "tid" && (
+          <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 12 }}>
+            {visibleEmployees.map((emp) => (
+        <div key={emp.id} className="tidslinje-side"
+          // Paa skaermen kun naar tidslinjen er valgt. Ved print altid — en udskrift
+          // af ugeplanen skal vise klokkeslaettene, ellers er den ikke til at
+          // arbejde efter i bilen. CSS'en tvinger dem frem igen i @media print.
+          style={{ display: ugeVisning === "tid" ? undefined : "none" }}>
+          <UgeTidslinje
+            emp={emp} dage={visibleDays} instances={instances}
+            travelSettings={travelSettings} weekOffset={weekOffset} weekYear={weekYear}
+            onOpenTask={onOpenTask} dragId={dragId} setDragId={setDragId} onPlace={onPlace} />
+        </div>
+            ))}
+          </div>
+        )}
+
         <div className="skjul-ved-print"
           style={{ ...styles.gridWrap, display: ugeVisning === "tid" ? "none" : undefined }}>
           <div style={{ display: "grid", gridTemplateColumns: `repeat(${visibleDays.length}, minmax(0, 1fr))`, gap: 8 }}>
@@ -5279,18 +5302,6 @@ function WeekView({ employees, instances, unplaced, onAdd, onAuto, onScheduleWee
 
       {/* Tidslinjen. Én pr. medarbejder, saa den ogsaa kan bruges naar alle vises —
           og saa udskriften faar én medarbejder pr. side. */}
-      {visibleEmployees.map((emp) => (
-        <div key={emp.id} className="tidslinje-side"
-          // Paa skaermen kun naar tidslinjen er valgt. Ved print altid — en udskrift
-          // af ugeplanen skal vise klokkeslaettene, ellers er den ikke til at
-          // arbejde efter i bilen. CSS'en tvinger dem frem igen i @media print.
-          style={{ display: ugeVisning === "tid" ? undefined : "none" }}>
-          <UgeTidslinje
-            emp={emp} dage={visibleDays} instances={instances}
-            travelSettings={travelSettings} weekOffset={weekOffset} weekYear={weekYear}
-            onOpenTask={onOpenTask} dragId={dragId} setDragId={setDragId} onPlace={onPlace} />
-        </div>
-      ))}
 
       {/* Ugesammenfatning — kun i detail view. Ikke paa papir. */}
       {(
@@ -8139,7 +8150,9 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
 // til at se to forskellige dage.
 //
 // Vises kun naar én medarbejder er valgt. Med tyve ville skalaen blive ulaeselig.
-const TL_PX_PR_MIN = 1.15;
+// Hoejden pr. minut. Hoejere end i Worklist, fordi planlaeggeren skal kunne LAESE
+// opgaven her — navn, adresse og tid — og ikke bare se at der ligger noget.
+const TL_PX_PR_MIN = 1.6;
 
 function UgeTidslinje({ emp, dage, instances, travelSettings, weekOffset, weekYear,
                         onOpenTask, dragId, setDragId, onPlace }) {
@@ -8231,21 +8244,47 @@ function UgeTidslinje({ emp, dage, instances, travelSettings, weekOffset, weekYe
                   const t = sg.task;
                   const id = opgaveIdentitet(t);
                   const aftalt = !!t.scheduledTime;
-                  const h = Math.max((t.duration || 0) * TL_PX_PR_MIN, 22);
+                  const h = Math.max((t.duration || 0) * TL_PX_PR_MIN, 26);
                   const m = TYPE_META[t.type] || TYPE_META.fixed;
+                  const tjek = checklistProgress(t);
+                  const enLinje = { whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" };
                   return (
                     <button key={t.id} onClick={() => onOpenTask(t.id)}
                       draggable={!laast}
                       onDragStart={(e) => { if (laast) return; e.stopPropagation(); setDragId?.(t.id); }}
-                      title={`${id.primaer || t.title} · ${fmtMin(t.duration)}${aftalt ? ` · aftalt kl. ${t.scheduledTime}` : " · beregnet tid"}`}
+                      title={[id.primaer || t.title, id.sekundaer, fmtMin(t.duration),
+                              aftalt ? `aftalt kl. ${t.scheduledTime}` : "beregnet tid — ikke aftalt",
+                              t.offSchedule ? "planlagt uden for aftalen" : null,
+                              t.outsideArea ? "uden for medarbejderens område" : null,
+                             ].filter(Boolean).join(" · ")}
                       style={{ position: "absolute", left: 2, right: 2, top, height: h,
                                textAlign: "left", overflow: "hidden", cursor: "pointer",
-                               padding: "2px 5px", borderRadius: 5, background: m.bg, color: m.color,
+                               padding: "3px 6px", borderRadius: 5, background: m.bg, color: m.color,
                                border: aftalt ? `1px solid ${m.color}` : `1px dashed ${m.color}`,
-                               fontSize: 10.5, fontWeight: 700, lineHeight: 1.25 }}>
-                      <div style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                        {fmtClock(sg.start)} {id.primaer || t.title}
+                               fontSize: 10.5, lineHeight: 1.3 }}>
+                      {/* Foerste linje er altid der: hvornaar og hvem. Resten kommer
+                          til efterhaanden som blokken er hoej nok — en halv times
+                          opgave har ikke plads til fire linjer, og en afklippet
+                          adresse er vaerre end ingen. */}
+                      <div style={{ ...enLinje, fontWeight: 700 }}>
+                        {aftalt
+                          ? <span title={`Aftalt kl. ${t.scheduledTime}`}>{t.scheduledTime}</span>
+                          : <span style={{ opacity: 0.75 }}>{fmtClock(sg.start)}</span>}
+                        {" "}{id.primaer || t.title}
+                        {t.offSchedule && <span title="Uden for aftalen"> ⚠️</span>}
+                        {t.outsideArea && <span title="Uden for området"> 📍</span>}
                       </div>
+                      {h >= 40 && id.sekundaer && (
+                        <div style={{ ...enLinje, opacity: 0.8 }}>{id.sekundaer}</div>
+                      )}
+                      {h >= 56 && (
+                        <div style={{ ...enLinje, opacity: 0.75, fontSize: 10 }}>
+                          {t.title}
+                          {" · "}{fmtMin(t.duration)}
+                          {tjek && tjek.total > 0 ? ` · ${tjek.done}/${tjek.total}` : ""}
+                          {!aftalt ? " · ikke aftalt tid" : ""}
+                        </div>
+                      )}
                     </button>
                   );
                 })}
