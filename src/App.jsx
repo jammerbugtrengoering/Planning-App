@@ -1456,7 +1456,7 @@ const MODULE_HELP = {
         "Over hver dag står belægningen med samme regnestykke som i gitteret, så de to visninger ikke kan vise forskelligt for den samme dag.",
         "⚠️ betyder planlagt uden for aftalen, 📍 uden for medarbejderens område. Hold musen over blokken for at få det hele.",
         "Det er præcis den samme dag, medarbejderen selv ser i Worklist. De to kan ikke vise forskellige tider, fordi de regnes af den samme funktion.",
-        "Ugedagene står øverst i tidslinjen og bliver stående, når du scroller. En overstået dag har en hængelås.",
+        "Medarbejderens navn og ugedagene bliver stående øverst, når du scroller ned gennem medarbejderne. En overstået dag har en hængelås.",
         "En medarbejder uden opgaver får alligevel en tom arbejdsdag, du kan trække ned i — det er netop hende, du leder efter, når noget skal placeres.",
         "Dit valg af visning huskes til næste gang."] },
     { h: "Udskrift", p: [
@@ -8192,6 +8192,12 @@ function UgeTidslinje({ emp, dage, instances, travelSettings, weekOffset, weekYe
 
   return (
     <div style={{ background: "#fff", borderRadius: 12, padding: "12px 10px", marginTop: 12 }}>
+      {/* Navn og ugedage sidder i SAMME faste blok.
+          Var kun ugedagene faste, forsvandt navnet op — og saa stod man med fem
+          navnloese kolonner og vidste ikke laengere hvis uge man kiggede paa. Med
+          tyve medarbejdere under hinanden er det ikke til at gaette. */}
+      <div style={{ position: "sticky", top: 0, zIndex: 5, background: "#fff",
+                    paddingTop: 2, marginBottom: 4 }}>
       <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>
         {medSolsikke(emp.name)} · uge {weekOffset}
         <span style={{ fontWeight: 400, color: "#94A3B8", marginLeft: 8 }}>
@@ -8204,8 +8210,7 @@ function UgeTidslinje({ emp, dage, instances, travelSettings, weekOffset, weekYe
       {/* Ugedagene. Kolonnerne er ellers unavngivne, og saa maa man taelle sig frem
           til hvilken dag man slipper en opgave paa. Den tomme celle til venstre
           holder overskrifterne ud for deres egen kolonne, forbi klokkeslaets-skalaen. */}
-      <div style={{ display: "flex", gap: 8, position: "sticky", top: 0, zIndex: 4,
-                    background: "#fff", paddingBottom: 4 }}>
+      <div style={{ display: "flex", gap: 8, paddingBottom: 4 }}>
         <div style={{ width: 34, flexShrink: 0 }} />
         <div style={{ display: "grid", gridTemplateColumns: `repeat(${dage.length}, minmax(0,1fr))`,
                       gap: 6, flex: 1 }}>
@@ -8239,6 +8244,7 @@ function UgeTidslinje({ emp, dage, instances, travelSettings, weekOffset, weekYe
             );
           })}
         </div>
+      </div>
       </div>
 
       <div style={{ display: "flex", gap: 8 }}>
