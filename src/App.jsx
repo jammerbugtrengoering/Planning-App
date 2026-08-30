@@ -1444,6 +1444,10 @@ const MODULE_HELP = {
         "I dag er ikke låst. Dagen er i gang, og planer ændrer sig hen over en dag.",
         "Grunden er, at det ikke ændrer virkeligheden at flytte en opgave ind eller ud af mandag, når det er onsdag — det ændrer kun regnskabet, og så passer timerne ikke med det, medarbejderen faktisk har lavet.",
         "Skal noget rettes bagud, gøres det på selve opgaven under Fakturering, hvor tid og begrundelse hører hjemme."] },
+    { h: "Belægning", p: [
+        "«📊 Belægning» ved siden af signaturforklaringen viser, hvor meget hver medarbejder har på i den viste uge, og hvor meget der er tilbage.",
+        "Den er foldet væk som udgangspunkt og folder sig ud over planen. Før lå den nederst på siden, hvor man skulle scrolle forbi den hver gang — den er et opslag man laver, når arbejde skal fordeles, ikke noget der skal stå fremme hele tiden.",
+        "Vælger du et område øverst, viser den kun medarbejderne i det område."] },
     { h: "Gitter eller tidslinje", p: [
         "Øverst kan du skifte mellem Gitter og Tidslinje. Gitteret viser HVAD der ligger på hver dag; tidslinjen viser HVORNÅR og hvor der er luft.",
         "Tidslinjen er den du detailplanlægger i. Vælg én medarbejder i listen, så står hendes uge alene.",
@@ -4910,6 +4914,8 @@ function scheduleWeekSimple(instances, employees, weekOffset, weekYear) {
 function WeekView({ employees, instances, unplaced, onAdd, onAuto, onScheduleWeek, onAutoAllWeeks, onPlace, onUnplace, onRemoveAssignee, onDelete, onOpenTask, onToggleInclude, onEditEmp, dragId, setDragId, weekLabel, weekNo, weekOffset, weekYear, onPrevWeek, onNextWeek, onTodayWeek, travelSettings, onOpenTravelSettings, currentIsoWeek, areas, employeeAreas, onOpenAddBlock, onOpenAddActivity, opgaveNoter }) {
   const [addMenuTaskId, setAddMenuTaskId] = useState(null);
   const [showWeekend, setShowWeekend] = useState(false);
+  // Belaegningen er foldet vaek som udgangspunkt. Se kommentaren ved selve blokken.
+  const [visBelaegning, setVisBelaegning] = useState(false);
   // Gitter eller tidslinje. Huskes, saa man ikke skal vaelge hver morgen.
   const [ugeVisning, setUgeVisning] = useState(() => localStorage.getItem("rp_ugevisning") || "gitter");
   useEffect(() => { localStorage.setItem("rp_ugevisning", ugeVisning); }, [ugeVisning]);
@@ -4991,6 +4997,14 @@ function WeekView({ employees, instances, unplaced, onAdd, onAuto, onScheduleWee
           {Object.entries(TYPE_META).filter(([k]) => k !== "flexible").map(([k, m]) => (
             <span key={k} style={{ ...styles.typeChip, color: m.color, background: m.bg }}>{m.label}</span>
           ))}
+          <button onClick={() => setVisBelaegning((v) => !v)}
+            title="Se hvor meget hver medarbejder har på i denne uge"
+            style={{ ...styles.typeChip, cursor: "pointer", border: "none",
+                     fontFamily: "inherit",
+                     color: visBelaegning ? "#fff" : "#475569",
+                     background: visBelaegning ? "#475569" : "#F1F5F9" }}>
+            📊 Belægning
+          </button>
         </div>
 
         <div style={styles.toolbarSpacer} />
@@ -5008,6 +5022,46 @@ function WeekView({ employees, instances, unplaced, onAdd, onAuto, onScheduleWee
       <div style={styles.legendRow}>
         <span style={styles.hint}>Træk en opgave tilbage til "Ikke tildelt" for at frigive den, eller klik + på en opgave for at sætte flere medarbejdere på.</span>
       </div>
+
+      {/* Belaegningen laa foer nederst paa siden, under hele ugeplanen. Der
+          forstyrrede den: den er et OPSLAG man laver naar man skal fordele arbejde,
+          ikke noget man skal scrolle forbi hver gang. Nu er den en knap ved siden af
+          signaturforklaringen, og den folder sig ud her — over planen, hvor man
+          kigger. */}
+      {visBelaegning && (
+        <div style={{ marginBottom: 12, background: "#F8FAFC", borderRadius: 10, padding: "10px 14px" }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: "#475569", marginBottom: 8 }}>📊 Ugebelægning{selectedAreaId !== "all" && areas ? ` — ${areas.find((a) => a.id === selectedAreaId)?.name}` : " — alle medarbejdere"}</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {visibleEmployees.map((emp) => {
+              // Samme regnestykke som dagcellerne og som planlaeggeren. Foer lagde
+              // totalen kun varigheder sammen, saa ugebjaelken kunne staa paa 80 % mens
+              // flere af de dage den opsummerer var roede af overbelastning.
+              const totalUsed = visibleDays.reduce(
+                (s, d) => s + belastning([emp], instances, emp.id, d.key, travelSettings), 0);
+              // Weekend indgaar ikke i kapacitetstotalen - der er intet loft at maale imod.
+  const totalCap = visibleDays.reduce((s, d) => s + (isWeekendDay(d.key) ? 0 : (emp.capacity[d.key] || 0)), 0);
+              const pct = totalCap ? Math.round((totalUsed / totalCap) * 100) : 0;
+              const over = totalUsed > totalCap;
+              return (
+                <div key={emp.id} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <span style={{ ...styles.avatar, background: emp.color, width: 24, height: 24, fontSize: 11, flexShrink: 0 }}>{initials(emp.name)}</span>
+                  <span style={{ fontSize: 12, color: "#111111", minWidth: 120, fontWeight: 500 }}>{medSolsikke(emp.name)}</span>
+                  <div style={{ flex: 1, height: 6, background: "#E2E8F0", borderRadius: 99, overflow: "hidden" }}>
+                    <div style={{ height: "100%", borderRadius: 99, background: over ? "#DC2626" : pct > 80 ? "#D97706" : "#D6247A", width: `${Math.min(100, pct)}%`, transition: "width 0.3s" }} />
+                  </div>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: over ? "#DC2626" : "#64748B", minWidth: 38, textAlign: "right" }}>{pct}%</span>
+                  <span style={{ fontSize: 11, color: over ? "#DC2626" : "#16A34A", fontWeight: 600, minWidth: 80, textAlign: "right" }}>
+                    {over ? `+${fmtMin(totalUsed - totalCap)} over` : `${fmtMin(totalCap - totalUsed)} ledig`}
+                  </span>
+                  <span style={{ fontSize: 11, color: "#94A3B8", minWidth: 80, textAlign: "right" }}>
+                    {fmtMin(totalUsed)} / {fmtMin(totalCap)}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       <div style={styles.weekLayout}>
         <div
@@ -5314,41 +5368,6 @@ function WeekView({ employees, instances, unplaced, onAdd, onAuto, onScheduleWee
       {/* Tidslinjen. Én pr. medarbejder, saa den ogsaa kan bruges naar alle vises —
           og saa udskriften faar én medarbejder pr. side. */}
 
-      {/* Ugesammenfatning — kun i detail view. Ikke paa papir. */}
-      {(
-        <div style={{ marginTop: 12, background: "#F8FAFC", borderRadius: 10, padding: "10px 14px" }}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: "#475569", marginBottom: 8 }}>📊 Ugebelægning{selectedAreaId !== "all" && areas ? ` — ${areas.find((a) => a.id === selectedAreaId)?.name}` : " — alle medarbejdere"}</div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            {visibleEmployees.map((emp) => {
-              // Samme regnestykke som dagcellerne og som planlaeggeren. Foer lagde
-              // totalen kun varigheder sammen, saa ugebjaelken kunne staa paa 80 % mens
-              // flere af de dage den opsummerer var roede af overbelastning.
-              const totalUsed = visibleDays.reduce(
-                (s, d) => s + belastning([emp], instances, emp.id, d.key, travelSettings), 0);
-              // Weekend indgaar ikke i kapacitetstotalen - der er intet loft at maale imod.
-  const totalCap = visibleDays.reduce((s, d) => s + (isWeekendDay(d.key) ? 0 : (emp.capacity[d.key] || 0)), 0);
-              const pct = totalCap ? Math.round((totalUsed / totalCap) * 100) : 0;
-              const over = totalUsed > totalCap;
-              return (
-                <div key={emp.id} style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <span style={{ ...styles.avatar, background: emp.color, width: 24, height: 24, fontSize: 11, flexShrink: 0 }}>{initials(emp.name)}</span>
-                  <span style={{ fontSize: 12, color: "#111111", minWidth: 120, fontWeight: 500 }}>{medSolsikke(emp.name)}</span>
-                  <div style={{ flex: 1, height: 6, background: "#E2E8F0", borderRadius: 99, overflow: "hidden" }}>
-                    <div style={{ height: "100%", borderRadius: 99, background: over ? "#DC2626" : pct > 80 ? "#D97706" : "#D6247A", width: `${Math.min(100, pct)}%`, transition: "width 0.3s" }} />
-                  </div>
-                  <span style={{ fontSize: 11, fontWeight: 700, color: over ? "#DC2626" : "#64748B", minWidth: 38, textAlign: "right" }}>{pct}%</span>
-                  <span style={{ fontSize: 11, color: over ? "#DC2626" : "#16A34A", fontWeight: 600, minWidth: 80, textAlign: "right" }}>
-                    {over ? `+${fmtMin(totalUsed - totalCap)} over` : `${fmtMin(totalCap - totalUsed)} ledig`}
-                  </span>
-                  <span style={{ fontSize: 11, color: "#94A3B8", minWidth: 80, textAlign: "right" }}>
-                    {fmtMin(totalUsed)} / {fmtMin(totalCap)}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
 
       <div id="print-week-plan" style={{ display: "none" }}>
         <div style={{ fontSize: 20, fontWeight: 700, marginBottom: 12 }}>
