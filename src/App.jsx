@@ -4,7 +4,7 @@ import {
   Plus, Download, X, Clock, AlertTriangle,
   Trash2, Pencil, Repeat, Zap, CalendarClock, Wand2, Star, ChevronLeft, ChevronRight, ChevronUp, ChevronDown,
   ClipboardList, Video, CheckCircle2, LogIn, ListChecks, Check, Lock, Navigation, Building2, Car, Copy,
-  Thermometer, Palmtree, Mail, LogOut,
+  Thermometer, Palmtree, LogOut,
 } from "lucide-react";
 
 // ---------- Opgavenoter og billeder ----------
@@ -416,7 +416,6 @@ function fmtMin(min) {
   return h > 0 ? `${h}t${m > 0 ? " " + m + "m" : ""}` : `${m}m`;
 }
 function defaultCapacity() { return { Mon: 480, Tue: 480, Wed: 480, Thu: 480, Fri: 480, Sat: 0, Sun: 0 }; }
-function rs(skill, minLevel = 1) { return { skill, minLevel }; }
 
 // ---------- Week helpers ----------
 function mondayOf(date) {
@@ -425,14 +424,6 @@ function mondayOf(date) {
   d.setDate(d.getDate() - dow);
   d.setHours(0, 0, 0, 0);
   return d;
-}
-function isoWeekNumber(date) {
-  // Brug lokal dato for korrekt dansk tidszone
-  const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-  const dayNum = (d.getDay() + 6) % 7; // Man=0 ... Søn=6
-  d.setDate(d.getDate() - dayNum + 3); // Nærmeste torsdag
-  const yearStart = new Date(d.getFullYear(), 0, 1);
-  return Math.ceil(((d - yearStart) / 86400000 + 1) / 7);
 }
 // Beregner både ISO-ugenummer OG det år ugen hører til (kan afvige fra
 // kalenderåret omkring årsskiftet, fx 30. dec. kan høre til uge 1 i det nye år).
@@ -548,33 +539,6 @@ function skillLabel(t) { return t.requiredSkills.map((r) => `${r.skill}${r.minLe
 // ---------- Checklists (reusable tasklists) ----------
 function ci(text, description = "", videoUrl = "") { return { text, description, videoUrl }; }
 
-const seedChecklistTemplates = [
-  { id: "cl1", name: "Gulvvask – standard", items: [
-    ci("Fej gulvet for løst støv"),
-    ci("Vask med neutralt gulvsæbe (1 dl pr. 5 liter vand)", "Brug aldrig klorbaseret sæbe på trægulve – det ødelægger lakken."),
-    ci("Sæt 'Vådt gulv'-skilt", "", "https://example.com/videoer/opsaetning-skilt"),
-    ci("Lad gulvet lufttørre"),
-    ci("Skyl og tøm moppe efter brug"),
-  ]},
-  { id: "cl2", name: "Sanitær – standard", items: [
-    ci("Brug engangshandsker"),
-    ci("Sanitér toilet, håndvask og armaturer", "Lad desinfektionsmiddel virke min. 5 minutter før aftørring."),
-    ci("Fyld op: sæbe, papir, håndklæder"),
-    ci("Tjek for skader/lækager og noter"),
-  ]},
-  { id: "cl3", name: "Kantine dybderens", items: [
-    ci("Rengør alle overflader"),
-    ci("Tøm og rengør køleskabe", "Tjek udløbsdatoer og kasser fordærvet mad iht. hygiejneregler."),
-    ci("Sorter og tøm affald"),
-    ci("Afkalk kaffemaskine", "", "https://example.com/videoer/afkalkning-kaffemaskine"),
-  ]},
-  { id: "cl4", name: "Facadevinduer", items: [
-    ci("Monter teleskopstang", "", "https://example.com/videoer/teleskopstang-opsaetning"),
-    ci("Vinduessæbe + gummiskraber"),
-    ci("Tjek vejrudsigt før opstart", "Undgå direkte sol på våde ruder – det giver striber."),
-    ci("Aftør vandpletter på karm"),
-  ]},
-];
 
 function instantiateChecklist(items) {
   return items.map((it) => {
@@ -4733,183 +4697,9 @@ function todayKeyGuess() {
   return map[new Date().getDay()] || "Mon";
 }
 
-function EmployeeAppView({ employees, instances, onLogMinutes, onSetStatus, onToggleChecklistItem, weekLabel, travelSettings }) {
-  const [empId, setEmpId] = useState(employees[0]?.id || "");
-  const [day, setDay] = useState(todayKeyGuess());
-  const [openTaskId, setOpenTaskId] = useState(null);
-  const emp = employees.find((e) => e.id === empId);
-
-  const myTasks = instances.filter((t) => t.assignees.includes(empId) && t.day === day);
-  const schedule = computeDaySchedule(myTasks, travelSettings, emp);
-
-  return (
-    <div style={styles.page}>
-      <div style={styles.phoneWrap}>
-        <div style={styles.phoneScreen}>
-          <div style={styles.phoneHeader}>
-            <LogIn size={14} />
-            <select style={styles.phoneEmpSelect} value={empId} onChange={(e) => setEmpId(e.target.value)}>
-              {employees.filter((e) => !e.fratraadtDato).map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
-            </select>
-          </div>
-          <div style={styles.phoneSub}>{weekLabel}</div>
-
-          <div style={styles.phoneDayRow}>
-            {ALL_DAYS.map((d) => (
-              <button key={d.key} style={d.key === day ? styles.phoneDayBtnActive : styles.phoneDayBtn} onClick={() => setDay(d.key)}>{d.label.slice(0, 3)}</button>
-            ))}
-          </div>
-
-          <div style={styles.phoneList}>
-            {myTasks.length === 0 && <div style={styles.emptyCol}>{emp ? `${emp.name} har ingen opgaver ${ALL_DAYS.find((d) => d.key === day)?.label.toLowerCase()}` : "Vælg medarbejder"}</div>}
-            {schedule.map((seg) => {
-              if (seg.type === "transport") {
-                return (
-                  <div key={seg.key} style={styles.phoneTransportCard}>
-                    <Car size={13} /> {fmtClock(seg.start)} · Transport til næste opgave · {fmtMin(seg.minutes)}
-                  </div>
-                );
-              }
-              const t = seg.task;
-              const myLogged = t.timeLog.filter((l) => l.empId === empId).reduce((s, l) => s + l.minutes, 0);
-              const shared = (t.assignees || []).length > 1;
-              const open = openTaskId === t.id;
-              const done = t.status === "udført";
-              return (
-                <div key={t.id} style={{ ...styles.phoneCard, opacity: done ? 0.6 : 1 }}>
-                  <div style={styles.phoneCardTop} onClick={() => setOpenTaskId(open ? null : t.id)}>
-                    <TypeBadge type={t.type} mini />
-                    <div style={{ flex: 1 }}>
-                      <div style={styles.cardTitle}>{fmtClock(seg.start)} · {t.title}</div>
-                      <div style={styles.cardMeta}>{skillLabel(t)} · {fmtMin(t.duration)}</div>
-                    </div>
-                    {done && <CheckCircle2 size={18} color="#111111" />}
-                  </div>
-
-                  {(t.customerName || t.address) && (
-                    <div style={styles.phoneAddressRow} onClick={(e) => e.stopPropagation()}>
-                      <Building2 size={13} color="#9C1B5D" style={{ flexShrink: 0, marginTop: 1 }} />
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        {(() => { const id = opgaveIdentitet(t); return (<>
-                          {id.primaer && <div style={styles.phoneCustomerName}>{id.primaer}</div>}
-                          {id.sekundaer && <div style={styles.cardMeta}>{id.sekundaer}</div>}
-                          {id.daempet && <div style={{ ...styles.cardMeta, color: "#94A3B8" }}>{id.daempet}</div>}
-                        </>); })()}
-                      </div>
-                      {t.address && (
-                        <a href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(t.address)}`} target="_blank" rel="noreferrer" style={styles.navigateBtn}>
-                          <Navigation size={12} /> Naviger
-                        </a>
-                      )}
-                    </div>
-                  )}
-                  {shared && <div style={{ ...styles.cardMeta, padding: "0 2px 4px" }}>Sammen med: {(t.assignees || []).filter((id) => id !== empId).map((id) => employees.find((e) => e.id === id)?.name).filter(Boolean).join(", ")}</div>}
-
-                  {open && (
-                    <div style={styles.phoneCardBody}>
-                      {t.needsKeyPickup && (
-                        <div style={{ background: "#FFFBEB", border: "1px solid #FDE68A", borderRadius: 8, padding: "7px 10px", marginBottom: 8, fontSize: 12.5, fontWeight: 600, color: "#92400E" }}>
-                          🔑 Nøgle/adgangskort hentes på kontoret først
-                        </div>
-                      )}
-                      {t.accessInstructions && (
-                        <div style={styles.accessBox}>
-                          <div style={styles.accessTitle}><Lock size={13} /> Adgang</div>
-                          <div style={styles.checklistItemDescription}>{t.accessInstructions}</div>
-                        </div>
-                      )}
-                      {t.checklist && t.checklist.length > 0 && (
-                        <div style={styles.instructionsBox}>
-                          <div style={styles.instructionsTitle}><ListChecks size={13} /> Tasks ({checklistProgress(t).done}/{checklistProgress(t).total})</div>
-                          {t.checklist.map((item) => (
-                            <div key={item.id} style={styles.checklistItemBlock}>
-                              <button
-                                type="button"
-                                onClick={(e) => { e.stopPropagation(); onToggleChecklistItem(t.id, item.id); }}
-                                style={styles.checklistItemRow}
-                              >
-                                <span style={item.done ? styles.checkboxDone : styles.checkboxEmpty}>{item.done && <Check size={11} color="#fff" />}</span>
-                                <span style={{ ...styles.checklistItemText, textDecoration: item.done ? "line-through" : "none", color: item.done ? "#94A3B8" : "#111111" }}>{item.text}</span>
-                              </button>
-                              {(item.description || item.videoUrl) && (
-                                <div style={styles.checklistItemExtra}>
-                                  {item.description && <div style={styles.checklistItemDescription}>{item.description}</div>}
-                                  {item.videoUrl && (
-                                    <a href={item.videoUrl} target="_blank" rel="noreferrer" style={styles.videoBtnSmall} onClick={(e) => e.stopPropagation()}>
-                                      <Video size={11} /> Se video til denne task
-                                    </a>
-                                  )}
-                                </div>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                      {t.videoUrl && (
-                        <a href={t.videoUrl} target="_blank" rel="noreferrer" style={styles.videoBtn}>
-                          <Video size={14} /> Se instruktionsvideo
-                        </a>
-                      )}
-                      {(!t.checklist || t.checklist.length === 0) && !t.videoUrl && (
-                        <div style={styles.cardMeta}><ClipboardList size={13} style={{ verticalAlign: "-2px", marginRight: 4 }} />Ingen tasks tilføjet til denne serviceorder</div>
-                      )}
-                    </div>
-                  )}
-
-                  <div style={styles.phoneCardFooter}>
-                    <span style={styles.phoneTimeLogged}><Clock size={12} /> Registreret: {fmtMin(myLogged)} / {fmtMin(t.duration)}</span>
-                    <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                      <input
-                        type="number" min={1} step={5} placeholder="min"
-                        style={{ width: 60, padding: "5px 6px", borderRadius: 7, border: "1px solid #E2E8F0", fontSize: 12.5, textAlign: "center", color: "#111111", background: "#fff" }}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" && Number(e.target.value) > 0) {
-                            onLogMinutes(t.id, empId, Number(e.target.value));
-                            e.target.value = "";
-                          }
-                        }}
-                      />
-                      <button style={styles.timerBtn} onClick={(e) => {
-                        const inp = e.currentTarget.previousSibling;
-                        const val = Number(inp.value);
-                        if (val > 0) { onLogMinutes(t.id, empId, val); inp.value = ""; }
-                      }}><Clock size={12} /> Gem</button>
-                      <button style={done ? styles.doneBtnActive : styles.doneBtn} onClick={() => onSetStatus(t.id, done ? "planlagt" : "udført")}>
-                        <CheckCircle2 size={12} /> {done ? "Udført ✓" : "Marker udført"}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 // ---------- Week view ----------
 // Send email notification to employee about day changes
-function scheduleWeekSimple(instances, employees, weekOffset, weekYear) {
-  const thisWeek = instances.filter(t => t.week === weekOffset && t.year === weekYear);
-  const unassigned = thisWeek.filter(t => !t.assignees || !t.assignees.length);
-  
-  if (unassigned.length === 0) return { count: 0, employees: [] };
-  
-  const assignedEmployees = new Set();
-  const updates = [];
-  
-  unassigned.forEach((task, idx) => {
-    const emp = employees[idx % employees.length];
-    if (emp) {
-      assignedEmployees.add(emp.name);
-      updates.push({ id: task.id, assignees: [emp.id], status: "planlagt" });
-    }
-  });
-  
-  return { count: updates.length, employees: Array.from(assignedEmployees), updates };
-}
 
 function WeekView({ employees, instances, unplaced, onAdd, onAuto, onScheduleWeek, onAutoAllWeeks, onPlace, onUnplace, onRemoveAssignee, onDelete, onOpenTask, onToggleInclude, onEditEmp, dragId, setDragId, weekLabel, weekNo, weekOffset, weekYear, onPrevWeek, onNextWeek, onTodayWeek, travelSettings, onOpenTravelSettings, currentIsoWeek, areas, employeeAreas, onOpenAddBlock, onOpenAddActivity, opgaveNoter }) {
   const [addMenuTaskId, setAddMenuTaskId] = useState(null);
