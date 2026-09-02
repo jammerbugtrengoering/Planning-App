@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from "react";
+import { samletForMedarbejder, danloenLinjer, danloenCsv } from "./loenberegning.js";
 import { supabase } from "./supabaseClient";
 import {
   Plus, Download, X, Clock, AlertTriangle,
@@ -4763,7 +4764,15 @@ function WeekView({ employees, instances, unplaced, onAdd, onAuto, onScheduleWee
           </select>
         )}
         <select
-          style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid #E2E8F0", background: printEmployeeId !== "all" ? "#EEF2FF" : "#fff", fontWeight: printEmployeeId !== "all" ? 700 : 400 }}
+          // color skal staa eksplicit. Uden den bruger browseren sin egen
+          // standardfarve til formularfelter, og den er hvid i moerk tilstand —
+          // paa den hvide baggrund lige ved siden af. Naboen ovenfor saetter den
+          // samme vej.
+          style={{ padding: "8px 12px", borderRadius: 8, fontSize: 13, fontFamily: "inherit",
+                   border: `1px solid ${printEmployeeId !== "all" ? "#4F46E5" : "#E2E8F0"}`,
+                   color: printEmployeeId !== "all" ? "#4F46E5" : "#111111",
+                   background: printEmployeeId !== "all" ? "#EEF2FF" : "#fff",
+                   fontWeight: printEmployeeId !== "all" ? 700 : 400 }}
           value={printEmployeeId}
           onChange={(e) => setPrintEmployeeId(e.target.value)}>
           <option value="all">🖨️ Alle medarbejdere</option>
@@ -6572,25 +6581,27 @@ function EmployeeExportView({ instances, employees, satsHistorik }) {
       }
 
       // Timer og loen fra de godkendte raekker.
-      const pr = new Map();
+      //
+      // Selve regnestykkerne ligger i loenberegning.js og afproeves ved hvert build.
+      // Her samles kun DATA — hvad der er godkendt, og hvem der har et Danloen-nummer.
+      // Det er beslutninger; beloebene er matematik, og de to skal ikke blandes.
+      const prMedarbejder = new Map();
       const sikr = (emp) => {
-        if (!pr.has(emp.id)) {
-          pr.set(emp.id, { nr: emp.danloenNr, navn: emp.name, minutter: 0, loen: 0, km: 0,
-                           weekendLoen: 0, weekendMinutter: 0, tillaeg: 0, emp });
+        if (!prMedarbejder.has(emp.id)) {
+          prMedarbejder.set(emp.id, { emp, linjer: [], kmRaekker: [] });
         }
-        return pr.get(emp.id);
+        return prMedarbejder.get(emp.id);
       };
+
       rows.forEach((r) => {
         if (!erGodkendt("timer", r.empId, r.instanceId)) return;
         const emp = employees.find((e) => e.id === r.empId);
         if (!emp?.danloenNr) return;
-        const g = sikr(emp);
-        g.minutter += r.registered || 0;
-        g.loen += r.registeredWage || 0;
-        // Weekendtimernes loen holdes for sig. Tillaegget regnes KUN af dem —
-        // ikke af hele maaneden.
-        if (r.isWeekend) g.weekendLoen += r.registeredWage || 0;
-        if (r.isWeekend) g.weekendMinutter += r.registered || 0;
+        sikr(emp).linjer.push({
+          registreretMinutter: r.registered || 0,
+          registreretLoen: r.registeredWage || 0,
+          erWeekend: !!r.isWeekend,
+        });
       });
 
       // Kilometer fra de godkendte ture i samme maaned.
@@ -6607,64 +6618,22 @@ function EmployeeExportView({ instances, employees, satsHistorik }) {
         if (!erGodkendt("km", r.employee_id, String(r.id))) return;
         const emp = employees.find((e) => e.id === r.employee_id);
         if (!emp?.danloenNr) return;
-        sikr(emp).km += Number(r.km) || 0;
+        sikr(emp).kmRaekker.push({ km: r.km });
       });
 
-      // Dansk decimalkomma. Danloen laeser danske tal, og et punktum ville blive
-      // laest som tusindtalsskilletegn — 45.50 timer ville blive til 4550.
-      const tal = (n, d) => Number(n).toFixed(d).replace(".", ",");
       const linjer = [];
-      [...pr.values()]
-        .sort((a, b) => String(a.nr).localeCompare(String(b.nr), "da", { numeric: true }))
-        .forEach((g) => {
-          if (loenart.loenart_timer && g.minutter > 0) {
-            linjer.push([g.nr, g.navn, loenart.loenart_timer, tal(g.minutter / 60, 2), tal(g.loen, 2)]);
-          }
-          // Weekendtillaeg: procent af loennen for timerne loerdag og soendag.
-          // Medarbejderens egen procent vinder over den faelles; er ingen af dem
-          // sat, springes linjen over frem for at sende et nul.
-          const wPct = g.emp.weekendPctEgen != null
-            ? Number(g.emp.weekendPctEgen)
-            : Number(String(loenart.weekend_pct || "").replace(",", "."));
-          if (loenart.loenart_weekend && g.emp.weekendTillaeg && g.weekendLoen > 0
-              && Number.isFinite(wPct) && wPct > 0) {
-            const bel = g.weekendLoen * (wPct / 100);
-            linjer.push([g.nr, g.navn, loenart.loenart_weekend, tal(g.weekendMinutter / 60, 2), tal(bel, 2)]);
-            g.tillaeg += bel;
-          }
-
-          if (loenart.loenart_km && g.km > 0) {
-            // Ingen beloeb paa km-linjen. Satsen for skattefri koerselsgodtgoerelse
-            // saettes i Danloen, ikke her — den aendres ved lov hvert aar, og to
-            // steder med hver sin sats bliver til to forskellige udbetalinger.
-            linjer.push([g.nr, g.navn, loenart.loenart_km, tal(g.km, 1), ""]);
-          }
-
-          // Soen- og helligdagsbetaling: procent af MAANEDENS loen. Grundlaget er
-          // timeloennen plus weekendtillaegget - altsaa det hun faktisk tjener i
-          // maaneden. Kilometerpenge er IKKE med: de er en skattefri godtgoerelse
-          // af en udgift, ikke loen for arbejde.
-          //
-          // Regnes til sidst, saa weekendtillaegget allerede er lagt til.
-          const sPct = g.emp.shPctEgen != null
-            ? Number(g.emp.shPctEgen)
-            : Number(String(loenart.sh_pct || "").replace(",", "."));
-          if (loenart.loenart_sh && g.emp.shBetaling && Number.isFinite(sPct) && sPct > 0) {
-            const grundlag = g.loen + g.tillaeg;
-            if (grundlag > 0) {
-              linjer.push([g.nr, g.navn, loenart.loenart_sh, "", tal(grundlag * (sPct / 100), 2)]);
-            }
-          }
+      [...prMedarbejder.values()]
+        .sort((a, b) => String(a.emp.danloenNr).localeCompare(String(b.emp.danloenNr), "da", { numeric: true }))
+        .forEach(({ emp, linjer: tid, kmRaekker: km }) => {
+          const samlet = samletForMedarbejder({ linjer: tid, kmRaekker: km });
+          linjer.push(...danloenLinjer({ medarbejder: emp, samlet, loenart }));
         });
 
       if (linjer.length === 0) {
         throw new Error("Ingen godkendte linjer med et Danløn-nummer i denne måned.");
       }
 
-      const hoved = ["medarbejdernr", "navn", "loenart", "antal", "beloeb"];
-      // Semikolon, ikke komma: tallene indeholder selv komma.
-      const csv = [hoved, ...linjer]
-        .map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(";")).join("\n");
+      const csv = danloenCsv(linjer);
       const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
