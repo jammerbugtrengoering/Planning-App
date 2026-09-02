@@ -7071,6 +7071,15 @@ function EmployeeExportView({ instances, employees, satsHistorik }) {
             </>
           );
         })()}
+        {/* Fejlen blev SAT seks steder men aldrig vist. Slog en godkendelse fejl,
+            hoppede fluebenet bare tilbage, og planlaeggeren troede det var et
+            fejlklik — mens linjen i virkeligheden ikke var godkendt og derfor ikke
+            ville komme med i loenfilen. */}
+        {godkFejl && (
+          <div style={{ fontSize: 12.5, color: "#B91C1C", fontWeight: 600, maxWidth: 320 }}>
+            ⚠️ {godkFejl}
+          </div>
+        )}
         <button style={styles.primaryBtn} onClick={exportRowsCSV}><Download size={16} /> Eksporter CSV</button>
       </div>
 
@@ -8868,7 +8877,12 @@ function AreasView({ supabase, areas, employees, employeeAreas, onAreasChange, o
       if (dbFail(areaUpdErr, "gemme området")) return;
       onAreasChange((prev) => prev.map((a) => a.id === editArea.id ? { ...a, name: areaName.trim(), zip_codes: zips } : a));
     } else {
-      const { data } = await supabase.from("areas").insert({ name: areaName.trim(), zip_codes: zips }).select().single();
+      // Fejlen blev kastet vaek foer. Er navnet taget i forvejen, skete der
+      // ingenting synligt: intet omraade, ingen besked. Resten af filen bruger
+      // dbFail(); de to indsaettelser var glemt.
+      const { data, error: areaInsErr } = await supabase.from("areas")
+        .insert({ name: areaName.trim(), zip_codes: zips }).select().single();
+      if (dbFail(areaInsErr, "oprette området")) { setSaving(false); return; }
       if (data) onAreasChange((prev) => [...prev, data]);
     }
     setSaving(false); setShowAdd(false); setEditArea(null); setAreaName(""); setAreaZips("");
@@ -10829,11 +10843,14 @@ function InventoryView({ supabase, employees, currentUserName, onInventoryChange
 
   async function addItem() {
     if (!newName.trim() || !newCat) return;
-    const { data } = await supabase.from("inventory_items").insert({
+    // Samme som ved omraader: fejlen blev kastet vaek, og en vare der ikke kunne
+    // oprettes saa ud som om knappen ikke virkede.
+    const { data, error: vareFejl } = await supabase.from("inventory_items").insert({
       name: newName.trim(), category_id: newCat, unit: newUnit,
       stock: Number(newStock), min_stock: Number(newMin),
       item_number: newItemNumber.trim() || null, price: Number(newPrice) || 0,
     }).select("*, inventory_categories(name,type,icon)").single();
+    if (dbFail(vareFejl, "oprette varen")) return;
     if (data) { setItems((prev) => [...prev, data]); setShowAddItem(false); setNewName(""); setNewItemNumber(""); setNewStock(0); setNewMin(0); setNewPrice(0); }
   }
 
