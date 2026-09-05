@@ -1782,7 +1782,7 @@ const MODULE_HELP = {
         "Ingen helbredsoplysninger.",
         "Det er værd at kunne svare på, for det er ofte det første en kunde eller en kommune spørger om."] },
     { h: "Hvem får oplysningerne uden for huset", p: [
-        "Supabase i Frankfurt — hele databasen ligger der.",
+        "Supabase i Stockholm (AWS eu-north-1) — hele databasen ligger der.",
         "Netlify — leverer appernes filer. Der ligger ingen persondata.",
         "Brevo i Frankrig — alle mails.",
         "Dinero i Danmark — kundenavn, adresse, ydelser og beløb ved fakturering.",
