@@ -1756,6 +1756,50 @@ const MODULE_HELP = {
         "Kørsel mangler — der er ikke registreret tid, eller adresserne mangler.",
         "Weekendtimer er 0 — tjek weekendaftalen, og at opgaven lå lørdag eller søndag."] },
   ], warn: "Kørsel beregnes automatisk hver nat ud fra opgaverne — men kun for opgaver med registreret tid. Derfor får medarbejderne en påmindelse på mail hver dag kl. 18." },
+
+  // Ikke et modul, men et opslag. Det ligger her, fordi hjaelpeteksten er kilden til
+  // den udskrevne vejledning — saa kommer politikken automatisk med, naar nogen
+  // trykker "Hele vejledningen", og kontoret kan svare uden at lede i et dokument.
+  //
+  // Samme indhold staar i Worklist og i kundeportalen, hvor medarbejderen og kunden
+  // selv kan laese det. Rettes det ét sted, skal det rettes alle tre.
+  privatliv: { title: "Personoplysninger", intro: "Hvad systemet gemmer om medarbejdere og kunder, hvorfor, og hvad du kan svare når nogen spørger.", blocks: [
+    { h: "Om medarbejderne", p: [
+        "Navn, arbejdsmail, sprogvalg, mødetidspunkt, kompetencer og områder.",
+        "Hjemmeadresse, men kun for dem der har kørsel i arbejdstiden. Den bruges alene til at beregne afstanden til dagens første opgave.",
+        "Timeløn og lønhistorik, weekendtillæg, SH-sats og Danløn-nummer.",
+        "Registrerede timer pr. opgave, fravær og fratrædelsesdato.",
+        "Fravær står som fravær. Systemet gemmer aldrig en årsag — hverken sygdom eller diagnose.",
+        "Bliver du spurgt: der er ingen GPS og ingen positionsmåling i Worklist. Kørslen regnes ud fra adresserne på opgaverne, ikke fra hvor telefonen har været. Det er et spørgsmål, medarbejdere stiller, og svaret er entydigt nej."] },
+    { h: "Om kunderne og borgerne", p: [
+        "Navn, adresse, kontaktperson og e-mail. Aftale, tider, priser og fakturaer.",
+        "Noter og billeder fra besøget. Adgangsforhold, herunder nøgleboks- og alarmkoder.",
+        "Ved accept af et tilbud gemmes desuden IP-adresse og browser sammen med underskriften. Kunden får det oplyst på accept-siden, inden hun trykker.",
+        "På Nexus- og ældrelovsopgaver er det kommunen der er dataansvarlig. Spørger en borger om indsigt i sine oplysninger, skal hun henvises til kommunen — vi udfører alene arbejdet efter kommunens instruks."] },
+    { h: "Det systemet ikke indeholder", p: [
+        "Ingen CPR-numre. Lønfilen bruger Danløn-nummeret.",
+        "Ingen bankoplysninger og ingen kontonumre.",
+        "Ingen helbredsoplysninger.",
+        "Det er værd at kunne svare på, for det er ofte det første en kunde eller en kommune spørger om."] },
+    { h: "Hvem får oplysningerne uden for huset", p: [
+        "Supabase i Frankfurt — hele databasen ligger der.",
+        "Netlify — leverer appernes filer. Der ligger ingen persondata.",
+        "Brevo i Frankrig — alle mails.",
+        "Dinero i Danmark — kundenavn, adresse, ydelser og beløb ved fakturering.",
+        "Statens adresseregister og et tysk ruteberegningsfirma — får en adresse, når en afstand skal beregnes første gang. De får ingen navne.",
+        "Apple og Google — beskeder til telefonerne. Indholdet er krypteret; de kan ikke læse det.",
+        "Danløn — men ikke automatisk. Du henter selv filen og lægger den op."] },
+    { h: "Hvad der slettes automatisk", p: [
+        "Billeder på opgaver: efter 12 måneder. Noten består, men markeres som havende haft billeder.",
+        "Nøgleboks- og alarmkoder: tre måneder efter at opgaven er afsluttet eller slettet.",
+        "Push-tilmeldinger: når telefonen ikke svarer længere.",
+        "Ved fratrædelse: login og arbejdsmail straks. Løn- og kørselsdokumentationen bliver stående, fordi den skal kunne fremvises år efter.",
+        "Beder en kunde om at få billeder fra sit hjem slettet, kan det gøres for de enkelte billeder uden at røre resten. Sig til."] },
+    { h: "Hvert opslag i en adgangskode logges", p: [
+        "Koder ligger aldrig i medarbejderens app og gemmes ikke på telefonen.",
+        "De hentes én ad gangen, og først når systemet har kontrolleret, at medarbejderen er sat på netop den opgave.",
+        "Hvert opslag skrives i loggen med medarbejder, opgave og tidspunkt. Vi kan altså altid svare en kunde på, hvem der har haft koden."] },
+  ], warn: "Ændrer I hvad systemet gemmer, skal teksten her rettes — og de samme afsnit i Worklist og kundeportalen. Fortegnelsen over behandlingsaktiviteter skal opdateres i samme ombæring." },
 };
 
 // Udskriver hjaelpen som den staar lige nu. Hjaelpeteksten er kilden — der findes
@@ -1795,8 +1839,16 @@ function udskrivHjaelp(noegler) {
   setTimeout(() => w.print(), 400);
 }
 function ModuleHelp({ view, onClose }) {
-  const h = MODULE_HELP[view];
+  // Panelet aabner altid paa det modul man staar i, men man kan blive i det og slaa op
+  // i persondataafsnittet. Det er ikke et modul og har ingen menupunkt — uden det her
+  // ville teksten kun findes i den udskrevne vejledning, og saa ville ingen finde den
+  // i det oejeblik en kunde staar i telefonen og spoerger.
+  const [nøgle, setNøgle] = useState(view);
+  useEffect(() => { setNøgle(view); }, [view]);   // nyt modul, ny hjaelp
+
+  const h = MODULE_HELP[nøgle];
   if (!h) return null;
+  const påPrivatliv = nøgle === "privatliv";
   return (
     <div onClick={onClose} style={{ position:"fixed", inset:0, background:"rgba(17,17,17,0.45)", zIndex:200, display:"flex", justifyContent:"flex-end" }}>
       <div onClick={(e) => e.stopPropagation()}
@@ -1805,14 +1857,20 @@ function ModuleHelp({ view, onClose }) {
           <div>
             <div style={{ fontSize:11, letterSpacing:0.6, color:"#94A3B8", fontWeight:700 }}>HJÆLP</div>
             <div style={{ fontWeight:800, fontSize:17 }}>{h.title}</div>
-            <div style={{ display:"flex", gap:6, marginTop:8 }}>
-              <button onClick={() => udskrivHjaelp([view])}
+            <div style={{ display:"flex", gap:6, marginTop:8, flexWrap:"wrap" }}>
+              <button onClick={() => udskrivHjaelp([nøgle])}
                 style={{ border:"1px solid #555", background:"transparent", color:"#fff", borderRadius:8, padding:"4px 10px", fontSize:11.5, cursor:"pointer" }}>
-                Udskriv dette modul
+                Udskriv dette afsnit
               </button>
               <button onClick={() => udskrivHjaelp(Object.keys(MODULE_HELP))}
                 style={{ border:"1px solid #555", background:"transparent", color:"#fff", borderRadius:8, padding:"4px 10px", fontSize:11.5, cursor:"pointer" }}>
                 Hele vejledningen
+              </button>
+              <button onClick={() => setNøgle(påPrivatliv ? view : "privatliv")}
+                title={påPrivatliv ? "Tilbage til modulets hjælp" : "Hvad systemet gemmer om medarbejdere og kunder"}
+                style={{ border:"1px solid #555", background: påPrivatliv ? "#333" : "transparent",
+                         color:"#fff", borderRadius:8, padding:"4px 10px", fontSize:11.5, cursor:"pointer" }}>
+                {påPrivatliv ? "← Tilbage" : "Personoplysninger"}
               </button>
             </div>
           </div>
