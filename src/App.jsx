@@ -1752,8 +1752,17 @@ const MODULE_HELP = {
         "Søn- og helligdagsbetalingen beregnes af månedens godkendte løn med weekendtillægget lagt til. Kilometerpenge tæller ikke med: de er en skattefri godtgørelse af en udgift, ikke løn for arbejde.",
         "Et eksempel: 38,25 timer à 170 kr giver 6.502,50 kr. Er 6 af timerne i weekenden og tillægget 50 %, bliver det 1.020 × 50 % = 510 kr. Med 4 % SH af 7.012,50 kr bliver det 280,50 kr — i alt 7.293 kr.",
         "Satserne står under Lønarter og gælder alle. Har en medarbejder sin egen procent på stamkortet, vinder den. Er ingen af dem sat, springes linjen over — der sendes aldrig et nul."] },
+    { h: "Kørsel på en anden aktivitet", p: [
+        "Skal en medarbejder have kilometerpenge for en tur, der ikke er en almindelig opgave — hente materialer, køre til kursus — opretter du en Anden aktivitet og sætter flueben i «Der skal udbetales kørsel for turen».",
+        "Så skriver du en fra-adresse og en til-adresse. Kilometrene beregnes i nat, når aktiviteten er markeret udført — nøjagtig som al anden kørsel.",
+        "«Tur/retur» giver to linjer i stedet for én. Det er med vilje: kørte hun kun den ene vej, kan I fjerne den anden uden at hele turen ryger.",
+        "Turen skal godkendes ligesom alt andet, før den kommer med i Danløn-filen.",
+        "Har aktiviteten sin egen kørsel, tages den UD af dagens rutekæde. Ellers ville strækningen blive talt to gange — én gang som sin egen tur, og én gang som led mellem opgaven før og opgaven efter.",
+        "En almindelig aktivitet uden de to adresser opfører sig som hidtil: den er et sted i ruten, ikke en tur for sig.",
+        "Lange ture er tilladt her. På ruten mellem to opgaver afvises alt over 100 km som en formentlig fejlgeokodet adresse, men på en aktivitetstur går grænsen ved 500 km — for der ER meningen at køre langt."] },
     { h: "Hvis tallene ikke passer", p: ["Timer mangler — medarbejderen har ikke registreret.",
         "Kørsel mangler — der er ikke registreret tid, eller adresserne mangler.",
+        "En aktivitetstur mangler km — tjek at begge adresser er skrevet, at aktiviteten er markeret udført, og at ruten er under 500 km.",
         "Weekendtimer er 0 — tjek weekendaftalen, og at opgaven lå lørdag eller søndag."] },
   ], warn: "Kørsel beregnes automatisk hver nat ud fra opgaverne — men kun for opgaver med registreret tid. Derfor får medarbejderne en påmindelse på mail hver dag kl. 18." },
 
@@ -2353,6 +2362,12 @@ function PlanningApp({ session, onSignOut }) {
             offSchedule: i.off_schedule ?? false, completedBy: i.completed_by ?? null, completedAt: i.completed_at ?? null,
           nexusConfirmed: i.nexus_confirmed ?? null,
             onSchedule: i.on_schedule ?? false,
+            // Samme grund som i realtime-kortlaegningen: laeses de ikke ind, skriver
+            // syncInstance null tilbage, og koerslen forsvinder naar nogen roerer
+            // aktiviteten.
+            kmFraAdresse: i.km_fra_adresse || null,
+            kmTilAdresse: i.km_til_adresse || null,
+            kmTurRetur: i.km_tur_retur ?? false,
           };
         });
         // Planlaegningshorisont: opgaverne materialiseres altid fire uger frem, saa
@@ -2595,6 +2610,13 @@ function PlanningApp({ session, onSignOut }) {
         completedAt: i.completed_at ?? null,
         nexusConfirmed: i.nexus_confirmed ?? null,
         onSchedule: i.on_schedule ?? false,
+        // Skal med herind, ellers ville næste skrivning af opgaven nulstille dem.
+        // syncInstance skriver kmFraAdresse ?? null, og et felt der ikke blev læst
+        // ind, findes ikke — så ville kørslen stille forsvinde, første gang nogen
+        // flyttede aktiviteten i planen.
+        kmFraAdresse: i.km_fra_adresse || null,
+        kmTilAdresse: i.km_til_adresse || null,
+        kmTurRetur: i.km_tur_retur ?? false,
       };
     }
 
@@ -2761,6 +2783,11 @@ function PlanningApp({ session, onSignOut }) {
       scheduled_time: inst.scheduledTime || null,
       checklist_template_ids: inst.checklistTemplateIds || [],
       extra_items: inst.extraItems || [],
+      // Enkeltstaaende koersel paa en aktivitet. Tomme felter betyder "ingen egen
+      // tur" — og saa opfoerer aktiviteten sig som hidtil, som et sted i dagens rute.
+      km_fra_adresse: inst.kmFraAdresse || null,
+      km_til_adresse: inst.kmTilAdresse || null,
+      km_tur_retur: !!inst.kmTurRetur,
     }, { onConflict: "id" });
     if (error) {
       // 23505 på uniq_instance_slot betyder at en anden session (fx en anden
@@ -3870,7 +3897,8 @@ function PlanningApp({ session, onSignOut }) {
   }
 
   async function addActivity(payload) {
-    const { employeeId, customerName, address, date, time, duration, description } = payload;
+    const { employeeId, customerName, address, date, time, duration, description,
+            kmFra, kmTil, kmTurRetur } = payload;
     const emp = employees.find((e) => e.id === employeeId);
     if (!emp || !date) { notify("Vælg medarbejder og dato"); return; }
     const d = new Date(date);
@@ -3906,10 +3934,17 @@ function PlanningApp({ session, onSignOut }) {
       warning: null, address: address || "", customerName: customerName || "",
       accessInstructions: description || "",
       poNumber: "", contractType: "privat", invoiceReady: false, dineroExported: false,
+      // Begge adresser eller ingen. Én af dem alene er ikke en tur, og halvt udfyldte
+      // felter ville bare give en linje uden kilometer, som nogen skulle rydde op i.
+      kmFraAdresse: (kmFra || "").trim() && (kmTil || "").trim() ? kmFra.trim() : null,
+      kmTilAdresse: (kmFra || "").trim() && (kmTil || "").trim() ? kmTil.trim() : null,
+      kmTurRetur: !!kmTurRetur,
     };
     setInstances((prev) => [...prev, activityInst]);
     syncInstance(activityInst);
-    notify(`Aktivitet oprettet for ${emp.name || "medarbejderen"}`);
+    notify(activityInst.kmFraAdresse
+      ? `Aktivitet med kørsel oprettet for ${emp.name || "medarbejderen"} — kilometrene beregnes i nat, når aktiviteten er markeret udført`
+      : `Aktivitet oprettet for ${emp.name || "medarbejderen"}`);
   }
 
   function dateOfBlockInstance(t) {
@@ -11084,15 +11119,26 @@ function ActivityModal({ employees, onClose, onSave }) {
   // opfoerer sig ens. Fluebenet bestemmer bare om der ogsaa oprettes et tilbud.
   const [erTilbudsmoede, setErTilbudsmoede] = useState(false);
   const [kontrakt, setKontrakt] = useState("privat");
+  // Koersel er slaaet fra som udgangspunkt. De fleste aktiviteter er et sted man er,
+  // ikke en straekning man koerer, og to tomme adressefelter i hvert vindue ville
+  // invitere til at nogen udfylder dem uden at mene det.
+  const [harKoersel, setHarKoersel] = useState(false);
+  const [kmFra, setKmFra] = useState("");
+  const [kmTil, setKmTil] = useState("");
+  const [kmTurRetur, setKmTurRetur] = useState(true);
 
   const valgt = employees.find((e) => e.id === employeeId);
   // Kun planlaeggere kan tage et tilbudsmoede — det er ogsaa haandhaevet i databasen.
   const maaTageTilbud = !!valgt?.isAdmin;
+  const koerselKlar = !harKoersel || (kmFra.trim() && kmTil.trim());
 
   function submit() {
     if (!employeeId || !date) return;
+    if (!koerselKlar) return;
     onSave({ employeeId, customerName, address, date, time, duration, description,
-             erTilbudsmoede: erTilbudsmoede && maaTageTilbud, kontrakt });
+             erTilbudsmoede: erTilbudsmoede && maaTageTilbud, kontrakt,
+             kmFra: harKoersel ? kmFra : "", kmTil: harKoersel ? kmTil : "",
+             kmTurRetur: harKoersel && kmTurRetur });
     onClose();
   }
 
@@ -11158,12 +11204,71 @@ function ActivityModal({ employees, onClose, onSave }) {
       <input type="number" min="5" step="5" style={styles.input} value={duration} onChange={(e) => setDuration(e.target.value)} />
       <div style={styles.hint}>Hvor længe én medarbejder bruger på opgaven.</div>
 
+      {/* Koersel paa aktiviteten.
+          En almindelig aktivitet er et STED, og saa haenger den ind i dagens rute som
+          alt andet. Det her er en STRAEKNING — hente materialer i Aalborg og hjem
+          igen — og den skal maales for sig. Er de to felter udfyldt, holdes
+          aktiviteten ude af rutekaeden, saa turen ikke ogsaa taelles som et led
+          mellem opgaven foer og opgaven efter. */}
+      <button type="button" onClick={() => setHarKoersel((v) => !v)}
+        style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left",
+                 padding: "11px 12px", borderRadius: 10, marginTop: 14, cursor: "pointer",
+                 border: harKoersel ? "2px solid #4F46E5" : "1.5px solid #E2E8F0",
+                 background: harKoersel ? "#EEF2FF" : "#fff", fontFamily: "inherit" }}>
+        <span style={{ width: 20, height: 20, borderRadius: 5, flexShrink: 0,
+                       border: harKoersel ? "2px solid #4F46E5" : "2px solid #CBD5E1",
+                       background: harKoersel ? "#4F46E5" : "#fff",
+                       display: "flex", alignItems: "center", justifyContent: "center" }}>
+          {harKoersel && <Check size={12} color="#fff" strokeWidth={3} />}
+        </span>
+        <span style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 14 }}>
+          <Car size={15} color={harKoersel ? "#4F46E5" : "#64748B"} />
+          Der skal udbetales kørsel for turen
+        </span>
+      </button>
+
+      {harKoersel && (
+        <>
+          <label style={styles.label}>Kører fra</label>
+          <AdresseFelt vaerdi={kmFra} onChange={setKmFra} />
+
+          <label style={styles.label}>Kører til</label>
+          <AdresseFelt vaerdi={kmTil} onChange={setKmTil} />
+
+          <button type="button" onClick={() => setKmTurRetur((v) => !v)}
+            style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left",
+                     padding: "10px 12px", borderRadius: 10, marginTop: 10, cursor: "pointer",
+                     border: kmTurRetur ? "2px solid #4F46E5" : "1.5px solid #E2E8F0",
+                     background: kmTurRetur ? "#EEF2FF" : "#fff", fontFamily: "inherit" }}>
+            <span style={{ width: 18, height: 18, borderRadius: 5, flexShrink: 0,
+                           border: kmTurRetur ? "2px solid #4F46E5" : "2px solid #CBD5E1",
+                           background: kmTurRetur ? "#4F46E5" : "#fff",
+                           display: "flex", alignItems: "center", justifyContent: "center" }}>
+              {kmTurRetur && <Check size={11} color="#fff" strokeWidth={3} />}
+            </span>
+            <span style={{ fontSize: 13.5 }}>Tur/retur — hun kører også tilbage</span>
+          </button>
+
+          <div style={styles.hint}>
+            Kilometrene beregnes i nat, når aktiviteten er markeret udført — på samme
+            måde som al anden kørsel. Tur/retur giver to linjer, så I kan godkende
+            hver vej for sig.
+          </div>
+          {!koerselKlar && (
+            <div style={{ ...styles.hint, color: "#B91C1C", fontWeight: 600 }}>
+              Udfyld begge adresser. Én adresse alene er ikke en tur.
+            </div>
+          )}
+        </>
+      )}
+
       <label style={styles.label}>Beskrivelse</label>
       <textarea style={{ ...styles.input, minHeight: 70 }} value={description} onChange={(e) => setDescription(e.target.value)} />
 
       <div style={styles.modalActions}>
         <button style={styles.secondaryBtn} onClick={onClose}>Annuller</button>
-        <button style={styles.primaryBtn} onClick={submit} disabled={!employeeId || !date}>Opret aktivitet</button>
+        <button style={styles.primaryBtn} onClick={submit}
+          disabled={!employeeId || !date || !koerselKlar}>Opret aktivitet</button>
       </div>
     </Modal>
   );
