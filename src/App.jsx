@@ -1755,7 +1755,9 @@ const MODULE_HELP = {
     { h: "Kørsel på en anden aktivitet", p: [
         "Skal en medarbejder have kilometerpenge for en tur, der ikke er en almindelig opgave — hente materialer, køre til kursus — opretter du en Anden aktivitet og sætter flueben i «Der skal udbetales kørsel for turen».",
         "Turen ender på aktivitetens egen adresse — den du skrev i feltet Adresse øverst. Du skal derfor kun skrive, hvor hun kører FRA.",
-        "Kilometrene beregnes i nat, når aktiviteten er markeret udført — nøjagtig som al anden kørsel.",
+        "Så snart begge adresser står der, viser vinduet turens længde: «ca. 166 km». Er tallet urimeligt, er en af adresserne skrevet forkert — og det opdager du her i stedet for i lønopgørelsen en måned senere.",
+        "Anslaget står også på aktiviteten ude i ugeplanen, som et lille mærke: 🚗 ca. 166 km t/r.",
+        "Anslaget er vejledende. Det tal der udbetales, beregnes i nat efter at aktiviteten er markeret udført — en tur der bliver aflyst, udbetales ikke.",
         "«Tur/retur» giver to linjer i stedet for én. Det er med vilje: kørte hun kun den ene vej, kan I fjerne den anden uden at hele turen ryger.",
         "Turen skal godkendes ligesom alt andet, før den kommer med i Danløn-filen.",
         "Har aktiviteten sin egen kørsel, tages den UD af dagens rutekæde. Ellers ville strækningen blive talt to gange — én gang som sin egen tur, og én gang som led mellem opgaven før og opgaven efter.",
@@ -2368,6 +2370,7 @@ function PlanningApp({ session, onSignOut }) {
             // aktiviteten.
             kmFraAdresse: i.km_fra_adresse || null,
             kmTurRetur: i.km_tur_retur ?? false,
+            kmAnslaaet: i.km_anslaaet ?? null,
           };
         });
         // Planlaegningshorisont: opgaverne materialiseres altid fire uger frem, saa
@@ -2616,6 +2619,7 @@ function PlanningApp({ session, onSignOut }) {
         // flyttede aktiviteten i planen.
         kmFraAdresse: i.km_fra_adresse || null,
         kmTurRetur: i.km_tur_retur ?? false,
+        kmAnslaaet: i.km_anslaaet ?? null,
       };
     }
 
@@ -2786,6 +2790,7 @@ function PlanningApp({ session, onSignOut }) {
       // tur" — og saa opfoerer aktiviteten sig som hidtil, som et sted i dagens rute.
       km_fra_adresse: inst.kmFraAdresse || null,
       km_tur_retur: !!inst.kmTurRetur,
+      km_anslaaet: inst.kmAnslaaet ?? null,
     }, { onConflict: "id" });
     if (error) {
       // 23505 på uniq_instance_slot betyder at en anden session (fx en anden
@@ -3896,7 +3901,7 @@ function PlanningApp({ session, onSignOut }) {
 
   async function addActivity(payload) {
     const { employeeId, customerName, address, date, time, duration, description,
-            kmFra, kmTurRetur } = payload;
+            kmFra, kmTurRetur, kmAnslaaet } = payload;
     const emp = employees.find((e) => e.id === employeeId);
     if (!emp || !date) { notify("Vælg medarbejder og dato"); return; }
     const d = new Date(date);
@@ -3936,6 +3941,7 @@ function PlanningApp({ session, onSignOut }) {
       // egen adresse, og uden den er der ikke noget at koere hen til.
       kmFraAdresse: (kmFra || "").trim() && (address || "").trim() ? kmFra.trim() : null,
       kmTurRetur: !!kmTurRetur,
+      kmAnslaaet: kmAnslaaet ?? null,
     };
     setInstances((prev) => [...prev, activityInst]);
     syncInstance(activityInst);
@@ -5282,6 +5288,13 @@ function WeekView({ employees, instances, unplaced, onAdd, onAuto, onScheduleWee
                           {t.customerName ? <div style={{ fontSize: 13 }}>Kunde: {t.customerName}</div> : null}
                           {t.address ? <div style={{ fontSize: 13 }}>Adresse: {t.address}</div> : null}
                           {t.needsKeyPickup ? <div style={{ fontSize: 13, fontWeight: 700 }}>🔑 Nøgle/adgangskort hentes på kontoret</div> : null}
+                          {t.kmFraAdresse ? (
+                            <div style={{ fontSize: 13 }}>
+                              Kørsel: fra {t.kmFraAdresse}
+                              {t.kmTurRetur ? " (tur/retur)" : ""}
+                              {t.kmAnslaaet ? ` · ca. ${String(t.kmAnslaaet).replace(".", ",")} km` : ""}
+                            </div>
+                          ) : null}
                           {t.accessInstructions ? <div style={{ fontSize: 13 }}>Adgang: {t.accessInstructions}</div> : null}
                           {(t.checklist || []).length > 0 ? (
                             <ul style={{ margin: "6px 0 0", paddingLeft: 18, fontSize: 13 }}>
@@ -11121,6 +11134,11 @@ function ActivityModal({ employees, onClose, onSave }) {
   const [harKoersel, setHarKoersel] = useState(false);
   const [kmFra, setKmFra] = useState("");
   const [kmTurRetur, setKmTurRetur] = useState(true);
+  // Anslaget hentes mens man skriver, saa en fejlskrevet adresse opdages her og ikke
+  // en maaned senere i loenopgoerelsen. { km, minutter } naar det lykkedes.
+  const [anslag, setAnslag] = useState(null);
+  const [anslagFejl, setAnslagFejl] = useState("");
+  const [anslagHenter, setAnslagHenter] = useState(false);
 
   const valgt = employees.find((e) => e.id === employeeId);
   // Kun planlaeggere kan tage et tilbudsmoede — det er ogsaa haandhaevet i databasen.
@@ -11129,12 +11147,47 @@ function ActivityModal({ employees, onClose, onSave }) {
   // der skal udbetales koersel — en tur uden et sted at koere hen findes ikke.
   const koerselKlar = !harKoersel || (kmFra.trim() && address.trim());
 
+  // Slaa turen op, naar begge adresser staar der. Vent et halvt sekund efter sidste
+  // tastetryk — ellers ville hvert bogstav i en adresse blive til et opslag hos
+  // ruteberegningen.
+  useEffect(() => {
+    const fra = kmFra.trim(), til = address.trim();
+    if (!harKoersel || !fra || !til || fra === til) {
+      setAnslag(null); setAnslagFejl(""); setAnslagHenter(false);
+      return;
+    }
+    let afbrudt = false;
+    setAnslagHenter(true); setAnslagFejl("");
+    const t = setTimeout(async () => {
+      try {
+        const { data, error } = await supabase.functions.invoke("travel-distance", {
+          // Samme graense som natjobbet bruger paa en aktivitetstur. Ellers ville
+          // anslaget sige 166 km og udbetalingen bagefter sige ingenting.
+          body: { pairs: [{ a: fra, b: til, maxKm: 500 }] },
+        });
+        if (afbrudt) return;
+        const r = (data && data.results && data.results[0]) || null;
+        if (error) setAnslagFejl("Ruten kunne ikke beregnes lige nu.");
+        else if (!r || typeof r.km !== "number") setAnslagFejl(r?.error || "Ruten kunne ikke beregnes. Tjek adresserne.");
+        else setAnslag({ km: r.km, minutter: r.minutes });
+      } catch {
+        if (!afbrudt) setAnslagFejl("Ruten kunne ikke beregnes lige nu.");
+      }
+      if (!afbrudt) setAnslagHenter(false);
+    }, 500);
+    return () => { afbrudt = true; clearTimeout(t); };
+  }, [harKoersel, kmFra, address]);
+
+  // Det tal der gemmes. Tur/retur er to ture, saa anslaget er det dobbelte.
+  const anslaaetIalt = anslag ? Math.round(anslag.km * (kmTurRetur ? 2 : 1) * 10) / 10 : null;
+
   function submit() {
     if (!employeeId || !date) return;
     if (!koerselKlar) return;
     onSave({ employeeId, customerName, address, date, time, duration, description,
              erTilbudsmoede: erTilbudsmoede && maaTageTilbud, kontrakt,
-             kmFra: harKoersel ? kmFra : "", kmTurRetur: harKoersel && kmTurRetur });
+             kmFra: harKoersel ? kmFra : "", kmTurRetur: harKoersel && kmTurRetur,
+             kmAnslaaet: harKoersel ? anslaaetIalt : null });
     onClose();
   }
 
@@ -11254,10 +11307,41 @@ function ActivityModal({ employees, onClose, onSave }) {
             <span style={{ fontSize: 13.5 }}>Tur/retur — hun kører også tilbage</span>
           </button>
 
+          {/* Anslaget. Det staar tydeligt, men med «ca.» foran og en linje under om
+              hvor det rigtige tal kommer fra. Et tal uden forbehold ville blive
+              husket som en aftale om, hvad der bliver udbetalt. */}
+          {harKoersel && (kmFra.trim() && address.trim()) && (
+            <div style={{ marginTop: 12, padding: "12px 14px", borderRadius: 10,
+                          background: anslagFejl ? "#FEF2F2" : "#EEF2FF",
+                          border: `1px solid ${anslagFejl ? "#FECACA" : "#C7D2FE"}` }}>
+              {anslagHenter ? (
+                <div style={{ fontSize: 13.5, color: "#4F46E5" }}>Beregner ruten…</div>
+              ) : anslagFejl ? (
+                <div style={{ fontSize: 13, color: "#B91C1C", lineHeight: 1.5 }}>{anslagFejl}</div>
+              ) : anslag ? (
+                <>
+                  <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
+                    <span style={{ fontSize: 21, fontWeight: 800, color: "#4F46E5" }}>
+                      ca. {String(anslaaetIalt).replace(".", ",")} km
+                    </span>
+                    <span style={{ fontSize: 13, color: "#4F46E5" }}>
+                      {kmTurRetur
+                        ? `${String(anslag.km).replace(".", ",")} km hver vej · ca. ${fmtMin(anslag.minutter * 2)} i bilen`
+                        : `ca. ${fmtMin(anslag.minutter)} i bilen`}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: 12, color: "#64748B", marginTop: 5, lineHeight: 1.5 }}>
+                    Vejledende. Det tal der udbetales, beregnes i nat efter at
+                    aktiviteten er markeret udført — en tur der bliver aflyst,
+                    udbetales ikke.
+                  </div>
+                </>
+              ) : null}
+            </div>
+          )}
+
           <div style={styles.hint}>
-            Kilometrene beregnes i nat, når aktiviteten er markeret udført — på samme
-            måde som al anden kørsel. Tur/retur giver to linjer, så I kan godkende
-            hver vej for sig.
+            Tur/retur giver to linjer i lønopgørelsen, så I kan godkende hver vej for sig.
           </div>
           {!koerselKlar && (
             <div style={{ ...styles.hint, color: "#B91C1C", fontWeight: 600 }}>
@@ -11954,6 +12038,16 @@ return (
               <option key={c.key} value={c.key}>{c.icon} {c.label}</option>
             ))}
           </select>
+        )}
+        {/* Koerselsmaerket. Anslaget staar med, saa planlaeggeren kan se turens
+            laengde uden at aabne aktiviteten — og opdage en fejlskrevet adresse med
+            det samme i stedet for i loenopgoerelsen en maaned senere. */}
+        {t.kmFraAdresse && (
+          <span style={{ ...styles.typeChip, background: "#EEF2FF", color: "#4F46E5" }}
+            title={`Kører fra ${t.kmFraAdresse}${t.kmTurRetur ? " — tur/retur" : ""}. Vejledende tal; udbetalingen beregnes efter at aktiviteten er markeret udført.`}>
+            🚗 {t.kmAnslaaet ? `ca. ${String(t.kmAnslaaet).replace(".", ",")} km` : "kørsel"}
+            {t.kmTurRetur ? " t/r" : ""}
+          </span>
         )}
         {t.offSchedule && <span style={{ ...styles.typeChip, background: "#FEF9C3", color: "#B45309" }}>⚠️ Uden for aftale</span>}
         {t.onSchedule && !t.offSchedule && <span style={{ ...styles.typeChip, background: "#ECFDF5", color: "#16A34A" }}>✓ Aftalt dag</span>}
