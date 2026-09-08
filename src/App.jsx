@@ -1595,7 +1595,8 @@ const MODULE_HELP = {
         "Når du vælger kunden, gemmes hendes unikke kundenummer på opgaven og på aftalen. Det er det nummer eksporten bruger — så to kunder med samme navn ikke kan forveksles.",
         "Finder søgningen ingen, skal kunden oprettes i Dinero først. Så kan du finde den her bagefter.",
         "Svarer Dinero ikke, så vent lidt og prøv igen. Du kan ikke oprette kunden midlertidigt i systemet — en kunde uden Dinero-nummer kan ikke faktureres."] },
-    { h: "Kolonnerne", p: ["Planlagt er den tid der er sat af. Registreret er den tid medarbejderen har logget.",
+    { h: "Kolonnerne", p: ["Planlagt er den tid der er sat af. Registreret er den tid der kan faktureres.",
+        "Er nogen markeret som oplæring på opgaven, er deres timer trukket fra her. Tre mand på en opgave til to timer giver seks timer i løn og to timer på fakturaen. Vil du se den fulde tid, står den på opgaven og under Løn data.",
         "Dinero (blå) markerer at linjen er sendt. Det grønne flueben er fakturagrundlag."] },
     { h: "Sådan fakturerer du", p: ["Vælg måned og år.", "Gennemgå listen og ret manglende registreringer med medarbejderen.",
         "Sæt fakturagrundlag på det der skal faktureres.", "Tryk «Eksportér til Dinero» og bekræft.",
@@ -1610,7 +1611,7 @@ const MODULE_HELP = {
         "Er kommentaren mærket «Kom ikke ind», blev opgaven ikke udført. Er der alligevel registreret tid på den, er det fordi du selv har besluttet i ugeplanen at den skal faktureres.",
         "Billederne slettes automatisk efter 12 måneder. Står der at de er slettet, er teksten stadig gyldig dokumentation for hvad der skete.",
         "Står der «Ikke kvitteret i Nexus» på linjen, har medarbejderen afsluttet uden at kvittere i KMD Nexus. Tjek det før du fakturerer — kommunen betaler efter Nexus."] },
-  ], warn: "Der faktureres kun registreret tid. Er der ikke logget tid, springes selve arbejdet over — også selvom opgaven er markeret som fakturagrundlag. Bekræftelsen fortæller hvor mange det gælder. Forbrugte produkter kommer stadig med." },
+  ], warn: "Der faktureres kun registreret tid — og kun tid fra dem der udfører opgaven, ikke fra dem der er med for at lære. Er der ikke logget fakturerbar tid, springes selve arbejdet over, også selvom opgaven er markeret som fakturagrundlag. Bekræftelsen fortæller hvor mange det gælder. Forbrugte produkter kommer stadig med." },
 
   inventory: { title: "Lager", intro: "Både det medarbejderne bruger hos kunderne, og arbejdstøj de kan bestille.", blocks: [
     { h: "De to slags produkter", p: ["Kundeprodukter bruges hos kunden og faktureres videre. De skal have varenummer og pris.",
@@ -1720,6 +1721,7 @@ const MODULE_HELP = {
   kundetimer: { title: "Kundetimer", intro: "Hvornår blev der brugt en anden tid end aftalt — og hvorfor.", blocks: [
     { h: "Hvad du ser", p: [
         "Kun de besøg hvor den registrerede tid er en anden end den aftalte. Passer tiden, er der ikke noget at forklare, og så fylder opgaven ikke.",
+        "Er nogen med på opgaven for at lære, tæller deres timer IKKE med her. Ellers ville hver eneste oplæringsdag stå som et stort merforbrug, og listen ville være ubrugelig præcis i den uge. Deres timer er der stadig — de står under Løn data.",
         "For hvert besøg står den planlagte tid, den registrerede tid, forskellen, og medarbejderens begrundelse.",
         "Alt er foldet ud. Ringer kunden og spørger hvorfor der er brugt mere tid, skal du kunne læse svaret uden at klikke først.",
         "Mest merforbrug øverst — det er den samtale der kommer.",
@@ -1737,7 +1739,7 @@ const MODULE_HELP = {
     { h: "Eksport", p: [
         "CSV-filen har en linje pr. besøg med begrundelsen, og en sumlinje pr. kunde.",
         "Der står ingen priser — hverken på skærmen eller i filen. Skal der kroner på, ligger de under Fakturering."] },
-  ], warn: "Tilbudsmøder og interne blokke som ferie og sygdom tæller ikke med. To medarbejdere på samme besøg er ét besøg, og deres minutter lægges sammen — det er sådan kunden ser det." },
+  ], warn: "Tilbudsmøder og interne blokke som ferie og sygdom tæller ikke med. To medarbejdere på samme besøg er ét besøg, og deres minutter lægges sammen — det er sådan kunden ser det. Undtagen dem der er markeret som oplæring: deres tid er med i lønnen, men hverken i denne liste eller på fakturaen." },
 
   medExport: { title: "Løn data", intro: "Grundlaget for løn: timer og kørsel pr. medarbejder.", blocks: [
     { h: "Sådan gør du", p: ["Vælg måned og år.", "«Afvigelse» viser hvor medarbejderen har skrevet en begrundelse.",
@@ -1781,7 +1783,9 @@ const MODULE_HELP = {
         "Har aktiviteten sin egen kørsel, tages den UD af dagens rutekæde. Ellers ville strækningen blive talt to gange — én gang som sin egen tur, og én gang som led mellem opgaven før og opgaven efter.",
         "En almindelig aktivitet uden de to adresser opfører sig som hidtil: den er et sted i ruten, ikke en tur for sig.",
         "Lange ture er tilladt her. På ruten mellem to opgaver afvises alt over 100 km som en formentlig fejlgeokodet adresse, men på en aktivitetstur går grænsen ved 500 km — for der ER meningen at køre langt."] },
-    { h: "Hvis tallene ikke passer", p: ["Timer mangler — medarbejderen har ikke registreret.",
+    { h: "Hvis tallene ikke passer", p: [
+        "Timer der er markeret som oplæring, ER med her. De skal udbetales — det er kun kundens faktura, de holdes ude af.",
+        "Timer mangler — medarbejderen har ikke registreret.",
         "Kørsel mangler — der er ikke registreret tid, eller adresserne mangler.",
         "En aktivitetstur mangler km — tjek at både Adresse og «Kører fra» er udfyldt, at aktiviteten er markeret udført, og at ruten er under 500 km.",
         "Weekendtimer er 0 — tjek weekendaftalen, og at opgaven lå lørdag eller søndag."] },
