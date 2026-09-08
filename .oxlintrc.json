@@ -13,7 +13,8 @@
     "supabase/**",
     "netlify/**",
     "tjek-tdz.mjs",
-    "loenberegning.test.mjs"
+    "loenberegning.test.mjs",
+    "opgavetid.test.mjs"
   ],
   "rules": {
     "no-undef": "error",

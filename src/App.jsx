@@ -1,5 +1,8 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { samletForMedarbejder, danloenLinjer, danloenCsv } from "./loenberegning.js";
+// Fakturerbar tid er ikke det samme som registreret tid, saa snart nogen er med paa
+// en opgave for at laere. Reglen ligger i opgavetid.js og afproeves ved hvert build.
+import { fakturerbareMinutter, registreredeMinutter, oplaeringsFolk, erUnderOplaering } from "./opgavetid.js";
 import { supabase } from "./supabaseClient";
 import {
   Plus, Download, X, Clock, AlertTriangle,
@@ -951,6 +954,11 @@ function ensureWeekInstances(week, year, allInstances, templates, employees, are
           // Auto-planlaegningen roerer aldrig en opgave der allerede har en medarbejder,
           // saa tildelingen staar ved magt - og sygdom/ferie fjerner den igen som normalt.
           assignees: tpl.preferredEmployeeId ? [tpl.preferredEmployeeId] : [],
+          // BEVIDST ingen oplaeringMedarbejdere her. En ny opgave foedes altid uden,
+          // ogsaa selvom sidste uges opgave paa samme aftale havde en elev paa.
+          // Oplaering er en beslutning om én bestemt dag; arvedes den, ville en kunde
+          // stille og roligt holde op med at blive faktureret, og ingen ville opdage
+          // hvornaar det begyndte.
           status: tpl.preferredEmployeeId ? "planlagt" : "unscheduled", timeLog: [],
           checklist: instantiateChecklist(tpl.checklistItems || []),
           checklistTemplateIds: tpl.checklistTemplateIds || [], extraItems: tpl.extraItems || [],
@@ -982,7 +990,9 @@ function ensureWeekInstances(week, year, allInstances, templates, employees, are
         const alreadyDelivered =
           existing.dineroExported ||
           existing.status === "udført" ||
-          ((existing.timeLog || []).reduce((s, l) => s + (l.minutes || 0), 0) > 0);
+          // registreret og ikke fakturerbar: har nogen overhovedet vaeret der, er
+          // opgaven roert, ogsaa hvis det kun var en elev.
+          (registreredeMinutter(existing) > 0);
         if (!alreadyDelivered) {
           list[existingIdx] = {
             ...existing,
@@ -1752,6 +1762,14 @@ const MODULE_HELP = {
         "Søn- og helligdagsbetalingen beregnes af månedens godkendte løn med weekendtillægget lagt til. Kilometerpenge tæller ikke med: de er en skattefri godtgørelse af en udgift, ikke løn for arbejde.",
         "Et eksempel: 38,25 timer à 170 kr giver 6.502,50 kr. Er 6 af timerne i weekenden og tillægget 50 %, bliver det 1.020 × 50 % = 510 kr. Med 4 % SH af 7.012,50 kr bliver det 280,50 kr — i alt 7.293 kr.",
         "Satserne står under Lønarter og gælder alle. Har en medarbejder sin egen procent på stamkortet, vinder den. Er ingen af dem sat, springes linjen over — der sendes aldrig et nul."] },
+    { h: "Oplæring — flere på opgaven uden at kunden betaler mere", p: [
+        "Skal en ny med ud og lære en opgave, sætter du hende på opgaven som alle andre og trykker «Oplæring» ud for hendes navn i opgavevinduet.",
+        "Så får hun sine timer på lønsedlen som normalt, men kunden faktureres kun for den, der udfører opgaven. Tre mand på en opgave til to timer giver seks timer i løn og to timer på fakturaen.",
+        "Kundetimer regner også kun med den fakturerbare tid. Uden det ville hver eneste oplæringsdag stå som et overforbrug på flere timer, og listen ville blive ubrugelig i den uge.",
+        "Mærket sidder på den ENKELTE opgave og aldrig på medarbejderen. Hun kan sagtens være fast og fakturerbar på sine egne opgaver samme dag.",
+        "Det arves heller ikke til næste uges opgave på samme aftale. Det er med vilje: arvedes det, ville en kunde stille og roligt holde op med at blive faktureret, og ingen ville opdage hvornår det begyndte.",
+        "Bliver eleven fast på opgaven bagefter, fjerner du bare mærket — så faktureres hendes tid igen fra den dag.",
+        "Medarbejderen kan se det selv i Worklist, med besked om at tiden stadig tæller på lønnen. Ellers ville hun tro, det ikke kunne betale sig at registrere den."] },
     { h: "Kørsel på en anden aktivitet", p: [
         "Skal en medarbejder have kilometerpenge for en tur, der ikke er en almindelig opgave — hente materialer, køre til kursus — opretter du en Anden aktivitet og sætter flueben i «Der skal udbetales kørsel for turen».",
         "Turen ender på aktivitetens egen adresse — den du skrev i feltet Adresse øverst. Du skal derfor kun skrive, hvor hun kører FRA.",
@@ -2370,6 +2388,7 @@ function PlanningApp({ session, onSignOut }) {
             // aktiviteten.
             kmFraAdresse: i.km_fra_adresse || null,
             kmTurRetur: i.km_tur_retur ?? false,
+            oplaeringMedarbejdere: i.oplaering_medarbejdere ?? [],
             kmAnslaaet: i.km_anslaaet ?? null,
           };
         });
@@ -2619,6 +2638,7 @@ function PlanningApp({ session, onSignOut }) {
         // flyttede aktiviteten i planen.
         kmFraAdresse: i.km_fra_adresse || null,
         kmTurRetur: i.km_tur_retur ?? false,
+        oplaeringMedarbejdere: i.oplaering_medarbejdere ?? [],
         kmAnslaaet: i.km_anslaaet ?? null,
       };
     }
@@ -2790,6 +2810,7 @@ function PlanningApp({ session, onSignOut }) {
       // tur" — og saa opfoerer aktiviteten sig som hidtil, som et sted i dagens rute.
       km_fra_adresse: inst.kmFraAdresse || null,
       km_tur_retur: !!inst.kmTurRetur,
+      oplaering_medarbejdere: inst.oplaeringMedarbejdere ?? [],
       km_anslaaet: inst.kmAnslaaet ?? null,
     }, { onConflict: "id" });
     if (error) {
@@ -3547,9 +3568,25 @@ function PlanningApp({ session, onSignOut }) {
   function removeAssignee(taskId, empId) {
     updateInstance(taskId, (t) => {
       const nextAssignees = (t.assignees || []).filter((id) => id !== empId);
+      // Ud af oplaeringslisten ogsaa. Ellers ville en genindsat medarbejder komme
+      // tilbage som elev uden at nogen havde bedt om det.
+      const nyOplaering = oplaeringsFolk(t).filter((id) => id !== empId);
       return nextAssignees.length === 0
-        ? { ...t, assignees: [], day: (t.type === "flexible" || t.type === "adhoc") ? null : t.day, status: "unscheduled" }
-        : { ...t, assignees: nextAssignees };
+        ? { ...t, assignees: [], oplaeringMedarbejdere: [], day: (t.type === "flexible" || t.type === "adhoc") ? null : t.day, status: "unscheduled" }
+        : { ...t, assignees: nextAssignees, oplaeringMedarbejdere: nyOplaering };
+    });
+  }
+
+  // Slaar oplaering til og fra for én medarbejder paa én opgave.
+  //
+  // Det er med vilje et valg pr. opgave og ikke en indstilling paa medarbejderen.
+  // Eleven er fast paa sine egne opgaver samme uge — et flag paa personen ville
+  // goere hende gratis for alle kunder, indtil nogen huskede at slaa det fra igen.
+  function toggleOplaering(taskId, empId) {
+    updateInstance(taskId, (t) => {
+      const nu = oplaeringsFolk(t);
+      const naeste = nu.includes(empId) ? nu.filter((id) => id !== empId) : [...nu, empId];
+      return { ...t, oplaeringMedarbejdere: naeste };
     });
   }
   // Goer en medarbejder fast paa aftalen. Valget gemmes paa skabelonen, saa alle
@@ -4087,8 +4124,7 @@ function PlanningApp({ session, onSignOut }) {
     const rows = [["Uge", "Dag", "Opgave", "Kunde", "Adresse", "Fakturabeskrivelse", "Type", "Kontrakttype", "Medarbejdere", "Status", "Planlagt (min)", "Planlagt (timer)", "Registreret (min)", "Registreret (timer)"]];
     toExport.forEach((t) => {
       const names = (t.assignees || []).map((id) => employees.find((e) => e.id === id)?.name).filter(Boolean);
-      const tl = t.timeLog || t.time_log || [];
-      const logged = tl.reduce((s, l) => s + (l.minutes || 0), 0);
+      const logged = fakturerbareMinutter(t);
       rows.push([
         `Uge ${t.week}`,
         ALL_DAYS.find((d) => d.key === t.day)?.label || "—",
@@ -4152,7 +4188,7 @@ function PlanningApp({ session, onSignOut }) {
     // Opgaver uden registreret tid faktureres ikke for arbejdet - vis det tydeligt
     // i bekraeftelsen, saa planlaeggeren kan naa at rette op inden kladden dannes.
     const noTimeLogged = toExport.filter((t) => !t.dineroExported &&
-      ((t.timeLog || t.time_log || []).reduce((s, l) => s + (l.minutes || 0), 0) <= 0));
+      fakturerbareMinutter(t) <= 0);
     const withCustomer = toExport.filter((t) => t.customerName && t.customerName.trim());
 
     const groups = {};
@@ -4205,7 +4241,7 @@ function PlanningApp({ session, onSignOut }) {
         // der ikke faktureres for det. Tidligere faldt beregningen tilbage til den
         // PLANLAGTE varighed, saa en opgave der aldrig blev udfoert endte paa fakturaen
         // med det planlagte beloeb, mens skaermen viste 0 kr under "Registreret kr.".
-        const loggedMinutes = (t.timeLog || t.time_log || []).reduce((s, l) => s + (l.minutes || 0), 0);
+        const loggedMinutes = fakturerbareMinutter(t);
         if (loggedMinutes <= 0) return productLines;
         const serviceLine = t.pricingType === "fixed"
           ? {
@@ -4348,10 +4384,8 @@ function PlanningApp({ session, onSignOut }) {
       const bDay = b.day ? ALL_DAYS.findIndex((d) => d.key === b.day) : 99;
       return aDay - bDay;
     });
-  const totalLogged = useMemo(() => instances.reduce((s, t) => {
-    const tl = t.timeLog || t.time_log || [];
-    return s + tl.reduce((s2, l) => s2 + (l.minutes || 0), 0);
-  }, 0), [instances]);
+  const totalLogged = useMemo(
+    () => instances.reduce((s, t) => s + fakturerbareMinutter(t), 0), [instances]);
   const wk = weekMeta(weekOffset, weekYear);
 
   if (loading) {
@@ -4772,6 +4806,7 @@ function PlanningApp({ session, onSignOut }) {
           }}
           onAddAssignee={(taskId, empId) => { const t = instances.find((x) => x.id === taskId); if (t?.day) manualPlace(taskId, t.day, empId); }}
           onRemoveAssignee={removeAssignee}
+          onToggleOplaering={toggleOplaering}
           onUnplace={(taskId) => { unplace(taskId); setOpenTaskId(null); }}
           onDelete={(taskId) => { deleteTask(taskId); setOpenTaskId(null); }}
           onEndBlockEarly={endBlockEarly}
@@ -5943,7 +5978,7 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
     });
 
   const totalPlanned = placed.reduce((s, t) => s + samletArbejde(t), 0);
-  const totalRegistered = placed.reduce((s, t) => s + (t.timeLog || t.time_log || []).reduce((s2, l) => s2 + (l.minutes || 0), 0), 0);
+  const totalRegistered = placed.reduce((s, t) => s + fakturerbareMinutter(t), 0);
 
   // Forventet omsætning baseret på registreret tid og timepriser
   const expectedRevenue = placed.reduce((s, t) => {
@@ -5951,7 +5986,7 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
       const hasLog = (t.timeLog || t.time_log || []).length > 0 || t.status === "udført";
       return s + (hasLog ? (Number(t.fixedPrice) || 0) : 0);
     }
-    const logged = (t.timeLog || t.time_log || []).reduce((s2, l) => s2 + (l.minutes || 0), 0);
+    const logged = fakturerbareMinutter(t);
     const rate = localPricing[t.contractType || "privat"] || 0;
     return s + (logged / 60) * rate;
   }, 0);
@@ -6076,7 +6111,7 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
       <div style={{ background: "#fff", borderRadius: "0 0 10px 10px", boxShadow: "0 1px 3px rgba(0,0,0,0.06)", overflow: "hidden" }}>
         {placed.map((t, idx) => {
           const emps = (t.assignees || []).map((id) => employees.find((e) => e.id === id)).filter(Boolean);
-          const logged = (t.timeLog || t.time_log || []).reduce((s, l) => s + (l.minutes || 0), 0);
+          const logged = fakturerbareMinutter(t);
           const dayLabel = ALL_DAYS.find((d) => d.key === t.day)?.label || t.day || "—";
           const isLow = logged > 0 && logged < t.duration * 0.5;
           const isEditing = editMinutes[t.id] !== undefined;
@@ -6364,7 +6399,9 @@ function CustomerHoursView({ instances }) {
       const { month, year } = instanceMonthYear(t, filterYear);
       if (month !== filterMonth || year !== filterYear) return;
       const tl = t.timeLog || t.time_log || [];
-      const registreret = tl.reduce((sum, l) => sum + (l.minutes || 0), 0);
+      // Fakturerbar og ikke al registreret tid: ellers stod hver oplaeringsdag som et
+      // overforbrug paa flere timer, og listen blev ubrugelig i netop den uge.
+      const registreret = fakturerbareMinutter(t);
       alle.push({
         kunde: t.customerName.trim(),
         week: t.week,
@@ -7346,7 +7383,7 @@ function ReportsView({ instances, pricing, budgets, onSaveBudget, isAdminUser })
             const hasLog = (t.timeLog || t.time_log || []).length > 0 || t.status === "udført";
             return s + (hasLog ? (Number(t.fixedPrice) || 0) : 0);
           }
-          const logged = (t.timeLog || t.time_log || []).reduce((s2, l) => s2 + (l.minutes || 0), 0);
+          const logged = fakturerbareMinutter(t);
           return s + (logged / 60) * rate;
         }, 0);
         if (isAllAreas) {
@@ -8441,7 +8478,7 @@ function ContractsView({ templates: alleTemplates, instances, pricing, employees
   function realizedMinutes(tplId) {
     return instances
       .filter((i) => i.templateId === tplId)
-      .reduce((s, i) => s + (i.timeLog || i.time_log || []).reduce((s2, l) => s2 + (l.minutes || 0), 0), 0);
+      .reduce((s, i) => s + fakturerbareMinutter(i), 0);
   }
 
   // Planlagte timer/uge for en skabelon: varighed pr. besøg × antal ugedage den
@@ -11719,7 +11756,7 @@ function EmployeeModal({ emp, onClose, onSave, skills: skillList, satsHistorik }
 }
 
 // ---------- Task / service order detail ----------
-function TaskDetailModal({ task, employees, templates, onSetPreferredEmployee, onCancelTemplate, checklistTemplates, skills, isAdminUser, areas, employeeAreas, onClose, onSetStatus, onToggleChecklistItem, onAddChecklistItem, onAddChecklistTemplate, onAddAssignee, onRemoveAssignee, onUnplace, onDelete, onUpdateCustomer, onUpdateCustomerInfo, onUpdateContractType, onRenameTask, onCopy, onUpdateSkills, onEndBlockEarly, onUpdateSchedule, onUpdateKeyPickup, onUpdateScheduledTime, tilbudPaaOpgaven, onAabnTilbud }) {
+function TaskDetailModal({ task, employees, templates, onSetPreferredEmployee, onCancelTemplate, checklistTemplates, skills, isAdminUser, areas, employeeAreas, onClose, onSetStatus, onToggleChecklistItem, onAddChecklistItem, onAddChecklistTemplate, onAddAssignee, onRemoveAssignee, onToggleOplaering, onUnplace, onDelete, onUpdateCustomer, onUpdateCustomerInfo, onUpdateContractType, onRenameTask, onCopy, onUpdateSkills, onEndBlockEarly, onUpdateSchedule, onUpdateKeyPickup, onUpdateScheduledTime, tilbudPaaOpgaven, onAabnTilbud }) {
   // Disse to laa efter det tidlige return for blokeringer (sygdom/ferie) laengere nede.
   // Hooks skal kaldes i samme raekkefoelge hver render: aabnede man en blokering og
   // derefter en almindelig opgave i samme modal, ville React se to hooks mere end sidst
@@ -12397,15 +12434,29 @@ return (
           der saettes paa. Uden regnestykket i klartekst er det let at saette varigheden
           som om det var den samlede tid, og saa faar medarbejderne besked om at de har
           overskredet noget de ikke har. */}
-      {assignedEmps.length > 1 && (
-        <div style={styles.flerePersonerBoks}>
-          <div style={{ fontWeight: 700, marginBottom: 3 }}>{assignedEmps.length} medarbejdere på opgaven</div>
-          <div>
-            Varigheden er pr. person: {assignedEmps.length} × {fmtMin(t.duration)} = <strong>{fmtMin(samletArbejde(t))} samlet arbejde</strong>.
-            Sikr dig at det passer med opgaven — det er det tal medarbejderne måles på, og det der faktureres.
+      {assignedEmps.length > 1 && (() => {
+        const elever = oplaeringsFolk(t);
+        const leverer = assignedEmps.length - elever.length;
+        return (
+          <div style={styles.flerePersonerBoks}>
+            <div style={{ fontWeight: 700, marginBottom: 3 }}>{assignedEmps.length} medarbejdere på opgaven</div>
+            {elever.length === 0 ? (
+              <div>
+                Varigheden er pr. person: {assignedEmps.length} × {fmtMin(t.duration)} = <strong>{fmtMin(samletArbejde(t))} samlet arbejde</strong>.
+                Sikr dig at det passer med opgaven — det er det tal medarbejderne måles på, og det der faktureres.
+              </div>
+            ) : (
+              /* Med elever paa holder det gamle regnestykke ikke laengere, og saetningen
+                 om at alt faktureres ville vaere direkte forkert. Derfor to tal. */
+              <div>
+                {elever.length} af dem er med for at lære. Alle {assignedEmps.length} får deres timer på lønsedlen,
+                men kunden faktureres kun for de {leverer === 1 ? "en" : leverer}, der udfører opgaven:{" "}
+                <strong>{fmtMin((t.duration || 0) * Math.max(leverer, 0))}</strong>.
+              </div>
+            )}
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       <div style={styles.detailAssigneeList}>
         {assignedEmps.map((e) => (
@@ -12413,6 +12464,22 @@ return (
             <span style={{ ...styles.avatar, background: e.color }}>{initials(e.name)}</span>
             <span style={{ flex: 1, fontSize: 13 }}>{e.name}</span>
             {byEmployee[e.id] > 0 && <span style={styles.cardMeta}>{fmtMin(byEmployee[e.id])} registreret</span>}
+            {/* Oplaering saettes pr. opgave. Knappen sidder her, hvor man alligevel
+                staar og kobler folk paa — ikke paa medarbejderens stamkort, hvor den
+                ville komme til at gaelde alle hendes opgaver. */}
+            {onToggleOplaering && (
+              <button type="button" onClick={() => onToggleOplaering(t.id, e.id)}
+                title={erUnderOplaering(t, e.id)
+                  ? "Med for at lære. Tiden går på lønnen, ikke på fakturaen. Tryk for at slå fra."
+                  : "Marker som under oplæring på denne opgave"}
+                style={{ border: erUnderOplaering(t, e.id) ? "1px solid #B45309" : "1px solid #E2E8F0",
+                         background: erUnderOplaering(t, e.id) ? "#FEF3C7" : "#fff",
+                         color: erUnderOplaering(t, e.id) ? "#92400E" : "#94A3B8",
+                         borderRadius: 999, padding: "2px 9px", fontSize: 11, fontWeight: 700,
+                         cursor: "pointer", whiteSpace: "nowrap", fontFamily: "inherit" }}>
+                Oplæring
+              </button>
+            )}
             {assignedEmps.length > 1 && (
               (t.completedByEmployee || t.completed_by_employee || {})[e.id]
                 ? <span style={{ fontSize: 11, color: "#16A34A", fontWeight: 700, whiteSpace: "nowrap" }}>✓ Udført</span>
