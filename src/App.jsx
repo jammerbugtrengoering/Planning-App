@@ -12545,7 +12545,7 @@ return (
         {assignedEmps.map((e) => (
           <div key={e.id} style={styles.detailAssigneeRow}>
             <span style={{ ...styles.avatar, background: e.color }}>{initials(e.name)}</span>
-            <span style={{ flex: 1, fontSize: 13 }}>{e.name}</span>
+            <span style={{ flex: 1, fontSize: 13 }}>{medSolsikke(e.name)}</span>
             {/* Hendes egen andel. Tomt felt = ingen saerlig andel, saa gaelder
                 opgavens varighed — det er derfor pladsholderen viser den. */}
             {onSetAndel && (
