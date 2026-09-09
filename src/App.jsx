@@ -269,18 +269,24 @@ function opgaveIdentitet(t) {
 // gaar til Dinero laeser navnet fra employees.name og roerer ikke den her funktion.
 // Solsikken saettes foerst i det oejeblik navnet TEGNES paa skaermen. Havde den
 // ligget i datalaget, var den foer eller siden endt i en faktura.
-const SOLSIKKE_NAVN = "Charlotte Thorsager Kronborg";
-const SOLSIKKE_SEERE = ["Charlotte Thorsager Kronborg", "Jonna Jensen IT"];
+//
+// Charlotte findes paa sit id og ikke paa sit navn. Foerste udgave slog op paa
+// navnetekst, og listen indeholdt "Jonna Jensen IT" — en medarbejder der siden er
+// omdoebt til "Udvikler IT". Dermed holdt solsikken op med at vise sig, uden at nogen
+// kunne se hvorfor: der var ingen fejl, kun en streng der ikke passede paa noget mere.
+const SOLSIKKE_ID = "e5";                  // Charlotte Thorsager Kronborg
 
-// Hvem kigger. Saettes én gang naar appen ved hvem der er logget ind. Ligger her og
-// ikke som en prop, fordi navnet ellers skulle traekkes gennem ti komponenter for en
-// solsikkes skyld — og hver af dem ville se ud som om den havde et formaal.
-let solsikkeSeer = "";
-function saetSolsikkeSeer(navn) { solsikkeSeer = navn || ""; }
+// Hvem der maa se den: alle planlaeggere. Ikke en liste over bestemte personer.
+//
+// En navngiven liste skal vedligeholdes, og det er lige praecis dét, der gik galt
+// foerste gang. Kontoret skifter desuden mellem medarbejdere hele tiden — det skal
+// vaere den, der SIDDER ved planen, der ser den, uanset hvem hun kigger paa.
+let seerErPlanlaegger = false;
+function saetSolsikkeSeer(erPlanlaegger) { seerErPlanlaegger = !!erPlanlaegger; }
 
-function medSolsikke(navn) {
-  if (navn !== SOLSIKKE_NAVN) return navn;
-  return SOLSIKKE_SEERE.includes(solsikkeSeer) ? navn + " \u{1F33B}" : navn;
+function medSolsikke(navn, empId) {
+  if (empId !== SOLSIKKE_ID) return navn;
+  return seerErPlanlaegger ? navn + " \u{1F33B}" : navn;
 }
 
 const CONTRACT_TYPES = [
@@ -4424,7 +4430,7 @@ function PlanningApp({ session, onSignOut }) {
   const aktiveEmployees = employees.filter((e) => !e.fratraadtDato);
   const isAdminUser = !!currentEmployeeForAuth?.isAdmin;
   // Paaskeaegget: se medSolsikke().
-  saetSolsikkeSeer(currentEmployeeForAuth?.name);
+  saetSolsikkeSeer(isAdminUser);
   // syncEmployee er en useCallback med tomme deps og bliver defineret laenge foer
   // isAdminUser findes. Den kan derfor ikke laese variablen direkte — en closure med
   // tomme deps ville fastholde vaerdien fra foerste render, hvor medarbejderen endnu
@@ -5036,7 +5042,7 @@ function WeekView({ employees, instances, unplaced, onAdd, onAuto, onScheduleWee
               return (
                 <div key={emp.id} style={{ display: "flex", alignItems: "center", gap: 10 }}>
                   <span style={{ ...styles.avatar, background: emp.color, width: 24, height: 24, fontSize: 11, flexShrink: 0 }}>{initials(emp.name)}</span>
-                  <span style={{ fontSize: 12, color: "#111111", minWidth: 120, fontWeight: 500 }}>{medSolsikke(emp.name)}</span>
+                  <span style={{ fontSize: 12, color: "#111111", minWidth: 120, fontWeight: 500 }}>{medSolsikke(emp.name, emp.id)}</span>
                   <div style={{ flex: 1, height: 6, background: "#E2E8F0", borderRadius: 99, overflow: "hidden" }}>
                     <div style={{ height: "100%", borderRadius: 99, background: over ? "#DC2626" : pct > 80 ? "#D97706" : "#D6247A", width: `${Math.min(100, pct)}%`, transition: "width 0.3s" }} />
                   </div>
@@ -5150,7 +5156,7 @@ function WeekView({ employees, instances, unplaced, onAdd, onAuto, onScheduleWee
                   title={`Rediger ${emp.name}`}
                 >
                   <span style={{ ...styles.avatar, background: emp.color }}>{initials(emp.name)}</span>
-                  <span style={{ fontSize: 14, fontWeight: 700, color: "#111111", textDecoration: "underline dotted", textUnderlineOffset: 3 }}>{medSolsikke(emp.name)}</span>
+                  <span style={{ fontSize: 14, fontWeight: 700, color: "#111111", textDecoration: "underline dotted", textUnderlineOffset: 3 }}>{medSolsikke(emp.name, emp.id)}</span>
                 </div>
                 {visibleDays.map((d, i) => {
                   const dayTasks = instances.filter((t) => (t.assignees || []).includes(emp.id) && t.day === d.key);
@@ -5347,7 +5353,7 @@ function WeekView({ employees, instances, unplaced, onAdd, onAuto, onScheduleWee
                                   )}
                                   {addable.map((e) => (
                                     <button key={e.id} type="button" style={styles.chipAddMenuItem} onClick={() => { onPlace(t.id, d.key, e.id); setAddMenuTaskId(null); }}>
-                                      <span style={{ ...styles.chipAvatar, background: e.color }}>{initials(e.name)}</span> {medSolsikke(e.name)}
+                                      <span style={{ ...styles.chipAvatar, background: e.color }}>{initials(e.name)}</span> {medSolsikke(e.name, e.id)}
                                     </button>
                                   ))}
                                 </div>
@@ -5378,7 +5384,7 @@ function WeekView({ employees, instances, unplaced, onAdd, onAuto, onScheduleWee
           if (empDays.length === 0) return null;
           return (
             <div key={emp.id} style={{ marginBottom: 28, pageBreakAfter: "always" }}>
-              <div style={{ fontSize: 17, fontWeight: 700, borderBottom: "2px solid #111111", paddingBottom: 4, marginBottom: 10 }}>{medSolsikke(emp.name)}</div>
+              <div style={{ fontSize: 17, fontWeight: 700, borderBottom: "2px solid #111111", paddingBottom: 4, marginBottom: 10 }}>{medSolsikke(emp.name, emp.id)}</div>
               {empDays.map((d) => {
                 const dayTasks = instances.filter((t) => (t.assignees || []).includes(emp.id) && t.day === d.key);
                 const schedule = computeDaySchedule(dayTasks, travelSettings, emp).filter((s) => s.type === "task");
@@ -5641,7 +5647,7 @@ function EmployeesView({ employees, onAdd, onEdit, onDelete, supabase, skills, o
                 onKeyDown={(ev) => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); skiftUdfoldet(e.id); } }}>
                 <span style={{ ...styles.avatar, background: e.color, width: 34, height: 34, fontSize: 13, flexShrink: 0 }}>{initials(e.name)}</span>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={styles.empName}>{medSolsikke(e.name)}</div>
+                  <div style={styles.empName}>{medSolsikke(e.name, e.id)}</div>
                   {/* Stamdata, ikke belaegning: det aftalte timetal og om weekend er med.
                       Hvor meget der er lagt paa i en given uge, staar i ugeplanen. */}
                   <div style={styles.empUnderNavn}>
@@ -8199,7 +8205,7 @@ function UgeTidslinje({ emp, dage, instances, travelSettings, weekOffset, weekYe
       <div style={{ position: "sticky", top: 0, zIndex: 5, background: "#fff",
                     paddingTop: 2, marginBottom: 4 }}>
       <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>
-        {medSolsikke(emp.name)} · uge {weekOffset}
+        {medSolsikke(emp.name, emp.id)} · uge {weekOffset}
         <span style={{ fontWeight: 400, color: "#94A3B8", marginLeft: 8 }}>
           {tom
             ? "Ingen opgaver i denne uge — træk en herned for at planlægge."
@@ -11592,7 +11598,7 @@ function EmployeeModal({ emp, onClose, onSave, skills: skillList, satsHistorik }
   const synlige = visAlleKompetencer ? (skillList || []) : valgte;
 
   return (
-    <Modal onClose={onClose} title={emp ? `Rediger ${emp.name}` : "Ny medarbejder"} persistent>
+    <Modal onClose={onClose} title={emp ? `Rediger ${medSolsikke(emp.name, emp.id)}` : "Ny medarbejder"} persistent>
       {/* Fire afsnit med samme farvesprog som Ny opgave: rosa er personen, groent er
           hvad hun kan, blaat er tid. Det graa med haengelaas er det som kun
           administratorer kan se — og det skal se anderledes ud af netop den grund. */}
@@ -12545,7 +12551,7 @@ return (
         {assignedEmps.map((e) => (
           <div key={e.id} style={styles.detailAssigneeRow}>
             <span style={{ ...styles.avatar, background: e.color }}>{initials(e.name)}</span>
-            <span style={{ flex: 1, fontSize: 13 }}>{medSolsikke(e.name)}</span>
+            <span style={{ flex: 1, fontSize: 13 }}>{medSolsikke(e.name, e.id)}</span>
             {/* Hendes egen andel. Tomt felt = ingen saerlig andel, saa gaelder
                 opgavens varighed — det er derfor pladsholderen viser den. */}
             {onSetAndel && (
