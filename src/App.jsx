@@ -3,7 +3,8 @@ import { samletForMedarbejder, danloenLinjer, danloenCsv } from "./loenberegning
 // Fakturerbar tid er ikke det samme som registreret tid, saa snart nogen er med paa
 // en opgave for at laere. Reglen ligger i opgavetid.js og afproeves ved hvert build.
 import { fakturerbareMinutter, registreredeMinutter, oplaeringsFolk, erUnderOplaering,
-         planlagtFakturerbart, afvigelse } from "./opgavetid.js";
+         planlagtFakturerbart, afvigelse, planlagtFor, planlagtIAlt,
+         fordelingen, harFordeling } from "./opgavetid.js";
 import { supabase } from "./supabaseClient";
 import {
   Plus, Download, X, Clock, AlertTriangle,
@@ -323,8 +324,10 @@ function antalPaaOpgaven(t) {
 // laesninger var uenige med en faktor to saa snart der var mere end én paa.
 // Konkret: en opgave paa 120 minutter med to personer, hvor begge registrerede 120,
 // blev meldt som 100 % overskridelse selvom alt gik som planlagt.
+// Alt planlagt arbejde paa opgaven. Er timerne fordelt mellem folk, er det summen
+// af andelene; ellers varigheden gange antal personer, som hidtil.
 function samletArbejde(t) {
-  return (t?.duration || 0) * antalPaaOpgaven(t);
+  return planlagtIAlt(t);
 }
 
 // Den timeloen der gjaldt for en medarbejder paa en bestemt dato: raekken med den
@@ -609,8 +612,17 @@ function ugerFraStartTilUdloeb(startDateStr, expiryDateStr) {
 }
 // Maa medarbejderen overhovedet arbejde denne dag? Weekend kraever en aftale.
 function canWorkOn(emp, day) { return !isWeekendDay(day) || !!(emp && emp.weekendOk); }
+// Hvor meget af hendes dag der er lagt beslag paa.
+//
+// planlagtFor og ikke t.duration: er timerne fordelt ulige, skal hendes dag belastes
+// med HENDES andel. Fire timer paa en ti-timers opgave fylder fire timer i hendes
+// kalender, ikke ti og ikke gennemsnittet.
+//
+// Er der ikke fordelt, giver planlagtFor opgavens varighed — altsaa praecis som foer.
 function usedMinutes(list, empId, day) {
-  return list.filter((t) => t.assignees.includes(empId) && t.day === day).reduce((s, t) => s + t.duration, 0);
+  return list
+    .filter((t) => t.assignees.includes(empId) && t.day === day)
+    .reduce((s, t) => s + planlagtFor(t, empId), 0);
 }
 
 // Dagens samlede transporttid for en medarbejder hvis koersel er en del af hendes
@@ -1766,6 +1778,14 @@ const MODULE_HELP = {
         "Søn- og helligdagsbetalingen beregnes af månedens godkendte løn med weekendtillægget lagt til. Kilometerpenge tæller ikke med: de er en skattefri godtgørelse af en udgift, ikke løn for arbejde.",
         "Et eksempel: 38,25 timer à 170 kr giver 6.502,50 kr. Er 6 af timerne i weekenden og tillægget 50 %, bliver det 1.020 × 50 % = 510 kr. Med 4 % SH af 7.012,50 kr bliver det 280,50 kr — i alt 7.293 kr.",
         "Satserne står under Lønarter og gælder alle. Har en medarbejder sin egen procent på stamkortet, vinder den. Er ingen af dem sat, springes linjen over — der sendes aldrig et nul."] },
+    { h: "Fordel timerne mellem flere på opgaven", p: [
+        "Varigheden på en opgave er tiden PR. PERSON. Sætter du tre på en opgave til to timer, er der afsat seks timers arbejde.",
+        "Skal de dele timerne ulige — en opgave på ti timer som 4, 4 og 2 — åbner du opgaven og skriver minutterne ud for hver medarbejder. Feltet er tomt som udgangspunkt, og så gælder opgavens varighed.",
+        "Under listen står summen løbende: «Fordelt i alt: 10t (4t + 4t + 2t)». Passer den ikke med det, du har aftalt med kunden, retter du enten fordelingen eller varigheden — systemet blokerer ikke, for lige så tit er det planen der er forkert.",
+        "Hendes egen andel er det, hun ser i Worklist, og det hendes dag belastes med i kapaciteten. Uden fordeling ville hun få gennemsnittet foreslået og se ud til at overskride fra første minut.",
+        "Kundetimer måler mod summen af andelene. Holder alle deres, er der ingen afvigelse.",
+        "Sætter du en person mere på — også med plusset på kortet — får du besked om at åbne opgaven og fordele timerne. En ny får ikke automatisk en andel.",
+        "Ved fast pris ændrer fordelingen ikke fakturaen; prisen er aftalt på forhånd. Ved timepris er fordelingen netop dét, der gør at ti planlagte timer også bliver til ti fakturerede."] },
     { h: "Oplæring — flere på opgaven uden at kunden betaler mere", p: [
         "Skal en ny med ud og lære en opgave, sætter du hende på opgaven som alle andre og trykker «Oplæring» ud for hendes navn i opgavevinduet.",
         "Så får hun sine timer på lønsedlen som normalt, men kunden faktureres kun for den, der udfører opgaven. Tre mand på en opgave til to timer giver seks timer i løn og to timer på fakturaen.",
@@ -2395,6 +2415,8 @@ function PlanningApp({ session, onSignOut }) {
             kmFraAdresse: i.km_fra_adresse || null,
             kmTurRetur: i.km_tur_retur ?? false,
             oplaeringMedarbejdere: i.oplaering_medarbejdere ?? [],
+        tidFordeling: i.tid_fordeling ?? {},
+            tidFordeling: i.tid_fordeling ?? {},
             kmAnslaaet: i.km_anslaaet ?? null,
           };
         });
@@ -2817,6 +2839,7 @@ function PlanningApp({ session, onSignOut }) {
       km_fra_adresse: inst.kmFraAdresse || null,
       km_tur_retur: !!inst.kmTurRetur,
       oplaering_medarbejdere: inst.oplaeringMedarbejdere ?? [],
+      tid_fordeling: inst.tidFordeling ?? {},
       km_anslaaet: inst.kmAnslaaet ?? null,
     }, { onConflict: "id" });
     if (error) {
@@ -3570,6 +3593,20 @@ function PlanningApp({ session, onSignOut }) {
         scheduledTime: tidspunkt || t.scheduledTime,
       };
     });
+
+    // Én mere paa en opgave, der allerede havde nogen? Saa er den samlede tid lige
+    // vokset, og fordelingen passer ikke laengere.
+    //
+    // Beskeden staar her og ikke kun i plusmenuen, fordi man ogsaa kan traekke en
+    // medarbejder ind paa opgaven — og saa saa man ellers ingenting.
+    if (!wasUnassigned && !(task.assignees || []).includes(empId)) {
+      const emp = employees.find((e) => e.id === empId);
+      const antalNu = (task.assignees || []).length + 1;
+      const fordelt = harFordeling(task);
+      notify(fordelt
+        ? `${emp?.name || "Medarbejderen"} er sat på — men hun har ingen andel af timerne endnu. Åbn opgaven og fordel tiden, ellers regnes hun med opgavens varighed på ${fmtMin(task.duration || 0)}.`
+        : `${emp?.name || "Medarbejderen"} er sat på. Nu er der ${antalNu} på opgaven à ${fmtMin(task.duration || 0)} = ${fmtMin((task.duration || 0) * antalNu)} samlet. Åbn opgaven, hvis timerne skal fordeles anderledes.`);
+    }
   }
   function removeAssignee(taskId, empId) {
     updateInstance(taskId, (t) => {
@@ -3580,6 +3617,23 @@ function PlanningApp({ session, onSignOut }) {
       return nextAssignees.length === 0
         ? { ...t, assignees: [], oplaeringMedarbejdere: [], day: (t.type === "flexible" || t.type === "adhoc") ? null : t.day, status: "unscheduled" }
         : { ...t, assignees: nextAssignees, oplaeringMedarbejdere: nyOplaering };
+    });
+  }
+
+  // Saetter én medarbejders andel af opgavens tid.
+  //
+  // Tomt felt betyder "ingen saerlig andel" og fjerner hende fra fordelingen — saa
+  // falder hun tilbage paa opgavens varighed. Er fordelingen helt tom bagefter,
+  // opfoerer opgaven sig praecis som foer, og det er med vilje: ingen skal tvinges
+  // til at fordele paa en almindelig enmandsopgave.
+  function setAndel(taskId, empId, minutter) {
+    updateInstance(taskId, (t) => {
+      const naeste = { ...fordelingen(t) };
+      const n = Number(minutter);
+      if (!minutter && minutter !== 0) delete naeste[empId];
+      else if (!Number.isFinite(n) || n <= 0) delete naeste[empId];
+      else naeste[empId] = Math.round(n);
+      return { ...t, tidFordeling: naeste };
     });
   }
 
@@ -4813,6 +4867,7 @@ function PlanningApp({ session, onSignOut }) {
           onAddAssignee={(taskId, empId) => { const t = instances.find((x) => x.id === taskId); if (t?.day) manualPlace(taskId, t.day, empId); }}
           onRemoveAssignee={removeAssignee}
           onToggleOplaering={toggleOplaering}
+          onSetAndel={setAndel}
           onUnplace={(taskId) => { unplace(taskId); setOpenTaskId(null); }}
           onDelete={(taskId) => { deleteTask(taskId); setOpenTaskId(null); }}
           onEndBlockEarly={endBlockEarly}
@@ -5275,10 +5330,19 @@ function WeekView({ employees, instances, unplaced, onAdd, onAuto, onScheduleWee
                                       plusset paa kortet man bruger i det daglige. */}
                                   {assignedEmps.length >= 1 && (
                                     <div style={styles.chipAddAdvarsel}>
-                                      Varigheden er <strong>pr. person</strong>. Med én mere bliver det{" "}
-                                      {assignedEmps.length + 1} × {fmtMin(t.duration)} ={" "}
-                                      <strong>{fmtMin(t.duration * (assignedEmps.length + 1))}</strong> samlet arbejde.
-                                      Skal opgaven gå hurtigere med flere, så sæt varigheden ned bagefter.
+                                      {harFordeling(t) ? (
+                                        <>
+                                          Timerne på opgaven er <strong>fordelt</strong> ({fmtMin(planlagtIAlt(t))} i alt).
+                                          En ny får ikke automatisk en andel — <strong>åbn opgaven og fordel tiden</strong> bagefter.
+                                        </>
+                                      ) : (
+                                        <>
+                                          Varigheden er <strong>pr. person</strong>. Med én mere bliver det{" "}
+                                          {assignedEmps.length + 1} × {fmtMin(t.duration)} ={" "}
+                                          <strong>{fmtMin(t.duration * (assignedEmps.length + 1))}</strong> samlet arbejde.
+                                          Skal de dele timerne ulige, så åbn opgaven og fordel dem.
+                                        </>
+                                      )}
                                     </div>
                                   )}
                                   {addable.map((e) => (
@@ -11765,7 +11829,7 @@ function EmployeeModal({ emp, onClose, onSave, skills: skillList, satsHistorik }
 }
 
 // ---------- Task / service order detail ----------
-function TaskDetailModal({ task, employees, templates, onSetPreferredEmployee, onCancelTemplate, checklistTemplates, skills, isAdminUser, areas, employeeAreas, onClose, onSetStatus, onToggleChecklistItem, onAddChecklistItem, onAddChecklistTemplate, onAddAssignee, onRemoveAssignee, onToggleOplaering, onUnplace, onDelete, onUpdateCustomer, onUpdateCustomerInfo, onUpdateContractType, onRenameTask, onCopy, onUpdateSkills, onEndBlockEarly, onUpdateSchedule, onUpdateKeyPickup, onUpdateScheduledTime, tilbudPaaOpgaven, onAabnTilbud }) {
+function TaskDetailModal({ task, employees, templates, onSetPreferredEmployee, onCancelTemplate, checklistTemplates, skills, isAdminUser, areas, employeeAreas, onClose, onSetStatus, onToggleChecklistItem, onAddChecklistItem, onAddChecklistTemplate, onAddAssignee, onRemoveAssignee, onToggleOplaering, onSetAndel, onUnplace, onDelete, onUpdateCustomer, onUpdateCustomerInfo, onUpdateContractType, onRenameTask, onCopy, onUpdateSkills, onEndBlockEarly, onUpdateSchedule, onUpdateKeyPickup, onUpdateScheduledTime, tilbudPaaOpgaven, onAabnTilbud }) {
   // Disse to laa efter det tidlige return for blokeringer (sygdom/ferie) laengere nede.
   // Hooks skal kaldes i samme raekkefoelge hver render: aabnede man en blokering og
   // derefter en almindelig opgave i samme modal, ville React se to hooks mere end sidst
@@ -12446,6 +12510,7 @@ return (
       {assignedEmps.length > 1 && (() => {
         const elever = oplaeringsFolk(t);
         const leverer = assignedEmps.length - elever.length;
+        const fordelt = harFordeling(t);
         return (
           <div style={styles.flerePersonerBoks}>
             <div style={{ fontWeight: 700, marginBottom: 3 }}>{assignedEmps.length} medarbejdere på opgaven</div>
@@ -12460,7 +12525,16 @@ return (
               <div>
                 {elever.length} af dem er med for at lære. Alle {assignedEmps.length} får deres timer på lønsedlen,
                 men kunden faktureres kun for de {leverer === 1 ? "en" : leverer}, der udfører opgaven:{" "}
-                <strong>{fmtMin((t.duration || 0) * Math.max(leverer, 0))}</strong>.
+                <strong>{fmtMin(planlagtFakturerbart(t))}</strong>.
+              </div>
+            )}
+            {/* Summen staar her, hvor man alligevel kigger, naar man har flere paa.
+                Den ADVARER men blokerer ikke: naar fordelingen ikke gaar op, er det
+                lige saa tit planen der er forkert som fordelingen. */}
+            {fordelt && (
+              <div style={{ marginTop: 6, paddingTop: 6, borderTop: "1px solid rgba(0,0,0,0.08)" }}>
+                Fordelt i alt: <strong>{fmtMin(planlagtIAlt(t))}</strong>
+                {" "}({assignedEmps.map((e) => fmtMin(planlagtFor(t, e.id))).join(" + ")})
               </div>
             )}
           </div>
@@ -12472,7 +12546,21 @@ return (
           <div key={e.id} style={styles.detailAssigneeRow}>
             <span style={{ ...styles.avatar, background: e.color }}>{initials(e.name)}</span>
             <span style={{ flex: 1, fontSize: 13 }}>{e.name}</span>
-            {byEmployee[e.id] > 0 && <span style={styles.cardMeta}>{fmtMin(byEmployee[e.id])} registreret</span>}
+            {/* Hendes egen andel. Tomt felt = ingen saerlig andel, saa gaelder
+                opgavens varighed — det er derfor pladsholderen viser den. */}
+            {onSetAndel && (
+              <input
+                type="number" min="0" step="5" inputMode="numeric"
+                value={fordelingen(t)[e.id] ?? ""}
+                placeholder={String(t.duration || 0)}
+                onChange={(ev) => onSetAndel(t.id, e.id, ev.target.value)}
+                title={`Planlagte minutter for ${e.name}. Tom = opgavens varighed (${fmtMin(t.duration || 0)}).`}
+                style={{ width: 62, padding: "3px 6px", borderRadius: 7, fontSize: 12,
+                         border: "1px solid #E2E8F0", color: "#111111", background: "#fff",
+                         fontFamily: "inherit", textAlign: "right" }} />
+            )}
+            <span style={{ fontSize: 11, color: "#94A3B8" }}>min</span>
+            {byEmployee[e.id] > 0 && <span style={styles.cardMeta}>{fmtMin(byEmployee[e.id])} reg.</span>}
             {/* Oplaering saettes pr. opgave. Knappen sidder her, hvor man alligevel
                 staar og kobler folk paa — ikke paa medarbejderens stamkort, hvor den
                 ville komme til at gaelde alle hendes opgaver. */}

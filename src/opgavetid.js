@@ -74,10 +74,39 @@ export function oplaeringsMinutter(opgave) {
   return registreredeMinutter(opgave) - fakturerbareMinutter(opgave);
 }
 
-// Hvor mange der er sat på opgaven.
-function antalPaa(opgave) {
+// Hvem er sat på opgaven.
+function folkPaa(opgave) {
   const a = opgave?.assignees;
-  return Array.isArray(a) ? a.length : 0;
+  return Array.isArray(a) ? a.filter((x) => typeof x === "string" && x) : [];
+}
+
+// Fordelingen af tid mellem dem der er på opgaven: {medarbejder: minutter}.
+//
+// Tom er det normale og betyder "alle bruger duration". Sådan har det virket for
+// alle opgaver indtil nu, og sådan bliver det ved med at virke, hvis ingen fordeler.
+export function fordelingen(opgave) {
+  const f = opgave?.tidFordeling ?? opgave?.tid_fordeling ?? {};
+  if (!f || typeof f !== "object" || Array.isArray(f)) return {};
+  const ud = {};
+  for (const [id, min] of Object.entries(f)) {
+    const n = Number(min);
+    if (id && Number.isFinite(n) && n > 0) ud[id] = Math.round(n);
+  }
+  return ud;
+}
+
+export function harFordeling(opgave) {
+  return Object.keys(fordelingen(opgave)).length > 0;
+}
+
+// Hvor lang tid ÉN medarbejder er planlagt til på opgaven.
+//
+// Er der fordelt, gælder hendes egen andel. Er der ikke, gælder opgavens varighed —
+// den er pr. person, så det er stadig det rigtige svar.
+export function planlagtFor(opgave, empId) {
+  const f = fordelingen(opgave);
+  if (empId && f[empId] != null) return f[empId];
+  return Number(opgave?.duration) || 0;
 }
 
 // Den planlagte tid der SKAL faktureres.
@@ -88,11 +117,20 @@ function antalPaa(opgave) {
 // Elever tælles ikke med: de er der for at lære, og deres tid når aldrig fakturaen.
 // Er alle på opgaven elever, er der intet planlagt fakturerbart arbejde.
 export function planlagtFakturerbart(opgave) {
-  const perPerson = Number(opgave?.duration) || 0;
-  const leverer = Math.max(0, antalPaa(opgave) - oplaeringsFolk(opgave).length);
+  const folk = folkPaa(opgave);
+  const elever = oplaeringsFolk(opgave);
+  const leverer = folk.filter((id) => !elever.includes(id));
   // Ingen tildelt endnu: så er det den ene planlagte portion, der er meningen.
-  if (antalPaa(opgave) === 0) return perPerson;
-  return perPerson * leverer;
+  if (folk.length === 0) return Number(opgave?.duration) || 0;
+  return leverer.reduce((sum, id) => sum + planlagtFor(opgave, id), 0);
+}
+
+// Alt planlagt arbejde på opgaven, også elevernes. Det er dét, der optager tid i
+// kalenderen og i medarbejdernes kapacitet — en elev fylder en dag som alle andre.
+export function planlagtIAlt(opgave) {
+  const folk = folkPaa(opgave);
+  if (folk.length === 0) return Number(opgave?.duration) || 0;
+  return folk.reduce((sum, id) => sum + planlagtFor(opgave, id), 0);
 }
 
 // Afvigelsen mod det aftalte.

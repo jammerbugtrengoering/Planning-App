@@ -7,6 +7,7 @@
 import {
   registreredeMinutter, fakturerbareMinutter, oplaeringsMinutter,
   minutterFor, oplaeringsFolk, erUnderOplaering, afvigelse, planlagtFakturerbart,
+  fordelingen, harFordeling, planlagtFor, planlagtIAlt,
 } from "./src/opgavetid.js";
 
 let fejl = 0, kørt = 0;
@@ -131,6 +132,67 @@ er("og så er der ingen afvigelse", afvigelse(treMedElever), 0);
 
 // Ingen tildelt endnu. Så er den planlagte portion det, der er meningen.
 er("uden nogen på opgaven", planlagtFakturerbart({ duration: 90 }), 90);
+
+// ── Ti timer delt fire-fire-to ──────────────────────────────────────────────
+// Den opgave spørgsmålet handlede om. Uden fordeling skulle varigheden sættes til
+// 3 t 20 min pr. person, og den der reelt skulle bruge fire timer, fik besked om at
+// have overskredet med fyrre minutter.
+const delt102 = {
+  duration: 200,                       // det gamle "10 timer / 3" — skal ignoreres
+  assignees: ["e2", "e5", "e7"],
+  tidFordeling: { e2: 240, e5: 240, e7: 120 },
+  timeLog: [
+    { empId: "e2", minutes: 240 },
+    { empId: "e5", minutes: 240 },
+    { empId: "e7", minutes: 120 },
+  ],
+};
+er("hver har sin egen andel", planlagtFor(delt102, "e7"), 120);
+er("den store andel er ikke gennemsnittet", planlagtFor(delt102, "e2"), 240);
+er("i alt ti timer", planlagtIAlt(delt102), 600);
+er("og ti timer faktureres", planlagtFakturerbart(delt102), 600);
+// Beskytter mod: at en fordeling der går op, alligevel giver en afvigelse.
+er("ingen afvigelse når de holder deres andele", afvigelse(delt102), 0);
+
+// Den ene brugte en time ekstra. Det ER en afvigelse — og præcis én time.
+const delt102Over = {
+  ...delt102,
+  timeLog: [
+    { empId: "e2", minutes: 300 },
+    { empId: "e5", minutes: 240 },
+    { empId: "e7", minutes: 120 },
+  ],
+};
+er("merforbrug måles mod summen af andele", afvigelse(delt102Over), 60);
+
+// ── Fordeling og oplæring sammen ────────────────────────────────────────────
+// Eleven har sin egen andel i kalenderen, men hun tæller ikke i fakturagrundlaget.
+const deltMedElev = {
+  duration: 120,
+  assignees: ["e2", "e5"],
+  oplaeringMedarbejdere: ["e5"],
+  tidFordeling: { e2: 240, e5: 120 },
+  timeLog: [{ empId: "e2", minutes: 240 }, { empId: "e5", minutes: 120 }],
+};
+er("eleven fylder i kalenderen", planlagtIAlt(deltMedElev), 360);
+er("men ikke på fakturaen", planlagtFakturerbart(deltMedElev), 240);
+er("og der er ingen afvigelse", afvigelse(deltMedElev), 0);
+
+// ── En tom fordeling må ikke ændre noget ────────────────────────────────────
+// Beskytter mod: at de 3.662 enmandsopgaver begynder at regne anderledes.
+er("tom fordeling", harFordeling(normal), false);
+er("uden fordeling gælder varigheden", planlagtFor(normal, "eb32ablk"), 120);
+er("to uden fordeling giver dobbelt", planlagtIAlt(toMand), 240);
+
+// ── Snavsede fordelinger ────────────────────────────────────────────────────
+er("nul minutter er ikke en andel", fordelingen({ tidFordeling: { e2: 0 } }), {});
+er("tekst i fordelingen", fordelingen({ tidFordeling: { e2: "240" } }), { e2: 240 });
+er("vrøvl i fordelingen", fordelingen({ tidFordeling: { e2: "abc" } }), {});
+er("liste i stedet for objekt", fordelingen({ tidFordeling: [1, 2] }), {});
+er("snake_case fra databasen", fordelingen({ tid_fordeling: { e5: 60 } }), { e5: 60 });
+// Fordeling for en der ikke er på opgaven, tæller ikke med i summerne.
+er("fremmed i fordelingen ignoreres", planlagtIAlt({
+  duration: 60, assignees: ["e2"], tidFordeling: { e2: 90, e99: 500 } }), 90);
 
 // ── Resultat ────────────────────────────────────────────────────────────────
 if (fejl > 0) {
