@@ -2,7 +2,8 @@ import React, { useState, useMemo, useEffect, useCallback, useRef } from "react"
 import { samletForMedarbejder, danloenLinjer, danloenCsv } from "./loenberegning.js";
 // Fakturerbar tid er ikke det samme som registreret tid, saa snart nogen er med paa
 // en opgave for at laere. Reglen ligger i opgavetid.js og afproeves ved hvert build.
-import { fakturerbareMinutter, registreredeMinutter, oplaeringsFolk, erUnderOplaering } from "./opgavetid.js";
+import { fakturerbareMinutter, registreredeMinutter, oplaeringsFolk, erUnderOplaering,
+         planlagtFakturerbart, afvigelse } from "./opgavetid.js";
 import { supabase } from "./supabaseClient";
 import {
   Plus, Download, X, Clock, AlertTriangle,
@@ -1723,6 +1724,7 @@ const MODULE_HELP = {
         "Kun de besøg hvor den registrerede tid er en anden end den aftalte. Passer tiden, er der ikke noget at forklare, og så fylder opgaven ikke.",
         "Er nogen med på opgaven for at lære, tæller deres timer IKKE med her. Ellers ville hver eneste oplæringsdag stå som et stort merforbrug, og listen ville være ubrugelig præcis i den uge. Deres timer er der stadig — de står under Løn data.",
         "For hvert besøg står den planlagte tid, den registrerede tid, forskellen, og medarbejderens begrundelse.",
+        "Er der flere på besøget, er den planlagte tid regnet for hele holdet. To medarbejdere à to timer er fire timers planlagt arbejde — ikke to.",
         "Alt er foldet ud. Ringer kunden og spørger hvorfor der er brugt mere tid, skal du kunne læse svaret uden at klikke først.",
         "Mest merforbrug øverst — det er den samtale der kommer.",
         "Søgefeltet finder kunden med det samme, hvis du allerede har hende i røret."] },
@@ -6412,9 +6414,12 @@ function CustomerHoursView({ instances }) {
         dato: instanceDateString(t),
         dayLabel: ALL_DAYS.find((d) => d.key === t.day)?.label || t.day || "—",
         titel: t.title,
-        planlagt: t.duration || 0,
+        // Planlagt for HELE holdet. Stod der t.duration, blev to medarbejderes
+        // samlede tid maalt mod én persons portion — og et besoeg der gik praecis
+        // som aftalt, stod som et merforbrug paa en hel portion.
+        planlagt: planlagtFakturerbart(t),
         registreret,
-        afvigelse: registreret - (t.duration || 0),
+        afvigelse: afvigelse(t),
         begrundelse: tl
           .filter((l) => l.note && String(l.note).trim() && l.empId !== "planner")
           .map((l) => l.note.trim())

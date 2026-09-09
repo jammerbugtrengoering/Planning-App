@@ -6,7 +6,7 @@
 
 import {
   registreredeMinutter, fakturerbareMinutter, oplaeringsMinutter,
-  minutterFor, oplaeringsFolk, erUnderOplaering, afvigelse,
+  minutterFor, oplaeringsFolk, erUnderOplaering, afvigelse, planlagtFakturerbart,
 } from "./src/opgavetid.js";
 
 let fejl = 0, kørt = 0;
@@ -89,6 +89,48 @@ const kunElever = {
 };
 er("kun elever giver intet fakturagrundlag", fakturerbareMinutter(kunElever), 0);
 er("men de får stadig løn", registreredeMinutter(kunElever), 240);
+
+// ── To på opgaven, begge leverer ────────────────────────────────────────────
+// Den fejl der lå i Kundetimer indtil 9.9: to medarbejdere à to timer, der begge
+// gjorde præcis som planlagt, stod som TO TIMERS MERFORBRUG, fordi der blev målt mod
+// én persons portion. Gisela Bender lå øverst på listen over kunder at ringe til, for
+// et besøg der gik nøjagtigt som aftalt.
+//
+// Den gamle test fangede den ikke: eksemplet med oplæring havde præcis én der
+// leverede, og der giver begge formler tilfældigvis samme svar.
+const toMand = {
+  duration: 120,
+  assignees: ["e2", "e5"],
+  timeLog: [{ empId: "e2", minutes: 120 }, { empId: "e5", minutes: 120 }],
+};
+er("to der leverer som planlagt har ingen afvigelse", afvigelse(toMand), 0);
+er("planlagt regnes for hele holdet", planlagtFakturerbart(toMand), 240);
+er("og de fire timer faktureres", fakturerbareMinutter(toMand), 240);
+
+// Samme hold, men den ene brugte en halv time ekstra. Det ER en afvigelse.
+const toMandOver = {
+  duration: 120,
+  assignees: ["e2", "e5"],
+  timeLog: [{ empId: "e2", minutes: 150 }, { empId: "e5", minutes: 120 }],
+};
+er("ægte merforbrug ses stadig", afvigelse(toMandOver), 30);
+
+// Tre på opgaven, to er elever: kun én leverer, så kun én portion er planlagt.
+const treMedElever = {
+  duration: 120,
+  assignees: ["eb32ablk", "e5", "e7"],
+  oplaeringMedarbejdere: ["e5", "e7"],
+  timeLog: [
+    { empId: "eb32ablk", minutes: 120 },
+    { empId: "e5", minutes: 120 },
+    { empId: "e7", minutes: 120 },
+  ],
+};
+er("elever tæller ikke med i det planlagte", planlagtFakturerbart(treMedElever), 120);
+er("og så er der ingen afvigelse", afvigelse(treMedElever), 0);
+
+// Ingen tildelt endnu. Så er den planlagte portion det, der er meningen.
+er("uden nogen på opgaven", planlagtFakturerbart({ duration: 90 }), 90);
 
 // ── Resultat ────────────────────────────────────────────────────────────────
 if (fejl > 0) {

@@ -74,11 +74,38 @@ export function oplaeringsMinutter(opgave) {
   return registreredeMinutter(opgave) - fakturerbareMinutter(opgave);
 }
 
+// Hvor mange der er sat på opgaven.
+function antalPaa(opgave) {
+  const a = opgave?.assignees;
+  return Array.isArray(a) ? a.length : 0;
+}
+
+// Den planlagte tid der SKAL faktureres.
+//
+// duration er tiden PR. PERSON, ikke for hele opgaven. To der gør rent i to timer
+// hver, har leveret fire timers arbejde, og det er de fire kunden betaler.
+//
+// Elever tælles ikke med: de er der for at lære, og deres tid når aldrig fakturaen.
+// Er alle på opgaven elever, er der intet planlagt fakturerbart arbejde.
+export function planlagtFakturerbart(opgave) {
+  const perPerson = Number(opgave?.duration) || 0;
+  const leverer = Math.max(0, antalPaa(opgave) - oplaeringsFolk(opgave).length);
+  // Ingen tildelt endnu: så er det den ene planlagte portion, der er meningen.
+  if (antalPaa(opgave) === 0) return perPerson;
+  return perPerson * leverer;
+}
+
 // Afvigelsen mod det aftalte.
 //
-// Måles mod FAKTURERBAR tid og ikke mod al registreret tid. Ellers ville en
-// oplæringsdag altid se ud som et voldsomt overforbrug, og Kundetimer ville blive
-// ubrugelig i den uge, hvor en ny bliver lært op.
+// To ting skal være rigtige her, og begge er blevet rettet efter at have været gale:
+//
+//   1. Der måles mod FAKTURERBAR tid og ikke mod al registreret tid. Ellers ville en
+//      oplæringsdag altid se ud som et voldsomt overforbrug.
+//
+//   2. Der måles mod planlagt tid for HELE holdet og ikke mod én persons portion.
+//      Det var en rigtig fejl i Kundetimer: to medarbejdere à to timer, der begge
+//      gjorde præcis som planlagt, stod som to timers merforbrug — og kunden lå
+//      øverst på listen over dem, kontoret skulle ringe til. Der var intet at ringe om.
 export function afvigelse(opgave) {
-  return fakturerbareMinutter(opgave) - (Number(opgave?.duration) || 0);
+  return fakturerbareMinutter(opgave) - planlagtFakturerbart(opgave);
 }
