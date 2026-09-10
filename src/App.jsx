@@ -1620,6 +1620,11 @@ const MODULE_HELP = {
     { h: "Sådan fakturerer du", p: ["Vælg måned og år.", "Gennemgå listen og ret manglende registreringer med medarbejderen.",
         "Sæt fakturagrundlag på det der skal faktureres.", "Tryk «Eksportér til Dinero» og bekræft.",
         "Linjerne markeres som sendt, så de ikke kan faktureres igen."] },
+    { h: "Sæt fakturagrundlag på hele listen", p: [
+        "Knappen «Sæt fakturagrundlag på N viste» sætter flueben på alt i listen på én gang. Sæt status til «Udført», vælg måneden, og tryk.",
+        "Den rammer præcis det, du kan se — samme måned, samme status, samme filtre. Skifter du filter, skifter tallet i knappen med.",
+        "To slags springes over: linjer der allerede er sendt til Dinero, og linjer uden fakturerbar tid. Hold musen over knappen, så står der hvor mange det er.",
+        "Er alt i listen allerede sat, bliver knappen til «Fjern fakturagrundlag fra N viste». Så kan man fortryde uden at klikke sig igennem hver linje."] },
     { h: "Produkter", p: ["Produktforbrug vises som egne linjer under opgaven med antal og beløb.",
         "Hver produktlinje har sit eget flueben, men kræver at selve opgaven også er fakturagrundlag."] },
     { h: "Timepriser", p: ["Tryk «Timepriser» for at rette satsen pr. kontrakttype. Satsen bruges i fakturering, ugebelægning og rapportering.",
@@ -2884,6 +2889,23 @@ function PlanningApp({ session, onSignOut }) {
         delete kopi[inst.id];
         instAccessRef.current = kopi;
       }
+    }
+  }, []);
+
+  // Saetter fakturagrundlag paa mange opgaver i ét hug.
+  //
+  // Skriver KUN invoice_ready. En fuld syncInstance ville skrive hele raekken tilbage,
+  // og saa kunne en tidsregistrering, en medarbejder laver i samme oejeblik fra
+  // Worklist, blive overskrevet med det appen havde staaende foer. Samme grund som i
+  // gemArvedeFelter.
+  const saetFakturagrundlagFlere = useCallback(async (ider, til) => {
+    if (!ider.length) return;
+    setInstances((prev) => prev.map((t) => (ider.includes(t.id) ? { ...t, invoiceReady: til } : t)));
+    const PORTION = 200;
+    for (let i = 0; i < ider.length; i += PORTION) {
+      const raekker = ider.slice(i, i + PORTION).map((id) => ({ id, invoice_ready: til }));
+      const { error } = await supabase.from("instances").upsert(raekker, { onConflict: "id" });
+      if (dbFail(error, "gemme fakturagrundlaget")) return;
     }
   }, []);
 
@@ -4727,6 +4749,7 @@ function PlanningApp({ session, onSignOut }) {
             }
           }}
           onUpdateInstance={(taskId, fields) => updateInstance(taskId, (t) => ({ ...t, ...fields }))}
+          onSaetFakturagrundlagFlere={saetFakturagrundlagFlere}
           onOpenTask={setOpenTaskId} />
       )}
 
@@ -5941,7 +5964,7 @@ function ChecklistModal({ checklist, onClose, onSave }) {
 }
 
 // ---------- Time & Export ----------
-function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLabel, onUpdateInstance, pricing: pricingProp, onPricingChange, isAdminUser, onOpenTask, productUsage, onToggleProductInvoice, onToggleProductDinero, opgaveNoter }) {
+function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLabel, onUpdateInstance, onSaetFakturagrundlagFlere, pricing: pricingProp, onPricingChange, isAdminUser, onOpenTask, productUsage, onToggleProductInvoice, onToggleProductDinero, opgaveNoter }) {
   const productLinesByTask = useMemo(() => {
     const map = {};
     (productUsage || []).forEach((tx) => {
@@ -6053,6 +6076,20 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
       return (a.title || "").localeCompare(b.title || "", "da");
     });
 
+  // Hvilke af de viste raekker der overhovedet KAN saettes som fakturagrundlag.
+  //
+  // To slags falder fra, og begge med vilje:
+  //   sendt til Dinero — den kan ikke faktureres igen, og fluebenet ville lyve
+  //   ingen fakturerbar tid — eksporten springer den alligevel over, saa et flueben
+  //     ville se ud som om der var noget at sende
+  const kanMarkeres = placed.filter((t) => !t.dineroExported && fakturerbareMinutter(t) > 0);
+  const umarkerede = kanMarkeres.filter((t) => !t.invoiceReady);
+  // Er alt allerede sat, bliver knappen til en fortrydelse. Samme moenster som
+  // "Godkend alle viste" i Loen data — man rammer aldrig et blindt ja.
+  const saetterAlle = umarkerede.length > 0;
+  const rammer = saetterAlle ? umarkerede : kanMarkeres;
+  const springesOver = placed.length - kanMarkeres.length;
+
   const totalPlanned = placed.reduce((s, t) => s + samletArbejde(t), 0);
   const totalRegistered = placed.reduce((s, t) => s + fakturerbareMinutter(t), 0);
 
@@ -6117,6 +6154,25 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
             <option value="udført">✅ Udført</option>
           </select>
         </div>
+        {/* Sæt hele den viste liste som fakturagrundlag paa ét klik.
+            Den rammer PRAECIS det man kan se — samme maaned, samme status, samme
+            filtre. Ellers ville knappen kunne naa opgaver, planlaeggeren ikke har
+            for oejnene, og det er ikke en knap man skal gaette om. */}
+        {onSaetFakturagrundlagFlere && kanMarkeres.length > 0 && (
+          <button
+            style={{ ...styles.secondaryBtn,
+                     color: saetterAlle ? "#16A34A" : "#B45309",
+                     borderColor: saetterAlle ? "#BBF7D0" : "#FDE68A" }}
+            title={springesOver > 0
+              ? `${springesOver} af de viste springes over: enten sendt til Dinero eller uden fakturerbar tid.`
+              : "Sætter fakturagrundlag på alle rækker i listen herunder"}
+            onClick={() => onSaetFakturagrundlagFlere(rammer.map((t) => t.id), saetterAlle)}>
+            <Check size={15} />
+            {saetterAlle
+              ? `Sæt fakturagrundlag på ${rammer.length} viste`
+              : `Fjern fakturagrundlag fra ${rammer.length} viste`}
+          </button>
+        )}
         <div style={styles.toolbarSpacer} />
         <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: invoiceOnly ? 700 : 400, color: invoiceOnly ? "#16A34A" : "#475569", cursor: "pointer" }}
           onClick={() => setInvoiceOnly((v) => !v)}>
