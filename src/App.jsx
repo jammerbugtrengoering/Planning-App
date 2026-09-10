@@ -1621,8 +1621,9 @@ const MODULE_HELP = {
         "Sæt fakturagrundlag på det der skal faktureres.", "Tryk «Eksportér til Dinero» og bekræft.",
         "Linjerne markeres som sendt, så de ikke kan faktureres igen."] },
     { h: "Sæt fakturagrundlag på hele listen", p: [
-        "Knappen «Sæt fakturagrundlag på N viste» sætter flueben på alt i listen på én gang. Sæt status til «Udført», vælg måneden, og tryk.",
-        "Den rammer præcis det, du kan se — samme måned, samme status, samme filtre. Skifter du filter, skifter tallet i knappen med.",
+        "Knappen «Sæt fakturagrundlag på N viste» sætter flueben på alt i listen på én gang. Vælg måneden, sæt status til «Udført», og tryk.",
+        "Knappen findes KUN under status «Udført». Fakturagrundlag på en opgave, der ikke er kørt endnu, er en regning for noget kunden ikke har fået — og under «Alle statusser» ligger de blandet, så man ikke kan se hvad et klik ville ramme.",
+        "Den rammer præcis det, du kan se — samme måned, samme filtre. Skifter du filter, skifter tallet i knappen med.",
         "To slags springes over: linjer der allerede er sendt til Dinero, og linjer uden fakturerbar tid. Hold musen over knappen, så står der hvor mange det er.",
         "Er alt i listen allerede sat, bliver knappen til «Fjern fakturagrundlag fra N viste». Så kan man fortryde uden at klikke sig igennem hver linje."] },
     { h: "Produkter", p: ["Produktforbrug vises som egne linjer under opgaven med antal og beløb.",
@@ -6082,13 +6083,22 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
   //   sendt til Dinero — den kan ikke faktureres igen, og fluebenet ville lyve
   //   ingen fakturerbar tid — eksporten springer den alligevel over, saa et flueben
   //     ville se ud som om der var noget at sende
-  const kanMarkeres = placed.filter((t) => !t.dineroExported && fakturerbareMinutter(t) > 0);
+  //
+  // Og kun naar der er valgt status UDFOERT. Fakturagrundlag paa en opgave, der ikke
+  // er koert endnu, er en regning for noget, kunden ikke har faaet. Under "Alle
+  // statusser" ligger de blandet mellem hinanden, og saa kan man ikke se hvad et klik
+  // ville ramme — derfor er knappen ogsaa vaek dér.
+  const maaMassemarkere = statusFilter === "udført";
+  const kanMarkeres = !maaMassemarkere ? []
+    : placed.filter((t) => !t.dineroExported && fakturerbareMinutter(t) > 0);
   const umarkerede = kanMarkeres.filter((t) => !t.invoiceReady);
   // Er alt allerede sat, bliver knappen til en fortrydelse. Samme moenster som
   // "Godkend alle viste" i Loen data — man rammer aldrig et blindt ja.
   const saetterAlle = umarkerede.length > 0;
   const rammer = saetterAlle ? umarkerede : kanMarkeres;
-  const springesOver = placed.length - kanMarkeres.length;
+  // Kun meningsfuldt naar knappen findes. Uden vagten ville tallet sige "alle
+  // springes over" paa de oevrige statusser — sandt nok, men vildledende at gemme.
+  const springesOver = maaMassemarkere ? placed.length - kanMarkeres.length : 0;
 
   const totalPlanned = placed.reduce((s, t) => s + samletArbejde(t), 0);
   const totalRegistered = placed.reduce((s, t) => s + fakturerbareMinutter(t), 0);
