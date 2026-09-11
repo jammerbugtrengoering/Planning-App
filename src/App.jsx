@@ -1480,6 +1480,9 @@ const MODULE_HELP = {
         "Opgaver til og med den dato bliver stående og skal stadig køres og faktureres. Alt efter datoen fjernes fra ugeplan, fakturering, rapportering og medarbejdernes app.",
         "Udførte opgaver røres aldrig, så alt der er kørt kan stadig faktureres og indgår i regnskabet.",
         "Aftalen bliver stående på Aftaler-siden med kontraktsummen, markeret UDGÅET. Så kan du se hvad aftalen var værd, og hvad I nåede at realisere.",
+        "Når den sidste opgave på aftalen er udført, er aftalen «gjort op» og falder af listen af sig selv. Den er der stadig — vælg «Udgåede», så ser du dem alle sammen, og tallet på knappen siger hvor mange der er lagt til side.",
+        "Så længe der er én opgave tilbage, der ikke er udført, bliver aftalen liggende i listen. Det er med vilje: den skal ikke kunne forsvinde, mens der stadig er noget, nogen skal tage stilling til.",
+        "En opsagt aftale danner heller ikke nye opgaver bagefter. Den regel ligger i databasen og ikke kun i browseren — ellers kunne en fane, der havde stået åben siden formiddagen, nå at lave en opgave til næste uge på en aftale, der blev opsagt ved frokosttid.",
         "Det kan ikke fortrydes i appen, så du bliver bedt om at bekræfte."] },
     { h: "Flere medarbejdere på samme opgave", p: [
         "Varigheden på en opgave er tiden PR. PERSON. Sætter du to på en opgave til 1 time, er der afsat 2 timers arbejde i alt — og begge er optaget en time i deres dag.",
@@ -1734,6 +1737,10 @@ const MODULE_HELP = {
     { h: "Sådan læses den", p: ["Kontraktsum er forventet omsætning over hele perioden ud fra planlagte timer.",
         "Realiseret er hvad der faktisk er registreret.", "Dage tilbage viser hvor længe der er til aftalen udløber."] },
     { h: "Gentagelse", p: ["En aftale kan gentages hver uge, hver 14. dag, hver måned eller hvert kvartal."] }, { h: "Under udarbejdelse", p: ["Er du ikke færdig med en ny aftale, så tryk «Gem som kladde» i stedet for «Gem og planlæg».", "En kladde opretter ingen opgaver. Den ligger og venter, og du kan rette alle felter i den så mange gange du vil.", "Find den igen med filteret «Under udarbejdelse» øverst her på siden. Tallet i knappen viser hvor mange der ligger.", "Tryk «Åbn og godkend» for at rette videre. Inde i aftalen vælger du så «Gem kladde» hvis du stadig ikke er færdig, eller «Godkend og planlæg» når den er klar.", "Først ved godkendelsen oprettes opgaverne — fra startdatoen og frem til udløbsdatoen. Det kan være mange på én gang, så tjek datoerne inden du godkender.", "Startdatoen kan ikke ligge i fortiden. Har en kladde ligget så længe at datoen er løbet fra dig, skal den rettes før du kan godkende."] }, { h: "Filtre", p: ["Den øverste række filtrerer på status, den nederste på kontrakttype. De virker sammen, så du kan fx se alle udgåede Nexus-aftaler."] },
+    { h: "Udgåede aftaler rydder op efter sig", p: [
+        "En udgået aftale, hvor den sidste opgave er udført, er «gjort op». Den falder af listen af sig selv, så den ikke ligger og fylder mellem de aktive resten af tiden.",
+        "Den er ikke væk. Vælg «Udgåede», så står de der alle sammen med kontraktsum og realiseret — og tallet på knappen siger, hvor mange der er lagt til side.",
+        "Er der stadig én opgave tilbage, der ikke er udført, bliver aftalen liggende. Så er der noget, nogen skal tage stilling til, og så skal den kunne ses uden at man leder efter den."] },
   ], warn: "Måned betyder kalendermåned. En månedlig aftale lander i den uge der indeholder samme dato som startdatoen — altså 12 besøg om året. Er startdatoen den 31., rammes sidste dag i korte måneder, så ingen måned springes over." },
 
   reports: { title: "Rapportering", intro: "Budget mod faktisk omsætning, opdelt pr. kontrakttype.", blocks: [
@@ -8602,10 +8609,34 @@ function ContractsView({ templates: alleTemplates, instances, pricing, employees
   const [statusFilter, setStatusFilter] = useState("alle");
   const [typeFilter, setTypeFilter] = useState("all");
 
+  // En udgaaet aftale, der er gjort op, falder af listen af sig selv.
+  //
+  // «Gjort op» betyder: der er ikke én opgave tilbage, som nogen skal foretage sig
+  // noget ved. Enten er de koert og afsluttet, eller ogsaa er de fjernet, da aftalen
+  // blev opsagt.
+  //
+  // Uden det her voksede listen bare. Ni opsagte aftaler laa og fyldte mellem de
+  // aktive, og den eneste maade at komme af med dem paa var at slette dem — og saa
+  // ryger forklaringen paa, hvorfor kunden stoppede, sammen med dem.
+  //
+  // Det kan lade sig goere at afgoere her, fordi appen henter SAMTLIGE opgaver, ikke
+  // kun den uge man kigger paa, og fordi slettemarkerede aldrig hentes ind. Er der
+  // ingen aabne tilbage i listen, er der heller ingen i databasen.
+  //
+  // De forsvinder ikke: «Udgåede» viser dem alle sammen, ogsaa dem der er gjort op.
+  // Det er meningen — man skal kunne slaa op, hvorfor en kunde stoppede, uden at
+  // aftalen ligger i vejen resten af tiden.
+  function erGjortOp(t) {
+    if ((t.status || "aktiv") !== "udgaaet") return false;
+    return !instances.some((i) => i.templateId === t.id && i.status !== "udført");
+  }
+  const gjortOpAntal = alleTemplates.filter(erGjortOp).length;
+
   // Der filtreres foer listen deles op i aftaler med og uden udloebsdato, saa begge
   // dele foelger samme valg. En kladde uden udloebsdato havner i den anden liste, og
   // skal kunne findes af filteret praecis som de oevrige.
   const templates = alleTemplates
+    .filter((t) => (statusFilter === "udgaaet" ? true : !erGjortOp(t)))
     .filter((t) => (statusFilter === "alle" ? true : (t.status || "aktiv") === statusFilter))
     .filter((t) => (typeFilter === "all" ? true : effectiveContractType(t) === typeFilter));
   // Find den reelle, aktuelle kontrakttype for en skabelon: den seneste værdi sat på
@@ -8725,9 +8756,21 @@ function ContractsView({ templates: alleTemplates, instances, pricing, employees
             {k === "kladde" && alleTemplates.filter((t) => t.status === "kladde").length > 0
               ? ` (${alleTemplates.filter((t) => t.status === "kladde").length})`
               : ""}
+            {/* Tallet paa «Udgåede» er dem, der er lagt til side. Uden det ville de
+                vaere umulige at gaette sig til — en liste, der skjuler noget uden at
+                sige hvor meget, er vaerre end en lang liste. */}
+            {k === "udgaaet" && gjortOpAntal > 0 ? ` (${gjortOpAntal} gjort op)` : ""}
           </button>
         ))}
       </div>
+
+      {statusFilter === "udgaaet" && gjortOpAntal > 0 && (
+        <div style={{ fontSize: 12.5, color: "#64748B", marginBottom: 14, lineHeight: 1.5 }}>
+          {gjortOpAntal === 1
+            ? "Én af dem er gjort op og vises kun her — der er ingen opgaver tilbage på den."
+            : `${gjortOpAntal} af dem er gjort op og vises kun her — der er ingen opgaver tilbage på dem.`}
+        </div>
+      )}
 
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 20 }}>
         <button
