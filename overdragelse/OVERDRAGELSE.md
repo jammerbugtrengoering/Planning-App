@@ -25,7 +25,7 @@ lønudbetalinger og rigtige kundefakturaer løber igennem.
 |---|---|---|---|
 | Planlægningsappen | `Planning-App` | jammerbugtrengoering-planning.netlify.app | Kontoret: ugeplan, aftaler, fakturering, løn, lager, rapportering |
 | Worklist | `jammerbugtrengoering-Medarbejder-App` | jammerbugtrengoering-service.netlify.app | Medarbejderne på telefonen |
-| Kundeportalen | `jammerbugtrengoering-kundeportal` | *(udfyldes)* | Kunderne, plus den åbne tilbudsside |
+| Kundeportalen | `jammerbugtrengoering-kundeportal` | jammerbugtrengoering-kundeportal.netlify.app | Kunderne, plus den åbne tilbudsside |
 
 Alle tre er React + Vite, ligger i GitHub-organisationen `jammerbugtrengoering` og
 udgives på Netlify, som selv bygger, når der pushes til `main`. Ingen af dem bruger
@@ -236,7 +236,12 @@ kan hjælpe fra sin egen maskine uden at skulle gætte, hvad der er ændret side
 7. ~~Den gamle anon-nøgle udfases ved udgangen af 2026.~~ **Lukket 12. september 2026.**
    Alle tre apps kører på den nye publishable-nøgle. Efterprøvet i de udgivne filer på
    begge Netlify-sites: nøglen er der, den gamle anon-nøgle er ikke. Kundeportalen har
-   aldrig brugt anon-nøglen — den står direkte i `src/db.js`.
+   aldrig brugt anon-nøglen.
+
+   Alle tre læser nu nøglen fra Netlify. Portalen havde variablen sat, men læste den
+   ikke — nøglen stod hårdt i koden. Det er rettet, for ellers ville en fremtidig
+   nøgleudskiftning slå igennem på to af tre sites, og portalen ville køre videre på
+   den gamle uden at sige noget. **Skiftes nøglen, skal den skiftes alle tre steder.**
 8. ~~`VITE_BREVO_API_KEY` i Netlify.~~ **Fjernet 12. september 2026.** Den lækkede
    aldrig noget, fordi ingen frontend-kode læste den — men `VITE_`-præfikset betyder
    «byg mig ind i den fil, browseren henter», og den dag nogen havde skrevet
