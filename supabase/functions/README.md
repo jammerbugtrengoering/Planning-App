@@ -39,29 +39,49 @@ værre end ingen kopi** — den ser rigtig ud lige indtil den dag, man skal brug
 
 Sådan hentes resten ned, nøjagtigt som de kører:
 
-```
-npm install -g supabase
-supabase login
-cd C:\planapp\Planning-App
-supabase functions download dinero            --project-ref gteowfoahsfpunzgdxum
-supabase functions download dinero-probe      --project-ref gteowfoahsfpunzgdxum
-supabase functions download compute-daily-km  --project-ref gteowfoahsfpunzgdxum
-supabase functions download travel-distance   --project-ref gteowfoahsfpunzgdxum
-supabase functions download send-email        --project-ref gteowfoahsfpunzgdxum
-supabase functions download send-push         --project-ref gteowfoahsfpunzgdxum
-supabase functions download plan-beskeder     --project-ref gteowfoahsfpunzgdxum
-supabase functions download daglige-paamindelser --project-ref gteowfoahsfpunzgdxum
-supabase functions download inviter-bruger    --project-ref gteowfoahsfpunzgdxum
-supabase functions download fratraed-medarbejder --project-ref gteowfoahsfpunzgdxum
-supabase functions download portal-login      --project-ref gteowfoahsfpunzgdxum
-supabase functions download bestilling-besked --project-ref gteowfoahsfpunzgdxum
-supabase functions download tilbud-offentlig  --project-ref gteowfoahsfpunzgdxum
-supabase functions download tilbud-pdf        --project-ref gteowfoahsfpunzgdxum
+**Installér ikke CLI'en med `npm install -g supabase`.** Supabase afviser den med
+vilje som globalt modul, og fejlen, man får, handler om filrettigheder og leder én på
+et vildspor. Brug én af disse i stedet:
+
+```powershell
+# Windows: kør den uden at installere noget
+npx supabase@latest login
 ```
 
-Kør dem gerne alle sytten — også de tre der allerede ligger her. Så bliver filerne
-overskrevet med den udrullede udgave, og så ved I med sikkerhed, at der ikke står
-noget andet i mappen end det, der faktisk kører.
+```bash
+# macOS: samme, eller installér med Homebrew
+npx supabase@latest login
+brew install supabase/tap/supabase
+```
+
+Derefter, fra `Planning-App`-mappen (drop `npx supabase@latest` og skriv bare
+`supabase`, hvis du installerede med Homebrew):
+
+```
+npx supabase@latest functions download dinero               --project-ref gteowfoahsfpunzgdxum
+npx supabase@latest functions download dinero-probe         --project-ref gteowfoahsfpunzgdxum
+npx supabase@latest functions download compute-daily-km     --project-ref gteowfoahsfpunzgdxum
+npx supabase@latest functions download travel-distance      --project-ref gteowfoahsfpunzgdxum
+npx supabase@latest functions download send-email           --project-ref gteowfoahsfpunzgdxum
+npx supabase@latest functions download send-push            --project-ref gteowfoahsfpunzgdxum
+npx supabase@latest functions download plan-beskeder        --project-ref gteowfoahsfpunzgdxum
+npx supabase@latest functions download daglige-paamindelser --project-ref gteowfoahsfpunzgdxum
+npx supabase@latest functions download maaneds-paamindelse  --project-ref gteowfoahsfpunzgdxum
+npx supabase@latest functions download helsetjek            --project-ref gteowfoahsfpunzgdxum
+npx supabase@latest functions download slet-gamle-fotos     --project-ref gteowfoahsfpunzgdxum
+npx supabase@latest functions download inviter-bruger       --project-ref gteowfoahsfpunzgdxum
+npx supabase@latest functions download fratraed-medarbejder --project-ref gteowfoahsfpunzgdxum
+npx supabase@latest functions download portal-login         --project-ref gteowfoahsfpunzgdxum
+npx supabase@latest functions download bestilling-besked    --project-ref gteowfoahsfpunzgdxum
+npx supabase@latest functions download tilbud-offentlig     --project-ref gteowfoahsfpunzgdxum
+npx supabase@latest functions download tilbud-pdf           --project-ref gteowfoahsfpunzgdxum
+```
+
+Alle sytten er med — også de to, der allerede ligger her. Så bliver de overskrevet med
+den udrullede udgave, og så ved I med sikkerhed, at der ikke står noget andet i mappen
+end det, der faktisk kører.
+
+CLI'en kræver Node 20 eller nyere. Det har I i forvejen.
 
 Bagefter: `git add supabase/functions`, commit og push.
 
