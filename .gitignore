@@ -29,3 +29,8 @@ dist-ssr
 # offentlig (den bundles ind i klient-JS), og RLS er den reelle sikkerhedsgrænse.
 .env.local
 .env.*.local
+
+# Supabase CLI'ens arbejdsmappe. Indeholder projektoplysninger og en cache over
+# hvilken CLI-version der sidst blev brugt — intet af det hoerer i et repository,
+# og filerne skrives om ved hver eneste kommando.
+supabase/.temp/
