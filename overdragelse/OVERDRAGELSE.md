@@ -21,11 +21,11 @@ lønudbetalinger og rigtige kundefakturaer løber igennem.
 
 **Tre apps:**
 
-| App | Repository | Hvem bruger den |
-|---|---|---|
-| Planlægningsappen | `Planning-App` | Kontoret: ugeplan, aftaler, fakturering, løn, lager, rapportering |
-| Worklist | `jammerbugtrengoering-Medarbejder-App` | Medarbejderne på telefonen |
-| Kundeportalen | `jammerbugtrengoering-kundeportal` | Kunderne, plus den åbne tilbudsside |
+| App | Repository | Adresse | Hvem bruger den |
+|---|---|---|---|
+| Planlægningsappen | `Planning-App` | jammerbugtrengoering-planning.netlify.app | Kontoret: ugeplan, aftaler, fakturering, løn, lager, rapportering |
+| Worklist | `jammerbugtrengoering-Medarbejder-App` | jammerbugtrengoering-service.netlify.app | Medarbejderne på telefonen |
+| Kundeportalen | `jammerbugtrengoering-kundeportal` | *(udfyldes)* | Kunderne, plus den åbne tilbudsside |
 
 Alle tre er React + Vite, ligger i GitHub-organisationen `jammerbugtrengoering` og
 udgives på Netlify, som selv bygger, når der pushes til `main`. Ingen af dem bruger
@@ -233,10 +233,12 @@ kan hjælpe fra sin egen maskine uden at skulle gætte, hvad der er ændret side
 6. **Morgentjekket sender to ens alarmer**, fordi det mangler den urkontrol, de andre
    daglige jobs har. Rettelsen er en enkelt linje, og den bør laves, inden nogen vænner
    sig til at der altid kommer to.
-7. ~~Den gamle anon-nøgle udfases ved udgangen af 2026.~~ **Ordnet 12. september 2026.**
-   Alle tre apps kører nu på den nye publishable-nøgle, og den gamle anon-nøgle findes
-   ikke længere i nogen af dem — efterprøvet i de byggede filer. Tilbage står ét
-   håndgreb, som kun kan gøres inde i Netlify: står der en `VITE_SUPABASE_ANON_KEY`
-   under *Site configuration → Environment variables* på et af de to sites, så skift
-   navnet til `VITE_SUPABASE_PUBLISHABLE_KEY`. En variabel sat dér kan overtrumfe den,
-   der følger med koden.
+7. ~~Den gamle anon-nøgle udfases ved udgangen af 2026.~~ **Lukket 12. september 2026.**
+   Alle tre apps kører på den nye publishable-nøgle. Efterprøvet i de udgivne filer på
+   begge Netlify-sites: nøglen er der, den gamle anon-nøgle er ikke. Kundeportalen har
+   aldrig brugt anon-nøglen — den står direkte i `src/db.js`.
+8. ~~`VITE_BREVO_API_KEY` i Netlify.~~ **Fjernet 12. september 2026.** Den lækkede
+   aldrig noget, fordi ingen frontend-kode læste den — men `VITE_`-præfikset betyder
+   «byg mig ind i den fil, browseren henter», og den dag nogen havde skrevet
+   `import.meta.env.VITE_BREVO_API_KEY`, havde nøglen ligget offentligt.
+   `BREVO_API_KEY` uden præfiks er den rigtige og er beholdt.
