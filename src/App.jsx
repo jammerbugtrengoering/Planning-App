@@ -10947,6 +10947,8 @@ function InventoryView({ supabase, employees, currentUserName, onInventoryChange
   const [pendingOrders, setPendingOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showAddItem, setShowAddItem] = useState(false);
+  // Spaerre mod at oprette den samme vare to gange. Se addItem nedenfor.
+  const [gemmerVare, setGemmerVare] = useState(false);
   const [showAdjust, setShowAdjust] = useState(null);
   const [showEditItem, setShowEditItem] = useState(null);
   const [editItemName, setEditItemName] = useState("");
@@ -10990,6 +10992,13 @@ function InventoryView({ supabase, employees, currentUserName, onInventoryChange
 
   async function addItem() {
     if (!newName.trim() || !newCat) return;
+    // To tryk paa «Gem produkt» gav to ens varer. Databasen har ingen indsigelse —
+    // to varer maa gerne hedde det samme — saa fejlen ville foerst blive opdaget den
+    // dag, nogen undrede sig over to linjer «Mikrofiberklude» i lageroversigten med
+    // hver sin beholdning.
+    if (gemmerVare) return;
+    setGemmerVare(true);
+    try {
     // Samme som ved omraader: fejlen blev kastet vaek, og en vare der ikke kunne
     // oprettes saa ud som om knappen ikke virkede.
     const { data, error: vareFejl } = await supabase.from("inventory_items").insert({
@@ -10999,6 +11008,9 @@ function InventoryView({ supabase, employees, currentUserName, onInventoryChange
     }).select("*, inventory_categories(name,type,icon)").single();
     if (dbFail(vareFejl, "oprette varen")) return;
     if (data) { setItems((prev) => [...prev, data]); setShowAddItem(false); setNewName(""); setNewItemNumber(""); setNewStock(0); setNewMin(0); setNewPrice(0); }
+    } finally {
+      setGemmerVare(false);
+    }
   }
 
   async function saveEditItem() {
@@ -11286,8 +11298,11 @@ function InventoryView({ supabase, employees, currentUserName, onInventoryChange
             </div>
           </div>
           <div style={styles.modalActions}>
-            <button style={styles.secondaryBtn} onClick={() => setShowAddItem(false)}>Annuller</button>
-            <button style={styles.primaryBtn} disabled={!newName.trim()} onClick={addItem}>Gem produkt</button>
+            <button style={styles.secondaryBtn} disabled={gemmerVare} onClick={() => setShowAddItem(false)}>Annuller</button>
+            <button style={{ ...styles.primaryBtn, opacity: gemmerVare ? 0.6 : 1 }}
+              disabled={gemmerVare || !newName.trim()} onClick={addItem}>
+              {gemmerVare ? "Gemmer…" : "Gem produkt"}
+            </button>
           </div>
         </Modal>
       )}
@@ -11705,6 +11720,18 @@ function TravelSettingsModal({ settings, onClose, onSave }) {
 }
 
 function EmployeeModal({ emp, onClose, onSave, skills: skillList, satsHistorik }) {
+  // Spaerre mod at oprette den samme medarbejder to gange.
+  //
+  // Id'et dannes med uid("e") INDE i knappens onClick. To tryk giver altsaa to
+  // forskellige id'er og dermed to medarbejdere med samme navn — ikke én gemt to
+  // gange, som man skulle tro. Det er den samme fejl, der gav fem dobbelte aftaler,
+  // og den bider haardere her: to medarbejdere deler kompetencer, kapacitet og
+  // loensats, og planlaegningen ville fordele opgaver til dem begge.
+  //
+  // Ved redigering er id'et det samme, og to tryk skriver det samme to gange. Men
+  // laasen skal alligevel gaelde begge veje: et halvt sekunds forskel paa to
+  // skrivninger af en loensats er ikke noget, nogen skal sidde og regne baglaens paa.
+  const [gemmer, setGemmer] = useState(false);
   const [name, setName] = useState(emp?.name || "");
   const [startTime, setStartTime] = useState(emp?.startTime || "");
   // Medarbejderens nummer i Danloen. Navne duer ikke som noegle - to kan hedde det
@@ -11993,11 +12020,19 @@ function EmployeeModal({ emp, onClose, onSave, skills: skillList, satsHistorik }
       </div>
 
       <div style={styles.modalActions}>
-        <button style={styles.secondaryBtn} onClick={onClose}>Annuller</button>
-        <button style={styles.primaryBtn} disabled={!name.trim()} onClick={() => onSave({ id: emp?.id || uid("e"), name: name.trim(), skills: empSkills, color: emp?.color || color, capacity, isAdmin, weekendOk, startTime: startTime || null, hourlyWage: hourlyWage === "" ? STANDARD_TIMELOEN : Math.max(0, Number(hourlyWage)), wageFrom: satsErAendret || !emp ? wageFrom : null, homeAddress: homeAddress.trim() || null, travelInWorktime, danloenNr: danloenNr.trim() || null,
-          weekendTillaeg, shBetaling,
-          weekendPctEgen: weekendPctEgen.trim() === "" ? null : Number(weekendPctEgen.replace(",", ".")),
-          shPctEgen: shPctEgen.trim() === "" ? null : Number(shPctEgen.replace(",", ".")) })}>Gem medarbejder</button>
+        <button style={styles.secondaryBtn} disabled={gemmer} onClick={onClose}>Annuller</button>
+        <button style={{ ...styles.primaryBtn, opacity: gemmer ? 0.6 : 1 }} disabled={gemmer || !name.trim()} onClick={async () => {
+          if (gemmer) return;
+          setGemmer(true);
+          try {
+            await onSave({ id: emp?.id || uid("e"), name: name.trim(), skills: empSkills, color: emp?.color || color, capacity, isAdmin, weekendOk, startTime: startTime || null, hourlyWage: hourlyWage === "" ? STANDARD_TIMELOEN : Math.max(0, Number(hourlyWage)), wageFrom: satsErAendret || !emp ? wageFrom : null, homeAddress: homeAddress.trim() || null, travelInWorktime, danloenNr: danloenNr.trim() || null,
+              weekendTillaeg, shBetaling,
+              weekendPctEgen: weekendPctEgen.trim() === "" ? null : Number(weekendPctEgen.replace(",", ".")),
+              shPctEgen: shPctEgen.trim() === "" ? null : Number(shPctEgen.replace(",", ".")) });
+          } finally {
+            setGemmer(false);
+          }
+        }}>{gemmer ? "Gemmer…" : "Gem medarbejder"}</button>
       </div>
     </Modal>
   );
