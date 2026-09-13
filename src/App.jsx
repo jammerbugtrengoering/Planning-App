@@ -7852,6 +7852,33 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
   }
   function removeSkillRow(i) { setRequiredSkills((prev) => prev.filter((_, idx) => idx !== i)); }
 
+  // Spaerre mod at gemme den samme aftale to gange.
+  //
+  // Det her er ikke en teoretisk risiko. Vi har fem dubletter i basen, og
+  // tidsstemplerne afsloerer dem: to ens aftaler oprettet 6 sekunder fra hinanden, to
+  // med 7, to med 19 og to med 28. Anne Soerensen fik to besoeg tirsdag kl. 09.45 paa
+  // samme adresse, hvor det andet stod som «2t for sent», fordi det laa oven paa det
+  // foerste.
+  //
+  // To ting gjorde det muligt. Knappen kunne trykkes igen, mens den foerste gemning
+  // koerte — og gemningen tager flere sekunder, fordi den danner et helt aars opgaver,
+  // uden at noget paa skaermen sagde at der skete noget. De 19 og 28 sekunder er ikke
+  // dobbeltklik; det er nogen, der troede, at det foerste tryk ikke virkede.
+  //
+  // Derfor baade laasen OG teksten «Gemmer…». En laas uden tilbagemelding inviterer
+  // stadig til at trykke igen — man foler bare, at knappen er gaaet i staa.
+  const [gemmer, setGemmer] = useState(false);
+
+  async function gemEnGang(nyttelast) {
+    if (gemmer) return;
+    setGemmer(true);
+    try {
+      await onSave(nyttelast, editId);
+    } finally {
+      setGemmer(false);
+    }
+  }
+
   // Begge gemme-knapper bygger nyttelasten her. De adskiller sig kun ved saveAsDraft,
   // saa de to veje aldrig kan naa at gemme forskellige felter — havde hver knap sin
   // egen feltliste, ville de foer eller siden komme ud af trit.
@@ -8183,10 +8210,10 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
       </div></div></div>
 
       <div style={{ ...styles.modalActions, position: "sticky", bottom: 0, zIndex: 5, background: "#F8FAFC", borderTop: "1px solid #E2E8F0", padding: "12px 84px 12px 18px", margin: "0 -18px -16px" }}>
-        <button style={styles.secondaryBtn} onClick={onClose}>Annuller</button>
+        <button style={styles.secondaryBtn} disabled={gemmer} onClick={onClose}>Annuller</button>
         <button
-          style={styles.primaryBtn}
-          disabled={!title.trim() || manglerDineroKunde || (type === "fixed" && days.length === 0) || requiredSkills.length === 0 || (type === "fixed" && !!startDate && startDate < todayIso())}
+          style={{ ...styles.primaryBtn, opacity: gemmer ? 0.6 : 1 }}
+          disabled={gemmer || !title.trim() || manglerDineroKunde || (type === "fixed" && days.length === 0) || requiredSkills.length === 0 || (type === "fixed" && !!startDate && startDate < todayIso())}
           title={manglerDineroKunde ? "Vælg kunden i Dinero-listen først" : undefined}
           onClick={() => {
             // Paa Nexus og AEldrelov er kunden den der faar REGNINGEN — kommunen.
@@ -8209,19 +8236,19 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
                 + `Worklist står der, hvem opgaven handler om.\n\n`
                 + `Vil du fortsætte uden?`)) return;
             }
-            onSave(buildPayload(false), editId);
+            gemEnGang(buildPayload(false));
           }}>
-          {editId ? "Godkend og planlæg" : "Gem og planlæg"}
+          {gemmer ? "Gemmer…" : (editId ? "Godkend og planlæg" : "Gem og planlæg")}
         </button>
         {/* Kladde giver kun mening paa en fast aftale. En fleksibel opgave er en
             enkeltstaaende opgave, ikke en aftale, og har intet at vaere kladde for. */}
         {type === "fixed" && (
           <button
-            style={{ ...styles.secondaryBtn, color: "#9C1B5D", borderColor: "#F4C0D1" }}
-            disabled={!title.trim() || manglerDineroKunde || (!!startDate && startDate < todayIso())}
+            style={{ ...styles.secondaryBtn, color: "#9C1B5D", borderColor: "#F4C0D1", opacity: gemmer ? 0.6 : 1 }}
+            disabled={gemmer || !title.trim() || manglerDineroKunde || (!!startDate && startDate < todayIso())}
             title="Gemmer aftalen uden at oprette opgaver. Du kan rette alle felter bagefter og godkende den under Aftaler."
-            onClick={() => onSave(buildPayload(true), editId)}>
-            {editId ? "Gem kladde" : "Gem som kladde"}
+            onClick={() => gemEnGang(buildPayload(true))}>
+            {gemmer ? "Gemmer…" : (editId ? "Gem kladde" : "Gem som kladde")}
           </button>
         )}
       </div>
