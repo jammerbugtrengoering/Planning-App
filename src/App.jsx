@@ -1388,8 +1388,8 @@ const MODULE_HELP = {
         "En medarbejder uden opgaver får alligevel en tom arbejdsdag, du kan trække ned i — det er netop hende, du leder efter, når noget skal placeres.",
         "Dit valg af visning huskes til næste gang."] },
     { h: "Udskrift", p: [
-        "«Print ugeplan» udskriver altid tidslinjen — også hvis du står i gitteret på skærmen. En seddel i bilen skal vise klokkeslæt.",
-        "Sæt fluebenet «Tag adgangsoplysninger med», hvis sedlen skal bruges af en, der endnu ikke har Worklist på telefonen. Så kommer nøgleboks- og alarmkoder med på kortene.",
+        "«Print ugeplan» udskriver en liste med klokkeslæt, kunde, adresse, kørsel, adgang og tjekliste — én medarbejder pr. side. Den ser ikke ud som skærmen; udskriften er sat op for sig, så den kan læses i en bil.",
+        "Sæt fluebenet «Tag adgangsoplysninger med», hvis sedlen skal bruges af en, der endnu ikke har Worklist på telefonen. Så kommer nøgleboks- og alarmkoder med under hver opgave, markeret med 🔑.",
         "Det er et valg, du skal tage hver gang — fluebenet huskes ikke. I appen logges hvert opslag, koden ligger kun på telefonen dagen ud, og et natligt job rydder den. Papir har ingen af delene, så selve udskriften skrives i adgangsloggen med dit navn, tidspunktet og hvilke opgaver den omfattede.",
         "Brug medarbejderfilteret, så sedlen kun indeholder den ene medarbejders uge. Ellers bærer ét ark koderne til alle ugens hjem.",
         "Udskriften får et bånd øverst om, at den er fortrolig og skal makuleres. Bliver en seddel væk, skal koderne skiftes — sig det til kontoret med det samme.",
@@ -5088,18 +5088,9 @@ function WeekView({ employees, instances, unplaced, adgangTekst, onUdskrivMedAdg
                        color: ugeVisning === k ? "#fff" : "#334155" }}>{navn}</button>
           ))}
         </div>
-        {/* Baandet staar KUN paa papiret. Den der finder sedlen i en bil eller en
-            frokoststue, skal kunne se paa den, hvad den er — uden at kende systemet. */}
-        {visAdgang && (
-          <div className="kun-paa-papir" style={{
-            display: "none", border: "2px solid #B45309", background: "#FEF3C7",
-            color: "#7C2D12", padding: "8px 12px", borderRadius: 6, marginBottom: 8,
-            fontSize: 12, fontWeight: 700, lineHeight: 1.4 }}>
-            FORTROLIGT · Denne seddel indeholder nøgleboks- og alarmkoder til private hjem.
-            Må ikke efterlades i bilen eller lægges fra sig. Makuleres når ugen er slut.
-            Er den bortkommet, sig det til kontoret med det samme — koderne skal skiftes.
-          </div>
-        )}
+        {/* Det fortrolige baand laa her og blev aldrig printet: alt uden for
+            #print-week-plan er «visibility: hidden» paa papiret. Baandet staar nu
+            samme sted som resten af udskriften. */}
         <button style={styles.secondaryBtn} onClick={() => udskriv()}>🖨️ Print ugeplan</button>
 
         {/* Adgangsoplysninger paa papir er et bevidst fravalg af den beskyttelse,
@@ -5282,13 +5273,6 @@ function WeekView({ employees, instances, unplaced, adgangTekst, onUdskrivMedAdg
             ))}
           </div>
         )}
-
-        {/* Skemaerne bagerst, ét pr. medarbejder — blanketten har navn og underskrift
-            i toppen, saa den kan ikke deles af to. */}
-        {visSkema && visibleEmployees.map((emp) => (
-          <TimeOgKmSkema key={`skema-${emp.id}`} emp={emp} dage={visibleDays}
-            instances={instances} ugeLabel={weekLabel} />
-        ))}
 
         <div className="skjul-ved-print"
           style={{ ...styles.gridWrap, display: ugeVisning === "tid" ? "none" : undefined }}>
@@ -5524,10 +5508,31 @@ function WeekView({ employees, instances, unplaced, adgangTekst, onUdskrivMedAdg
           og saa udskriften faar én medarbejder pr. side. */}
 
 
+      {/* DET HER ER UDSKRIFTEN. Ikke ugeplanen paa skaermen.
+          globalCss saetter «visibility: hidden» paa alt i body og kun «visible» paa
+          #print-week-plan og dens indhold. Staar noget uden for den her kasse, kommer
+          det IKKE med paa papiret — ogsaa selvom en @media print-regel i index.css
+          siger «display: block !important». Elementet fylder saa en tom plads paa
+          siden, og det ligner en fejl i printeren.
+          13.9.2026 kostede det baade adgangsoplysningerne og time- og koerselsskemaet:
+          begge var bygget ind i skaermbilledet og kom aldrig med ud.
+          Skal noget med paa udskriften, skal det staa herinde. */}
       <div id="print-week-plan" style={{ display: "none" }}>
         <div style={{ fontSize: 20, fontWeight: 700, marginBottom: 12 }}>
           Ugeplan – Uge {weekNo} · {weekYear} ({weekLabel}){printEmployeeId !== "all" && employees.find((e) => e.id === printEmployeeId) ? ` – ${employees.find((e) => e.id === printEmployeeId).name}` : ""}
         </div>
+        {/* Baandet staar KUN paa papiret. Den der finder sedlen i en bil eller en
+            frokoststue, skal kunne se paa den, hvad den er — uden at kende systemet. */}
+        {visAdgang && (
+          <div style={{
+            border: "2px solid #B45309", background: "#FEF3C7", color: "#7C2D12",
+            padding: "8px 12px", borderRadius: 6, marginBottom: 12,
+            fontSize: 12, fontWeight: 700, lineHeight: 1.4 }}>
+            FORTROLIGT · Denne seddel indeholder nøgleboks- og alarmkoder til private hjem.
+            Må ikke efterlades i bilen eller lægges fra sig. Makuleres når ugen er slut.
+            Er den bortkommet, sig det til kontoret med det samme — koderne skal skiftes.
+          </div>
+        )}
         {visibleEmployees.map((emp) => {
           const empDays = visibleDays.filter((d) => instances.some((t) => (t.assignees || []).includes(emp.id) && t.day === d.key));
           if (empDays.length === 0) return null;
@@ -5556,6 +5561,14 @@ function WeekView({ employees, instances, unplaced, adgangTekst, onUdskrivMedAdg
                             </div>
                           ) : null}
                           {t.accessInstructions ? <div style={{ fontSize: 13 }}>Adgang: {t.accessInstructions}</div> : null}
+                          {/* Noegleboks- og alarmkoder. Kun naar fluebenet er sat, og
+                              kun herfra — feltet ovenfor er aftalens frie tekst og
+                              indeholder ikke koderne. */}
+                          {visAdgang && adgangTekst && adgangTekst[t.id] ? (
+                            <div style={{ fontSize: 13, fontWeight: 700, color: "#7C2D12" }}>
+                              🔑 {adgangTekst[t.id]}
+                            </div>
+                          ) : null}
                           {(t.checklist || []).length > 0 ? (
                             <ul style={{ margin: "6px 0 0", paddingLeft: 18, fontSize: 13 }}>
                               {(t.checklist || []).map((c, i) => <li key={i}>☐ {c.text || c}</li>)}
@@ -5570,6 +5583,13 @@ function WeekView({ employees, instances, unplaced, adgangTekst, onUdskrivMedAdg
             </div>
           );
         })}
+
+        {/* Skemaerne bagerst, ét pr. medarbejder — blanketten har navn og underskrift
+            i toppen, saa den kan ikke deles af to. */}
+        {visSkema && visibleEmployees.map((emp) => (
+          <TimeOgKmSkema key={`skema-${emp.id}`} emp={emp} dage={visibleDays}
+            instances={instances} ugeLabel={weekLabel} />
+        ))}
       </div>
     </div>
   );
@@ -8425,7 +8445,7 @@ function TimeOgKmSkema({ emp, dage, instances, ugeLabel }) {
   const hoved = { ...celle, fontWeight: 700, background: "#F1F5F9" };
 
   return (
-    <div className="kun-paa-papir timeskema">
+    <div className="timeskema">
       <div style={{ textAlign: "center", fontSize: 14, fontWeight: 700, marginBottom: 2 }}>
         Time- og kørselsskema – Jammerbugt Rengøring ApS · CVR 41911387
       </div>

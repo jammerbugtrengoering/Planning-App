@@ -130,15 +130,13 @@ code {
   /* Farverne paa opgaveblokkene ER informationen — uden dem er alle brikker hvide. */
   * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
 
-  /* Tidslinjerne staar skjult paa skaermen naar man har valgt gitteret. Paa papir
-     skal de frem uanset hvad — en udskrift uden klokkeslaet er ikke til at
-     arbejde efter. */
-  .tidslinje-side { display: block !important; break-inside: avoid; page-break-inside: avoid; }
-  .tidslinje-side + .tidslinje-side { break-before: page; page-break-before: always; }
-
-  /* Baand der kun hoerer til paa papir: advarslen om at sedlen baerer noeglekoder.
-     Paa skaermen er den stoej — der staar allerede et flueben, man selv har sat. */
-  .kun-paa-papir { display: block !important; }
+  /* HER STOD DER TRE REGLER, DER IKKE VIRKEDE, og som kostede en halv dag.
+     De hev elementer frem fra SKAERMBILLEDET med «display: block !important» —
+     tidslinjerne, det fortrolige baand og skemaet. Men globalCss i App.jsx saetter
+     «visibility: hidden» paa alt i body og kun «visible» inde i #print-week-plan.
+     Et element uden for den kasse bliver aldrig synligt paa papir, uanset hvad der
+     staar om display. Det fyldte bare en tom plads paa siden.
+     Udskriften tegnes af #print-week-plan. Skal noget med, skal det staa DERINDE. */
 
   /* Hvert skema paa sin egen side, staaende. Ugeplanen er liggende, fordi den skal
      rumme fem dage; en blanket med fire kolonner skal ikke vaere det. */
