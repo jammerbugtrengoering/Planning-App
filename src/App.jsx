@@ -1375,6 +1375,10 @@ const MODULE_HELP = {
         "Dit valg af visning huskes til næste gang."] },
     { h: "Udskrift", p: [
         "«Print ugeplan» udskriver altid tidslinjen — også hvis du står i gitteret på skærmen. En seddel i bilen skal vise klokkeslæt.",
+        "Sæt fluebenet «Tag adgangsoplysninger med», hvis sedlen skal bruges af en, der endnu ikke har Worklist på telefonen. Så kommer nøgleboks- og alarmkoder med på kortene.",
+        "Det er et valg, du skal tage hver gang — fluebenet huskes ikke. I appen logges hvert opslag, koden ligger kun på telefonen dagen ud, og et natligt job rydder den. Papir har ingen af delene, så selve udskriften skrives i adgangsloggen med dit navn, tidspunktet og hvilke opgaver den omfattede.",
+        "Brug medarbejderfilteret, så sedlen kun indeholder den ene medarbejders uge. Ellers bærer ét ark koderne til alle ugens hjem.",
+        "Udskriften får et bånd øverst om, at den er fortrolig og skal makuleres. Bliver en seddel væk, skal koderne skiftes — sig det til kontoret med det samme.",
         "Der kommer én medarbejder pr. side, liggende A4. Vil du kun have én med, så vælg hende i listen først.",
         "Menuer og knapper kommer ikke med."] },
 
@@ -4685,6 +4689,17 @@ function PlanningApp({ session, onSignOut }) {
       {view === "uge" && (
         <WeekView
           employees={aktiveEmployees} instances={weekInstancesList} unplaced={unplaced} opgaveNoter={opgaveNoter}
+          // Adgangsoplysningerne ligger allerede i hukommelsen: planlaeggeren er
+          // administrator og henter dem ved opstart. De sendes med, men bruges KUN
+          // naar fluebenet paa udskriften er sat.
+          adgangTekst={instAccessRef.current}
+          onUdskrivMedAdgang={async (opgaveIder) => {
+            if (!opgaveIder || opgaveIder.length === 0) return;
+            const { error } = await supabase.rpc("log_adgangsudskrift", { p_opgaver: opgaveIder });
+            // Gaar logningen galt, skal udskriften ikke stoppes — men det skal siges
+            // hoejt. En kode paa papir uden et spor er praecis det, vi ikke vil have.
+            if (error) notify("Udskriften blev IKKE skrevet i adgangsloggen: " + error.message);
+          }}
           onAdd={() => setShowAddTask(true)} onAuto={runAuto} onScheduleWeek={runScheduleWeek} onAutoAllWeeks={runAutoAllWeeks}
           onPlace={manualPlace} onUnplace={unplace} onRemoveAssignee={removeAssignee} onDelete={deleteTask}
           onToggleInclude={(taskId) => updateInstance(taskId, (t) => ({ ...t, includeInAuto: !t.includeInAuto }))}
@@ -4910,13 +4925,19 @@ function todayKeyGuess() {
 // ---------- Week view ----------
 // Send email notification to employee about day changes
 
-function WeekView({ employees, instances, unplaced, onAdd, onAuto, onScheduleWeek, onAutoAllWeeks, onPlace, onUnplace, onRemoveAssignee, onDelete, onOpenTask, onToggleInclude, onEditEmp, dragId, setDragId, weekLabel, weekNo, weekOffset, weekYear, onPrevWeek, onNextWeek, onTodayWeek, travelSettings, onOpenTravelSettings, currentIsoWeek, areas, employeeAreas, onOpenAddBlock, onOpenAddActivity, opgaveNoter }) {
+function WeekView({ employees, instances, unplaced, adgangTekst, onUdskrivMedAdgang, onAdd, onAuto, onScheduleWeek, onAutoAllWeeks, onPlace, onUnplace, onRemoveAssignee, onDelete, onOpenTask, onToggleInclude, onEditEmp, dragId, setDragId, weekLabel, weekNo, weekOffset, weekYear, onPrevWeek, onNextWeek, onTodayWeek, travelSettings, onOpenTravelSettings, currentIsoWeek, areas, employeeAreas, onOpenAddBlock, onOpenAddActivity, opgaveNoter }) {
   const [addMenuTaskId, setAddMenuTaskId] = useState(null);
   const [showWeekend, setShowWeekend] = useState(false);
   // Belaegningen er foldet vaek som udgangspunkt. Se kommentaren ved selve blokken.
   const [visBelaegning, setVisBelaegning] = useState(false);
   // Gitter eller tidslinje. Huskes, saa man ikke skal vaelge hver morgen.
   const [ugeVisning, setUgeVisning] = useState(() => localStorage.getItem("rp_ugevisning") || "gitter");
+  // Slaas ALDRIG til af sig selv og huskes ikke mellem gange. En indstilling, der
+  // staar og husker at koderne skal med, ville foer eller siden sende et ark ud af
+  // huset, som ingen havde taget stilling til.
+  const [visAdgang, setVisAdgang] = useState(false);
+
+
   useEffect(() => { localStorage.setItem("rp_ugevisning", ugeVisning); }, [ugeVisning]);
   const [selectedAreaId, setSelectedAreaId] = useState("all"); // "all" eller area.id
   const [printEmployeeId, setPrintEmployeeId] = useState("all");
@@ -4942,6 +4963,24 @@ function WeekView({ employees, instances, unplaced, onAdd, onAuto, onScheduleWee
     ? employees
     : employees.filter((e) => employeeAreas.some((ea) => ea.employee_id === e.id && ea.area_id === selectedAreaId));
   const visibleEmployees = printEmployeeId === "all" ? areaFilteredEmployees : areaFilteredEmployees.filter((e) => e.id === printEmployeeId);
+
+  async function udskriv() {
+    if (visAdgang) {
+      const synlige = instances
+        .filter((t) => visibleEmployees.some((e) => (t.assignees || []).includes(e.id)))
+        .filter((t) => adgangTekst && adgangTekst[t.id])
+        .map((t) => t.id);
+      if (!window.confirm(
+        `Udskriften kommer til at indeholde nøgleboks- og alarmkoder til ${synlige.length} hjem.\n\n`
+        + `Papiret har hverken log eller udløb — derfor skrives selve udskriften i `
+        + `adgangsloggen med dit navn og tidspunktet.\n\nUdskriv?`)) return;
+      // Loggen skrives FOER udskriften. Fortryder man i printdialogen, staar der en
+      // linje for meget — og det er den rigtige vej at tage fejl paa.
+      if (onUdskrivMedAdgang) await onUdskrivMedAdgang(synlige);
+    }
+    window.print();
+  }
+
 
   // Filtrer ikke-tildelt opgaver baseret på uge
   const filteredUnplaced = unassignedFilter === "current"
@@ -4996,7 +5035,36 @@ function WeekView({ employees, instances, unplaced, onAdd, onAuto, onScheduleWee
                        color: ugeVisning === k ? "#fff" : "#334155" }}>{navn}</button>
           ))}
         </div>
-        <button style={styles.secondaryBtn} onClick={() => window.print()}>🖨️ Print ugeplan</button>
+        {/* Baandet staar KUN paa papiret. Den der finder sedlen i en bil eller en
+            frokoststue, skal kunne se paa den, hvad den er — uden at kende systemet. */}
+        {visAdgang && (
+          <div className="kun-paa-papir" style={{
+            display: "none", border: "2px solid #B45309", background: "#FEF3C7",
+            color: "#7C2D12", padding: "8px 12px", borderRadius: 6, marginBottom: 8,
+            fontSize: 12, fontWeight: 700, lineHeight: 1.4 }}>
+            FORTROLIGT · Denne seddel indeholder nøgleboks- og alarmkoder til private hjem.
+            Må ikke efterlades i bilen eller lægges fra sig. Makuleres når ugen er slut.
+            Er den bortkommet, sig det til kontoret med det samme — koderne skal skiftes.
+          </div>
+        )}
+        <button style={styles.secondaryBtn} onClick={() => udskriv()}>🖨️ Print ugeplan</button>
+
+        {/* Adgangsoplysninger paa papir er et bevidst fravalg af den beskyttelse,
+            resten af systemet bygger paa: opslaget i appen logges, koden ligger kun
+            paa telefonen dagen ud, og et natligt job rydder den. Papir har ingen af
+            delene. Derfor er det et valg man skal traeffe hver gang, og ikke en
+            indstilling der staar og huskes.
+
+            Det findes, fordi en afloeser under oplaering ikke har appen endnu og
+            ellers ikke kan komme ind. */}
+        <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5,
+                        color: visAdgang ? "#B45309" : "#64748B", cursor: "pointer",
+                        fontWeight: visAdgang ? 700 : 500 }}
+          title="Tager nøgleboks- og alarmkoder med på udskriften. Udskriften bliver skrevet i adgangsloggen.">
+          <input type="checkbox" checked={visAdgang}
+            onChange={(e) => setVisAdgang(e.target.checked)} />
+          🔑 Tag adgangsoplysninger med
+        </label>
 
         {/* Signaturforklaringen laa foer paa sin egen linje under vaerktoejslinjen og
             aad en raekke af skaermhoejden. Den staar her nu, hvor der var plads. */}
@@ -5145,7 +5213,7 @@ function WeekView({ employees, instances, unplaced, onAdd, onAuto, onScheduleWee
             emp={emp} dage={visibleDays} instances={instances}
             travelSettings={travelSettings} weekOffset={weekOffset} weekYear={weekYear}
             onOpenTask={onOpenTask} dragId={dragId} setDragId={setDragId} onPlace={onPlace}
-            alleMedarbejdere={employees} />
+            alleMedarbejdere={employees} adgangTekst={visAdgang ? adgangTekst : null} />
         </div>
             ))}
           </div>
@@ -8256,7 +8324,7 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
 const TL_PX_PR_MIN = 1.6;
 
 function UgeTidslinje({ emp, dage, instances, travelSettings, weekOffset, weekYear,
-                        onOpenTask, dragId, setDragId, onPlace, alleMedarbejdere }) {
+                        onOpenTask, dragId, setDragId, onPlace, alleMedarbejdere, adgangTekst }) {
   const perDag = dage.map((d) => {
     const dayTasks = instances.filter(
       (t) => t.day === d.key && (t.assignees || []).includes(emp.id)
@@ -8461,6 +8529,15 @@ function UgeTidslinje({ emp, dage, instances, travelSettings, weekOffset, weekYe
                       {h >= 72 && udfoert && (
                         <div style={{ ...enLinje, fontSize: 9.5, fontWeight: 700, marginTop: 1 }}>
                           ✓ {udfoert.label}{udfoert.when ? ` · ${udfoert.when}` : ""}
+                        </div>
+                      )}
+                      {/* Adgangsoplysninger. Staar til sidst og med fed, fordi det er
+                          dét, man leder efter ved doeren — og IKKE afkortet til én
+                          linje: en halv noeglebokskode er ubrugelig. */}
+                      {adgangTekst && adgangTekst[t.id] && (
+                        <div style={{ fontSize: 9.5, fontWeight: 700, marginTop: 2,
+                                      color: "#7C2D12", whiteSpace: "pre-wrap", lineHeight: 1.25 }}>
+                          🔑 {adgangTekst[t.id]}
                         </div>
                       )}
                     </button>

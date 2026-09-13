@@ -136,6 +136,10 @@ code {
   .tidslinje-side { display: block !important; break-inside: avoid; page-break-inside: avoid; }
   .tidslinje-side + .tidslinje-side { break-before: page; page-break-before: always; }
 
+  /* Baand der kun hoerer til paa papir: advarslen om at sedlen baerer noeglekoder.
+     Paa skaermen er den stoej — der staar allerede et flueben, man selv har sat. */
+  .kun-paa-papir { display: block !important; }
+
   /* Rullefelter skal foldes helt ud, ellers klippes alt under det synlige vaek. */
   * { overflow: visible !important; max-height: none !important; }
 }
