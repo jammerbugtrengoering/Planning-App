@@ -854,12 +854,23 @@ function ensureWeekInstances(week, year, allInstances, templates, employees, are
     }
     
     // Gentagelsesinterval (Plan parametre): spring uger over der ikke matcher
-    // det valgte interval (uge/14 dage/måned/3 måned), talt fra startdatoen.
-    // Maanedlig og kvartalsvis planlaegges efter KALENDERMAANED, ikke efter 4 hhv. 13
-    // uger. Den gamle ugebaserede beregning gav 13 besoeg om aaret paa en maanedlig
-    // aftale og skred loebende i forhold til kalenderen.
-    const PLAN_INTERVAL_MONTHS = { maaned: 1, "3_maaned": 3 };
-    const PLAN_INTERVAL_WEEKS = { uge: 1, "14_dage": 2 };
+    // det valgte interval, talt fra startdatoen.
+    //
+    // «Hver 3. måned» planlaegges efter KALENDERMAANED — et kvartalsbesoeg hoerer til
+    // en bestemt tid paa aaret, ikke til hver trettende uge.
+    //
+    // «Hver 4. uge» goer det modsatte, og det er et bevidst valg truffet 13.9.2026.
+    // Valget hed «Måned» foer og fulgte kalenderen: 12 besoeg om aaret, altid samme
+    // dato. Nu er det fire uger: 13 besoeg om aaret, og dagen vandrer gennem
+    // kalenderen. Det passer bedre til, hvordan rengoering faktisk aftales — hver
+    // fjerde torsdag, ikke «den femte i maaneden, uanset hvilken ugedag det er».
+    //
+    // Navnet paa knappen siger nu, hvad den goer. Ret ikke det ene uden det andet.
+    //
+    // 'maaned' staar stadig i listen, fordi der kan ligge gamle raekker med den
+    // vaerdi. De behandles som fire uger — det samme som den knap, de nu svarer til.
+    const PLAN_INTERVAL_MONTHS = { "3_maaned": 3 };
+    const PLAN_INTERVAL_WEEKS = { uge: 1, "14_dage": 2, "4_uger": 4, maaned: 4 };
     const intervalMonths = PLAN_INTERVAL_MONTHS[tpl.planInterval];
     if (intervalMonths) {
       // Uden startdato findes der intet anker for kadencen.
@@ -1736,12 +1747,15 @@ const MODULE_HELP = {
         "Retter du feltet på en eksisterende aftale, slår det igennem på de opgaver, der oprettes fremover — ikke på dem, der allerede ligger i planen."] },
     { h: "Sådan læses den", p: ["Kontraktsum er forventet omsætning over hele perioden ud fra planlagte timer.",
         "Realiseret er hvad der faktisk er registreret.", "Dage tilbage viser hvor længe der er til aftalen udløber."] },
-    { h: "Gentagelse", p: ["En aftale kan gentages hver uge, hver 14. dag, hver måned eller hvert kvartal."] }, { h: "Under udarbejdelse", p: ["Er du ikke færdig med en ny aftale, så tryk «Gem som kladde» i stedet for «Gem og planlæg».", "En kladde opretter ingen opgaver. Den ligger og venter, og du kan rette alle felter i den så mange gange du vil.", "Find den igen med filteret «Under udarbejdelse» øverst her på siden. Tallet i knappen viser hvor mange der ligger.", "Tryk «Åbn og godkend» for at rette videre. Inde i aftalen vælger du så «Gem kladde» hvis du stadig ikke er færdig, eller «Godkend og planlæg» når den er klar.", "Først ved godkendelsen oprettes opgaverne — fra startdatoen og frem til udløbsdatoen. Det kan være mange på én gang, så tjek datoerne inden du godkender.", "Startdatoen kan ikke ligge i fortiden. Har en kladde ligget så længe at datoen er løbet fra dig, skal den rettes før du kan godkende."] }, { h: "Filtre", p: ["Den øverste række filtrerer på status, den nederste på kontrakttype. De virker sammen, så du kan fx se alle udgåede Nexus-aftaler."] },
+    { h: "Gentagelse", p: [
+        "En aftale kan gentages hver uge, hver 14. dag, hver 4. uge eller hver 3. måned. Kadencen tælles fra startdatoen.",
+        "«Hver 4. uge» er ikke det samme som en gang om måneden. Det giver 13 besøg om året i stedet for 12, og dagen vandrer gennem kalenderen — et besøg den 5. bliver med tiden den 28. Til gengæld ligger det altid på den samme ugedag, og det er sådan, rengøring aftales i praksis.",
+        "Vil du have en fast dato i måneden i stedet, findes den mulighed ikke længere. Sig til, hvis I får brug for den."] }, { h: "Under udarbejdelse", p: ["Er du ikke færdig med en ny aftale, så tryk «Gem som kladde» i stedet for «Gem og planlæg».", "En kladde opretter ingen opgaver. Den ligger og venter, og du kan rette alle felter i den så mange gange du vil.", "Find den igen med filteret «Under udarbejdelse» øverst her på siden. Tallet i knappen viser hvor mange der ligger.", "Tryk «Åbn og godkend» for at rette videre. Inde i aftalen vælger du så «Gem kladde» hvis du stadig ikke er færdig, eller «Godkend og planlæg» når den er klar.", "Først ved godkendelsen oprettes opgaverne — fra startdatoen og frem til udløbsdatoen. Det kan være mange på én gang, så tjek datoerne inden du godkender.", "Startdatoen kan ikke ligge i fortiden. Har en kladde ligget så længe at datoen er løbet fra dig, skal den rettes før du kan godkende."] }, { h: "Filtre", p: ["Den øverste række filtrerer på status, den nederste på kontrakttype. De virker sammen, så du kan fx se alle udgåede Nexus-aftaler."] },
     { h: "Udgåede aftaler rydder op efter sig", p: [
         "En udgået aftale, hvor den sidste opgave er udført, er «gjort op». Den falder af listen af sig selv, så den ikke ligger og fylder mellem de aktive resten af tiden.",
         "Den er ikke væk. Vælg «Udgåede», så står de der alle sammen med kontraktsum og realiseret — og tallet på knappen siger, hvor mange der er lagt til side.",
         "Er der stadig én opgave tilbage, der ikke er udført, bliver aftalen liggende. Så er der noget, nogen skal tage stilling til, og så skal den kunne ses uden at man leder efter den."] },
-  ], warn: "Måned betyder kalendermåned. En månedlig aftale lander i den uge der indeholder samme dato som startdatoen — altså 12 besøg om året. Er startdatoen den 31., rammes sidste dag i korte måneder, så ingen måned springes over." },
+  ], warn: "«Hver 3. måned» følger kalenderen: besøget lander i den uge, der indeholder samme dato som startdatoen — altså fire besøg om året på samme tid. Er startdatoen den 31., rammes sidste dag i korte måneder, så intet kvartal springes over. «Hver 4. uge» tæller derimod i uger og vandrer gennem kalenderen." },
 
   reports: { title: "Rapportering", intro: "Budget mod faktisk omsætning, opdelt pr. kontrakttype.", blocks: [
     { h: "Tallene", p: ["Budget er det du selv lægger ind med «Redigér budget».",
@@ -7734,7 +7748,12 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
   const [contractType, setContractType] = useState(copyFrom?.contractType || "privat");
   const [pricingType, setPricingType] = useState(copyFrom?.pricingType || "hourly");
   const [fixedPrice, setFixedPrice] = useState(copyFrom?.fixedPrice ?? "");
-  const [planInterval, setPlanInterval] = useState(copyFrom?.planInterval || "uge");
+  // 'maaned' er den gamle vaerdi bag knappen, der hed «Måned». Knappen hedder nu
+  // «Hver 4. uge» og har vaerdien '4_uger'. Ligger der en gammel raekke tilbage, skal
+  // den vise en markeret knap og ikke ingenting — ellers ser aftalen ud til at mangle
+  // en kadence, og den foerste der aabner den, kommer til at vaelge en ny i blinde.
+  const [planInterval, setPlanInterval] = useState(
+    copyFrom?.planInterval === "maaned" ? "4_uger" : (copyFrom?.planInterval || "uge"));
   const [title, setTitle] = useState(copyFrom ? (editId ? copyFrom.title : `Kopi af ${copyFrom.title}`) : "");
   const [duration, setDuration] = useState(copyFrom?.duration || 60);
   const [requiredSkills, setRequiredSkills] = useState(copyFrom?.requiredSkills || [{ skill: skills[0] ?? "", minLevel: 1 }]);
@@ -8151,7 +8170,7 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
           <input type="date" style={styles.input} value={expiryDate} onChange={(e) => setExpiryDate(e.target.value)} />
           <label style={styles.label}>Plan parametre</label>
           <div style={styles.typePicker}>
-            {[["uge","Uge"],["14_dage","14 dage"],["maaned","Måned"],["3_maaned","3 måned"]].map(([k,l]) => (
+            {[["uge","Hver uge"],["14_dage","Hver 14. dag"],["4_uger","Hver 4. uge"],["3_maaned","Hver 3. måned"]].map(([k,l]) => (
               <button key={k} type="button" onClick={() => setPlanInterval(k)}
                 style={planInterval === k ? { ...styles.typePickBtn, borderColor:"#D6247A", color:"#D6247A", background:"#FCE4EF" } : styles.typePickBtn}>
                 {l}
@@ -8690,19 +8709,33 @@ function ContractsView({ templates: alleTemplates, instances, pricing, employees
     return (tpl.duration || 0) * ((tpl.days || []).length || 0);
   }
 
-  // Kontraktsum for hele aftaleperioden: planlagte timer/uge × antal uger fra
-  // startdato til udløbsdato × timeprisen for kontrakttypen. Uden en startdato kan
-  // "hele perioden" ikke opgøres præcist, så vi falder tilbage til en enkelt uges
-  // værdi og markerer det tydeligt i UI'et.
+  // Kontraktsum for hele aftaleperioden: værdien af ét besøg × antal besøg i perioden
+  // × timeprisen for kontrakttypen. Uden en startdato kan "hele perioden" ikke
+  // opgøres præcist, så vi falder tilbage til værdien af én omgang og markerer det
+  // tydeligt i UI'et.
+  //
+  // KADENCEN SKAL MED. Indtil 13.9.2026 blev ugeværdien ganget med antallet af uger i
+  // perioden — uanset om aftalen kørte hver uge, hver 14. dag eller hver måned. Alle
+  // 48 fjortendagsaftaler stod altså til det dobbelte, og de månedlige til godt fire
+  // gange for meget. Anne Sørensens aftale viste 32.760 kr for et år, hvor hun får
+  // 12 besøg à 630 kr — altså 7.560 kr.
+  //
+  // Samlet stod kontraktsummen 1,18 mio. kr for højt: 3,37 mio. mod 2,19 mio. Det er
+  // et tal, nogen kunne bruge til at vurdere forretningen, så det må ikke være pynt.
   function contractSumInfo(tpl, contractType, start, expiry) {
     const rate = pricing[contractType || "privat"] || 0;
     const weeklyMin = weeklyPlannedMinutes(tpl);
     const weeklyValue = tpl.pricingType === "fixed"
       ? (Number(tpl.fixedPrice) || 0) * ((tpl.days || []).length || 0)
       : (weeklyMin / 60) * rate;
+    // Uger mellem to besøg. 'maaned' er den gamle værdi bag «Hver 4. uge».
+    // Kvartalet regnes som 13 uger — det er ikke helt præcist over et år, men
+    // forskellen er under én procent, og alternativet er at lade som om en aftale
+    // med fire besøg om året har 52.
+    const pr = { uge: 1, "14_dage": 2, "4_uger": 4, maaned: 4, "3_maaned": 13 }[tpl.planInterval] || 1;
     if (start && expiry) {
       const weeks = Math.max(1, Math.round((expiry - start) / (1000 * 60 * 60 * 24 * 7)));
-      return { sum: weeklyValue * weeks, weeks, wholePeriod: true };
+      return { sum: (weeklyValue * weeks) / pr, weeks, wholePeriod: true };
     }
     return { sum: weeklyValue, weeks: 1, wholePeriod: false };
   }
