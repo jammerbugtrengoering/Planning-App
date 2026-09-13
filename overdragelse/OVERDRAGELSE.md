@@ -225,9 +225,11 @@ kan hjælpe fra sin egen maskine uden at skulle gætte, hvad der er ændret side
 3. **`Fortegnelse-markedsfoering.docx`** mangler afklaring på nogle punkter om
    SoMePlanning: samtykke til billeder af medarbejdere, en fremgangsmåde til at fjerne
    en persons billeder, og forholdet til Meta om sideindsigt.
-4. **Kopien fra oprydningen 11.–12. september 2026** ligger i tabellen
-   `oprydning_opsagte_2026_09`. Den indeholder nøglebokskoder og skal slettes, når
-   oprydningen har stået sin prøve. **Sæt en dato.**
+4. ~~Kopien fra oprydningen skal slettes.~~ **Ordnet 13. september 2026.** De to
+   kopitabeller — `oprydning_opsagte_2026_09` og `oprydning_aftaler_2026_09` — sletter
+   sig selv **13. november 2026**. Et dagligt job går hjem igen indtil den dato, og
+   når det har gjort sit, rydder det også persondataregistret og afmelder sig selv.
+   Skal I have kopierne længere, er datoen det ene sted i `ryd_oprydningskopier()`.
 5. **To udgåede aftaler hos Anne Sørensen** har hver en åben opgave, der skal afgøres i
    hånden — den ene er sidste dags rengøring, den anden blev dannet ved en fejl.
 6. **Morgentjekket sender to ens alarmer**, fordi det mangler den urkontrol, de andre
