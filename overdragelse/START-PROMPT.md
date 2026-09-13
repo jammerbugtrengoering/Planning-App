@@ -112,6 +112,13 @@ melde overforbrug på besøg, der gik præcis som planlagt.
 med, at en opgave ligger i hukommelsen i Worklist, holder det kun for den uge, der er
 åben.
 
+**Planen danner opgaver, når nogen åbner en uge.** Sletter du derfor en opgave helt,
+er den tilbage, næste gang nogen bladrer hen til den uge — med et nyt id, så det
+ligner en ny fejl. Opgaver på en aftale skal **slettemarkeres** (`deleted_at`), ikke
+fjernes: den slettemarkerede række holder pladsen og fortæller planen, at her er
+ryddet med vilje. Det kostede en formiddags oprydning, der var lavet om en time
+senere.
+
 ## Sådan udgiver vi en ændring
 
 1. Byg og se, at det er rent: `npm run build` i den mappe, det handler om. Byggeriet
