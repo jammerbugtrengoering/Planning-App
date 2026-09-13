@@ -833,6 +833,28 @@ function arvetAftryk(t) {
   return ARVEDE_FELTER.map((f) => JSON.stringify(t?.[f] ?? null)).join("|");
 }
 
+// Pladser der er ryddet MED VILJE: aftale + år + uge + dag på opgaver, nogen har
+// slettemarkeret.
+//
+// 13.9.2026. To dubletopgaver blev ryddet i databasen, og de stod der stadig i
+// planen — også i en frisk browser i inkognito. Rækkerne var der ikke; appen TEGNEDE
+// dem. ensureWeekInstances danner en opgave for hver plads, den ikke kan finde i
+// listen, og slettemarkerede rækker hentes aldrig ind. Så pladsen så tom ud, og
+// opgaven blev fundet på igen hver eneste gang ugen blev åbnet.
+//
+// Databasen afviser skrivningen — den har den samme regel — så der kom aldrig en ny
+// række. Men det var ikke til at se: skærmen viste en dublet, som ikke fandtes.
+//
+// Derfor hentes pladserne med ved indlæsningen, og listen ligger her, hvor både
+// horisonten og de enkelte uger kommer forbi. En parameter ville skulle føres gennem
+// syv kaldesteder, og så ville den blive glemt ét af dem.
+let ryddedePladser = new Set();
+const pladsNoegle = (tplId, aar, uge, dag) => `${tplId}|${aar}|${uge}|${dag}`;
+function saetRyddedePladser(raekker) {
+  ryddedePladser = new Set((raekker || []).map((r) =>
+    pladsNoegle(r.template_id, r.year, r.week, r.day)));
+}
+
 function ensureWeekInstances(week, year, allInstances, templates, employees, areas = [], employeeAreas = [], travelSettings = DEFAULT_TRAVEL) {
   let list = [...allInstances];
   const weekMonday = mondayOfWeek(week, year);
@@ -972,6 +994,10 @@ function ensureWeekInstances(week, year, allInstances, templates, employees, are
     const DAY_INDEX_TO_STRING = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
     daysToCreate.forEach((dayIdx) => {
       const day = DAY_INDEX_TO_STRING[dayIdx];
+      // Er pladsen ryddet med vilje, skal der ikke dannes en ny. En slettemarkeret
+      // opgave hentes ikke ind, saa uden det her ser pladsen tom ud — og opgaven
+      // bliver fundet paa igen, hver eneste gang ugen aabnes.
+      if (ryddedePladser.has(pladsNoegle(tpl.id, year, week, day))) return;
       const existingIdx = list.findIndex((i) => i.templateId === tpl.id && i.week === week && i.year === year && i.day === day);
       if (existingIdx === -1) {
         const newInst = {
@@ -2460,6 +2486,16 @@ function PlanningApp({ session, onSignOut }) {
         // gengaeld ved med at vaere i employees, saa historikken kan sige hvem der
         // udfoerte hvad — det er hele grunden til at raekken ikke slettes.
         const empAktive = empMapped.filter((e) => !e.fratraadtDato);
+        // Pladser ryddet med vilje. Hentes FOER opgaverne materialiseres — ellers
+        // danner horisonten dem igen, inden vi ved at de er ryddet.
+        //
+        // Kun de fire felter, der udgoer pladsen. Hele raekken ville betyde, at alt
+        // det slettede blev sendt ned i browseren igen, og det er blandt andet 434
+        // opgaver fra oprydningen i opsagte aftaler.
+        const { data: ryddede } = await supabase
+          .from("instances").select("template_id, year, week, day")
+          .not("deleted_at", "is", null).not("template_id", "is", null);
+        saetRyddedePladser(ryddede);
         let allInst = existingInst;
         const horizonAnchor = mondayOf(new Date());
         for (let hw = 0; hw < HORIZON_WEEKS; hw++) {
