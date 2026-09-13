@@ -1656,6 +1656,12 @@ const MODULE_HELP = {
         "En aftale kan gentages hver uge, hver 14. dag, hver 4. uge eller hver 3. måned. Kadencen tælles fra startdatoen.",
         "«Hver 4. uge» er ikke det samme som en gang om måneden. Det giver 13 besøg om året i stedet for 12, og dagen vandrer gennem kalenderen — et besøg den 5. bliver med tiden den 28. Til gengæld ligger det altid på den samme ugedag, og det er sådan, rengøring aftales i praksis.",
         "Vil du have en fast dato i måneden i stedet, findes den mulighed ikke længere. Sig til, hvis I får brug for den."] }, { h: "Under udarbejdelse", p: ["Er du ikke færdig med en ny aftale, så tryk «Gem som kladde» i stedet for «Gem og planlæg».", "En kladde opretter ingen opgaver. Den ligger og venter, og du kan rette alle felter i den så mange gange du vil.", "Find den igen med filteret «Under udarbejdelse» øverst her på siden. Tallet i knappen viser hvor mange der ligger.", "Tryk «Åbn og godkend» for at rette videre. Inde i aftalen vælger du så «Gem kladde» hvis du stadig ikke er færdig, eller «Godkend og planlæg» når den er klar.", "Først ved godkendelsen oprettes opgaverne — fra startdatoen og frem til udløbsdatoen. Det kan være mange på én gang, så tjek datoerne inden du godkender.", "Startdatoen kan ikke ligge i fortiden. Har en kladde ligget så længe at datoen er løbet fra dig, skal den rettes før du kan godkende."] }, { h: "Filtre", p: ["Den øverste række filtrerer på status, den nederste på kontrakttype. De virker sammen, så du kan fx se alle udgåede Nexus-aftaler."] },
+    { h: "Redigér en aftale der kører", p: [
+        "Tryk «Redigér aftale» på aftalen her på siden — eller åbn en hvilken som helst opgave på den i ugeplanen og vælg «Redigér aftalen». Begge veje åbner det samme.",
+        "Du kan rette alt: rytme, ugedage, klokkeslæt, varighed, pris, kontrakttype, tjeklister og fast medarbejder. Ændringerne gælder de opgaver, der dannes fremover.",
+        "Ændrer du rytmen eller ugedagene, rydder systemet selv de planlagte opgaver, der ikke passer længere, og siger hvor mange det var. Kun opgaver i fremtiden uden registreret tid og uden afslutning — udført arbejde røres aldrig.",
+        "De nye opgaver dukker op, efterhånden som du bladrer gennem ugerne. Vil du se dem med det samme, så klik dig gennem de kommende uger én gang.",
+        "En udgået aftale kan ikke redigeres. Skal den i gang igen, laver du en ny."] },
     { h: "Udgåede aftaler rydder op efter sig", p: [
         "En udgået aftale, hvor den sidste opgave er udført, er «gjort op». Den falder af listen af sig selv, så den ikke ligger og fylder mellem de aktive resten af tiden.",
         "Den er ikke væk. Vælg «Udgåede», så står de der alle sammen med kontraktsum og realiseret — og tallet på knappen siger, hvor mange der er lagt til side.",
@@ -3129,6 +3135,39 @@ function PlanningApp({ session, onSignOut }) {
       dineroContactGuid: payload.dineroContactGuid || "",
       status: nyStatus,
     };
+
+    // Ryd de opgaver, der ikke passer til den nye rytme.
+    //
+    // Uden det her ville en aendring vaere usynlig: skifter man fra hver uge til hver
+    // 4. uge, danner planen ikke nye opgaver — de findes allerede — og de gamle
+    // ugentlige bliver staaende. Skaermen ville vise den gamle rytme, mens aftalen
+    // sagde noget andet, og ingen ville opdage det foer kunden ringede.
+    //
+    // Kun opgaver der ligger i FREMTIDEN, ikke er udfoert og ikke har registreret tid.
+    // Udfoert arbejde og alt med tid paa er historik og maa aldrig forsvinde, fordi
+    // nogen retter en aftale.
+    //
+    // Der slettes helt og ikke slettemarkeres. En slettemarkeret plads spaerres for
+    // altid, og skifter planlaeggeren rytmen tilbage igen i morgen, skal opgaverne
+    // kunne dannes paa ny. Reglen om rytmen holder dem selv vaek imens.
+    const idag = todayIso();
+    const passerIkke = instances.filter((i) =>
+      i.templateId === tplId
+      && instanceDateString(i) > idag
+      && i.status !== "udført"
+      && (i.timeLog || i.time_log || []).length === 0
+      && !aftaleKoererPaaDag(opdateret, mondayOfWeek(i.week, i.year), i.day));
+
+    if (passerIkke.length > 0) {
+      const { error: delErr } = await supabase.from("instances")
+        .delete().in("id", passerIkke.map((i) => i.id));
+      if (dbFail(delErr, "rydde de opgaver der ikke passer til den nye rytme")) return;
+      const vaek = new Set(passerIkke.map((i) => i.id));
+      setInstances((prev) => prev.filter((i) => !vaek.has(i.id)));
+      notify(passerIkke.length === 1
+        ? "Aftalen er gemt — én planlagt opgave passede ikke til den nye rytme og er fjernet"
+        : `Aftalen er gemt — ${passerIkke.length} planlagte opgaver passede ikke til den nye rytme og er fjernet`);
+    }
 
     setTemplates((prevT) => {
       const nextT = prevT.map((t) => (t.id === tplId ? opdateret : t));
@@ -4739,6 +4778,13 @@ function PlanningApp({ session, onSignOut }) {
           templates={templates}
           onSetPreferredEmployee={setPreferredEmployee}
           onCancelTemplate={(tplId) => setCancelTarget(tplId)}
+          onEditTemplate={(tplId) => {
+            const tpl = templates.find((x) => x.id === tplId);
+            if (!tpl) return;
+            setCopyPayload({ ...tpl, type: "fixed", templateDays: tpl.days });
+            setEditTplId(tpl.id);
+            setShowAddTask(true);
+          }}
           task={instances.find((t) => t.id === openTaskId)}
           employees={aktiveEmployees}
           checklistTemplates={checklistTemplates}
@@ -8808,14 +8854,18 @@ function ContractsView({ templates: alleTemplates, instances, pricing, employees
                   )}
                 </div>
                 {/* Genvej direkte fra listen. Ellers skulle man vide at en kladde
-                    aabnes via Rediger, og det er ikke til at gaette. */}
-                {t.status === "kladde" && onEditDraft && (
+                    aabnes via Rediger, og det er ikke til at gaette.
+                    Siden 13.9.2026 ogsaa paa AKTIVE aftaler: indtil da kunne en
+                    godkendt aftale slet ikke aabnes igen, saa hverken rytme, ugedage,
+                    klokkeslaet, varighed eller pris kunne rettes. Maskineriet kunne
+                    det hele — det var kun doeren ind til det, der manglede. */}
+                {t.status !== "udgaaet" && onEditDraft && (
                   <div style={{ marginBottom: 6 }}>
                     <button
                       type="button"
                       onClick={() => onEditDraft(t)}
                       style={{ ...styles.primaryBtn, fontSize: 12, padding: "5px 10px" }}>
-                      Åbn og godkend
+                      {t.status === "kladde" ? "Åbn og godkend" : "Redigér aftale"}
                     </button>
                   </div>
                 )}
@@ -8875,14 +8925,14 @@ function ContractsView({ templates: alleTemplates, instances, pricing, employees
                     )}
                   </div>
                   {/* Samme genvej som i listen ovenfor. Aftaler uden udloebsdato staar
-                      i deres egen liste, saa markeringen skal findes to steder. */}
-                  {t.status === "kladde" && onEditDraft && (
+                      i deres egen liste, saa knappen skal findes to steder. */}
+                  {t.status !== "udgaaet" && onEditDraft && (
                     <div style={{ marginBottom: 6 }}>
                       <button
                         type="button"
                         onClick={() => onEditDraft(t)}
                         style={{ ...styles.primaryBtn, fontSize: 12, padding: "5px 10px" }}>
-                        Åbn og godkend
+                        {t.status === "kladde" ? "Åbn og godkend" : "Redigér aftale"}
                       </button>
                     </div>
                   )}
@@ -11954,7 +12004,7 @@ function EmployeeModal({ emp, onClose, onSave, skills: skillList, satsHistorik }
 }
 
 // ---------- Task / service order detail ----------
-function TaskDetailModal({ task, employees, templates, onSetPreferredEmployee, onCancelTemplate, checklistTemplates, skills, isAdminUser, areas, employeeAreas, onClose, onSetStatus, onToggleChecklistItem, onAddChecklistItem, onAddChecklistTemplate, onAddAssignee, onRemoveAssignee, onToggleOplaering, onSetAndel, onUnplace, onDelete, onUpdateCustomer, onUpdateCustomerInfo, onUpdateContractType, onRenameTask, onCopy, onUpdateSkills, onEndBlockEarly, onUpdateSchedule, onUpdateKeyPickup, onUpdateScheduledTime, tilbudPaaOpgaven, onAabnTilbud }) {
+function TaskDetailModal({ task, employees, templates, onSetPreferredEmployee, onCancelTemplate, onEditTemplate, checklistTemplates, skills, isAdminUser, areas, employeeAreas, onClose, onSetStatus, onToggleChecklistItem, onAddChecklistItem, onAddChecklistTemplate, onAddAssignee, onRemoveAssignee, onToggleOplaering, onSetAndel, onUnplace, onDelete, onUpdateCustomer, onUpdateCustomerInfo, onUpdateContractType, onRenameTask, onCopy, onUpdateSkills, onEndBlockEarly, onUpdateSchedule, onUpdateKeyPickup, onUpdateScheduledTime, tilbudPaaOpgaven, onAabnTilbud }) {
   // Disse to laa efter det tidlige return for blokeringer (sygdom/ferie) laengere nede.
   // Hooks skal kaldes i samme raekkefoelge hver render: aabnede man en blokering og
   // derefter en almindelig opgave i samme modal, ville React se to hooks mere end sidst
@@ -12240,7 +12290,18 @@ return (
         return (
           // Centreret og med god luft til begge sider, saa den ikke klaeber til
           // hverken overskriften eller opgavetypen nedenunder.
-          <div style={{ textAlign: "center", margin: "10px 0 20px" }}>
+          <div style={{ textAlign: "center", margin: "10px 0 20px", display: "flex",
+                        gap: 8, justifyContent: "center", flexWrap: "wrap" }}>
+            {/* Genvej til aftalen bag opgaven. Rytme, ugedage og klokkeslaet hoerer
+                til AFTALEN og ikke til den enkelte dag — men det er paa den enkelte
+                dag, man opdager at noget er galt, og det er dér man staar. */}
+            {onEditTemplate && (
+              <button type="button" style={styles.addSkillBtn}
+                title="Åbner hele aftalen: rytme, ugedage, klokkeslæt, varighed og pris"
+                onClick={() => { onEditTemplate(t.templateId); onClose(); }}>
+                Redigér aftalen
+              </button>
+            )}
             <button type="button" style={{ ...styles.addSkillBtn, borderColor: "#FCA5A5", color: "#B91C1C" }}
               title="Markerer hele aftalen som udgået og fjerner alle kommende opgaver"
               onClick={() => { onCancelTemplate(t.templateId); onClose(); }}>
