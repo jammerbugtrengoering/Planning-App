@@ -113,6 +113,33 @@ code {
   background: var(--code-bg);
 }
 
+/* ── Aftalesiden: listen til venstre, de to beloeb til hoejre ────────────────
+   De to tal er summen af netop dét, listen viser, og de skifter med filter og
+   soegning. De skal derfor blive staaende, mens man ruller listen igennem.
+
+   Hvorfor en klasse og ikke inline stil som resten af filen: rækkefølgen skal
+   vaere forskellig paa en bred og en smal skaerm. Paa en bred staar tallene til
+   hoejre; paa en iPad paa hoejkant falder de to kolonner sammen til én, og saa
+   skal tallene staa OEVERST — ikke under en liste, man aldrig ruller til bunden
+   af. Det kan kun en media query afgoere, og derfor staar de her. */
+.aftale-layout { display: flex; gap: 20px; align-items: flex-start; }
+/* order: 2 flytter tallene til hoejre, selvom de staar foerst i koden.
+   top: 140px er hoejden paa det sorte hoved plus fanerne, som begge klaeber.
+   Bliver de hoejere, skal tallet med. */
+.aftale-tal {
+  order: 2; position: sticky; top: 140px; width: 230px; flex-shrink: 0;
+  display: flex; flex-direction: column; gap: 10px;
+}
+/* min-width: 0 og ikke en fast bredde: uden den kan et langt kundenavn tvinge
+   listen bredere end kolonnen, og saa skubbes tallene ud over kanten. */
+.aftale-liste { order: 1; flex: 1; min-width: 0; }
+
+@media (max-width: 900px) {
+  .aftale-layout { flex-direction: column; }
+  .aftale-tal { order: 0; position: static; width: 100%; flex-direction: row; flex-wrap: wrap; }
+  .aftale-liste { width: 100%; }
+}
+
 /* ── Udskrift af ugeplanen ──────────────────────────────────────────────────
    Ugeplanen udskrives som tidslinje: den viser hvornaar paa dagen opgaverne
    ligger, og det er dét en medarbejder skal bruge paa en seddel i bilen.

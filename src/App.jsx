@@ -1687,7 +1687,7 @@ const MODULE_HELP = {
         "At den også leder i fakturabeskrivelsen er med vilje: på Nexus- og Ældrelov-aftaler hedder kunden «Jammerbugt Kommune» på dem alle sammen, og borgerens navn står i fakturabeskrivelsen. Søger du på borgeren, finder du den rigtige aftale — søger du på kommunen, får du dem alle.",
         "Adressen er med, fordi det ofte er dét, man husker.",
         "Den øverste knaprække filtrerer på status, den nederste på kontrakttype. De virker sammen med søgningen, så du kan fx søge på en vej og samtidig kun se de aktive.",
-        "De to beløb står i venstre side og bliver stående, mens du ruller gennem listen. De viser summen af præcis dét, listen indeholder lige nu — skifter du filter eller søger, følger tallene med.",
+        "De to beløb står i højre side og bliver stående, mens du ruller gennem listen. De viser summen af præcis dét, listen indeholder lige nu — skifter du filter eller søger, følger tallene med.",
         "Så kan du se, hvad et udvalg er værd, mens du går det igennem: fx hvad erhvervsaftalerne tilsammen giver, eller hvor meget der er realiseret på en enkelt kunde."] },
     { h: "Redigér en aftale der kører", p: [
         "Tryk «Redigér aftale» på aftalen her på siden — eller åbn en hvilken som helst opgave på den i ugeplanen og vælg «Redigér aftalen». Begge veje åbner det samme.",
@@ -9129,16 +9129,16 @@ function ContractsView({ templates: alleTemplates, instances, pricing, employees
         )}
       </div>
 
-      {/* Tallene i venstre side, listen til hoejre. De to tal er summen af netop det,
-          listen viser, og de aendrer sig, hver gang man skifter filter eller soeger.
-          Laa de over listen, rullede de vaek med det samme, og saa kunne man ikke se,
-          hvad udvalget var vaerd, mens man gik det igennem. */}
-      <div style={{ display: "flex", gap: 20, alignItems: "flex-start", flexWrap: "wrap" }}>
+      {/* Listen til venstre, tallene i hoejre side. Laa tallene over listen, rullede
+          de vaek med det samme, og saa kunne man ikke se, hvad udvalget var vaerd,
+          mens man gik det igennem. Selve opstillingen staar i index.css. */}
+      <div className="aftale-layout">
+        {/* Tallene staar FOER listen her i koden, selvom de vises til hoejre. Det er
+            med vilje: paa en smal skaerm falder de to kolonner sammen til én, og saa
+            skal tallene staa oeverst og ikke under en liste, man aldrig ruller til
+            bunden af. Rækkefølgen paa en bred skaerm ordnes med «order» i index.css. */}
         {(contracts.length > 0 || noExpiry.length > 0) && (
-          // top: 140 er hoejden paa det sorte hoved plus fanerne ovenover, som begge
-          // klaeber. Bliver de hoejere, skal tallet med.
-          <div style={{ position: "sticky", top: 140, width: 230, flexShrink: 0,
-                        display: "flex", flexDirection: "column", gap: 10 }}>
+          <div className="aftale-tal">
             <div style={{ ...styles.statBlock, borderLeft: "3px solid #64748B" }}>
               <div>
                 <div style={{ ...styles.statValue, color: "#64748B" }}>{Math.round(totalPlannedSum).toLocaleString("da-DK")} kr.</div>
@@ -9154,9 +9154,7 @@ function ContractsView({ templates: alleTemplates, instances, pricing, employees
           </div>
         )}
 
-        {/* minWidth gør, at listen ikke maser sig ned i en smal strimmel paa en iPad.
-            Er der ikke plads til begge, falder tallene op over listen i stedet. */}
-        <div style={{ flex: 1, minWidth: 340 }}>
+        <div className="aftale-liste">
       {contracts.length === 0 && noExpiry.length === 0 && (
         <div style={{ textAlign: "center", padding: 60, color: "#94A3B8" }}>
           <div style={{ fontSize: 36, marginBottom: 12 }}>📋</div>
