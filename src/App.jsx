@@ -1655,7 +1655,11 @@ const MODULE_HELP = {
     { h: "Gentagelse", p: [
         "En aftale kan gentages hver uge, hver 14. dag, hver 4. uge eller hver 3. måned. Kadencen tælles fra startdatoen.",
         "«Hver 4. uge» er ikke det samme som en gang om måneden. Det giver 13 besøg om året i stedet for 12, og dagen vandrer gennem kalenderen — et besøg den 5. bliver med tiden den 28. Til gengæld ligger det altid på den samme ugedag, og det er sådan, rengøring aftales i praksis.",
-        "Vil du have en fast dato i måneden i stedet, findes den mulighed ikke længere. Sig til, hvis I får brug for den."] }, { h: "Under udarbejdelse", p: ["Er du ikke færdig med en ny aftale, så tryk «Gem som kladde» i stedet for «Gem og planlæg».", "En kladde opretter ingen opgaver. Den ligger og venter, og du kan rette alle felter i den så mange gange du vil.", "Find den igen med filteret «Under udarbejdelse» øverst her på siden. Tallet i knappen viser hvor mange der ligger.", "Tryk «Åbn og godkend» for at rette videre. Inde i aftalen vælger du så «Gem kladde» hvis du stadig ikke er færdig, eller «Godkend og planlæg» når den er klar.", "Først ved godkendelsen oprettes opgaverne — fra startdatoen og frem til udløbsdatoen. Det kan være mange på én gang, så tjek datoerne inden du godkender.", "Startdatoen kan ikke ligge i fortiden. Har en kladde ligget så længe at datoen er løbet fra dig, skal den rettes før du kan godkende."] }, { h: "Filtre", p: ["Den øverste række filtrerer på status, den nederste på kontrakttype. De virker sammen, så du kan fx se alle udgåede Nexus-aftaler."] },
+        "Vil du have en fast dato i måneden i stedet, findes den mulighed ikke længere. Sig til, hvis I får brug for den."] }, { h: "Under udarbejdelse", p: ["Er du ikke færdig med en ny aftale, så tryk «Gem som kladde» i stedet for «Gem og planlæg».", "En kladde opretter ingen opgaver. Den ligger og venter, og du kan rette alle felter i den så mange gange du vil.", "Find den igen med filteret «Under udarbejdelse» øverst her på siden. Tallet i knappen viser hvor mange der ligger.", "Tryk «Åbn og godkend» for at rette videre. Inde i aftalen vælger du så «Gem kladde» hvis du stadig ikke er færdig, eller «Godkend og planlæg» når den er klar.", "Først ved godkendelsen oprettes opgaverne — fra startdatoen og frem til udløbsdatoen. Det kan være mange på én gang, så tjek datoerne inden du godkender.", "Startdatoen kan ikke ligge i fortiden. Har en kladde ligget så længe at datoen er løbet fra dig, skal den rettes før du kan godkende."] }, { h: "Søg og filtrér", p: [
+        "Søgefeltet øverst leder i kundenavn, fakturabeskrivelse, adresse og opgavetekst på én gang.",
+        "At den også leder i fakturabeskrivelsen er med vilje: på Nexus- og Ældrelov-aftaler hedder kunden «Jammerbugt Kommune» på dem alle sammen, og borgerens navn står i fakturabeskrivelsen. Søger du på borgeren, finder du den rigtige aftale — søger du på kommunen, får du dem alle.",
+        "Adressen er med, fordi det ofte er dét, man husker.",
+        "Den øverste knaprække filtrerer på status, den nederste på kontrakttype. De virker sammen med søgningen, så du kan fx søge på en vej og samtidig kun se de aktive."] },
     { h: "Redigér en aftale der kører", p: [
         "Tryk «Redigér aftale» på aftalen her på siden — eller åbn en hvilken som helst opgave på den i ugeplanen og vælg «Redigér aftalen». Begge veje åbner det samme.",
         "Du kan rette alt: rytme, ugedage, klokkeslæt, varighed, pris, kontrakttype, tjeklister og fast medarbejder. Ændringerne gælder de opgaver, der dannes fremover.",
@@ -8615,6 +8619,22 @@ function CancelTemplateModal({ template, onClose, onConfirm }) {
 function ContractsView({ templates: alleTemplates, instances, pricing, employees, isAdminUser, onCancelTemplate, onEditDraft }) {
   const [statusFilter, setStatusFilter] = useState("alle");
   const [typeFilter, setTypeFilter] = useState("all");
+  const [soeg, setSoeg] = useState("");
+
+  // Søgningen leder i MERE end kundenavnet, og det er ikke overflod.
+  //
+  // På Nexus og Ældrelov hedder kunden «Jammerbugt Kommune» på hver eneste aftale —
+  // det er kommunen, der får regningen. Borgeren, arbejdet handler om, står i
+  // fakturabeskrivelsen. En søgning på kun kundenavn ville altså give alle kommunens
+  // aftaler på én gang og aldrig den ene, man ledte efter.
+  //
+  // Adressen er med, fordi det ofte er dét, man husker: «hende på Klitheden».
+  const soegeord = soeg.trim().toLowerCase();
+  function passerSoegning(t) {
+    if (!soegeord) return true;
+    return [t.customerName, t.poNumber, t.address, t.title]
+      .some((f) => String(f || "").toLowerCase().includes(soegeord));
+  }
 
   // En udgaaet aftale, der er gjort op, falder af listen af sig selv.
   //
@@ -8645,7 +8665,8 @@ function ContractsView({ templates: alleTemplates, instances, pricing, employees
   const templates = alleTemplates
     .filter((t) => (statusFilter === "udgaaet" ? true : !erGjortOp(t)))
     .filter((t) => (statusFilter === "alle" ? true : (t.status || "aktiv") === statusFilter))
-    .filter((t) => (typeFilter === "all" ? true : effectiveContractType(t) === typeFilter));
+    .filter((t) => (typeFilter === "all" ? true : effectiveContractType(t) === typeFilter))
+    .filter(passerSoegning);
   // Find den reelle, aktuelle kontrakttype for en skabelon: den seneste værdi sat på
   // en tilknyttet opgave slår den statiske skabelonværdi, så redigering i ugeplanen
   // altid afspejles korrekt her.
@@ -8759,7 +8780,31 @@ function ContractsView({ templates: alleTemplates, instances, pricing, employees
   return (
     <div style={styles.page}>
       <div style={{ fontWeight: 700, fontSize: 18, color: "#111111", marginBottom: 4 }}>Aftaler</div>
-      <div style={{ fontSize: 13, color: "#64748B", marginBottom: 20 }}>Faste opgaver sorteret efter udløbsdato — nærmest udløbende øverst</div>
+      <div style={{ fontSize: 13, color: "#64748B", marginBottom: 14 }}>Faste opgaver sorteret efter udløbsdato — nærmest udløbende øverst</div>
+
+      {/* Søgefeltet står ØVERST, før filtrene. Leder man efter én bestemt kunde, er
+          det dét man vil, og så skal man ikke først forbi fire knapper der sorterer
+          i noget andet. */}
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
+        <input
+          type="search"
+          value={soeg}
+          onChange={(e) => setSoeg(e.target.value)}
+          placeholder="Søg efter kunde, borger, adresse eller opgave"
+          style={{ ...styles.input, maxWidth: 360, margin: 0 }} />
+        {soegeord && (
+          <span style={{ fontSize: 13, color: "#64748B" }}>
+            {templates.length === 0
+              ? "Ingen aftaler passer på søgningen"
+              : templates.length === 1 ? "1 aftale" : `${templates.length} aftaler`}
+            <button type="button" onClick={() => setSoeg("")}
+              style={{ marginLeft: 10, border: "none", background: "transparent", color: "#D6247A",
+                       fontWeight: 700, cursor: "pointer", fontSize: 13, fontFamily: "inherit" }}>
+              Ryd
+            </button>
+          </span>
+        )}
+      </div>
 
       {/* To uafhaengige raekker filtre: status og kontrakttype. De virker sammen, saa
           man kan f.eks. se kun kladder af typen hovedrengoering. Antallet staar kun
