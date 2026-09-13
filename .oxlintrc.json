@@ -14,7 +14,8 @@
     "netlify/**",
     "tjek-tdz.mjs",
     "loenberegning.test.mjs",
-    "opgavetid.test.mjs"
+    "opgavetid.test.mjs",
+    "aftalerytme.test.mjs"
   ],
   "rules": {
     "no-undef": "error",

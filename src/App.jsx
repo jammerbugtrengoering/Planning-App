@@ -6,6 +6,7 @@ import { fakturerbareMinutter, registreredeMinutter, oplaeringsFolk, erUnderOpla
          planlagtFakturerbart, afvigelse, planlagtFor, planlagtIAlt,
          fordelingen, harFordeling } from "./opgavetid.js";
 import { supabase } from "./supabaseClient";
+import { aftaleKoererPaaDag, DAG_FRA_INDEKS } from "./aftalerytme";
 import {
   Plus, Download, X, Clock, AlertTriangle,
   Trash2, Pencil, Repeat, Zap, CalendarClock, Wand2, Star, ChevronLeft, ChevronRight, ChevronUp, ChevronDown,
@@ -861,139 +862,17 @@ function ensureWeekInstances(week, year, allInstances, templates, employees, are
   const newlyCreatedIds = new Set();
   
   templates.forEach((tpl) => {
-    if (!tpl.days || tpl.days.length === 0) return; /* En kladde er under udarbejdelse og maa aldrig danne opgaver. Uden denne linje ville en halvfaerdig aftale materialisere op til 104 uger i det sekund nogen aabnede appen - og det er praecis det, kladden skal forhindre. */ if (tpl.status === "kladde") return;
-    
-    // Skip if past expiry date
-    if (tpl.expiryDate) {
-      const expiryMonday = mondayOf(new Date(tpl.expiryDate));
-      if (weekMonday > expiryMonday) return;
-    }
-    
-    // Skip if before start date
-    if (tpl.startDate) {
-      const startMonday = mondayOf(new Date(tpl.startDate));
-      if (weekMonday < startMonday) return;
-    }
-    
-    // Gentagelsesinterval (Plan parametre): spring uger over der ikke matcher
-    // det valgte interval, talt fra startdatoen.
+    // Hele reglen for «kører aftalen den dag?» ligger i src/aftalerytme.js.
     //
-    // «Hver 3. måned» planlaegges efter KALENDERMAANED — et kvartalsbesoeg hoerer til
-    // en bestemt tid paa aaret, ikke til hver trettende uge.
-    //
-    // «Hver 4. uge» goer det modsatte, og det er et bevidst valg truffet 13.9.2026.
-    // Valget hed «Måned» foer og fulgte kalenderen: 12 besoeg om aaret, altid samme
-    // dato. Nu er det fire uger: 13 besoeg om aaret, og dagen vandrer gennem
-    // kalenderen. Det passer bedre til, hvordan rengoering faktisk aftales — hver
-    // fjerde torsdag, ikke «den femte i maaneden, uanset hvilken ugedag det er».
-    //
-    // Navnet paa knappen siger nu, hvad den goer. Ret ikke det ene uden det andet.
-    //
-    // 'maaned' staar stadig i listen, fordi der kan ligge gamle raekker med den
-    // vaerdi. De behandles som fire uger — det samme som den knap, de nu svarer til.
-    const PLAN_INTERVAL_MONTHS = { "3_maaned": 3 };
-    const PLAN_INTERVAL_WEEKS = { uge: 1, "14_dage": 2, "4_uger": 4, maaned: 4 };
-    const intervalMonths = PLAN_INTERVAL_MONTHS[tpl.planInterval];
-    if (intervalMonths) {
-      // Uden startdato findes der intet anker for kadencen.
-      if (!tpl.startDate) return;
-      const startDate = new Date(tpl.startDate);
-      const weekEnd = new Date(weekMonday);
-      weekEnd.setDate(weekEnd.getDate() + 6);
-      // Besoeget lander i den uge der indeholder samme dato i maaneden som startdatoen.
-      // Datoen klippes til maanedens sidste dag, saa fx den 31. ogsaa rammer februar.
-      // En uge kan straekke sig over to maaneder, saa begge proeves: ellers ville en
-      // ultimo-dato som den 31. blive sprunget over hver gang ugen laa hen over et
-      // maanedsskift. Datoen ligger i praecis een uge, saa der dannes aldrig dubletter.
-      const monthsToTry = [
-        { y: weekMonday.getFullYear(), m: weekMonday.getMonth() },
-        { y: weekEnd.getFullYear(), m: weekEnd.getMonth() },
-      ];
-      let matchesMonth = false;
-      for (const cand of monthsToTry) {
-        const monthsSinceStart =
-          (cand.y - startDate.getFullYear()) * 12 + (cand.m - startDate.getMonth());
-        if (monthsSinceStart < 0 || monthsSinceStart % intervalMonths !== 0) continue;
-        const daysInMonth = new Date(cand.y, cand.m + 1, 0).getDate();
-        const target = new Date(cand.y, cand.m, Math.min(startDate.getDate(), daysInMonth));
-        if (target >= weekMonday && target <= weekEnd) { matchesMonth = true; break; }
-      }
-      if (!matchesMonth) return;
-    } else {
-      const planIntervalWeeks = PLAN_INTERVAL_WEEKS[tpl.planInterval] || 1;
-      if (planIntervalWeeks > 1) {
-        const anchorMonday = tpl.startDate ? mondayOf(new Date(tpl.startDate)) : weekMonday;
-        const weeksSinceAnchor = Math.round((weekMonday - anchorMonday) / (7 * 24 * 60 * 60 * 1000));
-        if (weeksSinceAnchor % planIntervalWeeks !== 0) return;
-      }
-    }
-    
-    // Filter days to only those within start/expiry interval and not excluded
-    const DAY_STRING_TO_INDEX = { "Mon": 0, "Tue": 1, "Wed": 2, "Thu": 3, "Fri": 4, "Sat": 5, "Sun": 6 };
-    
-    // Convert day strings to numeric indices if needed
-    const dayIndices = (tpl.days || []).map((d) => 
-      typeof d === "string" ? DAY_STRING_TO_INDEX[d] : d
-    ).filter((d) => d !== undefined);
-    
-    const daysToCreate = dayIndices.filter((day) => {
-      try {
-        // Create a date for this specific day
-        const dayDate = new Date(weekMonday);
-        dayDate.setDate(dayDate.getDate() + day);
-        
-        // Convert to ISO date string for consistent comparison (YYYY-MM-DD)
-        const year = dayDate.getFullYear();
-        const month = String(dayDate.getMonth() + 1).padStart(2, "0");
-        const dateNum = String(dayDate.getDate()).padStart(2, "0");
-        const dayDateString = `${year}-${month}-${dateNum}`;
-        
-        // Check if day is in excludedDays
-        if (tpl.excludedDays && Array.isArray(tpl.excludedDays) && tpl.excludedDays.length > 0) {
-          if (tpl.excludedDays.includes(dayDateString)) {
-            return false;
-          }
-        }
-        
-        // Check if day is before startDate (compare as strings: YYYY-MM-DD)
-        if (tpl.startDate) {
-          const startDateStr = typeof tpl.startDate === 'string' 
-            ? tpl.startDate.slice(0, 10)  // Ensure it's just YYYY-MM-DD
-            : new Date(tpl.startDate).toISOString().slice(0, 10);
-          
-          if (dayDateString < startDateStr) {
-            return false;
-          }
-        }
-        
-        // En udgaaet aftale danner ingen opgaver efter ophoersdatoen. Opgaver til og
-        // med datoen bliver staaende og skal stadig koeres og faktureres.
-        if (tpl.status === "udgaaet" && tpl.cancelledEffectiveDate) {
-          const stopStr = String(tpl.cancelledEffectiveDate).slice(0, 10);
-          if (dayDateString > stopStr) return false;
-        }
+    // Den lå her indtil 13.9.2026 og kunne derfor kun bruges til at DANNE opgaver.
+    // Da aktive aftaler blev redigerbare, opstod det modsatte behov: skifter man
+    // rytme, skal de opgaver, der ikke passer længere, ryddes væk. To steder, der
+    // skal svare det samme — så ligger reglen ét sted, med sin egen test.
+    const dageDerSkalDannes = DAG_FRA_INDEKS.filter((dag) =>
+      aftaleKoererPaaDag(tpl, weekMonday, dag));
+    if (dageDerSkalDannes.length === 0) return;
 
-        // Check if day is after expiryDate (compare as strings: YYYY-MM-DD)
-        if (tpl.expiryDate) {
-          const expiryDateStr = typeof tpl.expiryDate === 'string'
-            ? tpl.expiryDate.slice(0, 10)  // Ensure it's just YYYY-MM-DD
-            : new Date(tpl.expiryDate).toISOString().slice(0, 10);
-          
-          if (dayDateString > expiryDateStr) {
-            return false;
-          }
-        }
-        
-        return true;
-      } catch (e) {
-        console.error("Error filtering day:", e);
-        return true;
-      }
-    });
-    
-    const DAY_INDEX_TO_STRING = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-    daysToCreate.forEach((dayIdx) => {
-      const day = DAY_INDEX_TO_STRING[dayIdx];
+    dageDerSkalDannes.forEach((day) => {
       // Er pladsen ryddet med vilje, skal der ikke dannes en ny. En slettemarkeret
       // opgave hentes ikke ind, saa uden det her ser pladsen tom ud — og opgaven
       // bliver fundet paa igen, hver eneste gang ugen aabnes.
