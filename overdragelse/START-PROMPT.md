@@ -119,6 +119,15 @@ fjernes: den slettemarkerede række holder pladsen og fortæller planen, at her 
 ryddet med vilje. Det kostede en formiddags oprydning, der var lavet om en time
 senere.
 
+**En browserfane kører den kode, den hentede — ikke den, der ligger ude nu.** Den 13.
+september 2026 blev fire aftaler lagt om fra «Måned» til «Hver 4. uge» klokken 9.35.
+En fane, der havde stået åben siden før, kendte ikke den nye rytme, faldt tilbage på
+én uge og dannede syv opgaver, der ikke skulle have været der — én af dem dagen efter
+og tildelt en medarbejder. Planen så helt almindelig ud imens. Derfor sammenligner
+appen nu sit eget bundtnavn med det, der ligger på serveren, og holder op med at danne
+opgaver, indtil fanen er genindlæst (`src/nyversion.js`). **Ændrer du en regel, der
+afgør, hvad der bliver oprettet, så tænk over, hvad en gammel fane vil gøre med den.**
+
 ## Sådan udgiver vi en ændring
 
 1. Byg og se, at det er rent: `npm run build` i den mappe, det handler om. Byggeriet

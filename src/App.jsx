@@ -1394,7 +1394,16 @@ const MODULE_HELP = {
         "Brug medarbejderfilteret, så sedlen kun indeholder den ene medarbejders uge. Ellers bærer ét ark koderne til alle ugens hjem.",
         "Udskriften får et bånd øverst om, at den er fortrolig og skal makuleres. Bliver en seddel væk, skal koderne skiftes — sig det til kontoret med det samme.",
         "Der kommer én medarbejder pr. side, liggende A4. Vil du kun have én med, så vælg hende i listen først.",
+        "Sæt fluebenet «Tag time- og kørselsskema med», og der lægges et skema bagerst — ét pr. medarbejder, på sin egen stående side. Det er det samme skema, I hidtil har brugt på papir.",
+        "Dato og arbejdssted er skrevet ind på forhånd ud fra planen, så hun kun skal skrive timer og kilometer. Der er tomme linjer i bunden til det, der ikke stod i planen.",
+        "Skemaet er til de medarbejdere, der starter på papir, før de får Worklist på telefonen. Kontoret taster tallene ind bagefter, så løn og fakturering bygger på det samme som alle andres.",
+        "Det flueben huskes derimod til næste gang — i modsætning til adgangsoplysningerne er der ingen koder på skemaet.",
         "Menuer og knapper kommer ikke med."] },
+    { h: "«Der er kommet en nyere udgave»", p: [
+        "Står der et orange bånd øverst, har fanen stået åben, siden før en ny udgave blev lagt ud. Tryk «Genindlæs nu».",
+        "Så længe båndet står der, danner planen ikke nye opgaver. Alt andet virker: du kan se ugen, flytte, rette tider og afslutte.",
+        "Grunden er en fejl fra 13. september 2026. Aftalerne blev lagt om fra «Måned» til «Hver 4. uge» om formiddagen, men en fane fra tidligere på dagen kørte stadig den gamle kode, som ikke kendte den nye rytme. Den lavede syv opgaver i ugerytme, og planen så helt almindelig ud imens.",
+        "Det er derfor båndet stopper netop det at danne opgaver og ikke andet: det var dét, der gik galt, og det er ikke til at få øje på bagefter."] },
 
     { h: "Hvem står der på brikken", p: [
         "På private og erhvervsopgaver står kundens navn — det er også dér, arbejdet udføres.",

@@ -82,3 +82,10 @@ se, at den blev meldt — begge veje, både nyt og fjernet felt.
   mails eller noget, der går til Dinero.
 - Kommentarer i koden skal forklare **hvorfor**, ikke hvad — og gerne hvilken fejl der
   ligger bag, så ingen fjerner en linje, der ser overflødig ud.
+- Ændrer du en regel, der afgør **hvad der bliver oprettet** — rytme, interval,
+  gyldighedsdatoer — så husk, at en browserfane kører den kode, den hentede, og ikke
+  den, der ligger ude nu. Se fælden i `START-PROMPT.md` om den 13. september 2026 og
+  spærringen i `src/nyversion.js`.
+- En kopitabel lavet med `create table as` arver Supabases tildelinger: `anon` og
+  `authenticated` får fuld adgang. `revoke` dem ved navn og slå RLS til — `revoke ...
+  from public` gør det ikke.
