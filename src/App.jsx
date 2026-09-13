@@ -1683,10 +1683,12 @@ const MODULE_HELP = {
         "En aftale kan gentages hver uge, hver 14. dag, hver 4. uge eller hver 3. måned. Kadencen tælles fra startdatoen.",
         "«Hver 4. uge» er ikke det samme som en gang om måneden. Det giver 13 besøg om året i stedet for 12, og dagen vandrer gennem kalenderen — et besøg den 5. bliver med tiden den 28. Til gengæld ligger det altid på den samme ugedag, og det er sådan, rengøring aftales i praksis.",
         "Vil du have en fast dato i måneden i stedet, findes den mulighed ikke længere. Sig til, hvis I får brug for den."] }, { h: "Under udarbejdelse", p: ["Er du ikke færdig med en ny aftale, så tryk «Gem som kladde» i stedet for «Gem og planlæg».", "En kladde opretter ingen opgaver. Den ligger og venter, og du kan rette alle felter i den så mange gange du vil.", "Find den igen med filteret «Under udarbejdelse» øverst her på siden. Tallet i knappen viser hvor mange der ligger.", "Tryk «Åbn og godkend» for at rette videre. Inde i aftalen vælger du så «Gem kladde» hvis du stadig ikke er færdig, eller «Godkend og planlæg» når den er klar.", "Først ved godkendelsen oprettes opgaverne — fra startdatoen og frem til udløbsdatoen. Det kan være mange på én gang, så tjek datoerne inden du godkender.", "Startdatoen kan ikke ligge i fortiden. Har en kladde ligget så længe at datoen er løbet fra dig, skal den rettes før du kan godkende."] }, { h: "Søg og filtrér", p: [
-        "Søgefeltet øverst leder i kundenavn, fakturabeskrivelse, adresse og opgavetekst på én gang.",
+        "Søgefeltet under knapperne leder i kundenavn, fakturabeskrivelse, adresse og opgavetekst på én gang.",
         "At den også leder i fakturabeskrivelsen er med vilje: på Nexus- og Ældrelov-aftaler hedder kunden «Jammerbugt Kommune» på dem alle sammen, og borgerens navn står i fakturabeskrivelsen. Søger du på borgeren, finder du den rigtige aftale — søger du på kommunen, får du dem alle.",
         "Adressen er med, fordi det ofte er dét, man husker.",
-        "Den øverste knaprække filtrerer på status, den nederste på kontrakttype. De virker sammen med søgningen, så du kan fx søge på en vej og samtidig kun se de aktive."] },
+        "Den øverste knaprække filtrerer på status, den nederste på kontrakttype. De virker sammen med søgningen, så du kan fx søge på en vej og samtidig kun se de aktive.",
+        "De to beløb står i venstre side og bliver stående, mens du ruller gennem listen. De viser summen af præcis dét, listen indeholder lige nu — skifter du filter eller søger, følger tallene med.",
+        "Så kan du se, hvad et udvalg er værd, mens du går det igennem: fx hvad erhvervsaftalerne tilsammen giver, eller hvor meget der er realiseret på en enkelt kunde."] },
     { h: "Redigér en aftale der kører", p: [
         "Tryk «Redigér aftale» på aftalen her på siden — eller åbn en hvilken som helst opgave på den i ugeplanen og vælg «Redigér aftalen». Begge veje åbner det samme.",
         "Du kan rette alt: rytme, ugedage, klokkeslæt, varighed, pris, kontrakttype, tjeklister og fast medarbejder. Ændringerne gælder de opgaver, der dannes fremover.",
@@ -9047,30 +9049,6 @@ function ContractsView({ templates: alleTemplates, instances, pricing, employees
       <div style={{ fontWeight: 700, fontSize: 18, color: "#111111", marginBottom: 4 }}>Aftaler</div>
       <div style={{ fontSize: 13, color: "#64748B", marginBottom: 14 }}>Faste opgaver sorteret efter udløbsdato — nærmest udløbende øverst</div>
 
-      {/* Søgefeltet står ØVERST, før filtrene. Leder man efter én bestemt kunde, er
-          det dét man vil, og så skal man ikke først forbi fire knapper der sorterer
-          i noget andet. */}
-      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
-        <input
-          type="search"
-          value={soeg}
-          onChange={(e) => setSoeg(e.target.value)}
-          placeholder="Søg efter kunde, borger, adresse eller opgave"
-          style={{ ...styles.input, maxWidth: 360, margin: 0 }} />
-        {soegeord && (
-          <span style={{ fontSize: 13, color: "#64748B" }}>
-            {templates.length === 0
-              ? "Ingen aftaler passer på søgningen"
-              : templates.length === 1 ? "1 aftale" : `${templates.length} aftaler`}
-            <button type="button" onClick={() => setSoeg("")}
-              style={{ marginLeft: 10, border: "none", background: "transparent", color: "#D6247A",
-                       fontWeight: 700, cursor: "pointer", fontSize: 13, fontFamily: "inherit" }}>
-              Ryd
-            </button>
-          </span>
-        )}
-      </div>
-
       {/* To uafhaengige raekker filtre: status og kontrakttype. De virker sammen, saa
           man kan f.eks. se kun kladder af typen hovedrengoering. Antallet staar kun
           paa kladde-knappen — det er den eneste bunke der skal tommes. */}
@@ -9125,23 +9103,60 @@ function ContractsView({ templates: alleTemplates, instances, pricing, employees
         ))}
       </div>
 
-      {(contracts.length > 0 || noExpiry.length > 0) && (
-        <div style={{ display: "flex", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
-          <div style={{ ...styles.statBlock, borderLeft: "3px solid #64748B" }}>
-            <div>
-              <div style={{ ...styles.statValue, color: "#64748B" }}>{Math.round(totalPlannedSum).toLocaleString("da-DK")} kr.</div>
-              <div style={styles.statLabel}>Kontraktsum, planlagte timer{missingStartCount > 0 ? ` (${missingStartCount} mangler startdato)` : ""}</div>
-            </div>
-          </div>
-          <div style={{ ...styles.statBlock, borderLeft: "3px solid #16A34A" }}>
-            <div>
-              <div style={{ ...styles.statValue, color: "#16A34A" }}>{Math.round(totalRealizedSum).toLocaleString("da-DK")} kr.</div>
-              <div style={styles.statLabel}>Realiseret ({fmtMin(totalRealizedMin)})</div>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Søgefeltet staar UNDER filtrene og ikke over dem.
+          Filtrene er den grove sortering, man saetter én gang — «vis mig de aktive
+          erhvervsaftaler» — og soegningen er det, man skriver i bagefter og aendrer
+          hele tiden. Laa den oeverst, skulle oejet forbi den hver gang man skiftede
+          filter. */}
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20, flexWrap: "wrap" }}>
+        <input
+          type="search"
+          value={soeg}
+          onChange={(e) => setSoeg(e.target.value)}
+          placeholder="Søg efter kunde, borger, adresse eller opgave"
+          style={{ ...styles.input, maxWidth: 360, margin: 0 }} />
+        {soegeord && (
+          <span style={{ fontSize: 13, color: "#64748B" }}>
+            {templates.length === 0
+              ? "Ingen aftaler passer på søgningen"
+              : templates.length === 1 ? "1 aftale" : `${templates.length} aftaler`}
+            <button type="button" onClick={() => setSoeg("")}
+              style={{ marginLeft: 10, border: "none", background: "transparent", color: "#D6247A",
+                       fontWeight: 700, cursor: "pointer", fontSize: 13, fontFamily: "inherit" }}>
+              Ryd
+            </button>
+          </span>
+        )}
+      </div>
 
+      {/* Tallene i venstre side, listen til hoejre. De to tal er summen af netop det,
+          listen viser, og de aendrer sig, hver gang man skifter filter eller soeger.
+          Laa de over listen, rullede de vaek med det samme, og saa kunne man ikke se,
+          hvad udvalget var vaerd, mens man gik det igennem. */}
+      <div style={{ display: "flex", gap: 20, alignItems: "flex-start", flexWrap: "wrap" }}>
+        {(contracts.length > 0 || noExpiry.length > 0) && (
+          // top: 140 er hoejden paa det sorte hoved plus fanerne ovenover, som begge
+          // klaeber. Bliver de hoejere, skal tallet med.
+          <div style={{ position: "sticky", top: 140, width: 230, flexShrink: 0,
+                        display: "flex", flexDirection: "column", gap: 10 }}>
+            <div style={{ ...styles.statBlock, borderLeft: "3px solid #64748B" }}>
+              <div>
+                <div style={{ ...styles.statValue, color: "#64748B" }}>{Math.round(totalPlannedSum).toLocaleString("da-DK")} kr.</div>
+                <div style={styles.statLabel}>Kontraktsum, planlagte timer{missingStartCount > 0 ? ` (${missingStartCount} mangler startdato)` : ""}</div>
+              </div>
+            </div>
+            <div style={{ ...styles.statBlock, borderLeft: "3px solid #16A34A" }}>
+              <div>
+                <div style={{ ...styles.statValue, color: "#16A34A" }}>{Math.round(totalRealizedSum).toLocaleString("da-DK")} kr.</div>
+                <div style={styles.statLabel}>Realiseret ({fmtMin(totalRealizedMin)})</div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* minWidth gør, at listen ikke maser sig ned i en smal strimmel paa en iPad.
+            Er der ikke plads til begge, falder tallene op over listen i stedet. */}
+        <div style={{ flex: 1, minWidth: 340 }}>
       {contracts.length === 0 && noExpiry.length === 0 && (
         <div style={{ textAlign: "center", padding: 60, color: "#94A3B8" }}>
           <div style={{ fontSize: 36, marginBottom: 12 }}>📋</div>
@@ -9278,6 +9293,8 @@ function ContractsView({ templates: alleTemplates, instances, pricing, employees
             ))}
           </>
         )}
+      </div>
+        </div>
       </div>
     </div>
   );
