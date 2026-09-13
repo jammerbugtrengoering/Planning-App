@@ -140,6 +140,11 @@ code {
      Paa skaermen er den stoej — der staar allerede et flueben, man selv har sat. */
   .kun-paa-papir { display: block !important; }
 
+  /* Hvert skema paa sin egen side, staaende. Ugeplanen er liggende, fordi den skal
+     rumme fem dage; en blanket med fire kolonner skal ikke vaere det. */
+  .timeskema { display: block !important; break-before: page; page-break-before: always; }
+  .timeskema table { width: 100% !important; }
+
   /* Rullefelter skal foldes helt ud, ellers klippes alt under det synlige vaek. */
   * { overflow: visible !important; max-height: none !important; }
 }

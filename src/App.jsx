@@ -7,6 +7,7 @@ import { fakturerbareMinutter, registreredeMinutter, oplaeringsFolk, erUnderOpla
          fordelingen, harFordeling } from "./opgavetid.js";
 import { supabase } from "./supabaseClient";
 import { aftaleKoererPaaDag, DAG_FRA_INDEKS } from "./aftalerytme";
+import { holdOejeMedNyVersion } from "./nyversion";
 import {
   Plus, Download, X, Clock, AlertTriangle,
   Trash2, Pencil, Repeat, Zap, CalendarClock, Wand2, Star, ChevronLeft, ChevronRight, ChevronUp, ChevronDown,
@@ -856,8 +857,21 @@ function saetRyddedePladser(raekker) {
     pladsNoegle(r.template_id, r.year, r.week, r.day)));
 }
 
+// Er der kommet en nyere udgave, end den fane her kører?
+//
+// 13.9.2026: en fane, der havde staaet aaben siden om morgenen, dannede syv opgaver i
+// ugerytme paa aftaler, der var lavet om til hver 4. uge. Den kendte ikke den nye
+// rytme og faldt tilbage paa én uge. Se src/nyversion.js for hele historien.
+//
+// Saa laenge det her er sandt, DANNES der ingen nye opgaver. Alt andet virker: man kan
+// se ugen, rette tider og afslutte opgaver. Det er kun det at finde paa nye opgaver
+// efter en regel, der maaske er forældet, som stoppes.
+let planenMaaIkkeDanneMere = false;
+export function stopDannelseAfOpgaver() { planenMaaIkkeDanneMere = true; }
+
 function ensureWeekInstances(week, year, allInstances, templates, employees, areas = [], employeeAreas = [], travelSettings = DEFAULT_TRAVEL) {
   let list = [...allInstances];
+  if (planenMaaIkkeDanneMere) return list;
   const weekMonday = mondayOfWeek(week, year);
   const newlyCreatedIds = new Set();
   
@@ -1982,6 +1996,14 @@ function HelpButton({ onClick }) {
 function PlanningApp({ session, onSignOut }) {
   const [lang, setLang] = useState(() => localStorage.getItem("rp_lang") || "da");
   useEffect(() => { localStorage.setItem("rp_lang", lang); }, [lang]);
+
+  // Er fanen blevet forældet, mens den stod åben? Så holder planen op med at danne
+  // opgaver, og der kommer et bånd øverst. Se src/nyversion.js for hvorfor.
+  const [foraeldetFane, setForaeldetFane] = useState(false);
+  useEffect(() => holdOejeMedNyVersion(() => {
+    stopDannelseAfOpgaver();
+    setForaeldetFane(true);
+  }), []);
 
   const L = {
     da: { schedule:"Ugeplan", employees:"Medarbejdere", checklists:"Tjeklister", time:"Fakturering", inventory:"Lager", contracts:"Aftaler", kunder:"Kunder", tilbud:"Tilbud", kundetimer:"Kundetimer", reports:"Rapportering", medExport:"Løn data", signOut:"Log ud", sub:"Ugeplanlægning · kapacitet · kompetenceniveauer" },
@@ -4503,6 +4525,26 @@ function PlanningApp({ session, onSignOut }) {
   return (
     <div style={styles.app}>
       <style>{globalCss}</style>
+      {/* Fanen er forældet: planen danner ikke flere opgaver, før den er genindlæst.
+          Båndet ligger ØVERST og i fuld bredde med vilje — den fejl, det forhindrer,
+          er usynlig på skærmen, så advarslen skal være svær at overse. */}
+      {foraeldetFane && (
+        <div className="skjul-ved-print" style={{
+          background: "#B45309", color: "#fff", padding: "10px 24px", display: "flex",
+          alignItems: "center", justifyContent: "center", gap: 14, flexWrap: "wrap",
+          fontSize: 14, position: "sticky", top: 0, zIndex: 200 }}>
+          <span>
+            <strong>Der er kommet en nyere udgave.</strong>{" "}
+            Planen danner ikke nye opgaver, før du genindlæser — ellers risikerer den at
+            lave dem efter en gammel regel. Det, du kan se, kan du stadig rette og afslutte.
+          </span>
+          <button onClick={() => window.location.reload()} style={{
+            background: "#fff", color: "#B45309", border: "none", borderRadius: 8,
+            padding: "6px 14px", fontWeight: 600, cursor: "pointer" }}>
+            Genindlæs nu
+          </button>
+        </div>
+      )}
       <header style={styles.header}>
         <div style={styles.brand}>
           <img src="/app-icon.png" alt="Worklist" style={{ width: 36, height: 36, minWidth: 36, borderRadius: 10, objectFit: "contain", display: "block" }} />
@@ -4936,6 +4978,8 @@ function WeekView({ employees, instances, unplaced, adgangTekst, onUdskrivMedAdg
   // staar og husker at koderne skal med, ville foer eller siden sende et ark ud af
   // huset, som ingen havde taget stilling til.
   const [visAdgang, setVisAdgang] = useState(false);
+  const [visSkema, setVisSkema] = useState(() => localStorage.getItem("rp_printskema") === "ja");
+  useEffect(() => { localStorage.setItem("rp_printskema", visSkema ? "ja" : "nej"); }, [visSkema]);
 
 
   useEffect(() => { localStorage.setItem("rp_ugevisning", ugeVisning); }, [ugeVisning]);
@@ -5057,6 +5101,17 @@ function WeekView({ employees, instances, unplaced, adgangTekst, onUdskrivMedAdg
 
             Det findes, fordi en afloeser under oplaering ikke har appen endnu og
             ellers ikke kan komme ind. */}
+        {/* Skemaet er ikke foelsomt — det er navne og adresser, der staar paa planen
+            i forvejen — saa valget maa gerne huskes. Det modsatte af adgangsfluebenet,
+            og med vilje. */}
+        <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5,
+                        color: "#64748B", cursor: "pointer" }}
+          title="Lægger et time- og kørselsskema bagerst, med dato og arbejdssted udfyldt">
+          <input type="checkbox" checked={visSkema}
+            onChange={(e) => setVisSkema(e.target.checked)} />
+          📋 Tag time- og kørselsskema med
+        </label>
+
         <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5,
                         color: visAdgang ? "#B45309" : "#64748B", cursor: "pointer",
                         fontWeight: visAdgang ? 700 : 500 }}
@@ -5218,6 +5273,13 @@ function WeekView({ employees, instances, unplaced, adgangTekst, onUdskrivMedAdg
             ))}
           </div>
         )}
+
+        {/* Skemaerne bagerst, ét pr. medarbejder — blanketten har navn og underskrift
+            i toppen, saa den kan ikke deles af to. */}
+        {visSkema && visibleEmployees.map((emp) => (
+          <TimeOgKmSkema key={`skema-${emp.id}`} emp={emp} dage={visibleDays}
+            instances={instances} ugeLabel={weekLabel} />
+        ))}
 
         <div className="skjul-ved-print"
           style={{ ...styles.gridWrap, display: ugeVisning === "tid" ? "none" : undefined }}>
@@ -8321,6 +8383,103 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
 // Vises kun naar én medarbejder er valgt. Med tyve ville skalaen blive ulaeselig.
 // Hoejden pr. minut. Hoejere end i Worklist, fordi planlaeggeren skal kunne LAESE
 // opgaven her — navn, adresse og tid — og ikke bare se at der ligger noget.
+// Time- og kørselsskemaet, som firmaet har brugt på papir hidtil.
+//
+// Det ligger her i stedet for som en løs PDF, fordi de to kolonner, medarbejderen
+// ellers selv skulle skrive — dato og arbejdssted — allerede står i planen. Hun
+// skal kun udfylde timer og kilometer, og kontoret kan sammenholde med det, der var
+// aftalt, i stedet for at tyde en håndskrevet adresse.
+//
+// Findes, fordi nye medarbejdere starter på papir, inden de får Worklist. Så snart
+// hun registrerer i appen, er skemaet overflødigt — det er en rampe, ikke en vej.
+//
+// Kun på papir. På skærmen ville det være en tom tabel, ingen skal bruge til noget.
+function TimeOgKmSkema({ emp, dage, instances, ugeLabel }) {
+  const raekker = [];
+  dage.forEach((d) => {
+    instances
+      .filter((t) => t.day === d.key && (t.assignees || []).includes(emp.id)
+                  && !["sygdom", "ferie"].includes(t.type))
+      .sort((a, b) => String(a.scheduledTime || "99:99").localeCompare(String(b.scheduledTime || "99:99")))
+      .forEach((t) => {
+        const id = opgaveIdentitet(t);
+        const dato = instanceDateString(t);
+        raekker.push({
+          dato: dato ? `${dato.slice(8, 10)}.${dato.slice(5, 7)}` : d.label,
+          sted: [id.primaer || t.title, id.sekundaer].filter(Boolean).join(", "),
+        });
+      });
+  });
+  // Altid mindst nogle blanke linjer: der kommer altid noget, der ikke stod i planen.
+  const blanke = Math.max(4, 20 - raekker.length);
+  const celle = { border: "1px solid #111", padding: "5px 6px", fontSize: 10.5 };
+  const hoved = { ...celle, fontWeight: 700, background: "#F1F5F9" };
+
+  return (
+    <div className="kun-paa-papir timeskema">
+      <div style={{ textAlign: "center", fontSize: 14, fontWeight: 700, marginBottom: 2 }}>
+        Time- og kørselsskema – Jammerbugt Rengøring ApS · CVR 41911387
+      </div>
+      <div style={{ borderBottom: "2px solid #7C2D12", marginBottom: 10 }} />
+
+      <table style={{ borderCollapse: "collapse", width: "60%", marginBottom: 10 }}>
+        <tbody>
+          {/* Navnet er udfyldt; resten skriver hun selv. Cpr.nr. gemmer systemet
+              ikke og skal aldrig komme til det — feltet staar tomt som paa den
+              hidtidige blanket. */}
+          <tr><td style={{ ...celle, width: 90 }}>Navn:</td><td style={{ ...celle, fontWeight: 700 }}>{emp.name}</td></tr>
+          <tr><td style={celle}>Adresse:</td><td style={celle}>&nbsp;</td></tr>
+          <tr><td style={celle}>By:</td><td style={celle}>&nbsp;</td></tr>
+          <tr><td style={celle}>Cpr.nr:</td><td style={celle}>&nbsp;</td></tr>
+          <tr><td style={celle}>Underskrift:</td><td style={{ ...celle, height: 26 }}>&nbsp;</td></tr>
+        </tbody>
+      </table>
+
+      <div style={{ fontSize: 11, marginBottom: 6 }}>Ugeplan for <b>{ugeLabel}</b></div>
+
+      <table style={{ borderCollapse: "collapse", width: "100%" }}>
+        <thead>
+          <tr>
+            <th style={{ ...hoved, width: 62, textAlign: "left" }}>Dato:</th>
+            <th style={{ ...hoved, textAlign: "left" }}>Arbejdssted:</th>
+            <th style={{ ...hoved, width: 90, textAlign: "left" }}>Antal timer:</th>
+            <th style={{ ...hoved, width: 110, textAlign: "left" }}>Antal km – egen bil</th>
+          </tr>
+        </thead>
+        <tbody>
+          {raekker.map((r, i) => (
+            <tr key={`r${i}`}>
+              <td style={celle}>{r.dato}</td>
+              <td style={celle}>{r.sted}</td>
+              <td style={{ ...celle, height: 18 }}>&nbsp;</td>
+              <td style={celle}>&nbsp;</td>
+            </tr>
+          ))}
+          {Array.from({ length: blanke }).map((_, i) => (
+            <tr key={`b${i}`}>
+              <td style={{ ...celle, height: 18 }}>&nbsp;</td>
+              <td style={celle}>&nbsp;</td>
+              <td style={celle}>&nbsp;</td>
+              <td style={celle}>&nbsp;</td>
+            </tr>
+          ))}
+          <tr>
+            <td style={celle}>&nbsp;</td>
+            <td style={celle}>&nbsp;</td>
+            <td style={{ ...celle, fontWeight: 700 }}>I alt:</td>
+            <td style={{ ...celle, fontWeight: 700 }}>I alt:</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div style={{ fontSize: 9.5, marginTop: 8 }}>
+        Udfyldes fra den 20. i måneden til den 19. i næste — afleveres eller sendes pr.
+        mobil til 61608720 den 20. i hver måned.
+      </div>
+    </div>
+  );
+}
+
 const TL_PX_PR_MIN = 1.6;
 
 function UgeTidslinje({ emp, dage, instances, travelSettings, weekOffset, weekYear,
