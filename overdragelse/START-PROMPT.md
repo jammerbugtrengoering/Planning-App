@@ -94,6 +94,15 @@ om klokken faktisk er 18 i dansk tid.
 er 401. Skal du vide, om noget gik igennem, så slå op i `net._http_response` bagefter.
 Det var dét, der fik en hel dags påmindelser til at fejle i stilhed.
 
+**En edge-funktion kan fejle på en kold opstart, uden at der er noget galt med den.**
+Den 14. september 2026 faldt kilometerberegningen over «Gateway Timeout» på sit
+allerførste databasekald — Supabases egen gateway gav op, mens funktionen startede.
+To dage før ramte det `slet-gamle-fotos`. Koden fejlede ikke, og OpenRouteService
+fejlede ikke. Derfor: et natjob, der kun kører én gang, skal have et genforsøg.
+`genforsoeg_daglig_km()` kører kl. 2 og 3, men kun hvis natkørslen ikke lykkedes.
+Kommer den samme fejl på et andet job, er det dén slags løsning, der skal til — ikke
+en fejlsøgning i koden.
+
 **Mails sendes gennem edge-funktionen, ikke fra databasen.** `send-email` kræver en
 Authorization-header, og databasen sætter den ikke. Kald
 `daglige-paamindelser`/`maaneds-paamindelse` i stedet.
