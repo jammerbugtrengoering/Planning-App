@@ -15,7 +15,8 @@
     "tjek-tdz.mjs",
     "loenberegning.test.mjs",
     "opgavetid.test.mjs",
-    "aftalerytme.test.mjs"
+    "aftalerytme.test.mjs",
+    "ugevalg.test.mjs"
   ],
   "rules": {
     "no-undef": "error",

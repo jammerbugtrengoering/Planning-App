@@ -8,6 +8,7 @@ import { fakturerbareMinutter, registreredeMinutter, oplaeringsFolk, erUnderOpla
 import { supabase } from "./supabaseClient";
 import { aftaleKoererPaaDag, DAG_FRA_INDEKS } from "./aftalerytme";
 import { holdOejeMedNyVersion } from "./nyversion";
+import { filtrerUgevalg } from "./ugevalg";
 import {
   Plus, Download, X, Clock, AlertTriangle,
   Trash2, Pencil, Repeat, Zap, CalendarClock, Wand2, Star, ChevronLeft, ChevronRight, ChevronUp, ChevronDown,
@@ -1449,7 +1450,11 @@ const MODULE_HELP = {
         "Det gælder også når du skifter kunde på en opgave der allerede findes.",
         "Kundemøder og andre aktiviteter er undtaget. Skal du ud og give et tilbud, findes kunden jo netop ikke i Dinero endnu."] },
     { h: "Ikke tildelt", p: ["En opgave havner her hvis den er ny, hvis medarbejderen er blevet syg, eller hvis systemet ikke kunne finde nogen der passer.",
-                             "Træk den over på en medarbejder, eller sæt Auto-planlæg og tryk Planlæg."] },
+                             "Træk den over på en medarbejder, eller sæt Auto-planlæg og tryk Planlæg.",
+                             "Rullelisten øverst bestemmer hvilke uger der vises: denne uge, efter denne uge, før denne uge, eller alle. Tallet i overskriften følger med, så du kan se hvor mange der ligger i netop det udsnit.",
+                             "«Denne uge» betyder den uge, du står i — ikke den uge det er i dag. Bladrer du frem til uge 40, er det uge 40, der er «denne uge», og «før denne uge» er så alt før den.",
+                             "«Før denne uge» er den, du skal bruge til oprydning: en opgave, ingen nåede at tage, bliver liggende, og den falder ikke i øjnene, når du kun kigger på den uge, du er i gang med.",
+                             "På hvert kort står ugenummer og dag, så du kan se hvor en opgave hører til, også når listen viser flere uger."] },
     { h: "Hvorfor bliver en opgave ikke planlagt?", p: [
         "«Ingen har alle krævede kompetencer» — ingen har kompetencerne på det krævede niveau. Sænk kravet, eller giv kompetencen under Medarbejdere.",
         "«Ingen ledig dag inden fristen» — fristen er passeret, eller alle dage er optaget eller blokeret. Ret fristen på opgaven.",
@@ -4996,7 +5001,12 @@ function WeekView({ employees, instances, unplaced, adgangTekst, onUdskrivMedAdg
   useEffect(() => { localStorage.setItem("rp_ugevisning", ugeVisning); }, [ugeVisning]);
   const [selectedAreaId, setSelectedAreaId] = useState("all"); // "all" eller area.id
   const [printEmployeeId, setPrintEmployeeId] = useState("all");
-  const [unassignedFilter, setUnassignedFilter] = useState("current"); // "current" eller "all"
+  // Hvilke uger vises i «Ikke tildelt»: "current", "efter", "foer" eller "all".
+  //
+  // Alt maales mod den uge, man STAAR i - ikke mod dagens dato. «Denne uge» har
+  // altid betydet den viste uge, og bladrer man frem til uge 40, ville det vaere
+  // underligt, om «foer» saa stadig talte fra i dag.
+  const [unassignedFilter, setUnassignedFilter] = useState("current");
   // Weekendkolonnerne vises automatisk saa snart der ligger en opgave der - ellers
   // ville en loerdagsopgave vaere usynlig indtil man selv slog weekend til.
   const hasWeekendTasks = instances.some((t) => t.day === "Sat" || t.day === "Sun");
@@ -5037,10 +5047,9 @@ function WeekView({ employees, instances, unplaced, adgangTekst, onUdskrivMedAdg
   }
 
 
-  // Filtrer ikke-tildelt opgaver baseret på uge
-  const filteredUnplaced = unassignedFilter === "current"
-    ? unplaced.filter(t => t.week === weekOffset && t.year === weekYear)
-    : unplaced;
+  // Reglen ligger i src/ugevalg.js med sin egen test. Den ser lille ud, men den
+  // sammenligner uger hen over et aarsskifte, og dét er der en fejl gemt i.
+  const filteredUnplaced = filtrerUgevalg(unplaced, unassignedFilter, weekYear, weekOffset);
 
   return (
     <div style={styles.page}>
@@ -5208,7 +5217,13 @@ function WeekView({ employees, instances, unplaced, adgangTekst, onUdskrivMedAdg
               onChange={(e) => setUnassignedFilter(e.target.value)}
               style={{padding: '4px 8px', fontSize: '12px', border: '1px solid #CBD5E1', borderRadius: '4px', background: '#fff', cursor: 'pointer'}}
             >
+              {/* Ordlyden peger paa den viste uge og ikke paa i dag. Stod der
+                  «Tidligere uger», ville man tro, det var i forhold til dagens
+                  dato — og saa gav listen noget andet, end man regnede med, hver
+                  gang man havde bladret frem. */}
               <option value="current">Denne uge</option>
+              <option value="efter">Efter denne uge</option>
+              <option value="foer">Før denne uge</option>
               <option value="all">Alle uger</option>
             </select>
           </div>
