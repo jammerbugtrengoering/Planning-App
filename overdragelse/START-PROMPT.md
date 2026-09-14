@@ -90,6 +90,19 @@ gamle antal argumenter bliver tvetydigt. Den gamle skal droppes.
 de daglige jobs på både 16 og 17 UTC med en urkontrol inde i databasen, der ser efter,
 om klokken faktisk er 18 i dansk tid.
 
+**`net.http_post` venter kun 5 sekunder, hvis du ikke siger andet.** En edge-funktion,
+der starter koldt, bruger længere tid end det, og så står kørslen som «timed_out» i
+`net._http_response` — uanset om den lykkedes. Det er ikke bare støj: når hver anden
+kørsel står som timeout, kan man ikke se forskel på en kold opstart og et 401. Alle
+job-kald har derfor `timeout_milliseconds := 30000`. Laver du et nyt, så sæt det med.
+
+**Hvert job skal skrive et livstegn i `job_koersel`.** Morgentjekket ser kun de jobs,
+der står i `FORVENTET` i `helsetjek`. `plan-beskeder` manglede begge dele frem til den
+14. september 2026 — den kørte 96 gange i døgnet og talte direkte til medarbejdernes
+telefoner, og holdt den op med at virke, ville ingen opdage det. Kører et job oftere
+end en gang i timen, så skriv højst ét livstegn i timen, når der ikke er sket noget;
+ellers drukner loggen præcis når du skal bruge den.
+
 **`net.http_post` er asynkron.** Kaldet ser ud til at lykkes, også når svaret bagefter
 er 401. Skal du vide, om noget gik igennem, så slå op i `net._http_response` bagefter.
 Det var dét, der fik en hel dags påmindelser til at fejle i stilhed.
