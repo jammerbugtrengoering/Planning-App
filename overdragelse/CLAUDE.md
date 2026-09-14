@@ -75,6 +75,29 @@ se, at den blev meldt — begge veje, både nyt og fjernet felt.
 
 ---
 
+## Slut altid af med push-kommandoen
+
+Claude kan ikke nå GitHub — adgangskoden ligger i brugerens nøglering, ikke i Claudes
+miljø. Arbejdsdelingen er derfor: **Claude retter filerne og laver commit, brugeren
+pusher.**
+
+Har du lavet en commit, så slut svaret af med den færdige kommando, klar til at
+kopiere — og med den rigtige mappe, for de tre apps er tre selvstændige
+repositories:
+
+    cd ~/planapp/Planning-App && git push origin main
+    cd ~/planapp/jammerbugtrengoering-Medarbejder-App && git push origin main
+    cd ~/planapp/jammerbugtrengoering-kundeportal && git push origin main
+
+Har du rørt ved flere apps, så giv kommandoen for hver enkelt.
+
+Og tjek `git log origin/main..HEAD`, før du beder om det. Mærket `origin/main` flytter
+sig også i din mappe, når brugeren pusher fra sin egen terminal — så du kan altid se,
+om der faktisk mangler noget. Den 14. september 2026 blev der bedt om push fire gange
+i træk på noget, der allerede var pushet.
+
+---
+
 ## Øvrige faste ting
 
 - Hjælpen i alle tre apps skal altid opdateres, når funktionalitet ændres.
