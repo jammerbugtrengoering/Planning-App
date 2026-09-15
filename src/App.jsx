@@ -1572,6 +1572,10 @@ const MODULE_HELP = {
     { h: "Sådan fakturerer du", p: ["Vælg måned og år.", "Gennemgå listen og ret manglende registreringer med medarbejderen.",
         "Sæt fakturagrundlag på det der skal faktureres.", "Tryk «Eksportér til Dinero» og bekræft.",
         "Linjerne markeres som sendt, så de ikke kan faktureres igen."] },
+    { h: "Ret den registrerede tid", p: [
+        "Klik på minuttallet i listen for at rette det. Du kan skrive præcis det antal minutter, der er brugt — 18 minutter er lige så gyldigt som 15 eller 20.",
+        "Tiden skal passe med det, der faktisk er brugt. Runder man op til nærmeste kvarter, betaler kunden for noget, der ikke er sket, og medarbejderen får løn for det samme.",
+        "Retter du her, erstattes medarbejderens egen registrering, og der står «Justeret af planlægger» på linjen. Aftal det med hende først — det er hendes løn, det også handler om."] },
     { h: "Sæt fakturagrundlag på hele listen", p: [
         "Knappen «Sæt fakturagrundlag på N viste» sætter flueben på alt i listen på én gang. Vælg måneden, sæt status til «Udført», og tryk.",
         "Knappen findes KUN under status «Udført». Fakturagrundlag på en opgave, der ikke er kørt endnu, er en regning for noget kunden ikke har fået — og under «Alle statusser» ligger de blandet, så man ikke kan se hvad et klik ville ramme.",
@@ -4727,7 +4731,7 @@ function PlanningApp({ session, onSignOut }) {
                         Kontoret skal kunne se hvad de fakturerer, foer de trykker. */}
                     <label style={{ fontSize: 12, fontWeight: 700, color: "#7F1D1D" }}>Fakturér</label>
                     <input
-                      type="number" min="0" step="5"
+                      type="number" min="0" step="1"
                       value={forgaevesMin[o.id] ?? (opgave ? opgave.duration : 0)}
                       onChange={(e) => setForgaevesMin((prev) => ({ ...prev, [o.id]: e.target.value }))}
                       style={{ width: 80, padding: "7px 9px", fontSize: 13, borderRadius: 8, border: "1px solid #FCA5A5" }} />
@@ -6494,7 +6498,7 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
                 {isEditing ? (
                   <div style={{ display: "flex", alignItems: "center", gap: 4, justifyContent: "flex-end" }}>
                     <input
-                      type="number" min={0} step={5}
+                      type="number" min={0} step={1}
                       style={{ width: 60, padding: "3px 6px", borderRadius: 6, border: "1.5px solid #D6247A", fontSize: 13, textAlign: "right", color: "#111111" }}
                       value={editMinutes[t.id]}
                       onChange={(e) => setEditMinutes((prev) => ({ ...prev, [t.id]: e.target.value }))}
@@ -13261,7 +13265,7 @@ return (
                 opgavens varighed — det er derfor pladsholderen viser den. */}
             {onSetAndel && (
               <input
-                type="number" min="0" step="5" inputMode="numeric"
+                type="number" min="0" step="1" inputMode="numeric"
                 value={fordelingen(t)[e.id] ?? ""}
                 placeholder={String(t.duration || 0)}
                 onChange={(ev) => onSetAndel(t.id, e.id, ev.target.value)}
