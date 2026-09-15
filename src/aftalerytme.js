@@ -13,7 +13,7 @@ export const DAG_FRA_INDEKS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 // 'maaned' står stadig i listen, fordi der kan ligge gamle rækker med den værdi.
 // De behandles som fire uger — det samme som den knap, de nu svarer til.
-const UGEINTERVAL = { uge: 1, "14_dage": 2, "4_uger": 4, maaned: 4 };
+const UGEINTERVAL = { uge: 1, "14_dage": 2, "4_uger": 4, "6_uger": 6, maaned: 4 };
 const MAANEDSINTERVAL = { "3_maaned": 3 };
 
 export function mandagIUgen(dato) {

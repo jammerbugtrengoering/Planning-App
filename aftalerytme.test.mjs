@@ -50,6 +50,20 @@ er("fire uger hen over 25. oktober",
 er("og ugen før passer ikke",
    aftaleKoererPaaDag(fireUger, man(2026, 11, 5), "Thu"), false);
 
+// ── Hver 6. uge ─────────────────────────────────────────────────────────────
+const seksUger = { days: ["Thu"], planInterval: "6_uger", startDate: "2026-09-17", status: "aktiv" };
+er("første besøg",         aftaleKoererPaaDag(seksUger, man(2026, 9, 17), "Thu"), true);
+er("en uge efter: nej",    aftaleKoererPaaDag(seksUger, man(2026, 9, 24), "Thu"), false);
+er("fire uger efter: nej", aftaleKoererPaaDag(seksUger, man(2026, 10, 15), "Thu"), false);
+er("fem uger efter: nej",  aftaleKoererPaaDag(seksUger, man(2026, 10, 22), "Thu"), false);
+er("seks uger efter: ja",  aftaleKoererPaaDag(seksUger, man(2026, 10, 29), "Thu"), true);
+// Endnu en kadence hen over sommertidsskiftet (25. oktober 2026), længere ude end det
+// første match — samme beskyttelse mod Math.round-fejl som ved «hver 4. uge».
+er("tolv uger efter: ja",
+   aftaleKoererPaaDag(seksUger, man(2026, 12, 7), "Thu"), true);
+er("elleve uger efter: nej",
+   aftaleKoererPaaDag(seksUger, man(2026, 11, 30), "Thu"), false);
+
 // ── Hver 3. måned ───────────────────────────────────────────────────────────
 // Følger KALENDEREN og ikke uger: et kvartalsbesøg hører til en bestemt tid på året.
 //

@@ -8500,7 +8500,7 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
           <input type="date" style={styles.input} value={expiryDate} onChange={(e) => setExpiryDate(e.target.value)} />
           <label style={styles.label}>Plan parametre</label>
           <div style={styles.typePicker}>
-            {[["uge","Hver uge"],["14_dage","Hver 14. dag"],["4_uger","Hver 4. uge"],["3_maaned","Hver 3. måned"]].map(([k,l]) => (
+            {[["uge","Hver uge"],["14_dage","Hver 14. dag"],["4_uger","Hver 4. uge"],["6_uger","Hver 6. uge"],["3_maaned","Hver 3. måned"]].map(([k,l]) => (
               <button key={k} type="button" onClick={() => setPlanInterval(k)}
                 style={planInterval === k ? { ...styles.typePickBtn, borderColor:"#D6247A", color:"#D6247A", background:"#FCE4EF" } : styles.typePickBtn}>
                 {l}
@@ -9185,7 +9185,7 @@ function ContractsView({ templates: alleTemplates, instances, pricing, employees
     // Kvartalet regnes som 13 uger — det er ikke helt præcist over et år, men
     // forskellen er under én procent, og alternativet er at lade som om en aftale
     // med fire besøg om året har 52.
-    const pr = { uge: 1, "14_dage": 2, "4_uger": 4, maaned: 4, "3_maaned": 13 }[tpl.planInterval] || 1;
+    const pr = { uge: 1, "14_dage": 2, "4_uger": 4, "6_uger": 6, maaned: 4, "3_maaned": 13 }[tpl.planInterval] || 1;
     if (start && expiry) {
       const weeks = Math.max(1, Math.round((expiry - start) / (1000 * 60 * 60 * 24 * 7)));
       return { sum: (weeklyValue * weeks) / pr, weeks, wholePeriod: true };
@@ -11090,6 +11090,7 @@ function TilbudEditor({ supabase, checklistTemplates, pricing, currentUserName, 
             <select style={styles.input} value={interval} disabled={laast} onChange={(e) => setInterval_(e.target.value)}>
               <option value="uge">Hver uge</option>
               <option value="14_dage">Hver 14. dag</option>
+              <option value="6_uger">Hver 6. uge</option>
               <option value="maaned">Hver måned</option>
             </select>
 
