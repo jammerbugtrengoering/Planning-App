@@ -1720,7 +1720,8 @@ const MODULE_HELP = {
         "Vælg et år, eller «Hele løbetiden» for alt, hvad der er aftalt fra ende til anden.",
         "Værdien regnes ud fra de besøg, der ligger i planen — ikke ud fra «uger gange timepris». Derfor havner hvert besøg i det år, det faktisk ligger i, og en aftale, der starter i september, tæller kun med fra september.",
         "Årene i rullelisten kommer fra data. Løber en aftale til 2029, dukker 2029 op af sig selv.",
-        "Kun aktive aftaler er med. En udgået aftale er ikke en del af porteføljen — det, den nåede at levere, står som realiseret omsætning under den anden fane.",
+        "Fleksible opgaver — en ekstra hovedrengøring, en flytning, et enkeltbesøg — tæller med i værdien, men står på deres egen linje. De er ikke aftaler, og et gennemsnit «pr. aftale», der talte dem med, ville sige noget forkert om, hvad en aftale er værd.",
+        "Kun aktive aftaler er med. En udgået aftale er ikke en del af porteføljen — det, den nåede at levere, står som realiseret omsætning under den anden fane. Det gælder også en fleksibel opgave, der hænger på en opsagt aftale.",
         "Kig på medianen og ikke kun på gennemsnittet. Et par store erhvervsaftaler trækker gennemsnittet langt op, og så siger det ikke længere noget om, hvad en almindelig aftale er værd.",
         "«Hele løbetiden» ligger tæt på kontraktsummen på Aftaler-siden, men rammer ikke præcis samme tal. Aftaler-siden regner i uger og sætter et kvartal til 13 uger; her tælles de faktiske besøg. Forskellen er under en procent."] },
   ], warn: "Er «Registreret» meget lavere end «Planlagt», er det som regel manglende tidsregistrering — ikke manglende arbejde. Tjek Kundetimer." },
@@ -7934,7 +7935,10 @@ function PortefoeljeRapport({ templates, instances, pricing }) {
 
   const noegletal = [
     ["Aftaler", String(tal.aftaler), "aktive aftaler med besøg i perioden"],
-    ["Samlet værdi", kr(tal.vaerdi), `${tal.besoeg.toLocaleString("da-DK")} besøg · ${timer(tal.minutter)}`],
+    ["Samlet værdi", kr(tal.iAlt.vaerdi),
+      tal.fleksible.opgaver > 0
+        ? `heraf ${kr(tal.fleksible.vaerdi)} fleksible opgaver`
+        : `${tal.besoeg.toLocaleString("da-DK")} besøg · ${timer(tal.minutter)}`],
     ["Gennemsnit pr. aftale", kr(tal.gnsVaerdi), `median ${kr(tal.medianVaerdi)}`],
     ["Tid pr. besøg", `${Math.round(tal.gnsMinPrBesoeg)} min.`, `median ${Math.round(tal.medianMinPrBesoeg)} min.`],
   ];
@@ -7966,7 +7970,8 @@ function PortefoeljeRapport({ templates, instances, pricing }) {
       <div style={{ fontSize: 12.5, color: "#64748B", marginBottom: 14, lineHeight: 1.5, maxWidth: 780 }}>
         Værdien er regnet ud fra de besøg, der er lagt i planen — ikke ud fra «uger gange timepris».
         Derfor havner hvert besøg i det år, det faktisk ligger i, og en aftale, der starter i september,
-        tæller kun med fra september. Kun aktive aftaler er med; udgåede står under Aftaler.
+        tæller kun med fra september. Fleksible opgaver uden aftale tæller med i værdien, men står for sig.
+        Kun aktive aftaler er med; udgåede står under Aftaler.
         {valgtAar === null && " «Hele løbetiden» ligger tæt på kontraktsummen på Aftaler-siden, men rammer ikke præcis samme tal: Aftaler-siden regner i uger og sætter et kvartal til 13 uger, mens det her er de faktiske besøg. Forskellen er under en procent."}
       </div>
 
@@ -8001,13 +8006,36 @@ function PortefoeljeRapport({ templates, instances, pricing }) {
                 <span style={{ textAlign: "right", color: "#64748B" }}>{Math.round(p.gnsMinPrBesoeg)}</span>
               </div>
             ))}
+            {/* Fleksible opgaver paa sin egen linje. De er rigtige penge og skal med
+                i totalen, men de er ikke aftaler - derfor staar der en streg i
+                aftalekolonnen og i gennemsnittet. Et gennemsnit «pr. aftale» paa
+                noget, der ikke er en aftale, er et tal, der lyver. */}
+            {tal.fleksible.opgaver > 0 && (
+              <div style={{ display: "grid", gridTemplateColumns: "1.4fr 90px 100px 110px 130px 130px 110px",
+                            padding: "11px 14px", fontSize: 13, borderTop: "1px solid #F1F5F9", background: "#FFFBEB" }}>
+                <span style={{ fontWeight: 600, color: "#B45309" }}>
+                  ⚡ Fleksible opgaver
+                  <span style={{ fontWeight: 400, color: "#94A3B8" }}>
+                    {" — "}{tal.fleksible.perType.map((p) => (typeNavn[p.type] || p.type).replace(/^\S+\s/, "")).join(", ")}
+                  </span>
+                </span>
+                <span style={{ textAlign: "right", color: "#CBD5E1" }}>–</span>
+                <span style={{ textAlign: "right", color: "#64748B" }}>{tal.fleksible.opgaver.toLocaleString("da-DK")}</span>
+                <span style={{ textAlign: "right", color: "#64748B" }}>{timer(tal.fleksible.minutter)}</span>
+                <span style={{ textAlign: "right", fontWeight: 700 }}>{kr(tal.fleksible.vaerdi)}</span>
+                <span style={{ textAlign: "right", color: "#CBD5E1" }}>–</span>
+                <span style={{ textAlign: "right", color: "#64748B" }}>
+                  {tal.fleksible.opgaver ? Math.round(tal.fleksible.minutter / tal.fleksible.opgaver) : 0}
+                </span>
+              </div>
+            )}
             <div style={{ display: "grid", gridTemplateColumns: "1.4fr 90px 100px 110px 130px 130px 110px",
                           padding: "11px 14px", background: "#FCE4EF", fontWeight: 700, fontSize: 13 }}>
               <span style={{ color: "#9C1B5D" }}>I alt</span>
               <span style={{ textAlign: "right" }}>{tal.aftaler}</span>
-              <span style={{ textAlign: "right" }}>{tal.besoeg.toLocaleString("da-DK")}</span>
-              <span style={{ textAlign: "right" }}>{timer(tal.minutter)}</span>
-              <span style={{ textAlign: "right" }}>{kr(tal.vaerdi)}</span>
+              <span style={{ textAlign: "right" }}>{tal.iAlt.opgaver.toLocaleString("da-DK")}</span>
+              <span style={{ textAlign: "right" }}>{timer(tal.iAlt.minutter)}</span>
+              <span style={{ textAlign: "right" }}>{kr(tal.iAlt.vaerdi)}</span>
               <span style={{ textAlign: "right" }}>{kr(tal.gnsVaerdi)}</span>
               <span style={{ textAlign: "right" }}>{Math.round(tal.gnsMinPrBesoeg)}</span>
             </div>
@@ -8021,6 +8049,11 @@ function PortefoeljeRapport({ templates, instances, pricing }) {
             største: <strong>{kr(tal.stoersteVaerdi)}</strong> ·
             median: <strong>{kr(tal.medianVaerdi)}</strong>.
             {tal.gnsVaerdi > tal.medianVaerdi * 1.25 && " Gennemsnittet ligger et godt stykke over medianen — nogle få store aftaler trækker det op, så medianen siger mest om en typisk aftale."}
+            {tal.fleksible.opgaver > 0 && (
+              <> {" "}«Gns. pr. aftale» og tallene her regnes kun på aftalerne. De {tal.fleksible.opgaver}{" "}
+              fleksible opgaver ({kr(tal.fleksible.vaerdi)}) er med i værdien, men er ikke aftaler —
+              et gennemsnit «pr. aftale», der talte dem med, ville sige noget forkert om, hvad en aftale er værd.</>
+            )}
           </div>
         </>
       )}

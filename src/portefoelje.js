@@ -18,6 +18,15 @@
 
 const BLOKTYPER = ["sygdom", "ferie", "aktivitet"];
 
+// Fleksible opgaver hører ikke til en aftale: en ekstra hovedrengøring, en flytning,
+// et enkelt besøg nogen har bedt om. De er rigtige penge og skal med i totalen —
+// men de må ikke tælle som aftaler, for så ville «gennemsnitlig kontraktsum pr.
+// aftale» blive trukket ned af noget, der ikke er en aftale.
+//
+// «flexible» er den gamle type, der blev afløst af «adhoc». Den kan ikke længere
+// vælges, men der kan ligge ældre rækker med den, og de skal tælle med på lige fod.
+const LOESE_TYPER = ["adhoc", "flexible"];
+
 // Året et besøg falder i — kalenderåret, ikke ISO-ugeåret.
 //
 // De to er ikke det samme: uge 1 i 2027 begynder mandag den 4. januar, men uge 53
@@ -58,22 +67,38 @@ export function portefoeljeTal({ templates = [], instances = [], pricing = {}, a
   const aktive = new Map();
   templates.forEach((t) => { if (t && t.status === "aktiv") aktive.set(t.id, t); });
 
-  // Pr. aftale: hvad falder der i perioden?
+  // Pr. aftale: hvad falder der i perioden? Og ved siden af: de fleksible opgaver.
   const pr = new Map();
+  const loese = { opgaver: 0, minutter: 0, vaerdi: 0, perType: {} };
   instances.forEach((i) => {
-    if (!i || !i.templateId || !aktive.has(i.templateId)) return;
-    if (BLOKTYPER.includes(i.type)) return;
+    if (!i || BLOKTYPER.includes(i.type)) return;
+    // Hænger opgaven på en aftale, der ikke er aktiv — opsagt eller kladde — er den
+    // ikke en del af porteføljen. Heller ikke selvom den er fleksibel.
+    if (i.templateId && !aktive.has(i.templateId)) return;
     if (aar !== null && besoegsAar(i) !== aar) return;
-    const tpl = aktive.get(i.templateId);
-    const type = i.contractType || tpl.contractType || "privat";
+
+    const tpl = i.templateId ? aktive.get(i.templateId) : null;
+    const type = i.contractType || (tpl && tpl.contractType) || "privat";
     const vaerdi = besoegsVaerdi(i, pricing[type]);
-    const minutter = i.pricingType === "fixed" ? (Number(i.duration) || 0) : (Number(i.duration) || 0);
+    const minutter = Number(i.duration) || 0;
+
+    if (!i.templateId || LOESE_TYPER.includes(i.type)) {
+      loese.opgaver += 1;
+      loese.minutter += minutter;
+      loese.vaerdi += vaerdi;
+      if (!loese.perType[type]) loese.perType[type] = { opgaver: 0, minutter: 0, vaerdi: 0 };
+      loese.perType[type].opgaver += 1;
+      loese.perType[type].minutter += minutter;
+      loese.perType[type].vaerdi += vaerdi;
+      return;
+    }
+
     if (!pr.has(i.templateId)) pr.set(i.templateId, { type, vaerdi: 0, minutter: 0, besoeg: 0, varigheder: [] });
     const g = pr.get(i.templateId);
     g.vaerdi += vaerdi;
     g.minutter += minutter;
     g.besoeg += 1;
-    g.varigheder.push(Number(i.duration) || 0);
+    g.varigheder.push(minutter);
   });
 
   const raekker = [...pr.values()];
@@ -89,11 +114,31 @@ export function portefoeljeTal({ templates = [], instances = [], pricing = {}, a
     p.vaerdier.push(r.vaerdi); p.varigheder.push(...r.varigheder);
   });
 
+  const aftaleBesoeg = sum(raekker.map((r) => r.besoeg));
+  const aftaleMinutter = sum(raekker.map((r) => r.minutter));
+  const aftaleVaerdi = sum(vaerdier);
+
   return {
     aftaler: raekker.length,
-    besoeg: sum(raekker.map((r) => r.besoeg)),
-    minutter: sum(raekker.map((r) => r.minutter)),
-    vaerdi: sum(vaerdier),
+    besoeg: aftaleBesoeg,
+    minutter: aftaleMinutter,
+    vaerdi: aftaleVaerdi,
+    // De fleksible for sig. Gennemsnittene nedenfor regnes KUN paa aftalerne —
+    // «gennemsnitlig kontraktsum pr. aftale» maa ikke traekkes ned af noget, der
+    // ikke er en aftale.
+    fleksible: {
+      opgaver: loese.opgaver,
+      minutter: loese.minutter,
+      vaerdi: loese.vaerdi,
+      perType: Object.entries(loese.perType)
+        .map(([type, p]) => ({ type, ...p }))
+        .sort((a, b) => b.vaerdi - a.vaerdi),
+    },
+    iAlt: {
+      opgaver: aftaleBesoeg + loese.opgaver,
+      minutter: aftaleMinutter + loese.minutter,
+      vaerdi: aftaleVaerdi + loese.vaerdi,
+    },
     gnsVaerdi: raekker.length ? sum(vaerdier) / raekker.length : 0,
     medianVaerdi: median(vaerdier),
     mindsteVaerdi: vaerdier.length ? Math.min(...vaerdier) : 0,
@@ -120,8 +165,11 @@ export function aarMedBesoeg(templates = [], instances = []) {
   const aktive = new Set(templates.filter((t) => t && t.status === "aktiv").map((t) => t.id));
   const aar = new Set();
   instances.forEach((i) => {
-    if (!i || !i.templateId || !aktive.has(i.templateId)) return;
-    if (BLOKTYPER.includes(i.type)) return;
+    if (!i || BLOKTYPER.includes(i.type)) return;
+    // Samme afgrænsning som i opgørelsen: en fleksibel opgave uden aftale tæller
+    // med, en opgave på en opsagt aftale gør ikke. Ellers kunne rullelisten byde
+    // på et år, rapporten så var tom i.
+    if (i.templateId && !aktive.has(i.templateId)) return;
     const a = besoegsAar(i);
     if (a) aar.add(a);
   });
