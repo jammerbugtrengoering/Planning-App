@@ -9,6 +9,7 @@ import { supabase } from "./supabaseClient";
 import { aftaleKoererPaaDag, DAG_FRA_INDEKS } from "./aftalerytme";
 import { holdOejeMedNyVersion } from "./nyversion";
 import { filtrerUgevalg } from "./ugevalg";
+import { portefoeljeTal, aarMedBesoeg } from "./portefoelje";
 import {
   Plus, Download, X, Clock, AlertTriangle,
   Trash2, Pencil, Repeat, Zap, CalendarClock, Wand2, Star, ChevronLeft, ChevronRight, ChevronUp, ChevronDown,
@@ -1706,11 +1707,22 @@ const MODULE_HELP = {
         "Er der stadig én opgave tilbage, der ikke er udført, bliver aftalen liggende. Så er der noget, nogen skal tage stilling til, og så skal den kunne ses uden at man leder efter den."] },
   ], warn: "«Hver 3. måned» følger kalenderen: besøget lander i den uge, der indeholder samme dato som startdatoen — altså fire besøg om året på samme tid. Er startdatoen den 31., rammes sidste dag i korte måneder, så intet kvartal springes over. «Hver 4. uge» tæller derimod i uger og vandrer gennem kalenderen." },
 
-  reports: { title: "Rapportering", intro: "Budget mod faktisk omsætning, opdelt pr. kontrakttype.", blocks: [
-    { h: "Tallene", p: ["Budget er det du selv lægger ind med «Redigér budget».",
+  reports: { title: "Rapportering", intro: "To rapporter: budget mod faktisk omsætning, og hvad aftalerne er værd.", blocks: [
+    { h: "De to faner", p: [
+        "«Budget og omsætning» svarer på, hvad der er kommet ind måned for måned i år.",
+        "«Aftaleportefølje» svarer på, hvad der er aftalt — hvad de aftaler, I har, er værd, og hvordan de fordeler sig.",
+        "Det andet kan ikke læses ud af det første. En aftale, du skriver under i dag, fylder næsten ingenting i budgettet i år og kan alligevel være en halv million værd over sin løbetid."] },
+    { h: "Budget og omsætning", p: ["Budget er det du selv lægger ind med «Redigér budget».",
         "Planlagt er værdien af det der ligger i kalenderen.",
         "Registreret er den tid der faktisk er logget.",
         "Forecast fremskriver resten af året."] },
+    { h: "Aftaleportefølje", p: [
+        "Vælg et år, eller «Hele løbetiden» for alt, hvad der er aftalt fra ende til anden.",
+        "Værdien regnes ud fra de besøg, der ligger i planen — ikke ud fra «uger gange timepris». Derfor havner hvert besøg i det år, det faktisk ligger i, og en aftale, der starter i september, tæller kun med fra september.",
+        "Årene i rullelisten kommer fra data. Løber en aftale til 2029, dukker 2029 op af sig selv.",
+        "Kun aktive aftaler er med. En udgået aftale er ikke en del af porteføljen — det, den nåede at levere, står som realiseret omsætning under den anden fane.",
+        "Kig på medianen og ikke kun på gennemsnittet. Et par store erhvervsaftaler trækker gennemsnittet langt op, og så siger det ikke længere noget om, hvad en almindelig aftale er værd.",
+        "«Hele løbetiden» ligger tæt på kontraktsummen på Aftaler-siden, men rammer ikke præcis samme tal. Aftaler-siden regner i uger og sætter et kvartal til 13 uger; her tælles de faktiske besøg. Forskellen er under en procent."] },
   ], warn: "Er «Registreret» meget lavere end «Planlagt», er det som regel manglende tidsregistrering — ikke manglende arbejde. Tjek Kundetimer." },
 
   kundetimer: { title: "Kundetimer", intro: "Hvornår blev der brugt en anden tid end aftalt — og hvorfor.", blocks: [
@@ -4823,7 +4835,7 @@ function PlanningApp({ session, onSignOut }) {
       )}
 
       {view === "reports" && (
-        <ReportsView instances={instances} pricing={pricing} budgets={budgets} onSaveBudget={saveBudget} isAdminUser={isAdminUser} />
+        <ReportsView instances={instances} templates={templates} pricing={pricing} budgets={budgets} onSaveBudget={saveBudget} isAdminUser={isAdminUser} />
       )}
 
       {view === "kundetimer" && (<CustomerHoursView instances={instances} />)}
@@ -7643,7 +7655,13 @@ const REPORT_MONTHS = ["Januar","Februar","Marts","April","Maj","Juni","Juli","A
 const REPORT_AREA_COLORS = { ...Object.fromEntries(CONTRACT_TYPES.map((c) => [c.key, c.chart])), alle: "#334155" };
 const REPORT_TABS = [...REPORT_AREAS, ["alle", "🌐 Alle"]];
 
-function ReportsView({ instances, pricing, budgets, onSaveBudget, isAdminUser }) {
+function ReportsView({ instances, templates, pricing, budgets, onSaveBudget, isAdminUser }) {
+  // To rapporter, to spørgsmål. «Budget» handler om, hvad der er kommet ind måned
+  // for måned. «Aftaleportefølje» handler om, hvad der ER aftalt — hvad de aftaler,
+  // der ligger, er værd, og hvordan de fordeler sig. Det andet kan ikke læses ud af
+  // det første: en aftale underskrevet i dag fylder ingenting i budgettet i år og
+  // alligevel en halv million over sin løbetid.
+  const [rapport, setRapport] = useState("budget");
   const now = new Date();
   const [selectedArea, setSelectedArea] = useState("privat");
   const [selectedYear, setSelectedYear] = useState(now.getFullYear());
@@ -7723,8 +7741,25 @@ function ReportsView({ instances, pricing, budgets, onSaveBudget, isAdminUser })
   const chartMax = Math.max(1, ...monthRows.map((r) => Math.max(r.budgetKr, r.actualOrForecastKr)));
   const CHART_H = 160;
 
+  const rapportFaner = [["budget", "📊 Budget og omsætning"], ["portefoelje", "📁 Aftaleportefølje"]];
+
   return (
     <div style={styles.page}>
+      <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+        {rapportFaner.map(([k, l]) => (
+          <button key={k} type="button" onClick={() => setRapport(k)}
+            style={rapport === k
+              ? { ...styles.underNavAktiv }
+              : { ...styles.underNavBtn }}>
+            {l}
+          </button>
+        ))}
+      </div>
+
+      {rapport === "portefoelje" ? (
+        <PortefoeljeRapport templates={templates} instances={instances} pricing={pricing} />
+      ) : (
+      <>
       <div style={styles.toolbar}>
         <div style={styles.statBlock}>
           <div><div style={{ ...styles.statValue, color: "#64748B" }}>{Math.round(yearTotals.budget).toLocaleString("da-DK")} kr.</div><div style={styles.statLabel}>Budget {selectedYear}</div></div>
@@ -7872,6 +7907,123 @@ function ReportsView({ instances, pricing, budgets, onSaveBudget, isAdminUser })
         <span style={{ textAlign: "right", color: yearDiff >= 0 ? "#16A34A" : "#DC2626" }}>{yearDiff > 0 ? "+" : ""}{Math.round(yearDiff).toLocaleString("da-DK")} kr</span>
         <span />
       </div>
+      </>
+      )}
+    </div>
+  );
+}
+
+// Aftaleporteføljen: hvad er der aftalt, og hvad er det værd?
+//
+// Regnestykket ligger i src/portefoelje.js med sin egen test. Her er kun visningen.
+function PortefoeljeRapport({ templates, instances, pricing }) {
+  const [aar, setAar] = useState("alle");
+  const aarene = useMemo(() => aarMedBesoeg(templates, instances), [templates, instances]);
+  const valgtAar = aar === "alle" ? null : Number(aar);
+  const tal = useMemo(
+    () => portefoeljeTal({ templates, instances, pricing, aar: valgtAar }),
+    [templates, instances, pricing, valgtAar]);
+
+  const kr = (n) => Math.round(n).toLocaleString("da-DK") + " kr.";
+  const timer = (min) => {
+    const t = Math.floor(min / 60), m = Math.round(min % 60);
+    return m ? `${t.toLocaleString("da-DK")}t ${m}m` : `${t.toLocaleString("da-DK")}t`;
+  };
+  const periode = valgtAar ? String(valgtAar) : "hele løbetiden";
+  const typeNavn = Object.fromEntries(CONTRACT_TYPES.map((c) => [c.key, c.icon + " " + c.label]));
+
+  const noegletal = [
+    ["Aftaler", String(tal.aftaler), "aktive aftaler med besøg i perioden"],
+    ["Samlet værdi", kr(tal.vaerdi), `${tal.besoeg.toLocaleString("da-DK")} besøg · ${timer(tal.minutter)}`],
+    ["Gennemsnit pr. aftale", kr(tal.gnsVaerdi), `median ${kr(tal.medianVaerdi)}`],
+    ["Tid pr. besøg", `${Math.round(tal.gnsMinPrBesoeg)} min.`, `median ${Math.round(tal.medianMinPrBesoeg)} min.`],
+  ];
+
+  return (
+    <div>
+      <div style={styles.toolbar}>
+        {noegletal.map(([overskrift, vaerdi, under]) => (
+          <div key={overskrift} style={{ ...styles.statBlock, borderLeft: "3px solid #9C1B5D" }}>
+            <div>
+              <div style={{ ...styles.statValue, color: "#111111" }}>{vaerdi}</div>
+              <div style={styles.statLabel}>{overskrift}</div>
+              <div style={{ ...styles.statLabel, color: "#94A3B8" }}>{under}</div>
+            </div>
+          </div>
+        ))}
+        <div style={styles.toolbarSpacer} />
+        {/* Årene bygges af data og ikke af en fast raekke aarstal: loeber en aftale
+            til 2029, skal 2029 staa i listen uden at nogen skal huske at tilfoeje
+            det. «Hele loebetiden» er med, fordi det er dét tal, kontraktsummen paa
+            Aftaler-siden viser - saa de to kan sammenlignes. */}
+        <select style={{ ...styles.inputSm, fontSize: 13, fontWeight: 600, flex: "none", width: 150 }}
+          value={aar} onChange={(e) => setAar(e.target.value)}>
+          <option value="alle">Hele løbetiden</option>
+          {aarene.map((y) => <option key={y} value={y}>{y}</option>)}
+        </select>
+      </div>
+
+      <div style={{ fontSize: 12.5, color: "#64748B", marginBottom: 14, lineHeight: 1.5, maxWidth: 780 }}>
+        Værdien er regnet ud fra de besøg, der er lagt i planen — ikke ud fra «uger gange timepris».
+        Derfor havner hvert besøg i det år, det faktisk ligger i, og en aftale, der starter i september,
+        tæller kun med fra september. Kun aktive aftaler er med; udgåede står under Aftaler.
+        {valgtAar === null && " «Hele løbetiden» ligger tæt på kontraktsummen på Aftaler-siden, men rammer ikke præcis samme tal: Aftaler-siden regner i uger og sætter et kvartal til 13 uger, mens det her er de faktiske besøg. Forskellen er under en procent."}
+      </div>
+
+      {tal.aftaler === 0 ? (
+        <div style={{ textAlign: "center", padding: 60, color: "#94A3B8" }}>
+          <div style={{ fontSize: 36, marginBottom: 12 }}>📁</div>
+          <div style={{ fontWeight: 600 }}>Ingen aftaler med besøg i {periode}</div>
+        </div>
+      ) : (
+        <>
+          <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 8 }}>Fordelt på kontrakttype — {periode}</div>
+          <div style={{ background: "#fff", borderRadius: 12, overflow: "hidden", boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1.4fr 90px 100px 110px 130px 130px 110px",
+                          padding: "10px 14px", background: "#F8FAFC", fontWeight: 700, fontSize: 12, color: "#64748B" }}>
+              <span>Kontrakttype</span>
+              <span style={{ textAlign: "right" }}>Aftaler</span>
+              <span style={{ textAlign: "right" }}>Besøg</span>
+              <span style={{ textAlign: "right" }}>Timer</span>
+              <span style={{ textAlign: "right" }}>Værdi</span>
+              <span style={{ textAlign: "right" }}>Gns. pr. aftale</span>
+              <span style={{ textAlign: "right" }}>Min./besøg</span>
+            </div>
+            {tal.perType.map((p) => (
+              <div key={p.type} style={{ display: "grid", gridTemplateColumns: "1.4fr 90px 100px 110px 130px 130px 110px",
+                                         padding: "11px 14px", fontSize: 13, borderTop: "1px solid #F1F5F9" }}>
+                <span style={{ fontWeight: 600 }}>{typeNavn[p.type] || p.type}</span>
+                <span style={{ textAlign: "right" }}>{p.aftaler}</span>
+                <span style={{ textAlign: "right", color: "#64748B" }}>{p.besoeg.toLocaleString("da-DK")}</span>
+                <span style={{ textAlign: "right", color: "#64748B" }}>{timer(p.minutter)}</span>
+                <span style={{ textAlign: "right", fontWeight: 700 }}>{kr(p.vaerdi)}</span>
+                <span style={{ textAlign: "right", color: "#64748B" }}>{kr(p.gnsVaerdi)}</span>
+                <span style={{ textAlign: "right", color: "#64748B" }}>{Math.round(p.gnsMinPrBesoeg)}</span>
+              </div>
+            ))}
+            <div style={{ display: "grid", gridTemplateColumns: "1.4fr 90px 100px 110px 130px 130px 110px",
+                          padding: "11px 14px", background: "#FCE4EF", fontWeight: 700, fontSize: 13 }}>
+              <span style={{ color: "#9C1B5D" }}>I alt</span>
+              <span style={{ textAlign: "right" }}>{tal.aftaler}</span>
+              <span style={{ textAlign: "right" }}>{tal.besoeg.toLocaleString("da-DK")}</span>
+              <span style={{ textAlign: "right" }}>{timer(tal.minutter)}</span>
+              <span style={{ textAlign: "right" }}>{kr(tal.vaerdi)}</span>
+              <span style={{ textAlign: "right" }}>{kr(tal.gnsVaerdi)}</span>
+              <span style={{ textAlign: "right" }}>{Math.round(tal.gnsMinPrBesoeg)}</span>
+            </div>
+          </div>
+
+          {/* Spredningen er mindst lige saa vigtig som gennemsnittet. Ét stort
+              erhvervshus kan traekke gennemsnittet langt over det, en typisk aftale
+              er vaerd, og saa er tallet ubrugeligt til at vurdere en ny aftale med. */}
+          <div style={{ fontSize: 12.5, color: "#64748B", marginTop: 14, lineHeight: 1.6 }}>
+            Mindste aftale i perioden: <strong>{kr(tal.mindsteVaerdi)}</strong> ·
+            største: <strong>{kr(tal.stoersteVaerdi)}</strong> ·
+            median: <strong>{kr(tal.medianVaerdi)}</strong>.
+            {tal.gnsVaerdi > tal.medianVaerdi * 1.25 && " Gennemsnittet ligger et godt stykke over medianen — nogle få store aftaler trækker det op, så medianen siger mest om en typisk aftale."}
+          </div>
+        </>
+      )}
     </div>
   );
 }

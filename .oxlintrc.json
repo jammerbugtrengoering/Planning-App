@@ -16,7 +16,8 @@
     "loenberegning.test.mjs",
     "opgavetid.test.mjs",
     "aftalerytme.test.mjs",
-    "ugevalg.test.mjs"
+    "ugevalg.test.mjs",
+    "portefoelje.test.mjs"
   ],
   "rules": {
     "no-undef": "error",
