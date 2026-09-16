@@ -1672,7 +1672,7 @@ const MODULE_HELP = {
     { h: "Sådan læses den", p: ["Kontraktsum er forventet omsætning over hele perioden ud fra planlagte timer.",
         "Realiseret er hvad der faktisk er registreret.", "Dage tilbage viser hvor længe der er til aftalen udløber."] },
     { h: "Gentagelse", p: [
-        "En aftale kan gentages hver uge, hver 14. dag, hver 4. uge eller hver 3. måned. Kadencen tælles fra startdatoen.",
+        "En aftale kan gentages hver uge, hver 14. dag, hver 4. uge, hver 6. uge eller hver 3. måned. Kadencen tælles fra startdatoen.",
         "«Hver 4. uge» er ikke det samme som en gang om måneden. Det giver 13 besøg om året i stedet for 12, og dagen vandrer gennem kalenderen — et besøg den 5. bliver med tiden den 28. Til gengæld ligger det altid på den samme ugedag, og det er sådan, rengøring aftales i praksis.",
         "Vil du have en fast dato i måneden i stedet, findes den mulighed ikke længere. Sig til, hvis I får brug for den."] }, { h: "Under udarbejdelse", p: ["Er du ikke færdig med en ny aftale, så tryk «Gem som kladde» i stedet for «Gem og planlæg».", "En kladde opretter ingen opgaver. Den ligger og venter, og du kan rette alle felter i den så mange gange du vil.", "Find den igen med filteret «Under udarbejdelse» øverst her på siden. Tallet i knappen viser hvor mange der ligger.", "Tryk «Åbn og godkend» for at rette videre. Inde i aftalen vælger du så «Gem kladde» hvis du stadig ikke er færdig, eller «Godkend og planlæg» når den er klar.", "Først ved godkendelsen oprettes opgaverne — fra startdatoen og frem til udløbsdatoen. Det kan være mange på én gang, så tjek datoerne inden du godkender.", "Startdatoen kan ikke ligge i fortiden. Har en kladde ligget så længe at datoen er løbet fra dig, skal den rettes før du kan godkende."] }, { h: "Søg og filtrér", p: [
         "Søgefeltet under knapperne leder i kundenavn, fakturabeskrivelse, adresse og opgavetekst på én gang.",
@@ -1691,7 +1691,7 @@ const MODULE_HELP = {
         "En udgået aftale, hvor den sidste opgave er udført, er «gjort op». Den falder af listen af sig selv, så den ikke ligger og fylder mellem de aktive resten af tiden.",
         "Den er ikke væk. Vælg «Udgåede», så står de der alle sammen med kontraktsum og realiseret — og tallet på knappen siger, hvor mange der er lagt til side.",
         "Er der stadig én opgave tilbage, der ikke er udført, bliver aftalen liggende. Så er der noget, nogen skal tage stilling til, og så skal den kunne ses uden at man leder efter den."] },
-  ], warn: "«Hver 3. måned» følger kalenderen: besøget lander i den uge, der indeholder samme dato som startdatoen — altså fire besøg om året på samme tid. Er startdatoen den 31., rammes sidste dag i korte måneder, så intet kvartal springes over. «Hver 4. uge» tæller derimod i uger og vandrer gennem kalenderen." },
+  ], warn: "«Hver 3. måned» følger kalenderen: besøget lander i den uge, der indeholder samme dato som startdatoen — altså fire besøg om året på samme tid. Er startdatoen den 31., rammes sidste dag i korte måneder, så intet kvartal springes over. «Hver 4. uge» og «Hver 6. uge» tæller derimod i uger og vandrer gennem kalenderen — 13 henholdsvis 8-9 besøg om året, altid på samme ugedag." },
 
   reports: { title: "Rapportering", intro: "To rapporter: budget mod faktisk omsætning, og hvad aftalerne er værd.", blocks: [
     { h: "De to faner", p: [
