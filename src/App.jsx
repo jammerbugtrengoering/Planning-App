@@ -10,6 +10,7 @@ import { aftaleKoererPaaDag, DAG_FRA_INDEKS } from "./aftalerytme";
 import { holdOejeMedNyVersion } from "./nyversion";
 import { filtrerUgevalg } from "./ugevalg";
 import { portefoeljeTal, aarMedBesoeg } from "./portefoelje";
+import { hentAlleRaekker } from "./hentalle";
 import {
   Plus, Download, X, Clock, AlertTriangle,
   Trash2, Pencil, Repeat, Zap, CalendarClock, Wand2, Star, ChevronLeft, ChevronRight, ChevronUp, ChevronDown,
@@ -391,31 +392,12 @@ function dbFail(error, whatFailed) {
   return true;
 }
 
-// Henter ALLE raekker fra en tabel. Supabase/PostgREST returnerer hoejst 1000
-// raekker pr. kald, og uden eksplicit sortering er det en VILKAARLIG delmaengde
-// der kan variere fra indlaesning til indlaesning. Med 2500+ opgaver betoed det
-// at planlaeggeren kun saa ca. 40% af data - og ikke de samme 40% hver gang.
-// Vi henter derfor i sider indtil der ikke er flere, sorteret stabilt paa id.
-async function fetchAllRows(table, columns = "*", filter = null) {
-  const pageSize = 1000;
-  let from = 0;
-  const rows = [];
-  for (;;) {
-    let query = supabase
-      .from(table).select(columns).order("id", { ascending: true })
-      .range(from, from + pageSize - 1);
-    if (filter) query = filter(query);
-    const { data, error } = await query;
-    if (error) {
-      console.error(`fetchAllRows(${table}) fejlede:`, error.message);
-      break;
-    }
-    if (!data || data.length === 0) break;
-    rows.push(...data);
-    if (data.length < pageSize) break;
-    from += pageSize;
-  }
-  return rows;
+// Hentningen ligger i src/hentalle.js med sin egen test. Det er DEN hentning, hele
+// planlaegningsappen bygger paa: mangler der en opgave, findes den ikke for
+// planlaeggeren, og hun ser en tom plads i ugeplanen. Derfor er den flyttet ud,
+// hvor den kan proeves af uden at aabne appen.
+function fetchAllRows(table, columns = "*", filter = null) {
+  return hentAlleRaekker(supabase, table, columns, filter);
 }
 
 function weekdayKeyFor(date) {

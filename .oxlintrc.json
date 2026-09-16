@@ -17,7 +17,8 @@
     "opgavetid.test.mjs",
     "aftalerytme.test.mjs",
     "ugevalg.test.mjs",
-    "portefoelje.test.mjs"
+    "portefoelje.test.mjs",
+    "hentalle.test.mjs"
   ],
   "rules": {
     "no-undef": "error",
