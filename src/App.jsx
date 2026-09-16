@@ -2919,8 +2919,18 @@ function PlanningApp({ session, onSignOut }) {
       // Realtime-abonnementet, så vi skal ikke skræmme brugeren med en fejl
       // eller forsøge at gemme vores egen (nu overflødige) kopi igen.
       if (error.code === "23505" && String(error.message || "").includes("uniq_instance_slot")) {
-        console.warn("syncInstance: opgaven findes allerede (kapløb), ignorerer", inst.id);
-        return;
+        console.warn("syncInstance: pladsen er optaget", inst.id);
+        // Svaret gives TILBAGE og ikke bare til konsollen.
+        //
+        // 16.9.2026: to medarbejderoenskene om ny tid blev godkendt, medarbejderen
+        // fik besked om at opgaven var flyttet, og kunden blev lovet et besoeg -
+        // men opgaven blev aldrig flyttet. Den skulle ryddes ind paa en dag, hvor
+        // aftalen allerede havde et besoeg, og saa afviser databasen skrivningen.
+        // Her stod der «det er et kaploeb, ignorer det», og det passer, naar planen
+        // DANNER opgaver: to faner kan naa at lave den samme. Det passer ikke, naar
+        // nogen FLYTTER en - der betyder det, at pladsen er optaget, og det skal
+        // den, der trykkede, have at vide.
+        return { ok: false, pladsOptaget: true };
       }
       console.error("syncInstance error:", error.message, error.details, inst.id);
       // Uden dette forsvandt en fejlet gemning helt stille — opgaven virkede
@@ -2928,7 +2938,7 @@ function PlanningApp({ session, onSignOut }) {
       // gemt i databasen, og var så væk igen ved næste genindlæsning uden at
       // brugeren nogensinde fik besked om at noget gik galt.
       notify(`Kunne ikke gemme "${inst.title || "opgaven"}" — prøv igen (${error.message})`);
-      return;
+      return { ok: false, pladsOptaget: false };
     }
     // Adgangsteksten gemmes for sig, i den beskyttede tabel. Kun administratorer maa
     // skrive der, saa der spoerges ikke naar man ikke er det — ellers ville politikken
@@ -2948,6 +2958,7 @@ function PlanningApp({ session, onSignOut }) {
         instAccessRef.current = kopi;
       }
     }
+    return { ok: true, pladsOptaget: false };
   }, []);
 
   // Saetter fakturagrundlag paa mange opgaver i ét hug.
@@ -3878,7 +3889,29 @@ function PlanningApp({ session, onSignOut }) {
       warning: null,
     };
     setInstances((prev) => prev.map((x) => (x.id === t.id ? opdateret : x)));
-    syncInstance(opdateret);
+
+    // Der VENTES paa, at flytningen er gemt, foer oensket lukkes.
+    //
+    // 16.9.2026 blev to oenskene godkendt, medarbejderen fik besked om at opgaven
+    // var flyttet, og kunden var lovet et besoeg - men opgaven stod stadig paa den
+    // gamle dag. Her stod «syncInstance(opdateret)» uden await, og svaret blev
+    // kastet vaek. Den nye dag havde allerede et besoeg paa samme aftale, databasen
+    // afviste skrivningen, og alt det oevrige skete alligevel.
+    //
+    // Nu: gaar gemningen ikke igennem, lukkes oensket ikke, medarbejderen faar ikke
+    // besked, og skaermen rulles tilbage. Et oenske, der stadig staar som
+    // «afventer», er til at se og gore noget ved. Et, der staar som godkendt uden
+    // at vaere det, er der ingen der opdager.
+    const svar = await syncInstance(opdateret);
+    if (svar && svar.ok === false) {
+      setInstances((prev) => prev.map((x) => (x.id === t.id ? t : x)));
+      notify(svar.pladsOptaget
+        ? `Kunne ikke flytte: der ligger allerede en opgave på ${onske.requested_date} `
+          + `på den samme aftale. Flyt eller slet den først, og godkend så ønsket igen.`
+        : "Kunne ikke flytte opgaven — ønsket står stadig og kan godkendes igen.");
+      return;
+    }
+
     const { error } = await supabase.from("reschedule_requests")
       .update({ status: "godkendt", decided_at: new Date().toISOString() }).eq("id", onske.id);
     if (error) { notify("Opgaven er flyttet, men ønsket kunne ikke lukkes: " + error.message); return; }
