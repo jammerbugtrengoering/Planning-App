@@ -154,5 +154,40 @@ i alt: `iso_week_monday`, `instance_date`, `maanedsluk_periode` og `vaern_om_tje
 
 ---
 
+## Performance Advisor — hvad vi gjorde ved den (16. september 2026)
+
+Ingen fejl, 100 advarsler, 54 forslag. Kun to ting var værd at gøre noget ved:
+
+**Ni indeks lå i to eksemplarer**, ord for ord ens — formentlig fordi den samme
+opsætning er kørt to gange. Et indeks er ikke gratis: hver indsættelse og opdatering
+skal vedligeholde det, og med et par hundrede nye opgaver om dagen betalte skrivningen
+for det samme arbejde to gange. Det ene af hvert par er droppet.
+
+**`emp_update_self` kaldte `auth.uid()` én gang pr. række** i stedet for én gang for
+hele forespørgslen. Med tyve medarbejdere betyder det intet i praksis, men det koster
+ikke noget at skrive rigtigt. Efterprøvet: hun kan stadig rette sin egen række og ikke
+en kollegas.
+
+### Det vi bevidst lod stå
+
+**20 foreign keys uden indeks.** Næsten alle på små tabeller — tyve medarbejdere, en
+håndfuld områder. Et indeks koster på hver skrivning, og der er ingen læsning, der
+bliver hurtigere. Tages op igen, hvis en af tabellerne vokser.
+
+**90 «multiple permissive policies».** Det er `admin_all` plus en medarbejderregel på
+hver tabel. At slå dem sammen er en omskrivning af hele rækkesikkerheden, og risikoen
+for at åbne eller lukke noget forkert er langt større end den tid, der spares på
+tabeller med tyve rækker. **Rør det ikke for en advarsels skyld.**
+
+**Tre indeks, Advisoren kalder dubletter, er det ikke.** `instances_deleted_at_idx` er
+*delvis* (`where deleted_at is null`) og rammer præcis det, appen spørger om;
+`portal_brugere_auth_idx` og `wage_history_opslag_idx` ligger ved siden af hver sin
+unikke nøgle. De dækker forskellige ting, og gevinsten ved at fjerne dem er ikke til
+at måle.
+
+**Otte tabeller uden primærnøgle** er alle kopier og oprydningstabeller. Harmløst.
+
+---
+
 *Gennemgået 1. september 2026. Alle prøver kørt mod den rigtige database og rullet
 tilbage bagefter.*
