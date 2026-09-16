@@ -131,12 +131,26 @@ og kundedata i basen bør det være på plads, før I går produktivt.
 **Tilbudslinket har ingen hastighedsbegrænsning.** Nøglen er lang nok til, at gætteri er
 urealistisk, men portalens login har en grænse, og den her har ikke. Værd at ensrette.
 
-**Fire databasevisninger kører med ejerens rettigheder** (`aktive_medarbejdere`,
-`kundeoversigt`, `portal_opgaver`, `kunder_med_opgaver`). Det er sådan `portal_opgaver`
-er ment — den er kundens vindue. De tre andre bør gennemgås for, om de er for åbne.
+**~~Fire databasevisninger kører med ejerens rettigheder~~** — *lukket 16. september
+2026.* De var åbne for enhver med et login, og det inkluderer medarbejderne: Nadine
+har et Worklist-login og kunne med det læse hele kundebogen med omsætning pr. kunde.
 
-**To funktioner mangler fast `search_path`** (`iso_week_monday`, `instance_date`). Lav
-risiko, men det er den slags, der udnyttes, hvis noget andet først går galt.
+- `aktive_medarbejdere` er **slettet**. Den blev ikke brugt af nogen af de tre apps,
+  af nogen databasefunktion, politik eller visning — og gav medarbejdernes mails,
+  deres auth-id og hvem der er administrator til enhver med et login.
+- `kundeoversigt` og `kunder_med_opgaver` har fået `is_admin()` ind i selve visningen.
+  Planlæggerne ser præcis det samme som før; alle andre får en tom liste.
+- `portal_opgaver` er urørt. Den er ment som den er — kundens eget vindue, filtreret på
+  `current_portal_guid()`. Uden ejerens rettigheder ville den ikke virke, for kunden
+  har ingen adgang til `instances`.
+
+> Supabases Security Advisor **bliver ved med at melde de tre resterende** som fejl.
+> Den kan ikke se spærringen inde i visningen. Lav dem ikke om til `security_invoker`
+> for at få advarslen væk — så holder kundeportalen op med at virke. Efterprøvet som
+> både planlægger og medarbejder, rullet tilbage bagefter.
+
+**~~To funktioner mangler fast `search_path`~~** — *lukket 16. september 2026.* Fire
+i alt: `iso_week_monday`, `instance_date`, `maanedsluk_periode` og `vaern_om_tjekliste`.
 
 ---
 
