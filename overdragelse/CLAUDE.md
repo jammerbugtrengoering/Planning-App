@@ -75,6 +75,51 @@ se, at den blev meldt — begge veje, både nyt og fjernet felt.
 
 ---
 
+## Når I er flere om det samme repository
+
+Fem ting. De fire første tager et halvt minut, den femte er den, der kan koste en dag.
+
+**1. Hent ned, før du begynder.** Ikke før du pusher — *før du begynder*. Sidder I
+begge og retter i `App.jsx`, er det ikke til at flette bagefter.
+
+    git pull --rebase
+
+**2. Sæt dit navn i git, første gang på en ny maskine.** Ellers står der «Dit Navn» i
+historikken, og om et halvt år kan ingen se, hvem der lavede ændringen, eller hvem man
+skal spørge.
+
+    git config --global user.name "Fornavn Efternavn"
+    git config --global user.email "din@adresse.dk"
+
+**3. Push, så snart noget virker.** Små ændringer, ofte. Jo længere en ændring ligger
+lokalt, jo mere når den anden at bygge oven på noget andet.
+
+**4. Sig højt, hvad I arbejder på.** Git kan flette to filer, der er rørt hver sit
+sted. Det kan ikke afgøre, hvem der havde ret, hvis I har rettet det samme.
+
+**5. Databasen har ingen kopi og kan ikke flettes.** Det er dén, der gør ondt. Koden
+kan rulles tilbage; en tabel, der er lavet om, mens den andens app kørte på den gamle
+form, kan ikke. Så: **kun én ad gangen rører databasen, og den anden får det at vide,
+før det sker.** Det gælder også, når Claude gør det på jeres vegne.
+
+Og husk, at Netlify lægger ud, så snart der er pushet. Det, I pusher, er live for
+kontoret og for medarbejdernes telefoner inden for et par minutter — også midt i en
+arbejdsdag.
+
+### Bliver et push afvist
+
+    ! [rejected]  main -> main (fetch first)
+
+Så har den anden pushet imens. Det er ikke en fejl, du har lavet:
+
+    git pull --rebase
+    git push origin main
+
+Kommer der en konflikt, **så stop**. Lad være med at gætte, og lad være med at bruge
+`--force` — det sletter den andens arbejde. Vis beskeden til den, der kan hjælpe.
+
+---
+
 ## Slut altid af med push-kommandoen
 
 Claude kan ikke nå GitHub — adgangskoden ligger i brugerens nøglering, ikke i Claudes
@@ -112,3 +157,10 @@ i træk på noget, der allerede var pushet.
 - En kopitabel lavet med `create table as` arver Supabases tildelinger: `anon` og
   `authenticated` får fuld adgang. `revoke` dem ved navn og slå RLS til — `revoke ...
   from public` gør det ikke.
+- **Tilføjer du en kolonne til `instances`, skal den også med i visningen
+  `instances_let`.** Planlægningsappen henter derfra ved opstart, fordi tjeklistens
+  indhold fylder over halvdelen af de data, den ellers ville trække. Er kolonnen ikke
+  med i visningen, findes den ikke for planlæggeren — og første gang appen gemmer
+  opgaven, bliver feltet nulstillet. Morgentjekket fortæller dig om den nye kolonne
+  (den står som uklassificeret persondata), men det er dig, der skal huske visningen.
+  `select * from instances_let_mangler();` siger, hvad der mangler.

@@ -565,9 +565,19 @@ function buildChecklistItems(checklistTemplateIds, extraItems, checklistTemplate
     };
   });
 }
+// «3/5» paa brikken i ugeplanen.
+//
+// Tjeklistens INDHOLD hentes ikke ved opstart - den fylder 7 af de 13 MB, og kun 48
+// af 10.149 opgaver har et flueben sat. Men tallet skal stadig staa der, saa
+// databasen regner det ud i visningen instances_let og sender to smaa tal med.
+//
+// Er listen hentet (opgaven er aabnet), taelles der paa den - saa flytter tallet sig
+// med det samme, naar man saetter et flueben, uden at vente paa databasen.
 function checklistProgress(t) {
-  const items = t.checklist || [];
-  return { done: items.filter((i) => i.done).length, total: items.length };
+  if (Array.isArray(t.checklist)) {
+    return { done: t.checklist.filter((i) => i.done).length, total: t.checklist.length };
+  }
+  return { done: t.checklistUdfoert || 0, total: t.checklistAntal || 0 };
 }
 function itemText(x) { return typeof x === "string" ? x : x.text; }
 
@@ -2084,6 +2094,49 @@ function PlanningApp({ session, onSignOut }) {
   const [running, setRunning] = useState({});
   const [dragId, setDragId] = useState(null);
   const [openTaskId, setOpenTaskId] = useState(null);
+
+  // Tjeklisten hentes foerst, naar en opgave aabnes.
+  //
+  // Ved opstart henter appen opgaverne fra instances_let, som er den samme tabel
+  // uden tjeklistens indhold - 7 af de 13 MB. Kun 48 af 10.149 opgaver har et
+  // flueben sat, saa resten er punkternes tekst, kopieret ud paa hvert eneste
+  // fremtidige besoeg. Den hentes her, én opgave ad gangen, og det er én lille
+  // forespoergsel i det oejeblik, nogen klikker.
+  //
+  // Fejler den, saettes tjeklisten IKKE til []. Saa staar opgaven uden punkter paa
+  // skaermen - irriterende, men til at se - i stedet for at se tom ud og blive
+  // gemt tom. syncInstance skriver kun tjeklisten med, hvis den er et array, og
+  // databasen har den samme regel i vaern_om_tjekliste().
+  const hentTjeklisteFor = useCallback(async (taskId) => {
+    if (!taskId) return;
+    const { data, error } = await supabase
+      .from("instances").select("checklist").eq("id", taskId).maybeSingle();
+    if (error) { console.error("kunne ikke hente tjeklisten:", error.message); return; }
+    if (!data || !Array.isArray(data.checklist)) return;
+    setInstances((prev) => prev.map((t) =>
+      t.id === taskId && !Array.isArray(t.checklist) ? { ...t, checklist: data.checklist } : t));
+  }, []);
+
+  useEffect(() => { hentTjeklisteFor(openTaskId); }, [openTaskId, hentTjeklisteFor]);
+
+  // Flere paa én gang. Bruges foer en udskrift, hvor punkterne skal med paa papiret.
+  const hentTjeklisterFor = useCallback(async (ider) => {
+    // Der spoerges paa ALLE de viste opgaver og ikke kun paa dem, der mangler.
+    // En udskrift er en uges opgaver - halvtreds til hundrede - og ét opslag er
+    // billigere end at holde styr paa, hvilke der allerede var hentet. Nedenfor
+    // roeres kun dem, der faktisk manglede.
+    const mangler = [...new Set(ider || [])];
+    if (mangler.length === 0) return;
+    const hentede = new Map();
+    for (let i = 0; i < mangler.length; i += 500) {
+      const { data, error } = await supabase
+        .from("instances").select("id, checklist").in("id", mangler.slice(i, i + 500));
+      if (error) { console.error("kunne ikke hente tjeklisterne:", error.message); return; }
+      (data || []).forEach((r) => { if (Array.isArray(r.checklist)) hentede.set(r.id, r.checklist); });
+    }
+    setInstances((prev) => prev.map((t) =>
+      hentede.has(t.id) && !Array.isArray(t.checklist) ? { ...t, checklist: hentede.get(t.id) } : t));
+  }, []);
   const [showTravelSettings, setShowTravelSettings] = useState(false);
   const [productUsage, setProductUsage] = useState([]);
 
@@ -2207,7 +2260,7 @@ function PlanningApp({ session, onSignOut }) {
         // Slettemarkerede opgaver (aftalen er sat som udgaaet) hentes aldrig ind.
       // Dermed forsvinder de fra ugeplan, fakturering, rapportering og alt andet
       // paa én gang, uden at hvert modul skal huske at filtrere.
-      fetchAllRows("instances", "*", (q) => q.is("deleted_at", null)).then((data) => ({ data })),
+      fetchAllRows("instances_let", "*", (q) => q.is("deleted_at", null)).then((data) => ({ data })),
       hentMedFornyelse("ønsker om ny tid", () => supabase.from("reschedule_requests").select("*").eq("status", "afventer")),
       hentMedFornyelse("bestillinger fra kunder", () => supabase.from("portal_bestillinger").select("*").eq("status", "ny").order("oprettet")),
       hentMedFornyelse("kommentarer og billeder", () => supabase.from("task_notes").select("*").order("created_at", { ascending: false })),
@@ -2667,6 +2720,12 @@ function PlanningApp({ session, onSignOut }) {
         kmTurRetur: i.km_tur_retur ?? false,
         oplaeringMedarbejdere: i.oplaering_medarbejdere ?? [],
         kmAnslaaet: i.km_anslaaet ?? null,
+        // De to tal fra instances_let. checklist staar med vilje som undefined, naar
+        // listen ikke er hentet - IKKE som [], for en tom liste og «ikke hentet» maa
+        // aldrig kunne forveksles. Det er forskellen paa at vise 0/0 og paa at skrive
+        // en tom liste tilbage i databasen.
+        checklistAntal: i.checklist_antal ?? null,
+        checklistUdfoert: i.checklist_udfoert ?? null,
       };
     }
 
@@ -2795,7 +2854,19 @@ function PlanningApp({ session, onSignOut }) {
   }, []);
 
   const syncInstance = useCallback(async (inst) => {
+    // Tjeklisten skrives KUN med, hvis den er hentet.
+    //
+    // Siden 16.9.2026 hentes tjeklistens indhold ikke ved opstart - den fylder 7 af
+    // de 13 MB, og kun 48 af 10.149 opgaver har et flueben sat. Den hentes, naar en
+    // opgave aabnes. Men saa maa en opgave, der ALDRIG er aabnet, heller ikke faa
+    // skrevet «checklist: []» tilbage, bare fordi nogen flyttede den i planen -
+    // saa var punkterne vaek, uden en fejlmeddelelse og uden at nogen saa det.
+    //
+    // Databasen har den samme regel i vaern_om_tjekliste(), og den har det sidste
+    // ord. Den her er den foerste af to laase, ikke den eneste.
+    const tjeklisteFelt = Array.isArray(inst.checklist) ? { checklist: inst.checklist } : {};
     const { error } = await supabase.from("instances").upsert({
+      ...tjeklisteFelt,
       id: inst.id, template_id: inst.templateId ?? null, title: inst.title,
       type: inst.type, week: inst.week, year: inst.year ?? null, day: inst.day ?? null,
       deadline: inst.deadline ?? null, duration: inst.duration,
@@ -2804,7 +2875,6 @@ function PlanningApp({ session, onSignOut }) {
       dinero_contact_guid: inst.dineroContactGuid || null,
       warning: inst.warning ?? null,
       assignees: inst.assignees ?? [],
-      checklist: inst.checklist ?? [],
       time_log: inst.timeLog ?? [],
       required_skills: inst.requiredSkills ?? [],
       customer_name: inst.customerName ?? "",
@@ -4161,15 +4231,43 @@ function PlanningApp({ session, onSignOut }) {
       if (!(t.checklistTemplateIds || []).includes(tpl.id)) return t;
       return { ...t, checklistItems: buildChecklistItems(t.checklistTemplateIds, t.extraItems, nextLib, t.checklistItems) };
     }));
-    setInstances((prev) => prev.map((inst) => {
-      if (!(inst.checklistTemplateIds || []).includes(tpl.id)) return inst;
-      // Udfoerte opgaver roeres ikke. Deres tjekliste er dokumentation for hvad der
-      // faktisk blev gjort ude hos kunden, og den maa ikke aendre sig bagudrettet.
-      if (inst.status === "udført") return inst;
-      const updated = { ...inst, checklist: buildChecklistItems(inst.checklistTemplateIds, inst.extraItems, nextLib, inst.checklist) };
-      syncInstance(updated);
-      return updated;
-    }));
+    // Tjeklisterne skal vaere hentet, FOER de bygges om.
+    //
+    // Siden tjeklisten ikke laengere hentes ved opstart, staar den som undefined paa
+    // de opgaver, ingen har aabnet. Byggede vi om paa dem alligevel, ville de
+    // afkrydsede punkter blive genopbygget fra skabelonen - og fluebenene forsvinde.
+    // Det ville ramme de faa opgaver, der er i gang, og ingen andre, saa ingen ville
+    // opdage det foer medarbejderen stod med en tjekliste, der var blevet tom.
+    //
+    // Derfor hentes de manglende foerst, i ét opslag, og saa bygges der om.
+    (async () => {
+      const skalRoeres = instances.filter((i) =>
+        (i.checklistTemplateIds || []).includes(tpl.id) && i.status !== "udført");
+      const mangler = skalRoeres.filter((i) => !Array.isArray(i.checklist)).map((i) => i.id);
+      const hentede = new Map();
+      for (let i = 0; i < mangler.length; i += 500) {
+        const { data, error } = await supabase
+          .from("instances").select("id, checklist").in("id", mangler.slice(i, i + 500));
+        if (error) {
+          dbFail(error, "hente tjeklisterne — skabelonen er ikke ændret på opgaverne");
+          return;
+        }
+        (data || []).forEach((r) => hentede.set(r.id, r.checklist));
+      }
+      setInstances((prev) => prev.map((inst) => {
+        if (!(inst.checklistTemplateIds || []).includes(tpl.id)) return inst;
+        // Udfoerte opgaver roeres ikke. Deres tjekliste er dokumentation for hvad der
+        // faktisk blev gjort ude hos kunden, og den maa ikke aendre sig bagudrettet.
+        if (inst.status === "udført") return inst;
+        const nuvaerende = Array.isArray(inst.checklist) ? inst.checklist : hentede.get(inst.id);
+        // Kom den stadig ikke med, springes opgaven over. Bedre at lade én opgave
+        // staa med den gamle tjekliste end at bygge den om uden fluebenene.
+        if (!Array.isArray(nuvaerende)) return inst;
+        const updated = { ...inst, checklist: buildChecklistItems(inst.checklistTemplateIds, inst.extraItems, nextLib, nuvaerende) };
+        syncInstance(updated);
+        return updated;
+      }));
+    })();
     syncChecklistTemplate(tpl);
   }
   function deleteChecklistTemplate(id) {
@@ -4746,6 +4844,7 @@ function PlanningApp({ session, onSignOut }) {
       {view === "uge" && (
         <WeekView
           employees={aktiveEmployees} instances={weekInstancesList} unplaced={unplaced} opgaveNoter={opgaveNoter}
+          onHentTjeklisterTilPrint={hentTjeklisterFor}
           // Adgangsoplysningerne ligger allerede i hukommelsen: planlaeggeren er
           // administrator og henter dem ved opstart. De sendes med, men bruges KUN
           // naar fluebenet paa udskriften er sat.
@@ -4982,7 +5081,7 @@ function todayKeyGuess() {
 // ---------- Week view ----------
 // Send email notification to employee about day changes
 
-function WeekView({ employees, instances, unplaced, adgangTekst, onUdskrivMedAdgang, onAdd, onAuto, onScheduleWeek, onAutoAllWeeks, onPlace, onUnplace, onRemoveAssignee, onDelete, onOpenTask, onToggleInclude, onEditEmp, dragId, setDragId, weekLabel, weekNo, weekOffset, weekYear, onPrevWeek, onNextWeek, onTodayWeek, travelSettings, onOpenTravelSettings, currentIsoWeek, areas, employeeAreas, onOpenAddBlock, onOpenAddActivity, opgaveNoter }) {
+function WeekView({ employees, instances, unplaced, adgangTekst, onUdskrivMedAdgang, onHentTjeklisterTilPrint, onAdd, onAuto, onScheduleWeek, onAutoAllWeeks, onPlace, onUnplace, onRemoveAssignee, onDelete, onOpenTask, onToggleInclude, onEditEmp, dragId, setDragId, weekLabel, weekNo, weekOffset, weekYear, onPrevWeek, onNextWeek, onTodayWeek, travelSettings, onOpenTravelSettings, currentIsoWeek, areas, employeeAreas, onOpenAddBlock, onOpenAddActivity, opgaveNoter }) {
   const [addMenuTaskId, setAddMenuTaskId] = useState(null);
   const [showWeekend, setShowWeekend] = useState(false);
   // Belaegningen er foldet vaek som udgangspunkt. Se kommentaren ved selve blokken.
@@ -5041,6 +5140,18 @@ function WeekView({ employees, instances, unplaced, adgangTekst, onUdskrivMedAdg
       // Loggen skrives FOER udskriften. Fortryder man i printdialogen, staar der en
       // linje for meget — og det er den rigtige vej at tage fejl paa.
       if (onUdskrivMedAdgang) await onUdskrivMedAdgang(synlige);
+    }
+    // Tjeklisterne hentes, foer der printes.
+    //
+    // De hentes ikke laengere ved opstart, og udskriften er den ENE skaerm, hvor et
+    // manglende punkt ikke kan ses: medarbejderen staar med sedlen i bilen og har
+    // ingen anden kilde. Paa skaermen kan man klikke sig ind og opdage det; paa
+    // papir er der kun det, der stod, da der blev trykket print.
+    if (onHentTjeklisterTilPrint) {
+      const til = instances
+        .filter((t) => visibleEmployees.some((e) => (t.assignees || []).includes(e.id)))
+        .map((t) => t.id);
+      await onHentTjeklisterTilPrint(til);
     }
     window.print();
   }
