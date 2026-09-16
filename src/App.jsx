@@ -5698,7 +5698,20 @@ function WeekView({ employees, instances, unplaced, adgangTekst, onUdskrivMedAdg
                           ) : null}
                           {(t.checklist || []).length > 0 ? (
                             <ul style={{ margin: "6px 0 0", paddingLeft: 18, fontSize: 13 }}>
-                              {(t.checklist || []).map((c, i) => <li key={i}>☐ {c.text || c}</li>)}
+                              {/* Fluebenet skal med paa papiret.
+                                  Her stod «☐» fast, uanset om punktet var sat. En
+                                  udskrift af en opgave, der var halvt lavet, saa
+                                  ud som om der intet var gjort - og saa er sedlen
+                                  ikke til at arbejde efter. Opdaget 16.9.2026.
+                                  Stregen igennem er ikke pynt: paa en fotokopi i
+                                  daarligt lys er ☑ og ☐ til at forveksle. */}
+                              {(t.checklist || []).map((c, i) => (
+                                <li key={i} style={c.done
+                                  ? { textDecoration: "line-through", color: "#64748B" }
+                                  : undefined}>
+                                  {c.done ? "☑" : "☐"} {c.text || c}
+                                </li>
+                              ))}
                             </ul>
                           ) : null}
                         </div>
