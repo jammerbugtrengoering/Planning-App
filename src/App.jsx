@@ -1703,7 +1703,8 @@ const MODULE_HELP = {
         "Den er ikke væk. Vælg «Udgåede», så står de der alle sammen med kontraktsum og realiseret — og tallet på knappen siger, hvor mange der er lagt til side.",
         "Er der stadig én opgave tilbage, der ikke er udført, bliver aftalen liggende. Så er der noget, nogen skal tage stilling til, og så skal den kunne ses uden at man leder efter den."] },
     { h: "⚠ Ser ud som dublet", p: [
-        "Mærket står på kortet, når en anden aftale har samme adresse, mindst én fælles ugedag og samme varighed. Hold musen over for at se hvilke.",
+        "Mærket står kun på kladder. De aktive aftaler er gennemgået og kører — et advarselsmærke på dem ville så tvivl om noget, der allerede er taget stilling til. Bunken, der skal ses igennem, er kladderne.",
+        "Mærket står på kortet, når en anden aftale har samme adresse, mindst én fælles ugedag og samme varighed. Hold musen over for at se hvilke. Modparten kan lige så godt være en aktiv aftale som en anden kladde — det er netop en aktiv aftale på adressen, der gør kladden overflødig.",
         "Adressen alene er ikke nok. BHJ har tre forskellige rengøringer på Egevej 49, og på Postvænget 2 bor der både en borger med kommunal ordning og en privatkunde — de skal ikke stå og lyse. Derfor skal dag og varighed også passe.",
         "Rytmen tælles ikke med. En aftale kan sagtens være den samme, selvom den ene står som hver 14. dag og den anden som hver 4. uge — det er netop dét, der er gået galt, når nogen har oprettet den to gange.",
         "Mærket regnes ud på stedet og står ikke gemt nogen steder. Retter du den ene aftale, eller markerer den til sletning, forsvinder mærket af sig selv på den anden.",
@@ -9366,10 +9367,11 @@ function ContractsView({ templates: alleTemplates, instances, pricing, employees
   }
   const gjortOpAntal = alleTemplates.filter(erGjortOp).length;
 
-  // Hvilke aftaler ligger paa samme adresse som en anden? Reglen ligger i
+  // Hvilke KLADDER ligger paa samme adresse som en anden aftale? Reglen ligger i
   // src/dubletter.js med sin egen test. Den regnes LIVE og staar ikke i en
   // kolonne: saa forsvinder markeringen af sig selv, naar dubletten er ryddet,
-  // og den fanger ogsaa dem, ingen indlaesning har lavet.
+  // og den fanger ogsaa dem, ingen indlaesning har lavet. De aktive aftaler
+  // taeller med som modpart, men faar ikke selv et maerke.
   const dubletter = useMemo(() => findDubletter(alleTemplates), [alleTemplates]);
 
   // Der filtreres foer listen deles op i aftaler med og uden udloebsdato, saa begge
@@ -9649,7 +9651,10 @@ function ContractsView({ templates: alleTemplates, instances, pricing, employees
                     {/* Ligger der en anden aftale paa samme adresse? Saa staar det
                         paa LISTEN og ikke kun inde i aftalen. 38 af de 45 indlaeste
                         kladder var dubletter, og de skal kunne ses uden at aabne
-                        hver enkelt. Hold musen over for at se hvilke. */}
+                        hver enkelt. Hold musen over for at se hvilke.
+                        Maerket sidder KUN paa kladder — de aktive aftaler er
+                        gennemgaaet, og et advarselsmaerke paa dem saar tvivl om noget,
+                        kontoret allerede har afgjort. Reglen ligger i dubletter.js. */}
                     {dubletter.has(t.id) && (
                       <span
                         title={"Samme adresse som:\n" + dubletter.get(t.id)
@@ -9758,7 +9763,10 @@ function ContractsView({ templates: alleTemplates, instances, pricing, employees
                     {/* Ligger der en anden aftale paa samme adresse? Saa staar det
                         paa LISTEN og ikke kun inde i aftalen. 38 af de 45 indlaeste
                         kladder var dubletter, og de skal kunne ses uden at aabne
-                        hver enkelt. Hold musen over for at se hvilke. */}
+                        hver enkelt. Hold musen over for at se hvilke.
+                        Maerket sidder KUN paa kladder — de aktive aftaler er
+                        gennemgaaet, og et advarselsmaerke paa dem saar tvivl om noget,
+                        kontoret allerede har afgjort. Reglen ligger i dubletter.js. */}
                     {dubletter.has(t.id) && (
                       <span
                         title={"Samme adresse som:\n" + dubletter.get(t.id)

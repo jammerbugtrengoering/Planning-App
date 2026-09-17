@@ -46,17 +46,39 @@ er("intet giver ingen nøgle", adressenoegle(null), "");
 er("kun et nummer giver ingen nøgle", adressenoegle("42"), "");
 
 // ── Selve fundet ────────────────────────────────────────────────────────────
-const t = (id, address, status = "aktiv", days = ["Mon"], duration = 60) =>
+const t = (id, address, status = "kladde", days = ["Mon"], duration = 60) =>
   ({ id, address, status, title: id, days, duration });
 
 {
   const d = findDubletter([
     t("a", "Klausholmvej 56, Øland"),
-    t("b", "Klausholmvej 56, 9460 Øland", "kladde"),
+    t("b", "Klausholmvej 56, 9460 Øland"),
     t("c", "Udklitvej 155, Fjerritslev"),
   ]);
   er("de to på samme adresse peger på hinanden", [d.get("a").map(x=>x.id), d.get("b").map(x=>x.id)], [["b"], ["a"]]);
   er("den alene får ingen markering", d.has("c"), false);
+}
+
+// ── Mærket hører kun til i kladdeoversigten ─────────────────────────────────
+// De aktive aftaler er gennemgået og i drift. Et «ser ud som dublet» på en af dem
+// sår tvivl om noget, kontoret allerede har afgjort. Bunken, der skal gennemgås,
+// er kladderne fra de indlæste ruteplaner — så det er dem, mærket sidder på.
+{
+  const d = findDubletter([
+    t("aktiv1", "Bejstrupvej 72", "aktiv"),
+    t("aktiv2", "Bejstrupvej 72", "aktiv"),
+  ]);
+  er("to aktive aftaler får ingen markering", d.size, 0);
+}
+// Men en aktiv aftale er stadig en gyldig modpart: det er netop dét, der gør
+// kladden til en dublet.
+{
+  const d = findDubletter([
+    t("gammel", "Bejstrupvej 72", "aktiv"),
+    t("indlaest", "Bejstrupvej 72", "kladde"),
+  ]);
+  er("kun kladden markeres", [...d.keys()], ["indlaest"]);
+  er("men den peger på den aktive", d.get("indlaest").map((x) => x.id), ["gammel"]);
 }
 
 // En udgået aftale gør ikke en ny til dublet — den er jo netop afløst.
@@ -100,23 +122,23 @@ const t = (id, address, status = "aktiv", days = ["Mon"], duration = 60) =>
 // Postvænget 2 bor der både en borger med kommunal ordning og en privatkunde.
 {
   const d = findDubletter([
-    t("bhj1", "Egevej 49, Brovst", "aktiv", ["Fri"], 150),
-    t("bhj2", "Egevej 49, Brovst", "aktiv", ["Fri"], 60),
-    t("bhj3", "Egevej 49, Brovst", "aktiv", ["Tue"], 150),
+    t("bhj1", "Egevej 49, Brovst", "kladde", ["Fri"], 150),
+    t("bhj2", "Egevej 49, Brovst", "kladde", ["Fri"], 60),
+    t("bhj3", "Egevej 49, Brovst", "kladde", ["Tue"], 150),
   ]);
   er("tre forskellige rengøringer på samme adresse er ikke dubletter", d.size, 0);
 }
 {
   const d = findDubletter([
-    t("borger", "Postvænget 2, Brovst", "aktiv", ["Tue"], 20),
-    t("privat", "Postvænget 2, Brovst", "aktiv", ["Tue"], 90),
+    t("borger", "Postvænget 2, Brovst", "kladde", ["Tue"], 20),
+    t("privat", "Postvænget 2, Brovst", "kladde", ["Tue"], 90),
   ]);
   er("samme dag men forskellig varighed er ikke dublet", d.size, 0);
 }
 {
   const d = findDubletter([
-    t("a", "Fælledvej 2b", "aktiv", ["Fri"], 30),
-    t("b", "Fælledvej 2b", "aktiv", ["Fri"], 45),
+    t("a", "Fælledvej 2b", "kladde", ["Fri"], 30),
+    t("b", "Fælledvej 2b", "kladde", ["Fri"], 45),
   ]);
   er("30 og 45 minutter er to forskellige opgaver", d.size, 0);
 }
@@ -127,7 +149,7 @@ const t = (id, address, status = "aktiv", days = ["Mon"], duration = 60) =>
     t("gammel", "Bejstrupvej 72, Fjerritslev", "aktiv", ["Mon"], 120),
     t("indlaest", "Bejstrupvej 72, Fjerritslev", "kladde", ["Mon"], 120),
   ]);
-  er("samme adresse, dag og varighed er en dublet", d.size, 2);
+  er("samme adresse, dag og varighed er en dublet", [...d.keys()], ["indlaest"]);
 }
 // Rytmen tælles bevidst ikke med: de indlæste kladder har en gættet rytme, og
 // kræver man også den, smutter netop de dubletter, markeringen er lavet til.
@@ -136,7 +158,7 @@ const t = (id, address, status = "aktiv", days = ["Mon"], duration = 60) =>
     { id: "a", address: "Bejstrupvej 72", status: "aktiv", days: ["Mon"], duration: 120, planInterval: "4_uger" },
     { id: "b", address: "Bejstrupvej 72", status: "kladde", days: ["Mon"], duration: 120, planInterval: "14_dage" },
   ]);
-  er("forskellig rytme forhindrer ikke fundet", d.size, 2);
+  er("forskellig rytme forhindrer ikke fundet", [...d.keys()], ["b"]);
 }
 // Overlap er nok — hun kommer begge dage i den ene aftale.
 {
@@ -144,13 +166,13 @@ const t = (id, address, status = "aktiv", days = ["Mon"], duration = 60) =>
     t("flere", "Spurvevej 8", "kladde", ["Tue", "Thu"], 10),
     t("en", "Spurvevej 8", "aktiv", ["Thu"], 10),
   ]);
-  er("én fælles ugedag er nok", d.size, 2);
+  er("én fælles ugedag er nok", [...d.keys()], ["flere"]);
 }
 // En varighed på nul siger ingenting og må ikke gøre to aftaler ens.
 {
   const d = findDubletter([
-    t("x", "Ukendtvej 1", "aktiv", ["Mon"], 0),
-    t("y", "Ukendtvej 1", "aktiv", ["Mon"], 0),
+    t("x", "Ukendtvej 1", "kladde", ["Mon"], 0),
+    t("y", "Ukendtvej 1", "kladde", ["Mon"], 0),
   ]);
   er("to gange nul minutter er ikke et fund", d.size, 0);
 }

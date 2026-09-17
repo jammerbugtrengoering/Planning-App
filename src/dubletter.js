@@ -56,9 +56,21 @@ function sammeVarighed(a, b) {
   return Number(a.duration) > 0 && Number(a.duration) === Number(b.duration);
 }
 
-// Returnerer en Map: aftale-id → de øvrige aftaler, der ligner den.
-// En aftale, der selv er udgået eller markeret til sletning, tæller hverken med
-// eller får en markering — dubletten er jo netop på vej væk.
+// Kun kladder får mærket.
+//
+// 17.9.2026: markeringen stod i første omgang på alle aftaler, og det var forkert
+// sted at have den. De aktive aftaler er gennemgået og i drift — står der «ser ud
+// som dublet» på en af dem, sår det tvivl om noget, kontoret allerede har taget
+// stilling til. Bunken, der SKAL gennemgås, er kladderne fra de indlæste ruteplaner.
+//
+// De aktive aftaler tæller stadig med som modpart: en kladde er netop en dublet,
+// fordi der allerede ligger en rigtig aftale på adressen. Det er kun selve mærket,
+// der er flyttet over på kladden — den, nogen skal træffe en beslutning om.
+const MARKERES = "kladde";
+
+// Returnerer en Map: kladde-id → de øvrige aftaler, den ligner (kladder såvel som
+// aktive). En aftale, der selv er udgået eller markeret til sletning, tæller
+// hverken med eller får en markering — dubletten er jo netop på vej væk.
 export function findDubletter(templates = []) {
   const efterNoegle = new Map();
   (templates || []).forEach((t) => {
@@ -73,6 +85,7 @@ export function findDubletter(templates = []) {
   efterNoegle.forEach((gruppe) => {
     if (gruppe.length < 2) return;
     gruppe.forEach((t) => {
+      if (t.status !== MARKERES) return;
       const ligner = gruppe.filter(
         (a) => a.id !== t.id && overlapperDag(t, a) && sammeVarighed(t, a));
       if (ligner.length) ud.set(t.id, ligner);
