@@ -24,7 +24,7 @@ til at overskrive en. Nu kan man i det mindste se, hvad der stod, og hvad der er
 
 ## MANGLER: mappen er kun halvt fyldt
 
-Der ligger **to** funktioner her ud af sytten. Det er med vilje, og det skal gøres
+Der ligger **seks** funktioner her ud af tyve. Det er med vilje, og det skal gøres
 færdigt — men det skal gøres med et værktøj og ikke i hånden.
 
 Der lå i forvejen en `send-email/index.ts`, men den var forældet: 68 linjer mod cirka
@@ -32,7 +32,7 @@ Der lå i forvejen en `send-email/index.ts`, men den var forældet: 68 linjer mo
 forældet kopi er farligere end ingen — den ser rigtig ud, og nogen kunne finde på at
 rulle den ud. Git husker den stadig, hvis nogen skulle få brug for at se, hvad der stod.
 
-De tre er dem, vi kan stå inde for tegn for tegn, fordi de blev skrevet her.
+De seks er dem, vi kan stå inde for tegn for tegn, fordi de blev skrevet her.
 De øvrige fjorten skulle kopieres af fra Supabase, og fire tusind linjer kopieret i
 hånden har en reel risiko for en tavs tegnfejl. **En kopi, man ikke kan stole på, er
 værre end ingen kopi** — den ser rigtig ud lige indtil den dag, man skal bruge den.
@@ -59,6 +59,9 @@ Derefter, fra `Planning-App`-mappen (drop `npx supabase@latest` og skriv bare
 
 ```
 npx supabase@latest functions download dinero               --project-ref gteowfoahsfpunzgdxum
+npx supabase@latest functions download dinero-omsaetning    --project-ref gteowfoahsfpunzgdxum
+npx supabase@latest functions download dinero-omsaetning-sync --project-ref gteowfoahsfpunzgdxum
+npx supabase@latest functions download dinero-omsaetning-probe --project-ref gteowfoahsfpunzgdxum
 npx supabase@latest functions download dinero-probe         --project-ref gteowfoahsfpunzgdxum
 npx supabase@latest functions download compute-daily-km     --project-ref gteowfoahsfpunzgdxum
 npx supabase@latest functions download travel-distance      --project-ref gteowfoahsfpunzgdxum
@@ -77,7 +80,7 @@ npx supabase@latest functions download tilbud-offentlig     --project-ref gteowf
 npx supabase@latest functions download tilbud-pdf           --project-ref gteowfoahsfpunzgdxum
 ```
 
-Alle sytten er med — også de to, der allerede ligger her. Så bliver de overskrevet med
+Alle tyve er med — også de seks, der allerede ligger her. Så bliver de overskrevet med
 den udrullede udgave, og så ved I med sikkerhed, at der ikke står noget andet i mappen
 end det, der faktisk kører.
 
@@ -121,6 +124,9 @@ kopiere tilbage — og så er det filen her, der skal opdateres, ikke omvendt.
 | `send-push` | Push-beskeder til telefonerne | De øvrige funktioner |
 | `travel-distance` | Afstand og køretid mellem to adresser | Planlægningsappen |
 | `dinero` | Kunder, fakturaer og bogføring | Planlægningsappen |
+| `dinero-omsaetning` | Faktureret omsætning måned for måned, et år ad gangen | I hånden |
+| `dinero-omsaetning-sync` | Skriver betalt omsætning pr. måned ind i `dinero_omsaetning` | Natligt job kl. 4.15 |
+| `dinero-omsaetning-probe` | Afprøvning brugt under bygningen af synkroniseringen | I hånden |
 | `dinero-probe` | Afprøver forbindelsen til Dinero | I hånden |
 | `inviter-bruger` | Opretter login til en ny medarbejder | Planlægningsappen |
 | `fratraed-medarbejder` | Lukker adgangen for en der stopper | Planlægningsappen |
