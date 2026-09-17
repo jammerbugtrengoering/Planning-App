@@ -11,6 +11,7 @@ import { holdOejeMedNyVersion } from "./nyversion";
 import { filtrerUgevalg } from "./ugevalg";
 import { portefoeljeTal, aarMedBesoeg } from "./portefoelje";
 import { hentAlleRaekker } from "./hentalle";
+import { findDubletter } from "./dubletter";
 import {
   Plus, Download, X, Clock, AlertTriangle,
   Trash2, Pencil, Repeat, Zap, CalendarClock, Wand2, Star, ChevronLeft, ChevronRight, ChevronUp, ChevronDown,
@@ -1701,6 +1702,12 @@ const MODULE_HELP = {
         "En udgået aftale, hvor den sidste opgave er udført, er «gjort op». Den falder af listen af sig selv, så den ikke ligger og fylder mellem de aktive resten af tiden.",
         "Den er ikke væk. Vælg «Udgåede», så står de der alle sammen med kontraktsum og realiseret — og tallet på knappen siger, hvor mange der er lagt til side.",
         "Er der stadig én opgave tilbage, der ikke er udført, bliver aftalen liggende. Så er der noget, nogen skal tage stilling til, og så skal den kunne ses uden at man leder efter den."] },
+    { h: "⚠ Ser ud som dublet", p: [
+        "Mærket står på kortet, når en anden aftale har samme adresse, mindst én fælles ugedag og samme varighed. Hold musen over for at se hvilke.",
+        "Adressen alene er ikke nok. BHJ har tre forskellige rengøringer på Egevej 49, og på Postvænget 2 bor der både en borger med kommunal ordning og en privatkunde — de skal ikke stå og lyse. Derfor skal dag og varighed også passe.",
+        "Rytmen tælles ikke med. En aftale kan sagtens være den samme, selvom den ene står som hver 14. dag og den anden som hver 4. uge — det er netop dét, der er gået galt, når nogen har oprettet den to gange.",
+        "Mærket regnes ud på stedet og står ikke gemt nogen steder. Retter du den ene aftale, eller markerer den til sletning, forsvinder mærket af sig selv på den anden.",
+        "Det siger «ser ud som» og ikke «er». To naboer i samme opgang med samme rengøring på samme dag rammer også — se efter, før du sletter."] },
     { h: "Markér til sletning", p: [
         "🗑 «Markér til sletning» sætter aftalen til side, uden at slette noget. Den kan findes igen under filteret «Skal slettes», og tallet på knappen siger hvor mange der ligger.",
         "En markeret aftale danner ingen opgaver. Så snart du har markeret den, opfører den sig som om den var væk — også selvom den står der endnu.",
@@ -9359,6 +9366,12 @@ function ContractsView({ templates: alleTemplates, instances, pricing, employees
   }
   const gjortOpAntal = alleTemplates.filter(erGjortOp).length;
 
+  // Hvilke aftaler ligger paa samme adresse som en anden? Reglen ligger i
+  // src/dubletter.js med sin egen test. Den regnes LIVE og staar ikke i en
+  // kolonne: saa forsvinder markeringen af sig selv, naar dubletten er ryddet,
+  // og den fanger ogsaa dem, ingen indlaesning har lavet.
+  const dubletter = useMemo(() => findDubletter(alleTemplates), [alleTemplates]);
+
   // Der filtreres foer listen deles op i aftaler med og uden udloebsdato, saa begge
   // dele foelger samme valg. En kladde uden udloebsdato havner i den anden liste, og
   // skal kunne findes af filteret praecis som de oevrige.
@@ -9633,6 +9646,21 @@ function ContractsView({ templates: alleTemplates, instances, pricing, employees
                 )}
                 <div style={{ fontSize: 12, color: "#64748B", display: "flex", gap: 12, flexWrap: "wrap" }}>
                   {t.customerName && <span>👤 {t.customerName}</span>}
+                    {/* Ligger der en anden aftale paa samme adresse? Saa staar det
+                        paa LISTEN og ikke kun inde i aftalen. 38 af de 45 indlaeste
+                        kladder var dubletter, og de skal kunne ses uden at aabne
+                        hver enkelt. Hold musen over for at se hvilke. */}
+                    {dubletter.has(t.id) && (
+                      <span
+                        title={"Samme adresse som:\n" + dubletter.get(t.id)
+                          .map((d) => `· ${d.customerName || d.title} (${d.status === "kladde" ? "kladde" : d.status})`)
+                          .join("\n")}
+                        style={{ padding: "2px 9px", borderRadius: 999, background: "#FEF3C7",
+                                 color: "#92400E", fontSize: 11, fontWeight: 700,
+                                 border: "1px solid #FDE68A", cursor: "help" }}>
+                        ⚠ Ser ud som dublet{dubletter.get(t.id).length > 1 ? ` (${dubletter.get(t.id).length})` : ""}
+                      </span>
+                    )}
                     {t.status === "slettes" ? (
                       /* Markeret til sletning. Den danner ingen opgaver imens - reglen
                          ligger i aftalerytme.js - saa den opfoerer sig som om den
@@ -9727,6 +9755,21 @@ function ContractsView({ templates: alleTemplates, instances, pricing, employees
                   )}
                   <div style={{ fontSize: 12, color: "#64748B", display: "flex", gap: 12, flexWrap: "wrap" }}>
                     {t.customerName && <span>👤 {t.customerName}</span>}
+                    {/* Ligger der en anden aftale paa samme adresse? Saa staar det
+                        paa LISTEN og ikke kun inde i aftalen. 38 af de 45 indlaeste
+                        kladder var dubletter, og de skal kunne ses uden at aabne
+                        hver enkelt. Hold musen over for at se hvilke. */}
+                    {dubletter.has(t.id) && (
+                      <span
+                        title={"Samme adresse som:\n" + dubletter.get(t.id)
+                          .map((d) => `· ${d.customerName || d.title} (${d.status === "kladde" ? "kladde" : d.status})`)
+                          .join("\n")}
+                        style={{ padding: "2px 9px", borderRadius: 999, background: "#FEF3C7",
+                                 color: "#92400E", fontSize: 11, fontWeight: 700,
+                                 border: "1px solid #FDE68A", cursor: "help" }}>
+                        ⚠ Ser ud som dublet{dubletter.get(t.id).length > 1 ? ` (${dubletter.get(t.id).length})` : ""}
+                      </span>
+                    )}
                     {t.status === "slettes" ? (
                       /* Markeret til sletning. Den danner ingen opgaver imens - reglen
                          ligger i aftalerytme.js - saa den opfoerer sig som om den

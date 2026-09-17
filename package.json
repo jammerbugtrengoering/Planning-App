@@ -5,12 +5,12 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "oxlint && node tjek-tdz.mjs && node loenberegning.test.mjs && node opgavetid.test.mjs && node aftalerytme.test.mjs && node ugevalg.test.mjs && node portefoelje.test.mjs && node hentalle.test.mjs && vite build",
+    "build": "oxlint && node tjek-tdz.mjs && node loenberegning.test.mjs && node opgavetid.test.mjs && node aftalerytme.test.mjs && node ugevalg.test.mjs && node portefoelje.test.mjs && node hentalle.test.mjs && node dubletter.test.mjs && vite build",
     "build:kun": "vite build",
     "lint": "oxlint",
     "preview": "vite preview",
     "tjek": "node tjek-tdz.mjs",
-    "test": "node loenberegning.test.mjs && node opgavetid.test.mjs && node aftalerytme.test.mjs && node ugevalg.test.mjs && node portefoelje.test.mjs && node hentalle.test.mjs"
+    "test": "node loenberegning.test.mjs && node opgavetid.test.mjs && node aftalerytme.test.mjs && node ugevalg.test.mjs && node portefoelje.test.mjs && node hentalle.test.mjs && node dubletter.test.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.110.8",
