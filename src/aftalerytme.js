@@ -76,7 +76,13 @@ function ugenPasser(tpl, ugensMandag) {
 export function aftaleKoererPaaDag(tpl, ugensMandag, dagNoegle) {
   if (!tpl) return false;
   // En kladde er under udarbejdelse og må aldrig danne opgaver.
-  if (tpl.status === "kladde") return false;
+  //
+  // Det samme gælder «slettes»: den er markeret til at blive fjernet efter en
+  // gennemgang, og indtil nogen trykker slet, skal den opføre sig som om den
+  // allerede var væk. Ellers ville en aftale, kontoret har afgjort skal ud,
+  // blive ved med at lægge opgaver på en medarbejders plan imens — og det er
+  // netop dubletter, statussen er lavet til at rydde.
+  if (tpl.status === "kladde" || tpl.status === "slettes") return false;
   if (!tpl.days || tpl.days.length === 0) return false;
 
   const dage = (tpl.days || [])

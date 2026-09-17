@@ -1701,6 +1701,13 @@ const MODULE_HELP = {
         "En udgået aftale, hvor den sidste opgave er udført, er «gjort op». Den falder af listen af sig selv, så den ikke ligger og fylder mellem de aktive resten af tiden.",
         "Den er ikke væk. Vælg «Udgåede», så står de der alle sammen med kontraktsum og realiseret — og tallet på knappen siger, hvor mange der er lagt til side.",
         "Er der stadig én opgave tilbage, der ikke er udført, bliver aftalen liggende. Så er der noget, nogen skal tage stilling til, og så skal den kunne ses uden at man leder efter den."] },
+    { h: "Markér til sletning", p: [
+        "🗑 «Markér til sletning» sætter aftalen til side, uden at slette noget. Den kan findes igen under filteret «Skal slettes», og tallet på knappen siger hvor mange der ligger.",
+        "En markeret aftale danner ingen opgaver. Så snart du har markeret den, opfører den sig som om den var væk — også selvom den står der endnu.",
+        "Sletningen sker ikke af sig selv. Den køres som en samlet omgang, når du har været bunken igennem. Sådan kan beslutningen tages én ad gangen og handlingen udføres én gang.",
+        "«Fortryd» sætter aftalen tilbage til den status, den havde før. Den huskes, så en opsagt aftale ikke kan blive aktiv igen ved et uheld.",
+        "Brug det til noget, der ikke skulle have været der: en dublet, en fejlindlæsning. Skal en rigtig aftale stoppe, er «Markér som udgået» det rigtige — den beholder historikken og det, der er faktureret.",
+        "En aftale, der HAR opgaver, bliver ikke slettet. Sletningen springer den over og siger det, for en sletning ville efterlade opgaverne som løse uden aftale. Brug «udgået» på dem."] },
   ], warn: "«Hver 3. måned» følger kalenderen: besøget lander i den uge, der indeholder samme dato som startdatoen — altså fire besøg om året på samme tid. Er startdatoen den 31., rammes sidste dag i korte måneder, så intet kvartal springes over. «Hver 4. uge» og «Hver 6. uge» tæller derimod i uger og vandrer gennem kalenderen — 13 henholdsvis 8-9 besøg om året, altid på samme ugedag." },
 
   reports: { title: "Rapportering", intro: "To rapporter: budget mod faktisk omsætning, og hvad aftalerne er værd.", blocks: [
@@ -2401,6 +2408,7 @@ function PlanningApp({ session, onSignOut }) {
             planInterval: t.plan_interval || "uge",
             // Fritekst til kontoret. Vises KUN paa en kladde - se AftaleBemaerkning.
             bemaerkning: t.bemaerkning || "",
+            statusFoerSlettes: t.status_foer_slettes || null,
             dineroSynced: t.dinero_synced ?? false,
             checklistTemplateIds: t.checklist_template_ids || [],
             extraItems: t.extra_items || [],
@@ -3974,6 +3982,43 @@ function PlanningApp({ session, onSignOut }) {
     }
     notify("Ønsket er afvist" + (rk?.app_email ? " og medarbejderen har fået besked" : ""));
   }
+  // Markér en aftale til sletning — eller fortryd det.
+  //
+  // Beslutningen og handlingen er delt op med vilje: kontoret gaar bunken igennem
+  // og markerer, og sletningen sker som en samlet omgang bagefter. En aftale med
+  // denne status danner ingen opgaver imens (se src/aftalerytme.js), saa den
+  // opfoerer sig som om den allerede var vaek.
+  //
+  // Den tidligere status huskes i databasen. Ellers skulle Fortryd gaette, og
+  // gaettede den forkert, kunne en OPSAGT aftale blive aktiv igen og begynde at
+  // danne opgaver hos en kunde, der havde sagt op.
+  async function saetSlettes(tpl, markér) {
+    const fra = tpl.status || "aktiv";
+    if (markér) {
+      const harOpgaver = instances.some((i) => i.templateId === tpl.id);
+      if (!window.confirm(
+        `Markér «${tpl.title}» til sletning?\n\n`
+        + `Aftalen danner ingen opgaver, så længe den er markeret, og den kan findes `
+        + `under filteret «Skal slettes». Intet slettes nu — det sker som en samlet omgang.\n\n`
+        + (harOpgaver
+            ? `OBS: der ligger allerede opgaver på denne aftale. Slettes aftalen, bliver de `
+              + `stående som løse opgaver uden aftale. Skal aftalen bare stoppe, er `
+              + `«Markér som udgået» det rigtige i stedet.\n\n`
+            : "")
+        + `Fortsæt?`)) return;
+    }
+    const nyStatus = markér ? "slettes" : (tpl.statusFoerSlettes || "kladde");
+    const { error } = await supabase.from("service_templates")
+      .update({ status: nyStatus, status_foer_slettes: markér ? fra : null })
+      .eq("id", tpl.id);
+    if (dbFail(error, markér ? "markere aftalen til sletning" : "fortryde markeringen")) return;
+    setTemplates((prev) => prev.map((t) => (t.id === tpl.id
+      ? { ...t, status: nyStatus, statusFoerSlettes: markér ? fra : null } : t)));
+    notify(markér
+      ? `«${tpl.title}» er markeret til sletning`
+      : `Markeringen er fortrudt — aftalen står igen som ${nyStatus === "kladde" ? "kladde" : nyStatus}`);
+  }
+
   // ── Bestillinger fra kundeportalen ─────────────────────────────────────────
   //
   // Kunden har spurgt, ikke bestemt. Derfor bliver en bestilling ikke til en opgave
@@ -4948,7 +4993,7 @@ function PlanningApp({ session, onSignOut }) {
 
       {view === "contracts" && (
         <ContractsView templates={templates} instances={instances} pricing={pricing} employees={aktiveEmployees} onEditDraft={(tpl) => { setCopyPayload({ ...tpl, type: "fixed", templateDays: tpl.days }); setEditTplId(tpl.id); setShowAddTask(true); }}
-            isAdminUser={isAdminUser} onCancelTemplate={(tplId) => setCancelTarget(tplId)} />
+            isAdminUser={isAdminUser} onCancelTemplate={(tplId) => setCancelTarget(tplId)} onSaetSlettes={saetSlettes} />
       )}
 
       {view === "kunder" && (
@@ -9271,7 +9316,7 @@ function CancelTemplateModal({ template, onClose, onConfirm }) {
     </div>
   );
 }
-function ContractsView({ templates: alleTemplates, instances, pricing, employees, isAdminUser, onCancelTemplate, onEditDraft }) {
+function ContractsView({ templates: alleTemplates, instances, pricing, employees, isAdminUser, onCancelTemplate, onEditDraft, onSaetSlettes }) {
   const [statusFilter, setStatusFilter] = useState("alle");
   const [typeFilter, setTypeFilter] = useState("all");
   const [soeg, setSoeg] = useState("");
@@ -9441,7 +9486,7 @@ function ContractsView({ templates: alleTemplates, instances, pricing, employees
           man kan f.eks. se kun kladder af typen hovedrengoering. Antallet staar kun
           paa kladde-knappen — det er den eneste bunke der skal tommes. */}
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
-        {[["alle", "Alle"], ["kladde", "Under udarbejdelse"], ["aktiv", "Aktive"], ["udgaaet", "Udgåede"]].map(([k, l]) => (
+        {[["alle", "Alle"], ["kladde", "Under udarbejdelse"], ["aktiv", "Aktive"], ["udgaaet", "Udgåede"], ["slettes", "Skal slettes"]].map(([k, l]) => (
           <button
             key={k}
             type="button"
@@ -9457,6 +9502,12 @@ function ContractsView({ templates: alleTemplates, instances, pricing, employees
                 vaere umulige at gaette sig til — en liste, der skjuler noget uden at
                 sige hvor meget, er vaerre end en lang liste. */}
             {k === "udgaaet" && gjortOpAntal > 0 ? ` (${gjortOpAntal} gjort op)` : ""}
+            {/* Tallet skal staa der. En bunke, der venter paa at blive slettet,
+                maa ikke kunne ligge og blive glemt - og statussen er lavet
+                netop til at dele beslutningen og handlingen op. */}
+            {k === "slettes" && alleTemplates.filter((t) => t.status === "slettes").length > 0
+              ? ` (${alleTemplates.filter((t) => t.status === "slettes").length})`
+              : ""}
           </button>
         ))}
       </div>
@@ -9582,7 +9633,21 @@ function ContractsView({ templates: alleTemplates, instances, pricing, employees
                 )}
                 <div style={{ fontSize: 12, color: "#64748B", display: "flex", gap: 12, flexWrap: "wrap" }}>
                   {t.customerName && <span>👤 {t.customerName}</span>}
-                    {t.status === "udgaaet" ? (
+                    {t.status === "slettes" ? (
+                      /* Markeret til sletning. Den danner ingen opgaver imens - reglen
+                         ligger i aftalerytme.js - saa den opfoerer sig som om den
+                         allerede var vaek, indtil nogen faktisk sletter den. */
+                      <>
+                        <span style={{ color: "#B91C1C", fontWeight: 800 }}>🗑 SKAL SLETTES</span>
+                        {isAdminUser && onSaetSlettes && (
+                          <button type="button" onClick={() => onSaetSlettes(t, false)}
+                            style={{ padding: "2px 9px", borderRadius: 999, border: "1px solid #CBD5E1",
+                              background: "#fff", color: "#475569", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                            Fortryd
+                          </button>
+                        )}
+                      </>
+                    ) : t.status === "udgaaet" ? (
                       <span style={{ color: "#B91C1C", fontWeight: 800 }}>
                         UDGÅET · {cancelReasonLabel(t.cancelReason)}
                         {t.cancelledEffectiveDate ? " · sidste dag " + String(t.cancelledEffectiveDate).slice(0, 10) : ""}
@@ -9594,6 +9659,19 @@ function ContractsView({ templates: alleTemplates, instances, pricing, employees
                         Markér som udgået
                       </button>
                     ) : null}
+                    {/* Markér til sletning. Staar ved siden af «udgået», fordi de to
+                        loeser hver sin ting: udgået beholder historikken og rydder
+                        fremtiden, sletning fjerner aftalen helt. Det sidste duer kun
+                        paa noget, der ikke skulle have vaeret der - en dublet, en
+                        fejlindlaesning. Derfor to knapper og ikke én. */}
+                    {t.status !== "slettes" && isAdminUser && onSaetSlettes && (
+                      <button type="button" onClick={() => onSaetSlettes(t, true)}
+                        title="Markerer aftalen til sletning. Den danner ingen opgaver imens. Sletningen sker først, når nogen kører den."
+                        style={{ padding: "2px 9px", borderRadius: 999, border: "1px solid #CBD5E1",
+                          background: "#F8FAFC", color: "#64748B", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                        🗑 Markér til sletning
+                      </button>
+                    )}
                     {t.preferredEmployeeId && (
                       <span style={{ color: "#9C1B5D", fontWeight: 700 }}>
                         Fast: {((employees || []).find((e) => e.id === t.preferredEmployeeId) || {}).name || "ukendt"}
@@ -9649,7 +9727,21 @@ function ContractsView({ templates: alleTemplates, instances, pricing, employees
                   )}
                   <div style={{ fontSize: 12, color: "#64748B", display: "flex", gap: 12, flexWrap: "wrap" }}>
                     {t.customerName && <span>👤 {t.customerName}</span>}
-                    {t.status === "udgaaet" ? (
+                    {t.status === "slettes" ? (
+                      /* Markeret til sletning. Den danner ingen opgaver imens - reglen
+                         ligger i aftalerytme.js - saa den opfoerer sig som om den
+                         allerede var vaek, indtil nogen faktisk sletter den. */
+                      <>
+                        <span style={{ color: "#B91C1C", fontWeight: 800 }}>🗑 SKAL SLETTES</span>
+                        {isAdminUser && onSaetSlettes && (
+                          <button type="button" onClick={() => onSaetSlettes(t, false)}
+                            style={{ padding: "2px 9px", borderRadius: 999, border: "1px solid #CBD5E1",
+                              background: "#fff", color: "#475569", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                            Fortryd
+                          </button>
+                        )}
+                      </>
+                    ) : t.status === "udgaaet" ? (
                       <span style={{ color: "#B91C1C", fontWeight: 800 }}>
                         UDGÅET · {cancelReasonLabel(t.cancelReason)}
                         {t.cancelledEffectiveDate ? " · sidste dag " + String(t.cancelledEffectiveDate).slice(0, 10) : ""}
@@ -9661,6 +9753,19 @@ function ContractsView({ templates: alleTemplates, instances, pricing, employees
                         Markér som udgået
                       </button>
                     ) : null}
+                    {/* Markér til sletning. Staar ved siden af «udgået», fordi de to
+                        loeser hver sin ting: udgået beholder historikken og rydder
+                        fremtiden, sletning fjerner aftalen helt. Det sidste duer kun
+                        paa noget, der ikke skulle have vaeret der - en dublet, en
+                        fejlindlaesning. Derfor to knapper og ikke én. */}
+                    {t.status !== "slettes" && isAdminUser && onSaetSlettes && (
+                      <button type="button" onClick={() => onSaetSlettes(t, true)}
+                        title="Markerer aftalen til sletning. Den danner ingen opgaver imens. Sletningen sker først, når nogen kører den."
+                        style={{ padding: "2px 9px", borderRadius: 999, border: "1px solid #CBD5E1",
+                          background: "#F8FAFC", color: "#64748B", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                        🗑 Markér til sletning
+                      </button>
+                    )}
                     {t.preferredEmployeeId && (
                       <span style={{ color: "#9C1B5D", fontWeight: 700 }}>
                         Fast: {((employees || []).find((e) => e.id === t.preferredEmployeeId) || {}).name || "ukendt"}

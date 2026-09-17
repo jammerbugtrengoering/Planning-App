@@ -104,6 +104,13 @@ er("næste uge er upåvirket", aftaleKoererPaaDag(udeladt, man(2026, 9, 17), "Th
 
 // ── En kladde danner aldrig noget ───────────────────────────────────────────
 er("kladde", aftaleKoererPaaDag({ ...ugentlig, status: "kladde" }, man(2026, 9, 10), "Thu"), false);
+// «slettes» er markeret til at ryge efter en gennemgang. Indtil nogen trykker slet,
+// skal den opføre sig som om den allerede var væk — ellers bliver en aftale, kontoret
+// har afgjort skal ud, ved med at lægge opgaver på en medarbejders plan imens.
+er("markeret til sletning", aftaleKoererPaaDag({ ...ugentlig, status: "slettes" }, man(2026, 9, 10), "Thu"), false);
+er("og heller ikke en anden uge", aftaleKoererPaaDag({ ...ugentlig, status: "slettes" }, man(2026, 9, 17), "Thu"), false);
+// De to statusser, der STADIG danner opgaver, skal blive ved med at gøre det.
+er("aktiv danner stadig", aftaleKoererPaaDag({ ...ugentlig, status: "aktiv" }, man(2026, 9, 10), "Thu"), true);
 er("uden dage", aftaleKoererPaaDag({ ...ugentlig, days: [] }, man(2026, 9, 10), "Thu"), false);
 er("ingen aftale", aftaleKoererPaaDag(null, man(2026, 9, 10), "Thu"), false);
 
