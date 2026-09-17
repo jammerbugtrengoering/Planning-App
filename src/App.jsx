@@ -1684,7 +1684,7 @@ const MODULE_HELP = {
     { h: "Gentagelse", p: [
         "En aftale kan gentages hver uge, hver 14. dag, hver 4. uge, hver 6. uge eller hver 3. måned. Kadencen tælles fra startdatoen.",
         "«Hver 4. uge» er ikke det samme som en gang om måneden. Det giver 13 besøg om året i stedet for 12, og dagen vandrer gennem kalenderen — et besøg den 5. bliver med tiden den 28. Til gengæld ligger det altid på den samme ugedag, og det er sådan, rengøring aftales i praksis.",
-        "Vil du have en fast dato i måneden i stedet, findes den mulighed ikke længere. Sig til, hvis I får brug for den."] }, { h: "Under udarbejdelse", p: ["Er du ikke færdig med en ny aftale, så tryk «Gem som kladde» i stedet for «Gem og planlæg».", "En kladde opretter ingen opgaver. Den ligger og venter, og du kan rette alle felter i den så mange gange du vil.", "Find den igen med filteret «Under udarbejdelse» øverst her på siden. Tallet i knappen viser hvor mange der ligger.", "Tryk «Åbn og godkend» for at rette videre. Inde i aftalen vælger du så «Gem kladde» hvis du stadig ikke er færdig, eller «Godkend og planlæg» når den er klar.", "Først ved godkendelsen oprettes opgaverne — fra startdatoen og frem til udløbsdatoen. Det kan være mange på én gang, så tjek datoerne inden du godkender.", "Startdatoen kan ikke ligge i fortiden. Har en kladde ligget så længe at datoen er løbet fra dig, skal den rettes før du kan godkende."] }, { h: "Søg og filtrér", p: [
+        "Vil du have en fast dato i måneden i stedet, findes den mulighed ikke længere. Sig til, hvis I får brug for den."] }, { h: "Under udarbejdelse", p: ["Er du ikke færdig med en ny aftale, så tryk «Gem som kladde» i stedet for «Gem og planlæg».", "En kladde opretter ingen opgaver. Den ligger og venter, og du kan rette alle felter i den så mange gange du vil.", "Find den igen med filteret «Under udarbejdelse» øverst her på siden. Tallet i knappen viser hvor mange der ligger.", "Tryk «Åbn og godkend» for at rette videre. Inde i aftalen vælger du så «Gem kladde» hvis du stadig ikke er færdig, eller «Godkend og planlæg» når den er klar.", "Først ved godkendelsen oprettes opgaverne — fra startdatoen og frem til udløbsdatoen. Det kan være mange på én gang, så tjek datoerne inden du godkender.", "Startdatoen kan ikke ligge i fortiden. Har en kladde ligget så længe at datoen er løbet fra dig, skal den rettes før du kan godkende.", "Er kladden lavet ved en indlæsning, står der en gul «Bemærkning til kontoret» i aftalen med det, indlæsningen ikke kunne afgøre — manglende kundenavn, en gættet kontrakttype, noter fra det ark den kom fra. Læs den, ret det den peger på, og godkend så.", "Feltet vises kun, så længe aftalen er en kladde. Når den er godkendt, er noten gjort op, og feltet forsvinder — teksten bliver stående i databasen, men skal ikke stå og fylde bagefter."] }, { h: "Søg og filtrér", p: [
         "Søgefeltet under knapperne leder i kundenavn, fakturabeskrivelse, adresse og opgavetekst på én gang.",
         "At den også leder i fakturabeskrivelsen er med vilje: på Nexus- og Ældrelov-aftaler hedder kunden «Jammerbugt Kommune» på dem alle sammen, og borgerens navn står i fakturabeskrivelsen. Søger du på borgeren, finder du den rigtige aftale — søger du på kommunen, får du dem alle.",
         "Adressen er med, fordi det ofte er dét, man husker.",
@@ -2399,6 +2399,8 @@ function PlanningApp({ session, onSignOut }) {
             pricingType: t.pricing_type || "hourly",
             fixedPrice: t.fixed_price,
             planInterval: t.plan_interval || "uge",
+            // Fritekst til kontoret. Vises KUN paa en kladde - se AftaleBemaerkning.
+            bemaerkning: t.bemaerkning || "",
             dineroSynced: t.dinero_synced ?? false,
             checklistTemplateIds: t.checklist_template_ids || [],
             extraItems: t.extra_items || [],
@@ -3207,6 +3209,11 @@ function PlanningApp({ session, onSignOut }) {
       pricing_type: payload.pricingType || "hourly",
       fixed_price: fastPris,
       plan_interval: payload.planInterval || "uge",
+      // Skrives KUN, naar feltet var i spil. Noten vises kun paa kladder, saa et
+      // «|| null» her ville nulstille den, hver gang nogen gemte en GODKENDT
+      // aftale - samme faelde som tjeklisten og koerslen.
+      ...('bemaerkning' in payload && payload.bemaerkning !== undefined
+          ? { bemaerkning: payload.bemaerkning } : {}),
       dinero_synced: payload.dineroSynced || false,
       checklist_template_ids: payload.checklistTemplateIds || [],
       extra_items: payload.extraItems || [],
@@ -3374,6 +3381,8 @@ function PlanningApp({ session, onSignOut }) {
         contract_type: tpl.contractType || "privat",
         pricing_type: tpl.pricingType || "hourly", fixed_price: tpl.fixedPrice,
         plan_interval: tpl.planInterval || "uge",
+        ...('bemaerkning' in payload && payload.bemaerkning !== undefined
+          ? { bemaerkning: payload.bemaerkning } : {}),
         dinero_synced: tpl.dineroSynced,
         checklist_template_ids: tpl.checklistTemplateIds || [],
         extra_items: tpl.extraItems || [],
@@ -8215,6 +8224,11 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
     return CREATABLE_TYPES.includes(copyFrom.type) ? copyFrom.type : "adhoc";
   });
   const [contractType, setContractType] = useState(copyFrom?.contractType || "privat");
+  // Bemaerkning til kontoret. Vises KUN paa en kladde: det er en note om noget,
+  // der skal afklares, FOER aftalen godkendes. Naar den er godkendt, er noten
+  // gjort op, og et felt, der aldrig bliver tomt, holder man op med at laese.
+  const erKladde = copyFrom?.status === "kladde";
+  const [bemaerkning, setBemaerkning] = useState(copyFrom?.bemaerkning || "");
   const [pricingType, setPricingType] = useState(copyFrom?.pricingType || "hourly");
   const [fixedPrice, setFixedPrice] = useState(copyFrom?.fixedPrice ?? "");
   // 'maaned' er den gamle vaerdi bag knappen, der hed «Måned». Knappen hedder nu
@@ -8372,6 +8386,7 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
   // egen feltliste, ville de foer eller siden komme ud af trit.
   const buildPayload = (saveAsDraft) => ({
     type,
+    bemaerkning: erKladde ? (bemaerkning.trim() || null) : undefined,
     contractType,
     pricingType,
     fixedPrice: pricingType === "fixed" ? (Number(fixedPrice) || 0) : null,
@@ -8696,6 +8711,36 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
       )}
 
       </div></div></div>
+
+      {/* Bemaerkning til kontoret. KUN paa en kladde.
+          Den kom til, da Anders' ruteplan blev laest ind 17.9.2026: et regneark med
+          adresser og varigheder, ingen kundenavne, og noter som «fra uge 40» og
+          «slut 16/9», der ikke kunne afgoeres maskinelt. Alt det skal staa et sted,
+          hvor kontoret ser det, naar kladden aabnes - og ikke i et felt, der har et
+          andet formaal. po_number ender paa fakturaen; access_instructions vises til
+          medarbejderen.
+          Feltet forsvinder, naar aftalen godkendes: noten er en liste over noget, der
+          skal afklares FOER godkendelsen, og et felt, der aldrig bliver tomt, holder
+          man op med at laese. Teksten bliver staaende i databasen. */}
+      {erKladde && (
+        <div style={{ margin: "0 -18px", padding: "14px 18px", background: "#FFFBEB",
+                      borderTop: "1px solid #FDE68A", borderBottom: "1px solid #FDE68A" }}>
+          <label style={{ ...styles.label, color: "#92400E" }}>
+            📋 Bemærkning til kontoret
+            <span style={{ fontWeight: 400, color: "#A16207", marginLeft: 6 }}>
+              — vises kun så længe aftalen er en kladde
+            </span>
+          </label>
+          <textarea
+            rows={Math.min(14, Math.max(4, (bemaerkning.match(/\n/g) || []).length + 2))}
+            value={bemaerkning}
+            onChange={(e) => setBemaerkning(e.target.value)}
+            placeholder="Hvad mangler der, før aftalen kan godkendes?"
+            style={{ ...styles.input, width: "100%", fontFamily: "inherit", fontSize: 12.5,
+                     lineHeight: 1.5, background: "#fff", borderColor: "#FDE68A",
+                     color: "#111111", resize: "vertical" }} />
+        </div>
+      )}
 
       <div style={{ ...styles.modalActions, position: "sticky", bottom: 0, zIndex: 5, background: "#F8FAFC", borderTop: "1px solid #E2E8F0", padding: "12px 84px 12px 18px", margin: "0 -18px -16px" }}>
         <button style={styles.secondaryBtn} disabled={gemmer} onClick={onClose}>Annuller</button>
