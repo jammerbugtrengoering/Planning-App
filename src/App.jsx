@@ -362,6 +362,19 @@ function aktuelSats(historik, empId) {
   const iso = new Date(idag.getTime() - idag.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
   return satsPaaDato(historik, empId, iso);
 }
+
+// Den kilometersats der gjaldt for en medarbejder paa en bestemt dato — samme
+// princip som satsPaaDato for loen. Satsen er individuel (aftales fx ved
+// loenforhandling) og har sin egen historik med gyldighedsdato, saa en aendring
+// ikke regner gamle maaneders overskud om. Ingen sats fundet for medarbejderen
+// paa datoen giver null, ikke 0 — saa vi kan skelne "intet sat" fra "sat til nul".
+function kmSatsPaaDato(kmSatser, empId, datoStr) {
+  if (!kmSatser || !empId || !datoStr) return null;
+  const raekker = kmSatser[empId];
+  if (!raekker || raekker.length === 0) return null;
+  const fundet = raekker.find((r) => r.gyldig_fra <= datoStr);
+  return fundet ? Number(fundet.sats) : null;
+}
 // Bruges kun hvis en kaldende funktion ikke har transportindstillingerne ved haanden.
 const DEFAULT_TRAVEL = { defaultMinutes: 20, dayStart: "07:00", overrides: {} };
 // Planlaegningshorisont: hvor mange uger frem opgaverne altid materialiseres.
@@ -2263,6 +2276,9 @@ function PlanningApp({ session, onSignOut }) {
       { data: bestillingerData },
       { data: noterData },
       { data: wageData },
+      { data: kmSatsData },
+      { data: omkostningerData },
+      { data: kmLogFullData },
       { data: homeData },
       { data: instAccessData },
       { data: custAccessData },
@@ -2288,6 +2304,14 @@ function PlanningApp({ session, onSignOut }) {
       // Timeloen. Politikken slipper kun administratorer ind, saa for alle andre
       // kommer der en tom liste tilbage — helt uden fejl, og uden at loennen laekker.
       hentMedFornyelse("timelønninger", () => supabase.from("employee_wage_history").select("*").order("gyldig_fra", { ascending: false })),
+      // Kilometersats — individuel pr. medarbejder, samme mønster og adgangsregel
+      // som timelønnen. Kun til overskudsrapporten; sendes ikke til Danløn.
+      hentMedFornyelse("kilometersatser", () => supabase.from("km_sats_historik").select("*").order("gyldig_fra", { ascending: false })),
+      // Frie omkostningsposter (husleje, forsikring m.m.) til overskudsrapporten.
+      hentMedFornyelse("omkostninger", () => supabase.from("omkostninger").select("*")),
+      // Alle kørte kilometer — overskudsrapporten summerer på tværs af hele året,
+      // i modsætning til Danløn-eksporten der kun henter én måned ad gangen.
+      hentMedFornyelse("kørselslog", () => supabase.from("km_log").select("*")),
       // Hjemmeadresse og transportordning. Samme historie som loennen: er man ikke
       // administrator, kommer der en tom liste tilbage, og ordningen slaar ikke til.
       hentMedFornyelse("transportordninger", () => supabase.from("employee_home").select("*")),
@@ -2329,6 +2353,18 @@ function PlanningApp({ session, onSignOut }) {
       });
       Object.values(satsHistorik).forEach((liste) => liste.sort((a, b) => (a.gyldig_fra < b.gyldig_fra ? 1 : -1)));
       setSatsHistorik(satsHistorik);
+
+      // Kilometersatsen grupperes ligesom loenhistorikken — pr. medarbejder, nyeste
+      // gyldighedsdato foerst.
+      const kmSatser = {};
+      (kmSatsData || []).forEach((r) => {
+        if (!kmSatser[r.employee_id]) kmSatser[r.employee_id] = [];
+        kmSatser[r.employee_id].push({ sats: r.sats, gyldig_fra: r.gyldig_fra });
+      });
+      Object.values(kmSatser).forEach((liste) => liste.sort((a, b) => (a.gyldig_fra < b.gyldig_fra ? 1 : -1)));
+      setKmSatser(kmSatser);
+      if (omkostningerData) setOmkostninger(omkostningerData);
+      if (kmLogFullData) setKmLog(kmLogFullData);
 
       // Employees – saml skills og capacity op
       let empMapped = [];
@@ -2591,6 +2627,9 @@ function PlanningApp({ session, onSignOut }) {
   // Timeløn med gyldighedsdato, grupperet pr. medarbejder. Tom for alle andre end
   // administratorer, fordi politikken ikke slipper dem ind i tabellen.
   const [satsHistorik, setSatsHistorik] = useState({});
+  const [kmSatser, setKmSatser] = useState({}); // { [employee_id]: [{sats, gyldig_fra}, ...] }
+  const [omkostninger, setOmkostninger] = useState([]); // [{id, aar, maaned, beskrivelse, beloeb}]
+  const [kmLog, setKmLog] = useState([]); // [{id, employee_id, work_date, km}]
   const [afvisId, setAfvisId] = useState(null);
   const [afvisNote, setAfvisNote] = useState("");
   // Minutter kontoret vil fakturere for et forgaeves besoeg, pr. melding. Starter
@@ -4297,6 +4336,32 @@ function PlanningApp({ session, onSignOut }) {
     const { error: budErr } = await supabase.from("budgets").upsert(row, { onConflict: "id" });
     if (dbFail(budErr, "gemme budgettet")) return;
   }
+  // Ny manuel omkostningspost til overskudsrapporten (husleje, forsikring m.m.).
+  async function saveOmkostning(aar, maaned, beskrivelse, beloeb) {
+    const { data, error: omkErr } = await supabase.from("omkostninger")
+      .insert({ aar, maaned, beskrivelse, beloeb: Number(beloeb) || 0, oprettet_af: currentEmployeeForAuth?.auth_user_id || null })
+      .select().single();
+    if (dbFail(omkErr, "gemme omkostningsposten")) return;
+    setOmkostninger((prev) => [...prev, data]);
+  }
+  async function deleteOmkostning(id) {
+    setOmkostninger((prev) => prev.filter((o) => o.id !== id));
+    const { error: delErr } = await supabase.from("omkostninger").delete().eq("id", id);
+    if (dbFail(delErr, "slette omkostningsposten")) return;
+  }
+  // Ny kilometersats for en medarbejder, gaeldende fra en given dato — samme
+  // princip som loenstigninger: gamle maaneders overskud regnes ikke om.
+  async function saveKmSats(empId, sats, gyldigFra) {
+    const { data, error: satsErr } = await supabase.from("km_sats_historik")
+      .insert({ employee_id: empId, sats: Number(sats) || 0, gyldig_fra: gyldigFra })
+      .select().single();
+    if (dbFail(satsErr, "gemme kilometersatsen")) return;
+    setKmSatser((prev) => {
+      const naeste = { ...prev, [empId]: [...(prev[empId] || []), { sats: data.sats, gyldig_fra: data.gyldig_fra }] };
+      naeste[empId].sort((a, b) => (a.gyldig_fra < b.gyldig_fra ? 1 : -1));
+      return naeste;
+    });
+  }
   // Når planlæggeren selv sætter en opgave til udført, markeres den med
   // "planner" — så kan man i planen se at det ikke er medarbejderen der har
   // afsluttet den ude hos kunden. Felterne ryddes igen hvis opgaven genåbnes.
@@ -5022,7 +5087,10 @@ function PlanningApp({ session, onSignOut }) {
       )}
 
       {view === "reports" && (
-        <ReportsView instances={instances} templates={templates} pricing={pricing} budgets={budgets} onSaveBudget={saveBudget} isAdminUser={isAdminUser} />
+        <ReportsView instances={instances} templates={templates} pricing={pricing} budgets={budgets} onSaveBudget={saveBudget} isAdminUser={isAdminUser}
+          employees={employees} satsHistorik={satsHistorik} kmSatser={kmSatser} kmLog={kmLog}
+          omkostninger={omkostninger} onSaveOmkostning={saveOmkostning}
+          onDeleteOmkostning={deleteOmkostning} onSaveKmSats={saveKmSats} />
       )}
 
       {view === "kundetimer" && (<CustomerHoursView instances={instances} />)}
@@ -7867,7 +7935,234 @@ const REPORT_MONTHS = ["Januar","Februar","Marts","April","Maj","Juni","Juli","A
 const REPORT_AREA_COLORS = { ...Object.fromEntries(CONTRACT_TYPES.map((c) => [c.key, c.chart])), alle: "#334155" };
 const REPORT_TABS = [...REPORT_AREAS, ["alle", "🌐 Alle"]];
 
-function ReportsView({ instances, templates, pricing, budgets, onSaveBudget, isAdminUser }) {
+// Overskudsrapporten: omsaetning minus lønsum, kørsel og frie omkostninger, pr.
+// maaned og for hele aaret. Kun for administratorer.
+//
+// Omsaetningen genbruger den samme regel som "Registreret omsætning" i
+// Budget-fanen (fakturerbare minutter × sats, eller fastpris ved udførte
+// fastprisopgaver), men summeret paa tvaers af ALLE kontrakttyper i stedet for
+// ét omraade ad gangen. Loensum og koersel tages KUN med naar linjen er
+// godkendt (samme godkendelser som bruges til Danløn-eksporten) — en opgave der
+// endnu ikke er godkendt maa ikke paavirke et overskud der allerede er "laast".
+//
+// Kilometersatsen er INDIVIDUEL pr. medarbejder (aftales fx ved lønforhandling)
+// — ikke én fælles sats for hele virksomheden. Se kmSatsPaaDato.
+function OverskudRapport({ instances, employees, satsHistorik, kmSatser, kmLog, omkostninger,
+                            onSaveOmkostning, onDeleteOmkostning, onSaveKmSats, pricing, isAdminUser }) {
+  const now = new Date();
+  const [selectedYear, setSelectedYear] = useState(now.getFullYear());
+  const years = [now.getFullYear() - 1, now.getFullYear(), now.getFullYear() + 1];
+
+  // Godkendelser — samme tabel og nøgleform som Danløn-eksporten i
+  // EmployeeExportView ("slags|employee_id|reference"), hentet uafhængigt her
+  // så overskudsrapporten kan læses uden at afhænge af den fane.
+  const [godkendtSet, setGodkendtSet] = useState(() => new Set());
+  const [godkFejl, setGodkFejl] = useState("");
+  useEffect(() => {
+    (async () => {
+      const { data, error } = await supabase.from("loen_godkendelser").select("slags, employee_id, reference");
+      if (error) { setGodkFejl("Kunne ikke hente godkendelser: " + error.message); return; }
+      setGodkendtSet(new Set((data || []).map((r) => `${r.slags}|${r.employee_id}|${r.reference}`)));
+    })();
+  }, []);
+
+  const [nyBeskrivelse, setNyBeskrivelse] = useState("");
+  const [nyBeloeb, setNyBeloeb] = useState("");
+  const [nyMaaned, setNyMaaned] = useState(now.getMonth() + 1);
+
+  const [satsEmpId, setSatsEmpId] = useState("");
+  const [satsVaerdi, setSatsVaerdi] = useState("");
+  const [satsFra, setSatsFra] = useState(() => new Date().toISOString().slice(0, 10));
+
+  const monthRows = useMemo(() => REPORT_MONTHS.map((label, idx) => {
+    const month = idx + 1;
+
+    // Omsætning: samme regel som "Registreret omsætning" i Budget-fanen, men
+    // summeret over ALLE kontrakttyper i stedet for ét område.
+    const tasksInMonth = instances.filter((t) => {
+      if (BLOCK_TYPES.includes(t.type) || t.type === "aktivitet") return false;
+      if (!(t.assignees && t.assignees.length)) return false;
+      const my = instanceMonthYear(t, selectedYear);
+      return my.month === idx && my.year === selectedYear;
+    });
+    const omsaetning = tasksInMonth.reduce((s, t) => {
+      const rate = pricing[t.contractType || "privat"] || 0;
+      if (t.pricingType === "fixed") {
+        const hasLog = (t.timeLog || t.time_log || []).length > 0 || t.status === "udført";
+        return s + (hasLog ? (Number(t.fixedPrice) || 0) : 0);
+      }
+      return s + (fakturerbareMinutter(t) / 60) * rate;
+    }, 0);
+
+    // Lønomkostning: godkendt lønsum for ALLE medarbejdere i måneden.
+    let loenKr = 0;
+    instances
+      .filter((t) => !BLOCK_TYPES.includes(t.type))
+      .filter((t) => (t.assignees || []).length > 0)
+      .forEach((t) => {
+        const my = instanceMonthYear(t, selectedYear);
+        if (my.month !== idx || my.year !== selectedYear) return;
+        const tl = t.timeLog || t.time_log || [];
+        (t.assignees || []).forEach((empId) => {
+          if (!godkendtSet.has(`timer|${empId}|${t.id}`)) return;
+          const wage = satsPaaDato(satsHistorik, empId, instanceDateString(t));
+          if (wage == null) return;
+          const minutter = tl.filter((l) => l.empId === empId).reduce((s, l) => s + (l.minutes || 0), 0);
+          loenKr += (minutter / 60) * wage;
+        });
+      });
+
+    // Kørselsgodtgørelse: godkendte km-linjer i måneden × medarbejderens EGEN
+    // sats på kørselsdatoen (satsen er individuel, se kmSatsPaaDato).
+    const kmKr = kmLog
+      .filter((r) => {
+        const d = new Date(r.work_date);
+        return d.getFullYear() === selectedYear && d.getMonth() === idx;
+      })
+      .filter((r) => godkendtSet.has(`km|${r.employee_id}|${String(r.id)}`))
+      .reduce((s, r) => {
+        const sats = kmSatsPaaDato(kmSatser, r.employee_id, r.work_date);
+        return s + (sats == null ? 0 : Number(r.km) * sats);
+      }, 0);
+
+    // Manuelle omkostninger for netop denne måned.
+    const manuelleKr = omkostninger
+      .filter((o) => o.aar === selectedYear && o.maaned === month)
+      .reduce((s, o) => s + Number(o.beloeb), 0);
+
+    const omkostningerIAlt = loenKr + kmKr + manuelleKr;
+    return {
+      month, label, omsaetning, loenKr, kmKr, manuelleKr,
+      omkostningerIAlt, overskud: omsaetning - omkostningerIAlt,
+    };
+  }), [instances, satsHistorik, kmSatser, kmLog, godkendtSet, omkostninger, pricing, selectedYear]);
+
+  const aarTotal = monthRows.reduce((acc, r) => ({
+    omsaetning: acc.omsaetning + r.omsaetning,
+    omkostninger: acc.omkostninger + r.omkostningerIAlt,
+    overskud: acc.overskud + r.overskud,
+  }), { omsaetning: 0, omkostninger: 0, overskud: 0 });
+
+  const kr = (v) => Math.round(v).toLocaleString("da-DK") + " kr.";
+
+  function tilfoejOmkostning() {
+    if (!nyBeskrivelse.trim() || !nyBeloeb) return;
+    onSaveOmkostning(selectedYear, Number(nyMaaned), nyBeskrivelse.trim(), nyBeloeb);
+    setNyBeskrivelse(""); setNyBeloeb("");
+  }
+  function tilfoejKmSats() {
+    if (!satsEmpId || !satsVaerdi || !satsFra) return;
+    onSaveKmSats(satsEmpId, satsVaerdi, satsFra);
+    setSatsVaerdi("");
+  }
+
+  return (
+    <>
+      <div style={styles.toolbar}>
+        <div style={styles.statBlock}>
+          <div><div style={{ ...styles.statValue, color: "#64748B" }}>{kr(aarTotal.omsaetning)}</div><div style={styles.statLabel}>Omsætning {selectedYear}</div></div>
+        </div>
+        <div style={styles.statBlock}>
+          <div><div style={{ ...styles.statValue, color: "#DC2626" }}>{kr(aarTotal.omkostninger)}</div><div style={styles.statLabel}>Omkostninger i alt</div></div>
+        </div>
+        <div style={{ ...styles.statBlock, borderLeft: `3px solid ${aarTotal.overskud >= 0 ? "#16A34A" : "#DC2626"}` }}>
+          <div><div style={{ ...styles.statValue, color: aarTotal.overskud >= 0 ? "#16A34A" : "#DC2626" }}>{kr(aarTotal.overskud)}</div><div style={styles.statLabel}>Overskud</div></div>
+        </div>
+        <div style={styles.toolbarSpacer} />
+        <select style={{ ...styles.inputSm, fontSize: 13, fontWeight: 600, flex: "none", width: 100 }} value={selectedYear} onChange={(e) => setSelectedYear(Number(e.target.value))}>
+          {years.map((y) => <option key={y} value={y}>{y}</option>)}
+        </select>
+      </div>
+
+      {godkFejl && <div style={{ color: "#DC2626", fontSize: 12.5, marginBottom: 10 }}>{godkFejl}</div>}
+      <div style={{ fontSize: 12.5, color: "#94A3B8", marginBottom: 10 }}>
+        Kun godkendte timer og kilometer (samme godkendelser som bruges til Danløn-eksporten) tælles med i lønsum og kørsel.
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 110px 110px 110px 110px 110px", gap: 0, background: "#F8FAFC", borderRadius: "10px 10px 0 0", padding: "8px 14px", fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+        <span>Måned</span>
+        <span style={{ textAlign: "right" }}>Omsætning</span>
+        <span style={{ textAlign: "right" }}>Løn</span>
+        <span style={{ textAlign: "right" }}>Kørsel</span>
+        <span style={{ textAlign: "right" }}>Andet</span>
+        <span style={{ textAlign: "right" }}>Overskud</span>
+      </div>
+      <div style={{ background: "#fff", borderRadius: "0 0 10px 10px", boxShadow: "0 1px 3px rgba(0,0,0,0.06)", overflow: "hidden" }}>
+        {monthRows.map((r, idx) => (
+          <div key={r.month} style={{ display: "grid", gridTemplateColumns: "1fr 110px 110px 110px 110px 110px", gap: 0, padding: "9px 14px", borderBottom: idx < monthRows.length - 1 ? "1px solid #F1F5F9" : "none", alignItems: "center" }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: "#111111" }}>{r.label}</div>
+            <div style={{ fontSize: 13, color: "#334155", textAlign: "right" }}>{r.omsaetning > 0 ? kr(r.omsaetning) : "—"}</div>
+            <div style={{ fontSize: 13, color: "#64748B", textAlign: "right" }}>{r.loenKr > 0 ? kr(r.loenKr) : "—"}</div>
+            <div style={{ fontSize: 13, color: "#64748B", textAlign: "right" }}>{r.kmKr > 0 ? kr(r.kmKr) : "—"}</div>
+            <div style={{ fontSize: 13, color: "#64748B", textAlign: "right" }}>{r.manuelleKr > 0 ? kr(r.manuelleKr) : "—"}</div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: r.overskud >= 0 ? "#16A34A" : "#DC2626", textAlign: "right" }}>{kr(r.overskud)}</div>
+          </div>
+        ))}
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 110px 110px 110px 110px 110px", gap: 0, padding: "10px 14px", background: "#FCE4EF", borderRadius: 10, marginTop: 8, fontWeight: 700, fontSize: 13 }}>
+        <span style={{ color: "#9C1B5D" }}>I alt {selectedYear}</span>
+        <span style={{ textAlign: "right", color: "#111111" }}>{kr(aarTotal.omsaetning)}</span>
+        <span />
+        <span />
+        <span />
+        <span style={{ textAlign: "right", color: aarTotal.overskud >= 0 ? "#16A34A" : "#DC2626" }}>{kr(aarTotal.overskud)}</span>
+      </div>
+
+      {isAdminUser && (
+        <>
+          <div style={{ fontWeight: 700, fontSize: 14, color: "#111111", margin: "22px 0 10px" }}>Frie omkostningsposter</div>
+          <div style={{ background: "#fff", borderRadius: 10, boxShadow: "0 1px 3px rgba(0,0,0,0.06)", overflow: "hidden", marginBottom: 10 }}>
+            {omkostninger.filter((o) => o.aar === selectedYear).length === 0 && (
+              <div style={{ padding: "12px 14px", fontSize: 12.5, color: "#94A3B8" }}>Ingen poster for {selectedYear} endnu.</div>
+            )}
+            {omkostninger.filter((o) => o.aar === selectedYear).sort((a, b) => a.maaned - b.maaned).map((o, i, arr) => (
+              <div key={o.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 14px", borderBottom: i < arr.length - 1 ? "1px solid #F1F5F9" : "none" }}>
+                <span style={{ fontSize: 12.5, fontWeight: 600, color: "#64748B", width: 90 }}>{REPORT_MONTHS[o.maaned - 1]}</span>
+                <span style={{ fontSize: 13, flex: 1 }}>{o.beskrivelse}</span>
+                <span style={{ fontSize: 13, fontWeight: 600 }}>{kr(o.beloeb)}</span>
+                <button style={styles.iconBtnGhostInline} onClick={() => onDeleteOmkostning(o.id)} title="Slet"><Trash2 size={14} /></button>
+              </div>
+            ))}
+          </div>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 24 }}>
+            <select style={{ ...styles.inputSm, flex: "none", width: 110 }} value={nyMaaned} onChange={(e) => setNyMaaned(e.target.value)}>
+              {REPORT_MONTHS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
+            </select>
+            <input style={{ ...styles.inputSm, flex: 2 }} placeholder="Beskrivelse (fx husleje)" value={nyBeskrivelse} onChange={(e) => setNyBeskrivelse(e.target.value)} />
+            <input style={{ ...styles.inputSm, flex: "none", width: 110 }} type="number" min={0} placeholder="Kr." value={nyBeloeb} onChange={(e) => setNyBeloeb(e.target.value)} />
+            <button style={styles.secondaryBtn} onClick={tilfoejOmkostning}><Plus size={14} /> Tilføj</button>
+          </div>
+
+          <div style={{ fontWeight: 700, fontSize: 14, color: "#111111", margin: "10px 0 10px" }}>Kilometersatser (individuelle)</div>
+          <div style={{ background: "#fff", borderRadius: 10, boxShadow: "0 1px 3px rgba(0,0,0,0.06)", overflow: "hidden", marginBottom: 10 }}>
+            {employees.filter((e) => !e.fratraadtDato).map((e, i, arr) => {
+              const aktuel = kmSatsPaaDato(kmSatser, e.id, new Date().toISOString().slice(0, 10));
+              return (
+                <div key={e.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 14px", borderBottom: i < arr.length - 1 ? "1px solid #F1F5F9" : "none" }}>
+                  <span style={{ fontSize: 13, flex: 1 }}>{e.name}</span>
+                  <span style={{ fontSize: 12.5, color: aktuel == null ? "#94A3B8" : "#334155" }}>{aktuel == null ? "Ingen sats sat" : `${aktuel} kr./km`}</span>
+                </div>
+              );
+            })}
+          </div>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 10 }}>
+            <select style={{ ...styles.inputSm, flex: 2 }} value={satsEmpId} onChange={(e) => setSatsEmpId(e.target.value)}>
+              <option value="">Vælg medarbejder…</option>
+              {employees.filter((e) => !e.fratraadtDato).map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
+            </select>
+            <input style={{ ...styles.inputSm, flex: "none", width: 90 }} type="number" min={0} step="0.01" placeholder="Kr./km" value={satsVaerdi} onChange={(e) => setSatsVaerdi(e.target.value)} />
+            <input style={{ ...styles.inputSm, flex: "none", width: 140 }} type="date" value={satsFra} onChange={(e) => setSatsFra(e.target.value)} />
+            <button style={styles.secondaryBtn} onClick={tilfoejKmSats}><Plus size={14} /> Gem sats</button>
+          </div>
+        </>
+      )}
+    </>
+  );
+}
+
+function ReportsView({ instances, templates, pricing, budgets, onSaveBudget, isAdminUser,
+                        employees, satsHistorik, kmSatser, kmLog, omkostninger,
+                        onSaveOmkostning, onDeleteOmkostning, onSaveKmSats }) {
   // To rapporter, to spørgsmål. «Budget» handler om, hvad der er kommet ind måned
   // for måned. «Aftaleportefølje» handler om, hvad der ER aftalt — hvad de aftaler,
   // der ligger, er værd, og hvordan de fordeler sig. Det andet kan ikke læses ud af
@@ -7953,7 +8248,11 @@ function ReportsView({ instances, templates, pricing, budgets, onSaveBudget, isA
   const chartMax = Math.max(1, ...monthRows.map((r) => Math.max(r.budgetKr, r.actualOrForecastKr)));
   const CHART_H = 160;
 
-  const rapportFaner = [["budget", "📊 Budget og omsætning"], ["portefoelje", "📁 Aftaleportefølje"]];
+  const rapportFaner = [
+    ["budget", "📊 Budget og omsætning"],
+    ["portefoelje", "📁 Aftaleportefølje"],
+    ...(isAdminUser ? [["overskud", "💰 Overskud"]] : []),
+  ];
 
   return (
     <div style={styles.page}>
@@ -7970,6 +8269,11 @@ function ReportsView({ instances, templates, pricing, budgets, onSaveBudget, isA
 
       {rapport === "portefoelje" ? (
         <PortefoeljeRapport templates={templates} instances={instances} pricing={pricing} />
+      ) : rapport === "overskud" ? (
+        <OverskudRapport instances={instances} employees={employees} satsHistorik={satsHistorik}
+          kmSatser={kmSatser} kmLog={kmLog} omkostninger={omkostninger}
+          onSaveOmkostning={onSaveOmkostning} onDeleteOmkostning={onDeleteOmkostning}
+          onSaveKmSats={onSaveKmSats} pricing={pricing} isAdminUser={isAdminUser} />
       ) : (
       <>
       <div style={styles.toolbar}>
