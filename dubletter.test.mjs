@@ -41,6 +41,18 @@ er("etage og lejlighed efter adressen",
 er("postnummer og by alene er ikke en adresse",
    adressenoegle("Fælleshuset, 9460 Brovst"), "");
 
+// «53 b» og «53B» er det samme husnummer. Ruteplanen skrev det med mellemrum,
+// Dinero uden — og så gik Engtoften 53B fri, selvom aftalen lå der i forvejen.
+er("mellemrum i husnummeret",
+   adressenoegle("Engtoften 53 B, Fjerritslev"), adressenoegle("Engtoften 53B, 9690 Fjerritslev"));
+er("mellemrum i husnummeret, lille bogstav",
+   adressenoegle("Rugmarken 22 b"), "rugmarken 22b");
+// Men et ord efter husnummeret er ikke et bogstav i nummeret.
+er("«1 th» bliver ikke til husnummer 1t",
+   adressenoegle("Kirkevej 1 th, Hune"), "kirkevej 1");
+er("«20 C st» er 20c",
+   adressenoegle("Bredgade 20 C st, Pandrup"), adressenoegle("Bredgade 20C, Pandrup"));
+
 // Og det, der IKKE må smelte sammen:
 er("nabonumre er ikke det samme",
    adressenoegle("Skovbrynet 77") === adressenoegle("Skovbrynet 83"), false);

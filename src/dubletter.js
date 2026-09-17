@@ -44,6 +44,12 @@ export function adressenoegle(adresse) {
   const rent = raa
     .toLowerCase()
     .replace(/[^a-zæøå0-9]+/g, " ")
+    // «53 b» og «53b» er det samme husnummer. Den ene skrivemaade kom ind med
+    // ruteplanerne, den anden staar i Dinero — og saa gik Engtoften 53B fri af
+    // markeringen, selvom aftalen laa der i forvejen paa samme dag og varighed.
+    // Kun ET bogstav, og kun naar der ikke kommer flere: ellers ville
+    // «Kirkevej 1 th» blive til husnummer «1t».
+    .replace(/(\d+)\s+([a-zæøå])(?![a-zæøå])/g, "$1$2")
     .trim();
   if (!rent) return "";
   const vej = (rent.match(/[a-zæøå]{4,}/g) || []).join("");

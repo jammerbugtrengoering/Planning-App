@@ -1685,7 +1685,13 @@ const MODULE_HELP = {
     { h: "Gentagelse", p: [
         "En aftale kan gentages hver uge, hver 14. dag, hver 4. uge, hver 6. uge eller hver 3. måned. Kadencen tælles fra startdatoen.",
         "«Hver 4. uge» er ikke det samme som en gang om måneden. Det giver 13 besøg om året i stedet for 12, og dagen vandrer gennem kalenderen — et besøg den 5. bliver med tiden den 28. Til gengæld ligger det altid på den samme ugedag, og det er sådan, rengøring aftales i praksis.",
-        "Vil du have en fast dato i måneden i stedet, findes den mulighed ikke længere. Sig til, hvis I får brug for den."] }, { h: "Under udarbejdelse", p: ["Er du ikke færdig med en ny aftale, så tryk «Gem som kladde» i stedet for «Gem og planlæg».", "En kladde opretter ingen opgaver. Den ligger og venter, og du kan rette alle felter i den så mange gange du vil.", "Find den igen med filteret «Under udarbejdelse» øverst her på siden. Tallet i knappen viser hvor mange der ligger.", "Tryk «Åbn og godkend» for at rette videre. Inde i aftalen vælger du så «Gem kladde» hvis du stadig ikke er færdig, eller «Godkend og planlæg» når den er klar.", "Først ved godkendelsen oprettes opgaverne — fra startdatoen og frem til udløbsdatoen. Det kan være mange på én gang, så tjek datoerne inden du godkender.", "Startdatoen kan ikke ligge i fortiden. Har en kladde ligget så længe at datoen er løbet fra dig, skal den rettes før du kan godkende.", "Er kladden lavet ved en indlæsning, står der en gul «Bemærkning til kontoret» i aftalen med det, indlæsningen ikke kunne afgøre — manglende kundenavn, en gættet kontrakttype, noter fra det ark den kom fra. Læs den, ret det den peger på, og godkend så.", "Feltet vises kun, så længe aftalen er en kladde. Når den er godkendt, er noten gjort op, og feltet forsvinder — teksten bliver stående i databasen, men skal ikke stå og fylde bagefter."] }, { h: "Søg og filtrér", p: [
+        "Vil du have en fast dato i måneden i stedet, findes den mulighed ikke længere. Sig til, hvis I får brug for den."] }, { h: "Under udarbejdelse", p: ["Er du ikke færdig med en ny aftale, så tryk «Gem som kladde» i stedet for «Gem og planlæg».", "En kladde opretter ingen opgaver. Den ligger og venter, og du kan rette alle felter i den så mange gange du vil.", "Find den igen med filteret «Under udarbejdelse» øverst her på siden. Tallet i knappen viser hvor mange der ligger.", "Tryk «Åbn og godkend» for at rette videre. Inde i aftalen vælger du så «Gem kladde» hvis du stadig ikke er færdig, eller «Godkend og planlæg» når den er klar.", "Først ved godkendelsen oprettes opgaverne — fra startdatoen og frem til udløbsdatoen. Det kan være mange på én gang, så tjek datoerne inden du godkender.", "Startdatoen kan ikke ligge i fortiden. Har en kladde ligget så længe at datoen er løbet fra dig, skal den rettes før du kan godkende.", "Er kladden lavet ved en indlæsning, står der en gul «Bemærkning til kontoret» i aftalen med det, indlæsningen ikke kunne afgøre — manglende kundenavn, en gættet kontrakttype, noter fra det ark den kom fra. Læs den, ret det den peger på, og godkend så.", "Feltet vises kun, så længe aftalen er en kladde. Når den er godkendt, er noten gjort op, og feltet forsvinder — teksten bliver stående i databasen, men skal ikke stå og fylde bagefter."] }, { h: "Del kladdebunken op", p: [
+        "Vælger du «Under udarbejdelse», kommer der to filtre mere frem, som kun findes dér.",
+        "Det ene deler bunken i dem, der ser ud som dubletter, og dem der ikke gør. Tag dubletterne først — det er dem, der enten skal slettes eller lægges sammen med en aftale, der allerede kører, og de fylder mest.",
+        "Det andet er en liste med medarbejdere. Listen viser kun dem, der faktisk har kladder, og tallet siger hvor mange. Så kan du tage én medarbejders ruteplan ad gangen og få alle spørgsmålene afklaret med hende på én gang.",
+        "Tallene følger de øvrige filtre. Har du valgt «Erhverv», tæller de kun erhvervskladder.",
+        "De to filtre nulstiller sig selv, når du forlader bunken, så du ikke kommer tilbage og ser 12 af 340 uden at kunne huske hvorfor.",
+        "Markerer du en kladde til sletning, forsvinder den fra bunken med det samme — den er afgjort og skal ikke gennemgås igen. Find den under «Skal slettes», hvor «Fortryd» sætter den tilbage."] }, { h: "Søg og filtrér", p: [
         "Søgefeltet under knapperne leder i kundenavn, fakturabeskrivelse, adresse og opgavetekst på én gang.",
         "At den også leder i fakturabeskrivelsen er med vilje: på Nexus- og Ældrelov-aftaler hedder kunden «Jammerbugt Kommune» på dem alle sammen, og borgerens navn står i fakturabeskrivelsen. Søger du på borgeren, finder du den rigtige aftale — søger du på kommunen, får du dem alle.",
         "Adressen er med, fordi det ofte er dét, man husker.",
@@ -9328,6 +9334,13 @@ function ContractsView({ templates: alleTemplates, instances, pricing, employees
   const [statusFilter, setStatusFilter] = useState("alle");
   const [typeFilter, setTypeFilter] = useState("all");
   const [soeg, setSoeg] = useState("");
+  // De to sidste gaelder KUN kladdebunken, og de nulstilles naar man forlader den.
+  //
+  // 340 kladder er for mange til at gaa igennem i ét stykke. Bunken skal deles op
+  // paa de to maader, gennemgangen faktisk foregaar paa: «ryd dubletterne foerst»
+  // og «tag Nadines ind ad gangen, saa kan hun svare paa dem alle sammen».
+  const [dubletFilter, setDubletFilter] = useState("alle");   // alle | dublet | ikke
+  const [medarbFilter, setMedarbFilter] = useState("alle");   // alle | <id> | ingen
 
   // Søgningen leder i MERE end kundenavnet, og det er ikke overflod.
   //
@@ -9377,10 +9390,23 @@ function ContractsView({ templates: alleTemplates, instances, pricing, employees
   // Der filtreres foer listen deles op i aftaler med og uden udloebsdato, saa begge
   // dele foelger samme valg. En kladde uden udloebsdato havner i den anden liste, og
   // skal kunne findes af filteret praecis som de oevrige.
+  //
+  // «Under udarbejdelse» viser status «kladde» og INTET andet. En aftale, nogen har
+  // markeret til sletning, faar status «slettes» og falder altsaa ud af bunken af
+  // sig selv — den er afgjort, og den skal ikke ligge og blive gennemgaaet én gang
+  // til. Den kan findes igen under «Skal slettes», og «Fortryd» saetter den tilbage
+  // til kladde.
+  const erKladdevisning = statusFilter === "kladde";
   const templates = alleTemplates
     .filter((t) => (statusFilter === "udgaaet" ? true : !erGjortOp(t)))
     .filter((t) => (statusFilter === "alle" ? true : (t.status || "aktiv") === statusFilter))
     .filter((t) => (typeFilter === "all" ? true : effectiveContractType(t) === typeFilter))
+    // De to kladdefiltre virker kun i kladdevisningen. Ellers ville et valg, man
+    // havde glemt, sidde og skjule aftaler i en anden liste.
+    .filter((t) => !erKladdevisning || dubletFilter === "alle"
+      || (dubletFilter === "dublet" ? dubletter.has(t.id) : !dubletter.has(t.id)))
+    .filter((t) => !erKladdevisning || medarbFilter === "alle"
+      || (medarbFilter === "ingen" ? !t.preferredEmployeeId : t.preferredEmployeeId === medarbFilter))
     .filter(passerSoegning);
   // Find den reelle, aktuelle kontrakttype for en skabelon: den seneste værdi sat på
   // en tilknyttet opgave slår den statiske skabelonværdi, så redigering i ugeplanen
@@ -9436,6 +9462,35 @@ function ContractsView({ templates: alleTemplates, instances, pricing, employees
     }
     return { sum: weeklyValue, weeks: 1, wholePeriod: false };
   }
+
+  // Grundbunken bag tallene paa kladdefiltrene.
+  //
+  // Tallene skal sige, hvad et klik GIVER — ikke hvor mange der findes i alt. Derfor
+  // regnes de af de kladder, de oevrige filtre allerede slipper igennem: har man
+  // valgt «Erhverv», skal der staa hvor mange erhvervskladder der er dubletter, og
+  // ikke hvor mange dubletter der er i hele bunken.
+  const kladdeGrund = erKladdevisning
+    ? alleTemplates
+        .filter((t) => (t.status || "aktiv") === "kladde")
+        .filter((t) => (typeFilter === "all" ? true : effectiveContractType(t) === typeFilter))
+        .filter(passerSoegning)
+    : [];
+  const kladdeDubletAntal = kladdeGrund.filter((t) => dubletter.has(t.id)).length;
+
+  // Medarbejderne med kladder — og kun dem. En liste med alle tyve ville have
+  // femten navne, der giver nul aftaler, og saa skal man prøve sig frem.
+  const kladdeMedarbejdere = (() => {
+    const antal = new Map();
+    let uden = 0;
+    kladdeGrund.forEach((t) => {
+      if (!t.preferredEmployeeId) { uden += 1; return; }
+      antal.set(t.preferredEmployeeId, (antal.get(t.preferredEmployeeId) || 0) + 1);
+    });
+    const liste = [...antal.entries()]
+      .map(([id, n]) => ({ id, navn: (employees.find((e) => e.id === id) || {}).name || id, n }))
+      .sort((a, b) => a.navn.localeCompare(b.navn, "da"));
+    return { liste, uden };
+  })();
 
   // Hent alle faste kontrakter med udløbsdato — sortér efter nærmest udløbende
   const contracts = templates
@@ -9505,7 +9560,13 @@ function ContractsView({ templates: alleTemplates, instances, pricing, employees
           <button
             key={k}
             type="button"
-            onClick={() => setStatusFilter(k)}
+            onClick={() => {
+              setStatusFilter(k);
+              // Kladdefiltrene nulstilles, naar man forlader bunken. Ellers kommer
+              // man tilbage til «Under udarbejdelse» en time senere og ser 12 af
+              // 340 uden at kunne huske hvorfor.
+              if (k !== "kladde") { setDubletFilter("alle"); setMedarbFilter("alle"); }
+            }}
             style={statusFilter === k
               ? { ...styles.typePickBtn, flex: "none", borderColor: "#D6247A", color: "#D6247A", background: "#FCE4EF" }
               : { ...styles.typePickBtn, flex: "none" }}>
@@ -9526,6 +9587,50 @@ function ContractsView({ templates: alleTemplates, instances, pricing, employees
           </button>
         ))}
       </div>
+
+      {/* Kladdebunkens egne to filtre.
+          De staar KUN her, fordi de kun giver mening her: en aktiv aftale faar
+          aldrig et dubletmaerke, og en gennemgang «medarbejder for medarbejder» er
+          noget, man goer med de indlaeste ruteplaner og ikke med driften. */}
+      {erKladdevisning && (
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", marginBottom: 14 }}>
+          {[["alle", `Alle kladder (${kladdeGrund.length})`],
+            ["dublet", `⚠ Ser ud som dublet (${kladdeDubletAntal})`],
+            ["ikke", `Uden dubletmistanke (${kladdeGrund.length - kladdeDubletAntal})`]].map(([k, l]) => (
+            <button
+              key={k}
+              type="button"
+              onClick={() => setDubletFilter(k)}
+              style={dubletFilter === k
+                ? { ...styles.typePickBtn, flex: "none", borderColor: "#D97706", color: "#92400E", background: "#FEF3C7" }
+                : { ...styles.typePickBtn, flex: "none" }}>
+              {l}
+            </button>
+          ))}
+          <select
+            value={medarbFilter}
+            onChange={(e) => setMedarbFilter(e.target.value)}
+            style={{ ...styles.inputSm, margin: 0, minWidth: 210, fontSize: 13, fontWeight: 600,
+                     color: medarbFilter !== "alle" ? "#9C1B5D" : "#111111",
+                     borderColor: medarbFilter !== "alle" ? "#D6247A" : "#E2E8F0",
+                     background: medarbFilter !== "alle" ? "#FCE4EF" : "#fff" }}>
+            <option value="alle">Alle medarbejdere</option>
+            {kladdeMedarbejdere.liste.map((m) => (
+              <option key={m.id} value={m.id}>{m.navn} ({m.n})</option>
+            ))}
+            {kladdeMedarbejdere.uden > 0 && (
+              <option value="ingen">Uden fast medarbejder ({kladdeMedarbejdere.uden})</option>
+            )}
+          </select>
+          {(dubletFilter !== "alle" || medarbFilter !== "alle") && (
+            <button type="button" onClick={() => { setDubletFilter("alle"); setMedarbFilter("alle"); }}
+              style={{ border: "none", background: "transparent", color: "#D6247A", fontWeight: 700,
+                       cursor: "pointer", fontSize: 13, fontFamily: "inherit" }}>
+              Nulstil
+            </button>
+          )}
+        </div>
+      )}
 
       {statusFilter === "udgaaet" && gjortOpAntal > 0 && (
         <div style={{ fontSize: 12.5, color: "#64748B", marginBottom: 14, lineHeight: 1.5 }}>
