@@ -375,6 +375,13 @@ function kmSatsPaaDato(kmSatser, empId, datoStr) {
   const fundet = raekker.find((r) => r.gyldig_fra <= datoStr);
   return fundet ? Number(fundet.sats) : null;
 }
+
+// Den kilometersats der gaelder i dag — det er den man ser og retter paa medarbejderkortet.
+function aktuelKmSats(kmSatser, empId) {
+  const idag = new Date();
+  const iso = new Date(idag.getTime() - idag.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+  return kmSatsPaaDato(kmSatser, empId, iso);
+}
 // Bruges kun hvis en kaldende funktion ikke har transportindstillingerne ved haanden.
 const DEFAULT_TRAVEL = { defaultMinutes: 20, dayStart: "07:00", overrides: {} };
 // Planlaegningshorisont: hvor mange uger frem opgaverne altid materialiseres.
@@ -2391,6 +2398,9 @@ function PlanningApp({ session, onSignOut }) {
           // raekker, og satsen bliver null. Eksporten viser da en streg i stedet for
           // et forkert beloeb — den maa ikke gaette paa standardsatsen.
           hourlyWage: aktuelSats(satsHistorik, e.id),
+          // Samme princip som timeloennen: kilometersatsen vises og rettes paa
+          // medarbejderkortet, og en ny sats gaelder kun fremad.
+          kmSats: aktuelKmSats(kmSatser, e.id),
           homeAddress: (homeData || []).find((h) => h.employee_id === e.id)?.home_address ?? null,
           travelInWorktime: (homeData || []).find((h) => h.employee_id === e.id)?.travel_in_worktime ?? false,
           skills: Object.fromEntries(
@@ -2854,6 +2864,16 @@ function PlanningApp({ session, onSignOut }) {
           .upsert({ employee_id: emp.id, hourly_wage: emp.hourlyWage, gyldig_fra: emp.wageFrom },
                   { onConflict: "employee_id,gyldig_fra" });
         if (dbFail(wageErr, "gemme timelønnen")) return;
+      }
+
+      // Kilometersatsen gemmes efter samme princip som timeloennen — en ny linje i
+      // historikken, ikke en overskrivning, saa allerede afregnede maaneder ikke
+      // aendrer sig. Feltet er valgfrit: staar det tomt, roeres satsen slet ikke.
+      if (emp.kmSats != null && emp.kmSatsFra) {
+        const { error: kmSatsErr } = await supabase.from("km_sats_historik")
+          .upsert({ employee_id: emp.id, sats: emp.kmSats, gyldig_fra: emp.kmSatsFra },
+                  { onConflict: "employee_id,gyldig_fra" });
+        if (dbFail(kmSatsErr, "gemme kilometersatsen")) return;
       }
 
       const { error: homeErr } = await supabase.from("employee_home")
@@ -4354,19 +4374,6 @@ function PlanningApp({ session, onSignOut }) {
     const { error: delErr } = await supabase.from("omkostninger").delete().eq("id", id);
     if (dbFail(delErr, "slette omkostningsposten")) return;
   }
-  // Ny kilometersats for en medarbejder, gaeldende fra en given dato — samme
-  // princip som loenstigninger: gamle maaneders overskud regnes ikke om.
-  async function saveKmSats(empId, sats, gyldigFra) {
-    const { data, error: satsErr } = await supabase.from("km_sats_historik")
-      .insert({ employee_id: empId, sats: Number(sats) || 0, gyldig_fra: gyldigFra })
-      .select().single();
-    if (dbFail(satsErr, "gemme kilometersatsen")) return;
-    setKmSatser((prev) => {
-      const naeste = { ...prev, [empId]: [...(prev[empId] || []), { sats: data.sats, gyldig_fra: data.gyldig_fra }] };
-      naeste[empId].sort((a, b) => (a.gyldig_fra < b.gyldig_fra ? 1 : -1));
-      return naeste;
-    });
-  }
   // Ny individuel kvartalsbonus — starter IKKE godkendt, ligesom timer og km,
   // saa den foerst taeller med i overskudstallet naar den er godkendt (afsnit
   // "Bonus" i OverskudRapport haandterer selve godkendelsen).
@@ -5110,7 +5117,7 @@ function PlanningApp({ session, onSignOut }) {
         <ReportsView instances={instances} templates={templates} pricing={pricing} budgets={budgets} onSaveBudget={saveBudget} isAdminUser={isAdminUser}
           employees={employees} satsHistorik={satsHistorik} kmSatser={kmSatser} kmLog={kmLog}
           omkostninger={omkostninger} onSaveOmkostning={saveOmkostning}
-          onDeleteOmkostning={deleteOmkostning} onSaveKmSats={saveKmSats}
+          onDeleteOmkostning={deleteOmkostning}
           bonus={bonus} onSaveBonus={saveBonus} onDeleteBonus={deleteBonus} />
       )}
 
@@ -5125,7 +5132,7 @@ function PlanningApp({ session, onSignOut }) {
       )}
 
       {showAddTask && <TaskModal onClose={() => { setShowAddTask(false); setCopyPayload(null); setEditTplId(null); }} onSave={(p, editId) => (editId ? updateTemplate(p, editId) : addTask(p))} editId={editTplId} checklistTemplates={checklistTemplates} skills={skills} copyFrom={copyPayload} employees={aktiveEmployees} />}
-      {showAddEmp && <EmployeeModal emp={editEmp} onClose={() => { setShowAddEmp(false); setEditEmp(null); }} onSave={saveEmployee} skills={skills} satsHistorik={editEmp ? satsHistorik[editEmp.id] : null} />}
+      {showAddEmp && <EmployeeModal emp={editEmp} onClose={() => { setShowAddEmp(false); setEditEmp(null); }} onSave={saveEmployee} skills={skills} satsHistorik={editEmp ? satsHistorik[editEmp.id] : null} kmSatser={editEmp ? kmSatser[editEmp.id] : null} />}
       {showAddBlock && <BlockModal employees={aktiveEmployees} onClose={() => setShowAddBlock(false)} onSave={addBlock} />}
       {showAddActivity && <ActivityModal employees={aktiveEmployees} onClose={() => setShowAddActivity(false)} onSave={addActivity} />}
       {showTravelSettings && (
@@ -7959,6 +7966,24 @@ const REPORT_TABS = [...REPORT_AREAS, ["alle", "🌐 Alle"]];
 // Kvartalets SIDSTE måned (1-12) → hvilket kvartal (1-4) det er. Bruges til at
 // placere kvartalsbonussen i overskudsrapporten i den måned, kvartalet slutter.
 const KVARTAL_SIDSTE_MAANED = { 3: 1, 6: 2, 9: 3, 12: 4 };
+// Det omvendte: hvilke tre måneder et kvartal består af. Bruges til at tjekke
+// om en medarbejder har haft en sygedag i det kvartal en bonus dækker.
+const KVARTAL_MAANEDER = { 1: [1, 2, 3], 2: [4, 5, 6], 3: [7, 8, 9], 4: [10, 11, 12] };
+
+// Bonussen skal kun udbetales uden sygdom i kvartalet — men det er en advarsel,
+// ikke en spærre: administrator ser den og godkender eller afviser selv, se
+// afsnittet "Bonus" nedenfor. Genbruger sygdomsblokkene fra planlægningen
+// (BLOCK_TYPES), ikke en ny fraværstabel.
+function harSygdomIKvartal(instances, empId, aar, kvartal) {
+  const maaneder = KVARTAL_MAANEDER[kvartal] || [];
+  return instances.some((t) => {
+    if (t.type !== "sygdom" || !(t.assignees || []).includes(empId)) return false;
+    const datoStr = instanceDateString(t);
+    if (!datoStr) return false;
+    const d = new Date(datoStr);
+    return d.getFullYear() === aar && maaneder.includes(d.getMonth() + 1);
+  });
+}
 
 // Overskudsrapporten: omsaetning minus lønsum, kørsel og frie omkostninger, pr.
 // maaned og for hele aaret. Kun for administratorer.
@@ -7973,7 +7998,7 @@ const KVARTAL_SIDSTE_MAANED = { 3: 1, 6: 2, 9: 3, 12: 4 };
 // Kilometersatsen er INDIVIDUEL pr. medarbejder (aftales fx ved lønforhandling)
 // — ikke én fælles sats for hele virksomheden. Se kmSatsPaaDato.
 function OverskudRapport({ instances, employees, satsHistorik, kmSatser, kmLog, omkostninger,
-                            onSaveOmkostning, onDeleteOmkostning, onSaveKmSats, bonus,
+                            onSaveOmkostning, onDeleteOmkostning, bonus,
                             onSaveBonus, onDeleteBonus, pricing, isAdminUser }) {
   const now = new Date();
   const [selectedYear, setSelectedYear] = useState(now.getFullYear());
@@ -7995,10 +8020,6 @@ function OverskudRapport({ instances, employees, satsHistorik, kmSatser, kmLog, 
   const [nyBeskrivelse, setNyBeskrivelse] = useState("");
   const [nyBeloeb, setNyBeloeb] = useState("");
   const [nyMaaned, setNyMaaned] = useState(now.getMonth() + 1);
-
-  const [satsEmpId, setSatsEmpId] = useState("");
-  const [satsVaerdi, setSatsVaerdi] = useState("");
-  const [satsFra, setSatsFra] = useState(() => new Date().toISOString().slice(0, 10));
 
   const [bonusEmpId, setBonusEmpId] = useState("");
   const [bonusKvartal, setBonusKvartal] = useState(Math.floor(now.getMonth() / 3) + 1);
@@ -8090,11 +8111,6 @@ function OverskudRapport({ instances, employees, satsHistorik, kmSatser, kmLog, 
     if (!nyBeskrivelse.trim() || !nyBeloeb) return;
     onSaveOmkostning(selectedYear, Number(nyMaaned), nyBeskrivelse.trim(), nyBeloeb);
     setNyBeskrivelse(""); setNyBeloeb("");
-  }
-  function tilfoejKmSats() {
-    if (!satsEmpId || !satsVaerdi || !satsFra) return;
-    onSaveKmSats(satsEmpId, satsVaerdi, satsFra);
-    setSatsVaerdi("");
   }
   function tilfoejBonus() {
     if (!bonusEmpId || !bonusBeloeb) return;
@@ -8202,7 +8218,7 @@ function OverskudRapport({ instances, employees, satsHistorik, kmSatser, kmLog, 
           </div>
 
           <div style={{ fontWeight: 700, fontSize: 14, color: "#111111", margin: "10px 0 10px" }}>Kilometersatser (individuelle)</div>
-          <div style={{ background: "#fff", borderRadius: 10, boxShadow: "0 1px 3px rgba(0,0,0,0.06)", overflow: "hidden", marginBottom: 10 }}>
+          <div style={{ background: "#fff", borderRadius: 10, boxShadow: "0 1px 3px rgba(0,0,0,0.06)", overflow: "hidden", marginBottom: 6 }}>
             {employees.filter((e) => !e.fratraadtDato).map((e, i, arr) => {
               const aktuel = kmSatsPaaDato(kmSatser, e.id, new Date().toISOString().slice(0, 10));
               return (
@@ -8213,15 +8229,7 @@ function OverskudRapport({ instances, employees, satsHistorik, kmSatser, kmLog, 
               );
             })}
           </div>
-          <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 10 }}>
-            <select style={{ ...styles.inputSm, flex: 2 }} value={satsEmpId} onChange={(e) => setSatsEmpId(e.target.value)}>
-              <option value="">Vælg medarbejder…</option>
-              {employees.filter((e) => !e.fratraadtDato).map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
-            </select>
-            <input style={{ ...styles.inputSm, flex: "none", width: 90 }} type="number" min={0} step="0.01" placeholder="Kr./km" value={satsVaerdi} onChange={(e) => setSatsVaerdi(e.target.value)} />
-            <input style={{ ...styles.inputSm, flex: "none", width: 140 }} type="date" value={satsFra} onChange={(e) => setSatsFra(e.target.value)} />
-            <button style={styles.secondaryBtn} onClick={tilfoejKmSats}><Plus size={14} /> Gem sats</button>
-          </div>
+          <div style={{ ...styles.hint, marginBottom: 20 }}>Rettes på den enkelte medarbejders kort, samme sted som timelønnen.</div>
 
           <div style={{ fontWeight: 700, fontSize: 14, color: "#111111", margin: "10px 0 10px" }}>Bonus (kvartalsvis, individuel)</div>
           <div style={{ background: "#fff", borderRadius: 10, boxShadow: "0 1px 3px rgba(0,0,0,0.06)", overflow: "hidden", marginBottom: 10 }}>
@@ -8231,10 +8239,20 @@ function OverskudRapport({ instances, employees, satsHistorik, kmSatser, kmLog, 
             {bonus.filter((b) => b.aar === selectedYear).sort((a, b) => a.kvartal - b.kvartal).map((b, i, arr) => {
               const emp = employees.find((e) => e.id === b.employee_id);
               const godkendt = godkendtSet.has(`bonus|${b.employee_id}|${b.id}`);
+              // Advarsel, ikke en spærre — administrator ser den og godkender eller
+              // afviser selv, se KVARTAL_MAANEDER/harSygdomIKvartal ovenfor.
+              const harSygdom = harSygdomIKvartal(instances, b.employee_id, b.aar, b.kvartal);
               return (
                 <div key={b.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 14px", borderBottom: i < arr.length - 1 ? "1px solid #F1F5F9" : "none" }}>
                   <span style={{ fontSize: 12.5, fontWeight: 600, color: "#64748B", width: 40 }}>Q{b.kvartal}</span>
-                  <span style={{ fontSize: 13, flex: 1 }}>{emp?.name || "Ukendt medarbejder"}</span>
+                  <span style={{ fontSize: 13, flex: 1 }}>
+                    {emp?.name || "Ukendt medarbejder"}
+                    {harSygdom && (
+                      <span style={{ marginLeft: 8, fontSize: 11.5, fontWeight: 600, color: "#B45309" }} title="Medarbejderen har haft en sygedag registreret i dette kvartal.">
+                        ⚠️ Sygemeldt i kvartalet
+                      </span>
+                    )}
+                  </span>
                   <span style={{ fontSize: 13, fontWeight: 600 }}>{kr(b.beloeb)}</span>
                   <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, color: godkendt ? "#16A34A" : "#94A3B8", cursor: "pointer" }}>
                     <input type="checkbox" checked={godkendt} onChange={(e) => saetBonusGodkendt(b.id, b.employee_id, e.target.checked)} />
@@ -8264,7 +8282,7 @@ function OverskudRapport({ instances, employees, satsHistorik, kmSatser, kmLog, 
 
 function ReportsView({ instances, templates, pricing, budgets, onSaveBudget, isAdminUser,
                         employees, satsHistorik, kmSatser, kmLog, omkostninger,
-                        onSaveOmkostning, onDeleteOmkostning, onSaveKmSats,
+                        onSaveOmkostning, onDeleteOmkostning,
                         bonus, onSaveBonus, onDeleteBonus }) {
   // To rapporter, to spørgsmål. «Budget» handler om, hvad der er kommet ind måned
   // for måned. «Aftaleportefølje» handler om, hvad der ER aftalt — hvad de aftaler,
@@ -8376,7 +8394,7 @@ function ReportsView({ instances, templates, pricing, budgets, onSaveBudget, isA
         <OverskudRapport instances={instances} employees={employees} satsHistorik={satsHistorik}
           kmSatser={kmSatser} kmLog={kmLog} omkostninger={omkostninger}
           onSaveOmkostning={onSaveOmkostning} onDeleteOmkostning={onDeleteOmkostning}
-          onSaveKmSats={onSaveKmSats} bonus={bonus} onSaveBonus={onSaveBonus}
+          bonus={bonus} onSaveBonus={onSaveBonus}
           onDeleteBonus={onDeleteBonus} pricing={pricing} isAdminUser={isAdminUser} />
       ) : (
       <>
@@ -13067,7 +13085,7 @@ function TravelSettingsModal({ settings, onClose, onSave }) {
   );
 }
 
-function EmployeeModal({ emp, onClose, onSave, skills: skillList, satsHistorik }) {
+function EmployeeModal({ emp, onClose, onSave, skills: skillList, satsHistorik, kmSatser }) {
   // Spaerre mod at oprette den samme medarbejder to gange.
   //
   // Id'et dannes med uid("e") INDE i knappens onClick. To tryk giver altsaa to
@@ -13104,6 +13122,12 @@ function EmployeeModal({ emp, onClose, onSave, skills: skillList, satsHistorik }
   const [wageFrom, setWageFrom] = useState(todayIso());
   const nuvaerendeSats = emp?.hourlyWage != null ? Number(emp.hourlyWage) : null;
   const satsErAendret = Number(hourlyWage) !== nuvaerendeSats && hourlyWage !== "";
+  // Kilometersatsen er individuel ligesom timelønnen, men har INGEN standardværdi —
+  // et tomt felt skal blive ved med at betyde "ingen sats sat", ikke "sat til 0".
+  const [kmSats, setKmSats] = useState(emp?.kmSats != null ? String(emp.kmSats) : "");
+  const [kmSatsFra, setKmSatsFra] = useState(todayIso());
+  const nuvaerendeKmSats = emp?.kmSats != null ? Number(emp.kmSats) : null;
+  const kmSatsErAendret = kmSats !== "" && Number(kmSats) !== nuvaerendeKmSats;
   const [homeAddress, setHomeAddress] = useState(emp?.homeAddress || "");
   const [travelInWorktime, setTravelInWorktime] = useState(emp?.travelInWorktime ?? false);
   const [weekendOk, setWeekendOk] = useState(emp?.weekendOk ?? false);
@@ -13321,6 +13345,37 @@ function EmployeeModal({ emp, onClose, onSave, skills: skillList, satsHistorik }
             </div>
           )}
 
+          {/* Kilometersats — samme opbygning som timelønnen ovenfor, men uden
+              standardværdi. Bruges KUN til overskudsrapporten, ikke til Danløn. */}
+          <label style={{ ...styles.label, marginTop: 16 }}>Kilometersats (kr./km)</label>
+          <input style={{ ...styles.input, maxWidth: 160 }} type="number" min="0" step="0.01" value={kmSats}
+            onChange={(e) => setKmSats(e.target.value)} placeholder="Ingen sats sat" />
+          <div style={styles.hint}>Bruges kun til overskudsrapporten, ikke til løneksporten til Danløn.</div>
+
+          {kmSatsErAendret && (
+            <div style={{ background: "#FFFBEB", border: "1px solid #FDE68A", borderRadius: 10, padding: 12, marginTop: 10 }}>
+              <label style={{ ...styles.label, marginTop: 0 }}>Den nye kilometersats gælder fra</label>
+              <input style={{ ...styles.input, maxWidth: 200 }} type="date" value={kmSatsFra}
+                onChange={(e) => setKmSatsFra(e.target.value)} />
+              <div style={styles.hint}>
+                Kørsel før denne dato beholder den gamle sats, så afregnede måneder
+                ikke ændrer sig.
+              </div>
+            </div>
+          )}
+
+          {(kmSatser || []).length > 1 && (
+            <div style={{ marginTop: 10 }}>
+              <div style={{ fontSize: 11.5, fontWeight: 700, color: "#475569", marginBottom: 4 }}>Tidligere kilometersatser</div>
+              {(kmSatser || []).map((r) => (
+                <div key={r.gyldig_fra} style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5, color: "#64748B", padding: "3px 0" }}>
+                  <span>Fra {r.gyldig_fra}</span>
+                  <span style={{ fontWeight: 600, color: "#111111" }}>{Number(r.sats).toLocaleString("da-DK")} kr/km</span>
+                </div>
+              ))}
+            </div>
+          )}
+
           <button type="button" style={travelInWorktime ? styles.empTjekAktivGroen : styles.empTjek}
             onClick={() => setTravelInWorktime((v) => !v)}>
             <span style={travelInWorktime ? styles.empTjekFirkantGroen : styles.empTjekFirkant}>
@@ -13373,7 +13428,7 @@ function EmployeeModal({ emp, onClose, onSave, skills: skillList, satsHistorik }
           if (gemmer) return;
           setGemmer(true);
           try {
-            await onSave({ id: emp?.id || uid("e"), name: name.trim(), skills: empSkills, color: emp?.color || color, capacity, isAdmin, weekendOk, startTime: startTime || null, hourlyWage: hourlyWage === "" ? STANDARD_TIMELOEN : Math.max(0, Number(hourlyWage)), wageFrom: satsErAendret || !emp ? wageFrom : null, homeAddress: homeAddress.trim() || null, travelInWorktime, danloenNr: danloenNr.trim() || null,
+            await onSave({ id: emp?.id || uid("e"), name: name.trim(), skills: empSkills, color: emp?.color || color, capacity, isAdmin, weekendOk, startTime: startTime || null, hourlyWage: hourlyWage === "" ? STANDARD_TIMELOEN : Math.max(0, Number(hourlyWage)), wageFrom: satsErAendret || !emp ? wageFrom : null, kmSats: kmSats === "" ? null : Math.max(0, Number(kmSats)), kmSatsFra: kmSats !== "" && (kmSatsErAendret || !emp) ? kmSatsFra : null, homeAddress: homeAddress.trim() || null, travelInWorktime, danloenNr: danloenNr.trim() || null,
               weekendTillaeg, shBetaling,
               weekendPctEgen: weekendPctEgen.trim() === "" ? null : Number(weekendPctEgen.replace(",", ".")),
               shPctEgen: shPctEgen.trim() === "" ? null : Number(shPctEgen.replace(",", ".")) });
