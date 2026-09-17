@@ -2279,6 +2279,7 @@ function PlanningApp({ session, onSignOut }) {
       { data: kmSatsData },
       { data: omkostningerData },
       { data: kmLogFullData },
+      { data: bonusData },
       { data: homeData },
       { data: instAccessData },
       { data: custAccessData },
@@ -2312,6 +2313,8 @@ function PlanningApp({ session, onSignOut }) {
       // Alle kørte kilometer — overskudsrapporten summerer på tværs af hele året,
       // i modsætning til Danløn-eksporten der kun henter én måned ad gangen.
       hentMedFornyelse("kørselslog", () => supabase.from("km_log").select("*")),
+      // Individuel kvartalsbonus. Kun til overskudsrapporten; sendes ikke til Danløn.
+      hentMedFornyelse("bonus", () => supabase.from("bonus").select("*")),
       // Hjemmeadresse og transportordning. Samme historie som loennen: er man ikke
       // administrator, kommer der en tom liste tilbage, og ordningen slaar ikke til.
       hentMedFornyelse("transportordninger", () => supabase.from("employee_home").select("*")),
@@ -2365,6 +2368,7 @@ function PlanningApp({ session, onSignOut }) {
       setKmSatser(kmSatser);
       if (omkostningerData) setOmkostninger(omkostningerData);
       if (kmLogFullData) setKmLog(kmLogFullData);
+      if (bonusData) setBonus(bonusData);
 
       // Employees – saml skills og capacity op
       let empMapped = [];
@@ -2630,6 +2634,7 @@ function PlanningApp({ session, onSignOut }) {
   const [kmSatser, setKmSatser] = useState({}); // { [employee_id]: [{sats, gyldig_fra}, ...] }
   const [omkostninger, setOmkostninger] = useState([]); // [{id, aar, maaned, beskrivelse, beloeb}]
   const [kmLog, setKmLog] = useState([]); // [{id, employee_id, work_date, km}]
+  const [bonus, setBonus] = useState([]); // [{id, employee_id, aar, kvartal, beloeb, note}]
   const [afvisId, setAfvisId] = useState(null);
   const [afvisNote, setAfvisNote] = useState("");
   // Minutter kontoret vil fakturere for et forgaeves besoeg, pr. melding. Starter
@@ -4362,6 +4367,21 @@ function PlanningApp({ session, onSignOut }) {
       return naeste;
     });
   }
+  // Ny individuel kvartalsbonus — starter IKKE godkendt, ligesom timer og km,
+  // saa den foerst taeller med i overskudstallet naar den er godkendt (afsnit
+  // "Bonus" i OverskudRapport haandterer selve godkendelsen).
+  async function saveBonus(empId, aar, kvartal, beloeb) {
+    const { data, error: bonusErr } = await supabase.from("bonus")
+      .insert({ employee_id: empId, aar, kvartal, beloeb: Number(beloeb) || 0, oprettet_af: currentEmployeeForAuth?.auth_user_id || null })
+      .select().single();
+    if (dbFail(bonusErr, "gemme bonussen")) return;
+    setBonus((prev) => [...prev, data]);
+  }
+  async function deleteBonus(id) {
+    setBonus((prev) => prev.filter((b) => b.id !== id));
+    const { error: delErr } = await supabase.from("bonus").delete().eq("id", id);
+    if (dbFail(delErr, "slette bonussen")) return;
+  }
   // Når planlæggeren selv sætter en opgave til udført, markeres den med
   // "planner" — så kan man i planen se at det ikke er medarbejderen der har
   // afsluttet den ude hos kunden. Felterne ryddes igen hvis opgaven genåbnes.
@@ -5090,7 +5110,8 @@ function PlanningApp({ session, onSignOut }) {
         <ReportsView instances={instances} templates={templates} pricing={pricing} budgets={budgets} onSaveBudget={saveBudget} isAdminUser={isAdminUser}
           employees={employees} satsHistorik={satsHistorik} kmSatser={kmSatser} kmLog={kmLog}
           omkostninger={omkostninger} onSaveOmkostning={saveOmkostning}
-          onDeleteOmkostning={deleteOmkostning} onSaveKmSats={saveKmSats} />
+          onDeleteOmkostning={deleteOmkostning} onSaveKmSats={saveKmSats}
+          bonus={bonus} onSaveBonus={saveBonus} onDeleteBonus={deleteBonus} />
       )}
 
       {view === "kundetimer" && (<CustomerHoursView instances={instances} />)}
@@ -7935,6 +7956,10 @@ const REPORT_MONTHS = ["Januar","Februar","Marts","April","Maj","Juni","Juli","A
 const REPORT_AREA_COLORS = { ...Object.fromEntries(CONTRACT_TYPES.map((c) => [c.key, c.chart])), alle: "#334155" };
 const REPORT_TABS = [...REPORT_AREAS, ["alle", "🌐 Alle"]];
 
+// Kvartalets SIDSTE måned (1-12) → hvilket kvartal (1-4) det er. Bruges til at
+// placere kvartalsbonussen i overskudsrapporten i den måned, kvartalet slutter.
+const KVARTAL_SIDSTE_MAANED = { 3: 1, 6: 2, 9: 3, 12: 4 };
+
 // Overskudsrapporten: omsaetning minus lønsum, kørsel og frie omkostninger, pr.
 // maaned og for hele aaret. Kun for administratorer.
 //
@@ -7948,7 +7973,8 @@ const REPORT_TABS = [...REPORT_AREAS, ["alle", "🌐 Alle"]];
 // Kilometersatsen er INDIVIDUEL pr. medarbejder (aftales fx ved lønforhandling)
 // — ikke én fælles sats for hele virksomheden. Se kmSatsPaaDato.
 function OverskudRapport({ instances, employees, satsHistorik, kmSatser, kmLog, omkostninger,
-                            onSaveOmkostning, onDeleteOmkostning, onSaveKmSats, pricing, isAdminUser }) {
+                            onSaveOmkostning, onDeleteOmkostning, onSaveKmSats, bonus,
+                            onSaveBonus, onDeleteBonus, pricing, isAdminUser }) {
   const now = new Date();
   const [selectedYear, setSelectedYear] = useState(now.getFullYear());
   const years = [now.getFullYear() - 1, now.getFullYear(), now.getFullYear() + 1];
@@ -7973,6 +7999,10 @@ function OverskudRapport({ instances, employees, satsHistorik, kmSatser, kmLog, 
   const [satsEmpId, setSatsEmpId] = useState("");
   const [satsVaerdi, setSatsVaerdi] = useState("");
   const [satsFra, setSatsFra] = useState(() => new Date().toISOString().slice(0, 10));
+
+  const [bonusEmpId, setBonusEmpId] = useState("");
+  const [bonusKvartal, setBonusKvartal] = useState(Math.floor(now.getMonth() / 3) + 1);
+  const [bonusBeloeb, setBonusBeloeb] = useState("");
 
   const monthRows = useMemo(() => REPORT_MONTHS.map((label, idx) => {
     const month = idx + 1;
@@ -8030,12 +8060,23 @@ function OverskudRapport({ instances, employees, satsHistorik, kmSatser, kmLog, 
       .filter((o) => o.aar === selectedYear && o.maaned === month)
       .reduce((s, o) => s + Number(o.beloeb), 0);
 
-    const omkostningerIAlt = loenKr + kmKr + manuelleKr;
+    // Kvartalsbonus: lægges i kvartalets SIDSTE måned (marts, juni, september,
+    // december) — kun godkendte bonusser tæller med (samme godkendelsesprincip
+    // som timer og km).
+    const kvartal = KVARTAL_SIDSTE_MAANED[month];
+    const bonusKr = kvartal
+      ? bonus
+          .filter((b) => b.aar === selectedYear && b.kvartal === kvartal)
+          .filter((b) => godkendtSet.has(`bonus|${b.employee_id}|${b.id}`))
+          .reduce((s, b) => s + Number(b.beloeb), 0)
+      : 0;
+
+    const omkostningerIAlt = loenKr + kmKr + manuelleKr + bonusKr;
     return {
-      month, label, omsaetning, loenKr, kmKr, manuelleKr,
+      month, label, omsaetning, loenKr, kmKr, manuelleKr, bonusKr,
       omkostningerIAlt, overskud: omsaetning - omkostningerIAlt,
     };
-  }), [instances, satsHistorik, kmSatser, kmLog, godkendtSet, omkostninger, pricing, selectedYear]);
+  }), [instances, satsHistorik, kmSatser, kmLog, godkendtSet, omkostninger, bonus, pricing, selectedYear]);
 
   const aarTotal = monthRows.reduce((acc, r) => ({
     omsaetning: acc.omsaetning + r.omsaetning,
@@ -8054,6 +8095,30 @@ function OverskudRapport({ instances, employees, satsHistorik, kmSatser, kmLog, 
     if (!satsEmpId || !satsVaerdi || !satsFra) return;
     onSaveKmSats(satsEmpId, satsVaerdi, satsFra);
     setSatsVaerdi("");
+  }
+  function tilfoejBonus() {
+    if (!bonusEmpId || !bonusBeloeb) return;
+    onSaveBonus(bonusEmpId, selectedYear, Number(bonusKvartal), bonusBeloeb);
+    setBonusBeloeb("");
+  }
+  // Bonus har sin egen godkendelse, ligesom timer og km — genbruger samme
+  // loen_godkendelser-tabel med slags="bonus".
+  async function saetBonusGodkendt(bonusId, empId, til) {
+    if (til) {
+      const { error } = await supabase.from("loen_godkendelser")
+        .upsert({ slags: "bonus", employee_id: empId, reference: String(bonusId) }, { onConflict: "slags,employee_id,reference" });
+      if (error) { setGodkFejl(error.message); return; }
+    } else {
+      const { error } = await supabase.from("loen_godkendelser").delete()
+        .eq("slags", "bonus").eq("employee_id", empId).eq("reference", String(bonusId));
+      if (error) { setGodkFejl(error.message); return; }
+    }
+    setGodkendtSet((f) => {
+      const n = new Set(f);
+      const noegle = `bonus|${empId}|${bonusId}`;
+      if (til) n.add(noegle); else n.delete(noegle);
+      return n;
+    });
   }
 
   return (
@@ -8079,29 +8144,32 @@ function OverskudRapport({ instances, employees, satsHistorik, kmSatser, kmLog, 
         Kun godkendte timer og kilometer (samme godkendelser som bruges til Danløn-eksporten) tælles med i lønsum og kørsel.
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 110px 110px 110px 110px 110px", gap: 0, background: "#F8FAFC", borderRadius: "10px 10px 0 0", padding: "8px 14px", fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 110px 110px 110px 110px 110px 110px", gap: 0, background: "#F8FAFC", borderRadius: "10px 10px 0 0", padding: "8px 14px", fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.04em" }}>
         <span>Måned</span>
         <span style={{ textAlign: "right" }}>Omsætning</span>
         <span style={{ textAlign: "right" }}>Løn</span>
         <span style={{ textAlign: "right" }}>Kørsel</span>
         <span style={{ textAlign: "right" }}>Andet</span>
+        <span style={{ textAlign: "right" }}>Bonus</span>
         <span style={{ textAlign: "right" }}>Overskud</span>
       </div>
       <div style={{ background: "#fff", borderRadius: "0 0 10px 10px", boxShadow: "0 1px 3px rgba(0,0,0,0.06)", overflow: "hidden" }}>
         {monthRows.map((r, idx) => (
-          <div key={r.month} style={{ display: "grid", gridTemplateColumns: "1fr 110px 110px 110px 110px 110px", gap: 0, padding: "9px 14px", borderBottom: idx < monthRows.length - 1 ? "1px solid #F1F5F9" : "none", alignItems: "center" }}>
+          <div key={r.month} style={{ display: "grid", gridTemplateColumns: "1fr 110px 110px 110px 110px 110px 110px", gap: 0, padding: "9px 14px", borderBottom: idx < monthRows.length - 1 ? "1px solid #F1F5F9" : "none", alignItems: "center" }}>
             <div style={{ fontSize: 13, fontWeight: 600, color: "#111111" }}>{r.label}</div>
             <div style={{ fontSize: 13, color: "#334155", textAlign: "right" }}>{r.omsaetning > 0 ? kr(r.omsaetning) : "—"}</div>
             <div style={{ fontSize: 13, color: "#64748B", textAlign: "right" }}>{r.loenKr > 0 ? kr(r.loenKr) : "—"}</div>
             <div style={{ fontSize: 13, color: "#64748B", textAlign: "right" }}>{r.kmKr > 0 ? kr(r.kmKr) : "—"}</div>
             <div style={{ fontSize: 13, color: "#64748B", textAlign: "right" }}>{r.manuelleKr > 0 ? kr(r.manuelleKr) : "—"}</div>
+            <div style={{ fontSize: 13, color: "#64748B", textAlign: "right" }}>{r.bonusKr > 0 ? kr(r.bonusKr) : "—"}</div>
             <div style={{ fontSize: 13, fontWeight: 700, color: r.overskud >= 0 ? "#16A34A" : "#DC2626", textAlign: "right" }}>{kr(r.overskud)}</div>
           </div>
         ))}
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 110px 110px 110px 110px 110px", gap: 0, padding: "10px 14px", background: "#FCE4EF", borderRadius: 10, marginTop: 8, fontWeight: 700, fontSize: 13 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 110px 110px 110px 110px 110px 110px", gap: 0, padding: "10px 14px", background: "#FCE4EF", borderRadius: 10, marginTop: 8, fontWeight: 700, fontSize: 13 }}>
         <span style={{ color: "#9C1B5D" }}>I alt {selectedYear}</span>
         <span style={{ textAlign: "right", color: "#111111" }}>{kr(aarTotal.omsaetning)}</span>
+        <span />
         <span />
         <span />
         <span />
@@ -8154,6 +8222,40 @@ function OverskudRapport({ instances, employees, satsHistorik, kmSatser, kmLog, 
             <input style={{ ...styles.inputSm, flex: "none", width: 140 }} type="date" value={satsFra} onChange={(e) => setSatsFra(e.target.value)} />
             <button style={styles.secondaryBtn} onClick={tilfoejKmSats}><Plus size={14} /> Gem sats</button>
           </div>
+
+          <div style={{ fontWeight: 700, fontSize: 14, color: "#111111", margin: "10px 0 10px" }}>Bonus (kvartalsvis, individuel)</div>
+          <div style={{ background: "#fff", borderRadius: 10, boxShadow: "0 1px 3px rgba(0,0,0,0.06)", overflow: "hidden", marginBottom: 10 }}>
+            {bonus.filter((b) => b.aar === selectedYear).length === 0 && (
+              <div style={{ padding: "12px 14px", fontSize: 12.5, color: "#94A3B8" }}>Ingen bonusser for {selectedYear} endnu.</div>
+            )}
+            {bonus.filter((b) => b.aar === selectedYear).sort((a, b) => a.kvartal - b.kvartal).map((b, i, arr) => {
+              const emp = employees.find((e) => e.id === b.employee_id);
+              const godkendt = godkendtSet.has(`bonus|${b.employee_id}|${b.id}`);
+              return (
+                <div key={b.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 14px", borderBottom: i < arr.length - 1 ? "1px solid #F1F5F9" : "none" }}>
+                  <span style={{ fontSize: 12.5, fontWeight: 600, color: "#64748B", width: 40 }}>Q{b.kvartal}</span>
+                  <span style={{ fontSize: 13, flex: 1 }}>{emp?.name || "Ukendt medarbejder"}</span>
+                  <span style={{ fontSize: 13, fontWeight: 600 }}>{kr(b.beloeb)}</span>
+                  <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, color: godkendt ? "#16A34A" : "#94A3B8", cursor: "pointer" }}>
+                    <input type="checkbox" checked={godkendt} onChange={(e) => saetBonusGodkendt(b.id, b.employee_id, e.target.checked)} />
+                    {godkendt ? "Godkendt" : "Afventer"}
+                  </label>
+                  <button style={styles.iconBtnGhostInline} onClick={() => onDeleteBonus(b.id)} title="Slet"><Trash2 size={14} /></button>
+                </div>
+              );
+            })}
+          </div>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 10 }}>
+            <select style={{ ...styles.inputSm, flex: 2 }} value={bonusEmpId} onChange={(e) => setBonusEmpId(e.target.value)}>
+              <option value="">Vælg medarbejder…</option>
+              {employees.filter((e) => !e.fratraadtDato).map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
+            </select>
+            <select style={{ ...styles.inputSm, flex: "none", width: 80 }} value={bonusKvartal} onChange={(e) => setBonusKvartal(e.target.value)}>
+              {[1, 2, 3, 4].map((q) => <option key={q} value={q}>Q{q}</option>)}
+            </select>
+            <input style={{ ...styles.inputSm, flex: "none", width: 110 }} type="number" min={0} placeholder="Kr." value={bonusBeloeb} onChange={(e) => setBonusBeloeb(e.target.value)} />
+            <button style={styles.secondaryBtn} onClick={tilfoejBonus}><Plus size={14} /> Tilføj bonus</button>
+          </div>
         </>
       )}
     </>
@@ -8162,7 +8264,8 @@ function OverskudRapport({ instances, employees, satsHistorik, kmSatser, kmLog, 
 
 function ReportsView({ instances, templates, pricing, budgets, onSaveBudget, isAdminUser,
                         employees, satsHistorik, kmSatser, kmLog, omkostninger,
-                        onSaveOmkostning, onDeleteOmkostning, onSaveKmSats }) {
+                        onSaveOmkostning, onDeleteOmkostning, onSaveKmSats,
+                        bonus, onSaveBonus, onDeleteBonus }) {
   // To rapporter, to spørgsmål. «Budget» handler om, hvad der er kommet ind måned
   // for måned. «Aftaleportefølje» handler om, hvad der ER aftalt — hvad de aftaler,
   // der ligger, er værd, og hvordan de fordeler sig. Det andet kan ikke læses ud af
@@ -8273,7 +8376,8 @@ function ReportsView({ instances, templates, pricing, budgets, onSaveBudget, isA
         <OverskudRapport instances={instances} employees={employees} satsHistorik={satsHistorik}
           kmSatser={kmSatser} kmLog={kmLog} omkostninger={omkostninger}
           onSaveOmkostning={onSaveOmkostning} onDeleteOmkostning={onDeleteOmkostning}
-          onSaveKmSats={onSaveKmSats} pricing={pricing} isAdminUser={isAdminUser} />
+          onSaveKmSats={onSaveKmSats} bonus={bonus} onSaveBonus={onSaveBonus}
+          onDeleteBonus={onDeleteBonus} pricing={pricing} isAdminUser={isAdminUser} />
       ) : (
       <>
       <div style={styles.toolbar}>
