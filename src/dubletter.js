@@ -16,8 +16,31 @@
 // «C.O.Jensensvej 1, Brovst» og «C O Jensensvej 1, 9460 Brovst» er den samme
 // adresse skrevet af to personer. Punktummer, dobbelte mellemrum, postnummer og
 // store bogstaver må ikke kunne skjule en dublet.
+// Kun det stykke af teksten, der faktisk ER en adresse.
+//
+// Foerste udgave tog alt foer det foerste komma. Det duer paa «Klausholmvej 56,
+// Øland», men ikke paa de indlaeste ruteplaner: dér staar firmanavnet foerst
+// («BHJ, Egevej 49, Løkken», «Davidsen Hune,Vesterhavsparken 2,Hune»), og saa
+// blev noeglen «BHJ» — uden husnummer, altsaa tom, altsaa ingen markering. Det
+// var netop de dyre dubletter, der smuttede: BHJ og Davidsen ligger der i
+// forvejen som aktive aftaler.
+//
+// Derfor: gaa stykkerne igennem og tag det foerste, der ligner en adresse —
+// bogstaver OG et husnummer. Et rent postnummer med by («9460 Brovst») springes
+// over; ellers ville enhver aftale i Brovst uden vejnavn blive dublet af de
+// andre.
+function adressedelen(adresse) {
+  const stykker = String(adresse || "").split(",");
+  for (const s of stykker) {
+    if (!/\d/.test(s)) continue;
+    if (/^\s*\d{4}\s+[a-zæøå.\s-]+$/i.test(s)) continue; // «9460 Brovst»
+    if (/[a-zæøå]{4,}/i.test(s)) return s;
+  }
+  return stykker[0];
+}
+
 export function adressenoegle(adresse) {
-  const raa = String(adresse || "").split(",")[0];
+  const raa = adressedelen(adresse);
   const rent = raa
     .toLowerCase()
     .replace(/[^a-zæøå0-9]+/g, " ")

@@ -30,6 +30,17 @@ er("store og små bogstaver",
 er("husnummer med bogstav bevares",
    adressenoegle("Rugmarken 22b, Fjerritslev"), "rugmarken 22b");
 
+// Firmanavnet foran adressen må ikke skjule adressen. Det var sådan de indlæste
+// ruteplaner skrev dem, og BHJ og Davidsen ligger der i forvejen som aktive.
+er("firmanavn foran adressen",
+   adressenoegle("BHJ, Egevej 49, Løkken"), adressenoegle("Egevej 49, 9480 Løkken"));
+er("firmanavn uden mellemrum",
+   adressenoegle("Davidsen Hune,Vesterhavsparken 2,Hune"), adressenoegle("Vesterhavsparken 2, 9492 Blokhus"));
+er("etage og lejlighed efter adressen",
+   adressenoegle("Postvænget 2, 2. sal. lejl. 3, Aabybro"), adressenoegle("Postvænget 2, 2. 3, 9440 Aabybro"));
+er("postnummer og by alene er ikke en adresse",
+   adressenoegle("Fælleshuset, 9460 Brovst"), "");
+
 // Og det, der IKKE må smelte sammen:
 er("nabonumre er ikke det samme",
    adressenoegle("Skovbrynet 77") === adressenoegle("Skovbrynet 83"), false);
