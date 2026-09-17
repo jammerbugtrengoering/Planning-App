@@ -2287,6 +2287,7 @@ function PlanningApp({ session, onSignOut }) {
       { data: omkostningerData },
       { data: kmLogFullData },
       { data: bonusData },
+      { data: dineroOmsaetningData },
       { data: homeData },
       { data: instAccessData },
       { data: custAccessData },
@@ -2322,6 +2323,9 @@ function PlanningApp({ session, onSignOut }) {
       hentMedFornyelse("kørselslog", () => supabase.from("km_log").select("*")),
       // Individuel kvartalsbonus. Kun til overskudsrapporten; sendes ikke til Danløn.
       hentMedFornyelse("bonus", () => supabase.from("bonus").select("*")),
+      // Betalt omsaetning fra Dinero, synkroniseret natligt (se edge-funktionen
+      // dinero-omsaetning-sync). Kun en sammenligningskolonne i Overskud-rapporten.
+      hentMedFornyelse("dinero-omsætning", () => supabase.from("dinero_omsaetning").select("*")),
       // Hjemmeadresse og transportordning. Samme historie som loennen: er man ikke
       // administrator, kommer der en tom liste tilbage, og ordningen slaar ikke til.
       hentMedFornyelse("transportordninger", () => supabase.from("employee_home").select("*")),
@@ -2376,6 +2380,20 @@ function PlanningApp({ session, onSignOut }) {
       if (omkostningerData) setOmkostninger(omkostningerData);
       if (kmLogFullData) setKmLog(kmLogFullData);
       if (bonusData) setBonus(bonusData);
+      if (dineroOmsaetningData) {
+        // Grupperes pr. aar og maaned, saa rapporten kan slaa direkte op uden at
+        // filtrere en liste for hver raekke.
+        const dineroMap = {};
+        dineroOmsaetningData.forEach((r) => {
+          if (!dineroMap[r.aar]) dineroMap[r.aar] = {};
+          dineroMap[r.aar][r.maaned] = {
+            beloeb: Number(r.beloeb) || 0,
+            antal: r.antal_fakturaer || 0,
+            opdateret: r.opdateret_tidspunkt,
+          };
+        });
+        setDineroOmsaetning(dineroMap);
+      }
 
       // Employees – saml skills og capacity op
       let empMapped = [];
@@ -2645,6 +2663,7 @@ function PlanningApp({ session, onSignOut }) {
   const [omkostninger, setOmkostninger] = useState([]); // [{id, aar, maaned, beskrivelse, beloeb}]
   const [kmLog, setKmLog] = useState([]); // [{id, employee_id, work_date, km}]
   const [bonus, setBonus] = useState([]); // [{id, employee_id, aar, kvartal, beloeb, note}]
+  const [dineroOmsaetning, setDineroOmsaetning] = useState({}); // { [aar]: { [maaned]: {beloeb, antal, opdateret} } }
   const [afvisId, setAfvisId] = useState(null);
   const [afvisNote, setAfvisNote] = useState("");
   // Minutter kontoret vil fakturere for et forgaeves besoeg, pr. melding. Starter
@@ -5118,7 +5137,8 @@ function PlanningApp({ session, onSignOut }) {
           employees={employees} satsHistorik={satsHistorik} kmSatser={kmSatser} kmLog={kmLog}
           omkostninger={omkostninger} onSaveOmkostning={saveOmkostning}
           onDeleteOmkostning={deleteOmkostning}
-          bonus={bonus} onSaveBonus={saveBonus} onDeleteBonus={deleteBonus} />
+          bonus={bonus} onSaveBonus={saveBonus} onDeleteBonus={deleteBonus}
+          dineroOmsaetning={dineroOmsaetning} />
       )}
 
       {view === "kundetimer" && (<CustomerHoursView instances={instances} />)}
@@ -7999,7 +8019,7 @@ function harSygdomIKvartal(instances, empId, aar, kvartal) {
 // — ikke én fælles sats for hele virksomheden. Se kmSatsPaaDato.
 function OverskudRapport({ instances, employees, satsHistorik, kmSatser, kmLog, omkostninger,
                             onSaveOmkostning, onDeleteOmkostning, bonus,
-                            onSaveBonus, onDeleteBonus, pricing, isAdminUser }) {
+                            onSaveBonus, onDeleteBonus, pricing, isAdminUser, dineroOmsaetning }) {
   const now = new Date();
   const [selectedYear, setSelectedYear] = useState(now.getFullYear());
   const years = [now.getFullYear() - 1, now.getFullYear(), now.getFullYear() + 1];
@@ -8092,18 +8112,26 @@ function OverskudRapport({ instances, employees, satsHistorik, kmSatser, kmLog, 
           .reduce((s, b) => s + Number(b.beloeb), 0)
       : 0;
 
+    // Omsætning fra Dinero — kun betalte fakturaer, synkroniseret natligt. Rent
+    // sammenligningstal ved siden af den beregnede omsætning; påvirker ikke overskuddet.
+    const dineroInfo = dineroOmsaetning?.[selectedYear]?.[month] || null;
+    const dineroKr = dineroInfo ? dineroInfo.beloeb : null;
+    const dineroAntal = dineroInfo ? dineroInfo.antal : null;
+
     const omkostningerIAlt = loenKr + kmKr + manuelleKr + bonusKr;
     return {
       month, label, omsaetning, loenKr, kmKr, manuelleKr, bonusKr,
       omkostningerIAlt, overskud: omsaetning - omkostningerIAlt,
+      dineroKr, dineroAntal,
     };
-  }), [instances, satsHistorik, kmSatser, kmLog, godkendtSet, omkostninger, bonus, pricing, selectedYear]);
+  }), [instances, satsHistorik, kmSatser, kmLog, godkendtSet, omkostninger, bonus, pricing, selectedYear, dineroOmsaetning]);
 
   const aarTotal = monthRows.reduce((acc, r) => ({
     omsaetning: acc.omsaetning + r.omsaetning,
     omkostninger: acc.omkostninger + r.omkostningerIAlt,
     overskud: acc.overskud + r.overskud,
-  }), { omsaetning: 0, omkostninger: 0, overskud: 0 });
+    dineroKr: acc.dineroKr + (r.dineroKr || 0),
+  }), { omsaetning: 0, omkostninger: 0, overskud: 0, dineroKr: 0 });
 
   const kr = (v) => Math.round(v).toLocaleString("da-DK") + " kr.";
 
@@ -8158,11 +8186,13 @@ function OverskudRapport({ instances, employees, satsHistorik, kmSatser, kmLog, 
       {godkFejl && <div style={{ color: "#DC2626", fontSize: 12.5, marginBottom: 10 }}>{godkFejl}</div>}
       <div style={{ fontSize: 12.5, color: "#94A3B8", marginBottom: 10 }}>
         Kun godkendte timer og kilometer (samme godkendelser som bruges til Danløn-eksporten) tælles med i lønsum og kørsel.
+        {" "}"Oms. (Dinero)" er betalte fakturaer hentet fra Dinero natten før — kun til sammenligning, den tæller ikke med i overskuddet.
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 110px 110px 110px 110px 110px 110px", gap: 0, background: "#F8FAFC", borderRadius: "10px 10px 0 0", padding: "8px 14px", fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 110px 110px 110px 110px 110px 110px 110px", gap: 0, background: "#F8FAFC", borderRadius: "10px 10px 0 0", padding: "8px 14px", fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.04em" }}>
         <span>Måned</span>
         <span style={{ textAlign: "right" }}>Omsætning</span>
+        <span style={{ textAlign: "right" }}>Oms. (Dinero)</span>
         <span style={{ textAlign: "right" }}>Løn</span>
         <span style={{ textAlign: "right" }}>Kørsel</span>
         <span style={{ textAlign: "right" }}>Andet</span>
@@ -8171,9 +8201,10 @@ function OverskudRapport({ instances, employees, satsHistorik, kmSatser, kmLog, 
       </div>
       <div style={{ background: "#fff", borderRadius: "0 0 10px 10px", boxShadow: "0 1px 3px rgba(0,0,0,0.06)", overflow: "hidden" }}>
         {monthRows.map((r, idx) => (
-          <div key={r.month} style={{ display: "grid", gridTemplateColumns: "1fr 110px 110px 110px 110px 110px 110px", gap: 0, padding: "9px 14px", borderBottom: idx < monthRows.length - 1 ? "1px solid #F1F5F9" : "none", alignItems: "center" }}>
+          <div key={r.month} style={{ display: "grid", gridTemplateColumns: "1fr 110px 110px 110px 110px 110px 110px 110px", gap: 0, padding: "9px 14px", borderBottom: idx < monthRows.length - 1 ? "1px solid #F1F5F9" : "none", alignItems: "center" }}>
             <div style={{ fontSize: 13, fontWeight: 600, color: "#111111" }}>{r.label}</div>
             <div style={{ fontSize: 13, color: "#334155", textAlign: "right" }}>{r.omsaetning > 0 ? kr(r.omsaetning) : "—"}</div>
+            <div style={{ fontSize: 13, color: "#0369A1", textAlign: "right" }} title={r.dineroAntal != null ? `${r.dineroAntal} betalte fakturaer` : undefined}>{r.dineroKr != null ? kr(r.dineroKr) : "—"}</div>
             <div style={{ fontSize: 13, color: "#64748B", textAlign: "right" }}>{r.loenKr > 0 ? kr(r.loenKr) : "—"}</div>
             <div style={{ fontSize: 13, color: "#64748B", textAlign: "right" }}>{r.kmKr > 0 ? kr(r.kmKr) : "—"}</div>
             <div style={{ fontSize: 13, color: "#64748B", textAlign: "right" }}>{r.manuelleKr > 0 ? kr(r.manuelleKr) : "—"}</div>
@@ -8182,9 +8213,10 @@ function OverskudRapport({ instances, employees, satsHistorik, kmSatser, kmLog, 
           </div>
         ))}
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 110px 110px 110px 110px 110px 110px", gap: 0, padding: "10px 14px", background: "#FCE4EF", borderRadius: 10, marginTop: 8, fontWeight: 700, fontSize: 13 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 110px 110px 110px 110px 110px 110px 110px", gap: 0, padding: "10px 14px", background: "#FCE4EF", borderRadius: 10, marginTop: 8, fontWeight: 700, fontSize: 13 }}>
         <span style={{ color: "#9C1B5D" }}>I alt {selectedYear}</span>
         <span style={{ textAlign: "right", color: "#111111" }}>{kr(aarTotal.omsaetning)}</span>
+        <span style={{ textAlign: "right", color: "#0369A1" }}>{kr(aarTotal.dineroKr)}</span>
         <span />
         <span />
         <span />
@@ -8283,7 +8315,7 @@ function OverskudRapport({ instances, employees, satsHistorik, kmSatser, kmLog, 
 function ReportsView({ instances, templates, pricing, budgets, onSaveBudget, isAdminUser,
                         employees, satsHistorik, kmSatser, kmLog, omkostninger,
                         onSaveOmkostning, onDeleteOmkostning,
-                        bonus, onSaveBonus, onDeleteBonus }) {
+                        bonus, onSaveBonus, onDeleteBonus, dineroOmsaetning }) {
   // To rapporter, to spørgsmål. «Budget» handler om, hvad der er kommet ind måned
   // for måned. «Aftaleportefølje» handler om, hvad der ER aftalt — hvad de aftaler,
   // der ligger, er værd, og hvordan de fordeler sig. Det andet kan ikke læses ud af
@@ -8395,7 +8427,8 @@ function ReportsView({ instances, templates, pricing, budgets, onSaveBudget, isA
           kmSatser={kmSatser} kmLog={kmLog} omkostninger={omkostninger}
           onSaveOmkostning={onSaveOmkostning} onDeleteOmkostning={onDeleteOmkostning}
           bonus={bonus} onSaveBonus={onSaveBonus}
-          onDeleteBonus={onDeleteBonus} pricing={pricing} isAdminUser={isAdminUser} />
+          onDeleteBonus={onDeleteBonus} pricing={pricing} isAdminUser={isAdminUser}
+          dineroOmsaetning={dineroOmsaetning} />
       ) : (
       <>
       <div style={styles.toolbar}>

@@ -75,6 +75,7 @@ npx supabase@latest functions download portal-login         --project-ref gteowf
 npx supabase@latest functions download bestilling-besked    --project-ref gteowfoahsfpunzgdxum
 npx supabase@latest functions download tilbud-offentlig     --project-ref gteowfoahsfpunzgdxum
 npx supabase@latest functions download tilbud-pdf           --project-ref gteowfoahsfpunzgdxum
+npx supabase@latest functions download dinero-omsaetning-sync --project-ref gteowfoahsfpunzgdxum
 ```
 
 Alle sytten er med — også de to, der allerede ligger her. Så bliver de overskrevet med
@@ -122,6 +123,7 @@ kopiere tilbage — og så er det filen her, der skal opdateres, ikke omvendt.
 | `travel-distance` | Afstand og køretid mellem to adresser | Planlægningsappen |
 | `dinero` | Kunder, fakturaer og bogføring | Planlægningsappen |
 | `dinero-probe` | Afprøver forbindelsen til Dinero | I hånden |
+| `dinero-omsaetning-sync` | Henter betalt omsætning fra Dinero til Overskud-rapporten | Natligt job (04:15) |
 | `inviter-bruger` | Opretter login til en ny medarbejder | Planlægningsappen |
 | `fratraed-medarbejder` | Lukker adgangen for en der stopper | Planlægningsappen |
 | `portal-login` | Sender kunden en engangskode til portalen | Kundeportalen |
