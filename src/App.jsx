@@ -1855,7 +1855,7 @@ const MODULE_HELP = {
     { h: "Om medarbejderne", p: [
         "Navn, arbejdsmail, sprogvalg, mødetidspunkt, kompetencer og områder.",
         "Hjemmeadresse, men kun for dem der har kørsel i arbejdstiden. Den bruges alene til at beregne afstanden til dagens første opgave.",
-        "Timeløn og lønhistorik, weekendtillæg, SH-sats og Danløn-nummer.",
+        "Timeløn og lønhistorik, bonus og kilometersats, weekendtillæg, SH-sats og Danløn-nummer.",
         "Registrerede timer pr. opgave, fravær og fratrædelsesdato.",
         "Fravær står som fravær. Systemet gemmer aldrig en årsag — hverken sygdom eller diagnose.",
         "Bliver du spurgt: der er ingen GPS og ingen positionsmåling i Worklist. Kørslen regnes ud fra adresserne på opgaverne, ikke fra hvor telefonen har været. Det er et spørgsmål, medarbejdere stiller, og svaret er entydigt nej."] },
