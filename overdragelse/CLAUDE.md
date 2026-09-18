@@ -84,6 +84,22 @@ begge og retter i `App.jsx`, er det ikke til at flette bagefter.
 
     git pull --rebase
 
+**Sæt det her én gang på hver maskine**, ellers går det i stå for jer:
+
+    git config --global pull.rebase false
+
+Uden den siger git *«You have divergent branches and need to specify how to reconcile
+them»* og **gør ingenting**, når I begge har committet siden sidst. Det skete 18.9.2026:
+push blev afvist, `git pull` hentede filerne ned men flettede dem ikke, og `git merge
+--abort` svarede *«There is no merge to abort»* — for der var aldrig startet en. Intet
+var gået galt, men det lignede det. Med linjen ovenfor fletter `git pull` bare, og så
+skal der kun pushes bagefter.
+
+Kommer du til at stå i det alligevel, er vejen ud:
+
+    git pull --no-rebase origin main
+    git push origin main
+
 **2. Sæt dit navn i git, første gang på en ny maskine.** Ellers står der «Dit Navn» i
 historikken, og om et halvt år kan ingen se, hvem der lavede ændringen, eller hvem man
 skal spørge.
