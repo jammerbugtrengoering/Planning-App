@@ -231,6 +231,11 @@ const MENU_GRUPPER = [
   { key: "lager",     navn: "Lager",      sider: [["inventory", "Lager"]] },
   { key: "oekonomi",  navn: "Økonomi",     sider: [["time", "Fakturering"], ["kundetimer", "Kundetimer"], ["reports", "Rapportering"], ["medExport", "Løn data"]] },
   { key: "opsaetning", navn: "Opsætning", sider: [["employees", "Medarbejdere"], ["checklists", "Tjeklister"]] },
+  // Drift staar sidst og kun for administratorer. Den hoerer ikke til i en
+  // arbejdsdag — man gaar derind, naar man vil vide, om det hele koerer, eller naar
+  // noget ser forkert ud. Laa den mellem de oevrige, ville den blive aabnet ved en
+  // fejl af en planlaegger, der ikke kan bruge den til noget.
+  { key: "drift", navn: "Drift", kunAdmin: true, sider: [["drift", "Drift"]] },
 ];
 function gruppeFor(view) {
   return MENU_GRUPPER.find((g) => g.sider.some(([k]) => k === view)) || MENU_GRUPPER[0];
@@ -1736,6 +1741,29 @@ const MODULE_HELP = {
         "Brug det til noget, der ikke skulle have været der: en dublet, en fejlindlæsning. Skal en rigtig aftale stoppe, er «Markér som udgået» det rigtige — den beholder historikken og det, der er faktureret.",
         "En aftale, der HAR opgaver, bliver ikke slettet. Sletningen springer den over og siger det, for en sletning ville efterlade opgaverne som løse uden aftale. Brug «udgået» på dem."] },
   ], warn: "«Hver 3. måned» følger kalenderen: besøget lander i den uge, der indeholder samme dato som startdatoen — altså fire besøg om året på samme tid. Er startdatoen den 31., rammes sidste dag i korte måneder, så intet kvartal springes over. «Hver 4. uge» og «Hver 6. uge» tæller derimod i uger og vandrer gennem kalenderen — 13 henholdsvis 8-9 besøg om året, altid på samme ugedag." },
+
+  drift: { title: "Drift", intro: "Kører løsningen, og er der noget, nogen skal tage fat i?", blocks: [
+    { h: "Siden kan ikke sige, at noget er nede", p: [
+        "Den ligger inde i det, den holder øje med. Kan du se den, virker både Netlify og Supabase — og er de nede, kan du ikke åbne den.",
+        "Derfor er den et overblik, ikke en vagt. Vagten er morgenmailen fra helsetjekket, som kommer udefra og lander i din indbakke, også når appen ikke kan åbnes. Den må aldrig slukkes.",
+        "Hører du ingenting om morgenen, har alt kørt. Mailen sendes kun, når noget fejler."] },
+    { h: "De automatiske job", p: [
+        "Grøn betyder, at jobbet har skrevet et livstegn inden for den tid, der må gå — ikke at der skete noget sidste gang det kørte.",
+        "Morgentjekket skriver «intet at melde», når alt er i orden. Det er med vilje: uden den linje kunne man ikke se forskel på en rolig nat og et job, der er holdt op med at køre.",
+        "Står der gult, er der gået for længe siden sidste livstegn. Står der rødt, fejlede sidste kørsel — og så står forklaringen på linjen."] },
+    { h: "Tjenester udefra", p: [
+        "Der står ikke «OK» hentet fra en offentlig statusside. Sådan en kan sagtens sige, at alt er fint, samtidig med at netop vores nøgle er udløbet.",
+        "I stedet står der, hvornår tjenesten sidst svarede os, og hvad den svarede. Dinero hentede 13.650 fakturaer kl. 06.15 — det er et bevis. «OK» er en påstand.",
+        "Netlify-linjen viser, hvornår den app, du sidder med, blev bygget. Er den ældre, end du forventer, er dit sidste push ikke gået igennem."] },
+    { h: "Adresseregistret spørges med det samme", p: [
+        "Alle de andre tjenester kaldes fra serveren og efterlader spor. Adresseregistret kaldes fra din browser, og det fejler i stilhed — adressefeltet holder bare op med at foreslå adresser uden at sige hvorfor.",
+        "Derfor slår siden op med det samme, når den åbnes, og svaret er fra dette sekund.",
+        "Under linjen står, hvor mange af de gemte ruter der er slået op i registret, og hvor mange der kom fra reserven hos OpenRouteService. Alt andet end registret er værd at kigge på: findes adressen ikke i registret, kan reserven finde på et svar — og så er kilometerne opdigtede."] },
+    { h: "Noget nogen skal tage stilling til", p: [
+        "Listen er ikke driftsfejl. Det er arbejde, der ligger og venter, og som bliver dyrt, hvis det bliver liggende.",
+        "Kladder uden kundenavn kan ikke godkendes. Medarbejdere uden mailadresse får hverken besked om planændringer eller påmindelser. Aftaler markeret til sletning danner ingen opgaver imens.",
+        "Er listen tom, vises den ikke."] },
+  ], warn: "Siden er kun for administratorer. Den er også spærret i databasen — job_koersel kan kun læses af en administrator, så en planlægger, der skriver sig frem til siden, får ingen tal at se." },
 
   reports: { title: "Rapportering", intro: "To rapporter: budget mod faktisk omsætning, og hvad aftalerne er værd.", blocks: [
     { h: "De to faner", p: [
@@ -4833,7 +4861,7 @@ function PlanningApp({ session, onSignOut }) {
           </div>
         </div>
         <nav style={styles.nav}>
-          {MENU_GRUPPER.map((gr) => {
+          {MENU_GRUPPER.filter((gr) => !gr.kunAdmin || isAdminUser).map((gr) => {
             const aktiv = gruppeFor(view).key === gr.key;
             return (
               <button key={gr.key} onClick={() => setView(gr.sider[0][0])}
@@ -5092,6 +5120,11 @@ function PlanningApp({ session, onSignOut }) {
           omkostninger={omkostninger} onSaveOmkostning={saveOmkostning}
           onDeleteOmkostning={deleteOmkostning} onSaveKmSats={saveKmSats} />
       )}
+
+      {/* Spærret to steder: fanen vises ikke for andre end administratorer, OG siden
+          siger nej, hvis nogen skriver sig frem til den. Databasen afviser i øvrigt
+          opslagene uanset hvad — job_koersel er lukket med is_admin(). */}
+      {view === "drift" && (<DriftView isAdminUser={isAdminUser} />)}
 
       {view === "kundetimer" && (<CustomerHoursView instances={instances} />)}
       {view === "medExport" && (<EmployeeExportView instances={instances} employees={employees} satsHistorik={satsHistorik} />)}
@@ -8157,6 +8190,411 @@ function OverskudRapport({ instances, employees, satsHistorik, kmSatser, kmLog, 
         </>
       )}
     </>
+  );
+}
+
+// ── Drift ────────────────────────────────────────────────────────────────────
+//
+// Svarer på ét spørgsmål: kører løsningen, og er der noget, nogen skal tage fat i?
+//
+// DEN VIGTIGSTE BESLUTNING BAG SIDEN, og den er ubehagelig: siden ligger INDE I det,
+// den holder øje med. Er Supabase nede, kan den ikke hentes. Er Netlify nede, kan den
+// ikke åbnes. Den kan altså aldrig fortælle dig, at løsningen er nede — kun at den
+// kører. Vagten er og bliver morgenmailen fra helsetjek, fordi den kommer udefra og
+// lander i en indbakke, også når intet andet virker. Det står på siden med rene ord,
+// så ingen forveksler de to.
+//
+// DERFOR INGEN FALSKE LAMPER. Det er fristende at hente «OK» fra tjenesternes
+// offentlige statussider. Men sådan en kan sagtens sige, at alt er fint, samtidig med
+// at netop vores nøgle er udløbet — og et rødt lys kan ingen se, hvis siden ikke kan
+// åbnes. I stedet vises det, vi selv kan bevise: hvornår hver tjeneste sidst svarede
+// OS, og hvad den svarede. Dinero hentede 13.650 fakturaer kl. 06.15. Det er et bevis.
+// «OK» er en påstand.
+//
+// Adresseregistret er den ene undtagelse, og med vilje. Det kaldes fra browseren og
+// fejler i stilhed, så der findes ingen spor i databasen at se tilbage på. Derfor
+// slås der op NU, når siden åbnes: ét opslag af en kendt adresse, og svaret er fra
+// dette sekund.
+
+// Hvor længe der må gå mellem to livstegn, før det er værd at kigge på. Samme tal
+// som i helsetjek-funktionen — de to skal ikke kunne blive uenige om, hvornår et job
+// er ved at være væk.
+const DRIFT_JOB = [
+  { job: "helsetjek",              timer: 30, navn: "Morgentjek" },
+  { job: "plan-beskeder",          timer: 6,  navn: "Beskeder til telefonerne" },
+  { job: "dinero-omsaetning-sync", timer: 36, navn: "Omsætning fra Dinero" },
+  { job: "compute-daily-km",       timer: 36, navn: "Beregning af kørsel" },
+  { job: "ryd-adgangskoder",       timer: 36, navn: "Oprydning i adgangskoder" },
+  { job: "slet-gamle-fotos",       timer: 36, navn: "Oprydning i gamle billeder" },
+  { job: "daglige-paamindelser",   timer: 80, navn: "Daglig påmindelse" },
+  { job: "maaneds-paamindelse",    timer: 80, navn: "Påmindelse før månedsskiftet" },
+];
+
+// En adresse, der med sikkerhed findes i Danmarks adresseregister, og som ikke hører
+// til nogen kunde. Bruges kun til at spørge registret, om det svarer.
+const PROEVEADRESSE = "Rådhuspladsen 1, 1550 København V";
+
+function dkNaar(t) {
+  if (!t) return "aldrig";
+  const d = new Date(t);
+  const nu = new Date();
+  const sammeDag = d.toDateString() === nu.toDateString();
+  const iGaar = new Date(nu.getTime() - 86400000).toDateString() === d.toDateString();
+  const kl = d.toLocaleTimeString("da-DK", { hour: "2-digit", minute: "2-digit" });
+  if (sammeDag) return `i dag ${kl}`;
+  if (iGaar) return `i går ${kl}`;
+  return d.toLocaleString("da-DK", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+}
+
+function timerSiden(t) {
+  return (Date.now() - new Date(t).getTime()) / 3600000;
+}
+
+function DriftMaerkat({ slags, tekst }) {
+  const f = { ok: ["#F0FDF4", "#15803D"], gul: ["#FFFBEB", "#B45309"],
+              roed: ["#FEF2F2", "#B91C1C"], graa: ["#F1F5F9", "#475569"] }[slags] || ["#F1F5F9", "#475569"];
+  return (
+    <span style={{ fontSize: 12, fontWeight: 700, borderRadius: 7, padding: "3px 9px",
+                   background: f[0], color: f[1], whiteSpace: "nowrap" }}>{tekst}</span>
+  );
+}
+
+function DriftKort({ children }) {
+  return <div style={{ background: "#fff", border: "1px solid #E2E8F0", borderRadius: 13, overflow: "hidden" }}>{children}</div>;
+}
+
+function DriftNote({ children }) {
+  return (
+    <div style={{ fontSize: 13, color: "#64748B", background: "#fff", border: "1px solid #E2E8F0",
+                  borderLeft: "4px solid #94A3B8", borderRadius: 10, padding: "11px 14px",
+                  margin: "8px 0 4px", lineHeight: 1.55 }}>{children}</div>
+  );
+}
+
+function DriftView({ isAdminUser }) {
+  const [job, setJob] = useState(null);          // null = henter endnu
+  const [tal, setTal] = useState(null);
+  const [kilder, setKilder] = useState(null);
+  const [register, setRegister] = useState("spoerger");  // spoerger | svarer | svarer_ikke | ukendt_adresse
+  const [fejl, setFejl] = useState("");
+
+  useEffect(() => {
+    if (!isAdminUser) return;
+    let afbrudt = false;
+
+    (async () => {
+      try {
+        // Seneste linje pr. job. Der hentes 300 og reduceres her frem for at lave ét
+        // kald pr. job — otte kald for at tegne én tabel er otte gange så mange
+        // måder, det kan gå galt på.
+        const { data: raekker, error } = await supabase
+          .from("job_koersel").select("job, ok, besked, tidspunkt")
+          .order("tidspunkt", { ascending: false }).limit(300);
+        if (error) throw error;
+        const seneste = new Map();
+        (raekker || []).forEach((r) => { if (!seneste.has(r.job)) seneste.set(r.job, r); });
+        if (!afbrudt) setJob(seneste);
+      } catch (e) {
+        if (!afbrudt) setFejl(e.message || String(e));
+      }
+
+      try {
+        const t = async (tabel, byg) => {
+          let q = supabase.from(tabel).select("*", { count: "exact", head: true });
+          if (byg) q = byg(q);
+          const { count, error } = await q;
+          if (error) throw error;
+          return count || 0;
+        };
+        // «Uden navn» tælles som alle minus dem MED navn, ikke med et or-filter på
+        // «er null eller tom streng». Det andet skal skrives i PostgREST-syntaks som
+        // en tekststreng, og en tastefejl dér giver ikke en fejl — den giver et
+        // forkert tal. Et tal, der ser rigtigt ud, er værre end en fejlmeddelelse.
+        const kladder      = await t("service_templates", (q) => q.eq("status", "kladde"));
+        const kladderNavn  = await t("service_templates", (q) =>
+          q.eq("status", "kladde").not("customer_name", "is", null).neq("customer_name", ""));
+        const medarbejdere = await t("employees", (q) => q.is("fratraadt_dato", null));
+        const medMail      = await t("employees", (q) =>
+          q.is("fratraadt_dato", null).not("app_email", "is", null).neq("app_email", ""));
+
+        const svar = {
+          aktive:   await t("service_templates", (q) => q.eq("status", "aktiv")),
+          kladder,
+          udenNavn: kladder - kladderNavn,
+          slettes:  await t("service_templates", (q) => q.eq("status", "slettes")),
+          opgaver:  await t("instances"),
+          medarbejdere,
+          udenMail: medarbejdere - medMail,
+        };
+        if (!afbrudt) setTal(svar);
+      } catch (e) {
+        if (!afbrudt) setFejl((f) => f || (e.message || String(e)));
+      }
+
+      try {
+        // Hvilken kilde geokodede de gemte ruter? Alt andet end «dawa» betyder, at
+        // adresseregistret ikke svarede, og at reserven fandt på et svar i stedet.
+        const { data, error } = await supabase.from("travel_overrides").select("source");
+        if (error) throw error;
+        const optalt = {};
+        (data || []).forEach((r) => {
+          const k = r.source || "?";
+          optalt[k] = (optalt[k] || 0) + 1;
+        });
+        if (!afbrudt) setKilder(optalt);
+      } catch { /* ruterne er ikke vigtige nok til at vaelte siden */ }
+
+      // Og det levende opslag. Registret kaldes direkte fra browseren, præcis som
+      // adressefeltet gør det — så det her er det samme svar, kontoret ville få.
+      try {
+        const res = await fetch("https://api.dataforsyningen.dk/adresser/autocomplete?per_side=1&q="
+          + encodeURIComponent(PROEVEADRESSE));
+        if (!res.ok) throw new Error(String(res.status));
+        const d = await res.json();
+        if (!afbrudt) setRegister(Array.isArray(d) && d.length ? "svarer" : "ukendt_adresse");
+      } catch {
+        if (!afbrudt) setRegister("svarer_ikke");
+      }
+    })();
+
+    return () => { afbrudt = true; };
+  }, [isAdminUser]);
+
+  if (!isAdminUser) {
+    return <div style={styles.page}><div style={{ color: "#64748B" }}>Siden er kun for administratorer.</div></div>;
+  }
+
+  // Er der noget galt lige nu? Kun jobbene tæller med her. At der ligger kladder til
+  // gennemgang er ikke en driftsfejl — det er arbejde, og det har sin egen liste.
+  const jobRaekker = DRIFT_JOB.map((f) => {
+    const r = job ? job.get(f.job) : null;
+    if (!job) return { ...f, slags: "graa", tekst: "henter", r: null };
+    if (!r) return { ...f, slags: "gul", tekst: "aldrig kørt", r: null };
+    if (timerSiden(r.tidspunkt) > f.timer) return { ...f, slags: "gul", tekst: "for længe siden", r };
+    if (!r.ok) return { ...f, slags: "roed", tekst: "fejlede", r };
+    return { ...f, slags: "ok", tekst: "OK", r };
+  });
+  const skidt = jobRaekker.filter((r) => r.slags === "gul" || r.slags === "roed");
+  const henter = !job || !tal;
+
+  // Ruterne fra før 19.9.2026 står med kilden «api», fordi der dengang ikke blev
+  // skrevet HVEM der svarede. De er ikke fald tilbage til reserven — vi ved det
+  // bare ikke. De skal derfor tælles for sig, ellers ville siden sige, at 287 ruter
+  // var geokodet forkert, og det ville være en løgn.
+  const kilderKendt = kilder
+    ? Object.entries(kilder).filter(([k]) => k !== "api" && k !== "?")
+    : [];
+  const kilderIAlt = kilderKendt.reduce((s, [, n]) => s + n, 0);
+  const kilderRegister = kilderKendt.filter(([k]) => k === "dawa").reduce((s, [, n]) => s + n, 0);
+  const kilderIkkeRegister = kilderIAlt - kilderRegister;
+  const kilderUkendt = kilder ? ((kilder.api || 0) + (kilder["?"] || 0)) : 0;
+
+  // Stemplet bages ind som UTC (toISOString), og det skal det blive ved med at være
+  // — et tidspunkt uden tidszone er ubrugeligt. Men det SKAL vises i dansk tid.
+  // Ellers står der 06.00 på en app, der blev udgivet kl. 08.00, og så tror man, at
+  // sit push kl. 07.50 ikke er nået med. Præcis den forvirring, siden skal fjerne.
+  const bygget = (() => {
+    if (typeof __BYGGET__ !== "string" || !__BYGGET__) return null;
+    const d = new Date(__BYGGET__.replace(" ", "T") + ":00Z");
+    return isNaN(d.getTime()) ? __BYGGET__
+      : d.toLocaleString("da-DK", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+  })();
+
+  const beslutninger = tal ? [
+    tal.udenNavn > 0 && { t: `${tal.udenNavn} kladder mangler kundenavn`,
+      s: "De kan ikke godkendes, og de kan ikke faktureres, før navnet er på." },
+    tal.slettes > 0 && { t: `${tal.slettes} aftaler er markeret til sletning`,
+      s: "De danner ingen opgaver imens. Sletningen sker, når nogen kører den." },
+    tal.udenMail > 0 && { t: `${tal.udenMail} af ${tal.medarbejdere} medarbejdere har ingen mailadresse`,
+      s: "De får ingen besked, når planen ændrer sig, og ingen påmindelse om manglende registrering." },
+    kilderIkkeRegister > 0 && { t: `${kilderIkkeRegister} af ${kilderIAlt} ruter er ikke slået op i adresseregistret`,
+      s: "Koordinaterne kom fra reserven hos OpenRouteService. Findes adressen ikke i registret, kan reserven finde på et svar — og så er kilometerne opdigtede. Se adresserne efter." },
+  ].filter(Boolean) : [];
+
+  return (
+    <div style={styles.page}>
+      <div style={{ fontWeight: 700, fontSize: 18, marginBottom: 2 }}>Drift</div>
+      <div style={{ fontSize: 13, color: "#64748B", marginBottom: 16 }}>
+        Kører løsningen, og er der noget, nogen skal tage fat i?
+      </div>
+
+      {fejl && (
+        <div style={{ background: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 11,
+                      padding: "12px 15px", marginBottom: 12, fontSize: 13.5, color: "#B91C1C" }}>
+          Noget kunne ikke hentes: {fejl}
+        </div>
+      )}
+
+      {/* Ét svar øverst. Det er det, man kom for. */}
+      <div style={{ borderRadius: 14, padding: "16px 18px", marginBottom: 6,
+                    display: "flex", alignItems: "center", gap: 14,
+                    background: henter ? "#F8FAFC" : skidt.length ? "#FFFBEB" : "#F0FDF4",
+                    border: `1px solid ${henter ? "#E2E8F0" : skidt.length ? "#FDE68A" : "#BBF7D0"}` }}>
+        <div style={{ width: 14, height: 14, borderRadius: "50%", flexShrink: 0,
+                      background: henter ? "#94A3B8" : skidt.length ? "#D97706" : "#16A34A" }} />
+        <div>
+          <div style={{ fontSize: 17, fontWeight: 700 }}>
+            {henter ? "Henter…" : skidt.length === 0 ? "Alt kører"
+              : skidt.length === 1 ? "Én ting kræver et kig" : `${skidt.length} ting kræver et kig`}
+          </div>
+          <div style={{ fontSize: 13.5, color: "#64748B" }}>
+            {henter ? "Et øjeblik." : skidt.length === 0
+              ? "Alle automatiske job har kørt, som de skulle."
+              : skidt.map((r) => r.navn).join(", ")}
+          </div>
+        </div>
+      </div>
+
+      <DriftNote>
+        Den her side ligger <b>inde i</b> det, den holder øje med. Kan du se den, virker
+        både Netlify og Supabase — og er de nede, kan du ikke åbne den. Derfor er siden et
+        overblik, ikke en vagt. Vagten er morgenmailen, som kommer udefra og lander i din
+        indbakke, også når appen ikke kan åbnes.
+      </DriftNote>
+
+      <div style={{ fontSize: 14, fontWeight: 700, color: "#334155", margin: "22px 0 9px" }}>De automatiske job</div>
+      <DriftKort>
+        {jobRaekker.map((r, i) => (
+          <div key={r.job} style={{ display: "grid", gridTemplateColumns: "1fr 130px 110px", gap: 10,
+                                    padding: "11px 15px", alignItems: "center",
+                                    borderBottom: i < jobRaekker.length - 1 ? "1px solid #F1F5F9" : "none" }}>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontWeight: 600, fontSize: 14 }}>{r.navn}</div>
+              <div style={{ fontSize: 12.5, color: "#64748B", overflow: "hidden",
+                            textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {r.r ? (r.r.besked || "—") : "ingen linjer endnu"}
+              </div>
+            </div>
+            <div style={{ fontSize: 13, color: "#334155", textAlign: "right" }}>
+              {r.r ? dkNaar(r.r.tidspunkt) : "—"}
+            </div>
+            <div style={{ textAlign: "center" }}><DriftMaerkat slags={r.slags} tekst={r.tekst} /></div>
+          </div>
+        ))}
+      </DriftKort>
+      <DriftNote>
+        Grøn betyder, at jobbet har skrevet et livstegn inden for den tid, der må gå — ikke
+        at der skete noget sidste gang. Morgentjekket skriver «intet at melde», når alt er
+        i orden, netop så en tom linje ikke kan forveksles med et job, der er gået i stå.
+      </DriftNote>
+
+      <div style={{ fontSize: 14, fontWeight: 700, color: "#334155", margin: "22px 0 9px" }}>Tjenester udefra</div>
+      <DriftKort>
+        <DriftTjeneste navn="Netlify" maerkat={bygget ? "Udgivet" : "ukendt"} slags={bygget ? "ok" : "graa"}>
+          {bygget
+            ? <>Appen, du ser på nu, blev bygget <b>{bygget}</b>. Er det ældre, end du forventer,
+                er dit sidste push ikke gået igennem.</>
+            : <>Udgivelsestidspunktet mangler i denne udgave. Det kommer med næste udgivelse.</>}
+        </DriftTjeneste>
+
+        <DriftTjeneste navn="Supabase" maerkat="Svarer" slags="ok">
+          Svarede, da den her side blev hentet. Kunne den ikke, ville siden være tom.
+        </DriftTjeneste>
+
+        <DriftTjeneste navn="Dinero"
+          maerkat={job?.get("dinero-omsaetning-sync") ? "Svarede" : "ukendt"}
+          slags={job?.get("dinero-omsaetning-sync") ? "ok" : "graa"}>
+          {job?.get("dinero-omsaetning-sync")
+            ? <>{job.get("dinero-omsaetning-sync").besked} — <b>{dkNaar(job.get("dinero-omsaetning-sync").tidspunkt)}</b>.</>
+            : <>Ingen synkronisering endnu.</>}
+        </DriftTjeneste>
+
+        <DriftTjeneste navn="Brevo (mail)"
+          maerkat={job?.get("daglige-paamindelser") ? "Svarede" : "ukendt"}
+          slags={job?.get("daglige-paamindelser") ? "ok" : "graa"}>
+          {job?.get("daglige-paamindelser")
+            ? <>Sidste mailjob kørte uden fejl <b>{dkNaar(job.get("daglige-paamindelser").tidspunkt)}</b>.</>
+            : <>Intet mailjob har kørt endnu.</>}
+        </DriftTjeneste>
+
+        <DriftTjeneste navn="OpenRouteService"
+          maerkat={job?.get("compute-daily-km") ? "Svarede" : "ukendt"}
+          slags={job?.get("compute-daily-km") ? "ok" : "graa"}>
+          {job?.get("compute-daily-km")
+            ? <>{job.get("compute-daily-km").besked} — <b>{dkNaar(job.get("compute-daily-km").tidspunkt)}</b>.</>
+            : <>Kørslen er ikke beregnet endnu.</>}
+        </DriftTjeneste>
+
+        {/* Den eneste, der spørges LIGE NU. De øvrige kaldes fra edge-funktioner og
+            efterlader spor i job_koersel; adresseregistret kaldes fra browseren og
+            fejler i stilhed, så der er ingen historik at læse. */}
+        <DriftTjeneste navn="Adresseregistret"
+          maerkat={{ spoerger: "spørger…", svarer: "Svarer nu",
+                     svarer_ikke: "Svarer ikke", ukendt_adresse: "Svarer mærkeligt" }[register]}
+          slags={{ spoerger: "graa", svarer: "ok", svarer_ikke: "roed", ukendt_adresse: "gul" }[register]}>
+          {register === "svarer" && <>Slået op nu, fra denne browser. Registret kender prøveadressen.</>}
+          {register === "spoerger" && <>Slår op…</>}
+          {register === "svarer_ikke" && <>dataforsyningen.dk svarede ikke. Adressefeltet holder op med
+            at foreslå adresser, <b>uden at sige det</b> — og kørslen geokodes fra reserven i stedet.</>}
+          {register === "ukendt_adresse" && <>Registret svarede, men kendte ikke en adresse, det burde
+            kende. Noget er anderledes end forventet.</>}
+          {kilder && (
+            <div style={{ marginTop: 4 }}>
+              {kilderIAlt > 0 && (
+                <>Af {kilderIAlt} ruter med kendt kilde er <b>{kilderRegister}</b> slået op i registret
+                  {kilderIkkeRegister > 0 && <> og <b>{kilderIkkeRegister}</b> hos reserven</>}. </>
+              )}
+              {kilderUkendt > 0 && (
+                <>{kilderIAlt > 0 ? "Dertil " : ""}{kilderUkendt} ældre ruter siger ikke, hvor de kom fra —
+                  kilden er først blevet skrevet med fra 19. september.</>
+              )}
+            </div>
+          )}
+        </DriftTjeneste>
+      </DriftKort>
+      <DriftNote>
+        Her står ikke «OK» hentet fra en offentlig statusside. Der står, hvornår tjenesten
+        sidst svarede <b>os</b>, og hvad den svarede. En statusside kan sige, at alt er fint,
+        samtidig med at netop vores nøgle er udløbet.
+      </DriftNote>
+
+      {beslutninger.length > 0 && (
+        <>
+          <div style={{ fontSize: 14, fontWeight: 700, color: "#334155", margin: "22px 0 9px" }}>
+            Noget nogen skal tage stilling til
+          </div>
+          <DriftKort>
+            {beslutninger.map((b, i) => (
+              <div key={i} style={{ padding: "12px 15px",
+                                    borderBottom: i < beslutninger.length - 1 ? "1px solid #F1F5F9" : "none" }}>
+                <div style={{ fontWeight: 600, fontSize: 14 }}>{b.t}</div>
+                <div style={{ fontSize: 13, color: "#64748B" }}>{b.s}</div>
+              </div>
+            ))}
+          </DriftKort>
+        </>
+      )}
+
+      <div style={{ fontSize: 14, fontWeight: 700, color: "#334155", margin: "22px 0 9px" }}>Tal</div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(145px,1fr))", gap: 10 }}>
+        {[["aktive aftaler", tal?.aktive], ["kladder til gennemgang", tal?.kladder],
+          ["opgaver i alt", tal?.opgaver], ["medarbejdere", tal?.medarbejdere]].map(([l, v]) => (
+          <div key={l} style={{ background: "#fff", border: "1px solid #E2E8F0", borderRadius: 12, padding: "13px 15px" }}>
+            <div style={{ fontSize: 23, fontWeight: 800 }}>
+              {v === undefined || v === null ? "—" : v.toLocaleString("da-DK")}
+            </div>
+            <div style={{ fontSize: 12.5, color: "#64748B" }}>{l}</div>
+          </div>
+        ))}
+      </div>
+
+      <DriftNote>
+        <b>Det siden ikke kan.</b> Den kan ikke se, om en medarbejders telefon har mistet
+        forbindelsen, og den kan ikke advare, hvis den selv holder op med at virke. Til det
+        er der kun morgenmailen — og den er derfor det eneste, der aldrig må slukkes.
+      </DriftNote>
+    </div>
+  );
+}
+
+function DriftTjeneste({ navn, maerkat, slags, children }) {
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "150px 1fr 120px", gap: 10,
+                  padding: "12px 15px", borderBottom: "1px solid #F1F5F9", alignItems: "center" }}>
+      <div style={{ fontWeight: 600, fontSize: 14 }}>{navn}</div>
+      <div style={{ fontSize: 13, color: "#64748B", lineHeight: 1.5 }}>{children}</div>
+      <div style={{ textAlign: "center" }}><DriftMaerkat slags={slags} tekst={maerkat} /></div>
+    </div>
   );
 }
 

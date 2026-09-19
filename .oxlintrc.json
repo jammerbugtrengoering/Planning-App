@@ -30,5 +30,8 @@
         "allowConstantExport": true
       }
     ]
+  },
+  "globals": {
+    "__BYGGET__": "readonly"
   }
 }
