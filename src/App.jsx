@@ -1773,6 +1773,8 @@ const MODULE_HELP = {
     { h: "Noget nogen skal tage stilling til", p: [
         "Listen er ikke driftsfejl. Det er arbejde, der ligger og venter, og som bliver dyrt, hvis det bliver liggende.",
         "Kladder uden kundenavn kan ikke godkendes. Medarbejdere uden mailadresse får hverken besked om planændringer eller påmindelser. Aftaler markeret til sletning danner ingen opgaver imens.",
+        "Knappen til højre går derhen, hvor arbejdet kan gøres — og sætter filteret undervejs. «Åbn kladderne» lander på Aftaler med «Under udarbejdelse» valgt, ikke på «Alle».",
+        "Linjen om adresseregistret har med vilje ingen knap. De ruter står ikke på nogen side i appen, og en knap, der førte et sted hen, hvor svaret ikke er, ville være værre end ingen.",
         "Er listen tom, vises den ikke."] },
   ], warn: "Siden er kun for administratorer. Den er også spærret i databasen — job_koersel kan kun læses af en administrator, så en planlægger, der skriver sig frem til siden, får ingen tal at se." },
 
@@ -2127,6 +2129,17 @@ function PlanningApp({ session, onSignOut }) {
   // Saettes naar man springer fra en moedeopgave til tilbuddet, saa fanen aabner
   // det rigtige i stedet for bare at vise listen.
   const [aabnTilbudId, setAabnTilbudId] = useState(null);
+
+  // Hvilket statusfilter Aftaler skal staa paa, naar man kommer dertil fra Drift.
+  //
+  // Knappen «340 kladder mangler kundenavn» skal ikke bare aabne Aftaler — den skal
+  // aabne kladdebunken. Lander man paa «Alle» og selv skal finde filteret, er halvdelen
+  // af pointen med knappen vaek.
+  //
+  // Vaerdien bruges én gang og nulstilles med det samme (onStartBrugt). Ellers ville
+  // filteret vende tilbage naeste gang man aabnede Aftaler paa almindelig vis, og saa
+  // ville siden se ud til at have glemt, hvad man sidst kiggede paa.
+  const [aftalerStart, setAftalerStart] = useState(null);
 
   const [instances, setInstances] = useState([]);
 
@@ -5150,7 +5163,8 @@ function PlanningApp({ session, onSignOut }) {
 
       {view === "contracts" && (
         <ContractsView templates={templates} instances={instances} pricing={pricing} employees={aktiveEmployees} onEditDraft={(tpl) => { setCopyPayload({ ...tpl, type: "fixed", templateDays: tpl.days }); setEditTplId(tpl.id); setShowAddTask(true); }}
-            isAdminUser={isAdminUser} onCancelTemplate={(tplId) => setCancelTarget(tplId)} onSaetSlettes={saetSlettes} />
+            isAdminUser={isAdminUser} onCancelTemplate={(tplId) => setCancelTarget(tplId)} onSaetSlettes={saetSlettes}
+            startStatus={aftalerStart} onStartBrugt={() => setAftalerStart(null)} />
       )}
 
       {view === "kunder" && (
@@ -5176,7 +5190,10 @@ function PlanningApp({ session, onSignOut }) {
       {/* Spærret to steder: fanen vises ikke for andre end administratorer, OG siden
           siger nej, hvis nogen skriver sig frem til den. Databasen afviser i øvrigt
           opslagene uanset hvad — job_koersel er lukket med is_admin(). */}
-      {view === "drift" && (<DriftView isAdminUser={isAdminUser} />)}
+      {view === "drift" && (
+        <DriftView isAdminUser={isAdminUser}
+          paaSide={(side, status) => { setAftalerStart(status || null); setView(side); }} />
+      )}
 
       {view === "kundetimer" && (<CustomerHoursView instances={instances} />)}
       {view === "medExport" && (<EmployeeExportView instances={instances} employees={employees} satsHistorik={satsHistorik} />)}
@@ -8427,7 +8444,7 @@ function DriftNote({ children }) {
   );
 }
 
-function DriftView({ isAdminUser }) {
+function DriftView({ isAdminUser, paaSide }) {
   const [job, setJob] = useState(null);          // null = henter endnu
   const [tal, setTal] = useState(null);
   const [kilder, setKilder] = useState(null);
@@ -8556,15 +8573,27 @@ function DriftView({ isAdminUser }) {
       : d.toLocaleString("da-DK", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
   })();
 
+  // Hver linje har en knap, der går præcis derhen, hvor arbejdet kan gøres — og hvor
+  // det giver mening, med filteret allerede sat. En linje, der siger «340 kladder
+  // mangler kundenavn», og så lader dig selv finde kladdebunken, har kun fortalt dig
+  // noget, du blev ked af at høre.
+  //
+  // «gaa: null» er et bevidst valg og ikke en manglende knap: der findes ikke nogen
+  // side i appen, hvor de geokodede ruter står. Hellere ingen knap end en knap, der
+  // fører et sted hen, hvor svaret ikke er.
   const beslutninger = tal ? [
     tal.udenNavn > 0 && { t: `${tal.udenNavn} kladder mangler kundenavn`,
-      s: "De kan ikke godkendes, og de kan ikke faktureres, før navnet er på." },
+      s: "De kan ikke godkendes, og de kan ikke faktureres, før navnet er på.",
+      knap: "Åbn kladderne", gaa: () => paaSide("contracts", "kladde") },
     tal.slettes > 0 && { t: `${tal.slettes} aftaler er markeret til sletning`,
-      s: "De danner ingen opgaver imens. Sletningen sker, når nogen kører den." },
+      s: "De danner ingen opgaver imens. Sletningen sker, når nogen kører den.",
+      knap: "Gennemgå", gaa: () => paaSide("contracts", "slettes") },
     tal.udenMail > 0 && { t: `${tal.udenMail} af ${tal.medarbejdere} medarbejdere har ingen mailadresse`,
-      s: "De får ingen besked, når planen ændrer sig, og ingen påmindelse om manglende registrering." },
+      s: "De får ingen besked, når planen ændrer sig, og ingen påmindelse om manglende registrering.",
+      knap: "Åbn Medarbejdere", gaa: () => paaSide("employees") },
     kilderIkkeRegister > 0 && { t: `${kilderIkkeRegister} af ${kilderIAlt} ruter er ikke slået op i adresseregistret`,
-      s: "Koordinaterne kom fra reserven hos OpenRouteService. Findes adressen ikke i registret, kan reserven finde på et svar — og så er kilometerne opdigtede. Se adresserne efter." },
+      s: "Koordinaterne kom fra reserven hos OpenRouteService. Findes adressen ikke i registret, kan reserven finde på et svar — og så er kilometerne opdigtede. Se adresserne efter.",
+      knap: null, gaa: null },
   ].filter(Boolean) : [];
 
   return (
@@ -8711,10 +8740,21 @@ function DriftView({ isAdminUser }) {
           </div>
           <DriftKort>
             {beslutninger.map((b, i) => (
-              <div key={i} style={{ padding: "12px 15px",
+              <div key={i} style={{ padding: "12px 15px", display: "flex", alignItems: "center", gap: 14,
                                     borderBottom: i < beslutninger.length - 1 ? "1px solid #F1F5F9" : "none" }}>
-                <div style={{ fontWeight: 600, fontSize: 14 }}>{b.t}</div>
-                <div style={{ fontSize: 13, color: "#64748B" }}>{b.s}</div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 600, fontSize: 14 }}>{b.t}</div>
+                  <div style={{ fontSize: 13, color: "#64748B" }}>{b.s}</div>
+                </div>
+                {b.gaa && (
+                  <button type="button" onClick={b.gaa}
+                    style={{ flexShrink: 0, background: "#fff", border: "1px solid #E2E8F0",
+                             borderRadius: 10, padding: "9px 14px", fontSize: 13.5, fontWeight: 600,
+                             color: "#334155", cursor: "pointer", fontFamily: "inherit",
+                             minHeight: 40, whiteSpace: "nowrap" }}>
+                    {b.knap}
+                  </button>
+                )}
               </div>
             ))}
           </DriftKort>
@@ -10231,8 +10271,15 @@ function CancelTemplateModal({ template, onClose, onConfirm }) {
     </div>
   );
 }
-function ContractsView({ templates: alleTemplates, instances, pricing, employees, isAdminUser, onCancelTemplate, onEditDraft, onSaetSlettes }) {
-  const [statusFilter, setStatusFilter] = useState("alle");
+function ContractsView({ templates: alleTemplates, instances, pricing, employees, isAdminUser, onCancelTemplate, onEditDraft, onSaetSlettes, startStatus, onStartBrugt }) {
+  // startStatus saettes kun, naar man kommer hertil fra en knap paa Drift-siden.
+  // Ellers er den null, og saa staar filteret paa «Alle» som altid.
+  const [statusFilter, setStatusFilter] = useState(startStatus || "alle");
+
+  // Forbruges med det samme. Siden her bliver bygget op paa ny hver gang man aabner
+  // den, saa vaerdien er allerede brugt i linjen ovenfor — bliver den staaende i App,
+  // slaar den igennem igen naeste gang, hvor ingen har bedt om den.
+  useEffect(() => { if (startStatus && onStartBrugt) onStartBrugt(); }, []);   // eslint-disable-line react-hooks/exhaustive-deps
   const [typeFilter, setTypeFilter] = useState("all");
   const [soeg, setSoeg] = useState("");
   // De to sidste gaelder KUN kladdebunken, og de nulstilles naar man forlader den.
