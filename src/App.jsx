@@ -1751,6 +1751,7 @@ const MODULE_HELP = {
         "«Fortryd» sætter aftalen tilbage til den status, den havde før. Den huskes, så en opsagt aftale ikke kan blive aktiv igen ved et uheld.",
         "Brug det til noget, der ikke skulle have været der: en dublet, en fejlindlæsning. Skal en rigtig aftale stoppe, er «Markér som udgået» det rigtige — den beholder historikken og det, der er faktureret.",
         "En aftale, der HAR opgaver, bliver ikke slettet. Sletningen springer den over og siger det, for en sletning ville efterlade opgaverne som løse uden aftale. Brug «udgået» på dem."] },
+    { h: "Konkrete datoer", p: ["Til opgaver uden fast rytme — fx sommerhuse, hvor datoerne kommer fra kunden. Du indtaster hver dato med sit eget klokkeslæt.", "Listen kan rettes løbende: tilføj, ret eller slet en linje, når kunden melder en ændring.", "Ugedage og udløbsdato bruges ikke her. Listen bestemmer selv, hvornår der er opgaver, og hvornår det slutter."] },
   ], warn: "«Hver 3. måned» følger kalenderen: besøget lander i den uge, der indeholder samme dato som startdatoen — altså fire besøg om året på samme tid. Er startdatoen den 31., rammes sidste dag i korte måneder, så intet kvartal springes over. «Hver 4. uge» og «Hver 6. uge» tæller derimod i uger og vandrer gennem kalenderen — 13 henholdsvis 8-9 besøg om året, altid på samme ugedag." },
 
   drift: { title: "Drift", intro: "Kører løsningen, og er der noget, nogen skal tage fat i?", blocks: [
@@ -9686,7 +9687,7 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
                 <button type="button" onClick={() => setKonkreteDatoer([...konkreteDatoer, { dato: "", tid: "" }])}>Tilfoej dato</button>
               </div>
             )}
-            <label style={styles.label}>Ugedage (gentages hver uge)</label>
+            <label style={styles.label}>{planInterval === "konkrete_datoer" ? "Ugedage (bruges ikke ved konkrete datoer)" : "Ugedage (gentages hver uge)"}</label>
           <div style={styles.skillPicker}>
             {ALL_DAYS.map((d) => <button key={d.key} type="button" onClick={() => toggleDay(d.key)} style={days.includes(d.key) ? styles.skillPickBtnActive : styles.skillPickBtn}>{d.label}</button>)}
           </div>
