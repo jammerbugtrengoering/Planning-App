@@ -1,4 +1,14 @@
-# Faste instruktioner for arbejdet i denne mappe
+# Baggrunden for reglerne
+
+> **De regler, der gælder til daglig, står i `../CLAUDE.md`** — i roden af repositoryet,
+> hvor de bliver læst af sig selv. Den her fil er den lange udgave: hvorfor reglerne er
+> som de er, og hvad der gik galt, før de fandtes.
+>
+> Frem til 21.9.2026 var det her den eneste udgave. Den blev aldrig læst, fordi ingen
+> åbner en undermappe af sig selv. Det er derfor, der nu er to filer. Retter du en regel,
+> så ret den i `../CLAUDE.md` — og her, hvis begrundelsen også ændrer sig.
+
+## Faste instruktioner for arbejdet i denne mappe
 
 ## Worklist skal altid virke på både Android og iOS
 
