@@ -48,11 +48,13 @@ const sammenlignede = sammenlignBlok
 tjek("sammenligningslisten er ikke tom", sammenlignede.length > 0);
 
 // ---- 3. Find oversættelsen ved indlæsning -----------------------------------
-// Blokken starter ved `const existingInst = (instData || []).map((i) => {` og
-// slutter ved den afsluttende `});` på samme indrykning.
-const start = kilde.indexOf("const existingInst = (instData || []).map(");
+// `kortlaegOpgave` er den ENE funktion, der laver en databaserække om til en opgave.
+// Både første og anden runde bruger den — og det er med vilje, for to næsten ens
+// oversættelser er netop sådan et felt bliver glemt ét af stederne.
+const start = kilde.indexOf("const kortlaegOpgave = (i) => {");
 tjek("oversættelsen af opgaver ved opstart findes", start !== -1,
-  "Er `existingInst` omdøbt, skal den her prøve følge med.");
+  "Hedder `kortlaegOpgave` noget andet nu, skal den her prøve følge med —\n" +
+  "      og der må stadig kun være ÉN oversættelse.");
 const blok = start === -1 ? "" : kilde.slice(start, start + 4000);
 const definerede = new Set([...blok.matchAll(/^\s{10,}([a-zA-Z]+):/gm)].map((m) => m[1]));
 
@@ -89,6 +91,23 @@ if (helbredFn) {
     "      gennem syncInstance, ellers bliver en medarbejder tildelt uden at blive gemt.",
   );
 }
+
+// ---- 6. Horisonten skal ligge INDEN FOR vinduet -----------------------------
+// Horisonten danner opgaver nogle uger frem. Vinduet henter nogle uger frem. Er
+// horisonten den længste, danner den i uger, der ikke er hentet — og så siger værnet
+// nej, uden at nogen har bedt om det. Opgaverne ville først blive dannet, når anden
+// runde lander, og indtil da ville de uger se tomme ud.
+//
+// Det er ikke farligt, men det er tavst. Derfor står reglen her.
+const { UGER_FREM } = await import("./src/vindue.js");
+const horisont = Number((kilde.match(/const HORIZON_WEEKS = (\d+)/) || [])[1]);
+tjek("HORIZON_WEEKS blev fundet", Number.isFinite(horisont));
+tjek(
+  `vinduet rækker længere frem end horisonten (${UGER_FREM} ≥ ${horisont})`,
+  UGER_FREM >= horisont,
+  "Hæv UGER_FREM i src/vindue.js, eller sænk HORIZON_WEEKS. Ellers danner\n" +
+  "      horisonten i uger, første runde ikke har hentet, og værnet stopper den.",
+);
 
 console.log(fejl
   ? `\nIndlæsning: ${fejl} fejlede, ${ok} i orden.`

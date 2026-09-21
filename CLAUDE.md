@@ -72,6 +72,30 @@ opstart taber oversættelsen igen.
 `node indlaesning.test.mjs` håndhæver reglen: hvert felt, selvhelbredelsen rører, skal
 findes i oversættelsen. Den kører med i `npm run build`.
 
+### Du rører noget, der danner eller viser opgaver
+
+**Opgaverne hentes i to runder.** Først ugerne omkring i dag (cirka 1.300 af 10.700),
+så ugeplanen kan tegnes med det samme. Resten kommer bagefter i baggrunden.
+
+Det gør én ting farlig: **`ensureWeekInstances` kan ikke se forskel på «pladsen er
+tom» og «ugen er ikke hentet endnu».** Kører den på halve data, opfinder den dubletter
+i en plan, nogen arbejder i — og sender dem ud på medarbejdernes telefoner.
+
+Værnet er `hentedeUger` i `src/App.jsx` og reglen i **`src/vindue.js`**: er ugen ikke
+hentet helt, dannes der ingenting i den. Rører du noget i den kæde, så lad værnet være,
+og kør `node vindue.test.mjs`.
+
+To ting følger med:
+
+- Regner din nye side på **alle** opgaver, skal den stå i `SIDER_DER_KRAEVER_ALT`.
+  Ellers viser den et tal bygget på en femtedel af data, uden at sige det.
+- Hæver du `HORIZON_WEEKS`, skal `UGER_FREM` i `src/vindue.js` følge med.
+  `indlaesning.test.mjs` fejler, hvis du glemmer det.
+
+> 21.9.2026: opstarten tog knap 12 sekunder, fordi alle 10.893 opgaver blev hentet —
+> 6,4 MB i elleve sider — mens planlæggeren sad og kiggede på én uge. 82 % af dem var
+> 2027 og 2028, fordi en aftale danner hele sin løbetid, når den oprettes.
+
 ### Du retter i databasen
 
 `execute_sql` i Supabase-værktøjet er **skrivebeskyttet**. Ethvert `insert`, `update`,

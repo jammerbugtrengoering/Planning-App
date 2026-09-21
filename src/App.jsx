@@ -11,6 +11,7 @@ import { holdOejeMedNyVersion } from "./nyversion";
 import { filtrerUgevalg } from "./ugevalg";
 import { portefoeljeTal, aarMedBesoeg } from "./portefoelje";
 import { hentAlleRaekker } from "./hentalle";
+import { vinduetsGraenser, vinduetsStykker, hentedeUgerFra, ugenErHentet } from "./vindue";
 import { findDubletter } from "./dubletter";
 import {
   Plus, Download, X, Clock, AlertTriangle,
@@ -396,6 +397,14 @@ const DEFAULT_TRAVEL = { defaultMinutes: 20, dayStart: "07:00", overrides: {} };
 // Planlaegningshorisont: hvor mange uger frem opgaverne altid materialiseres.
 const HORIZON_WEEKS = 4;
 
+// Sider, der regner paa samtlige opgaver og derfor ikke kan vise et rigtigt tal,
+// foer anden runde er hentet.
+//
+// «uge» staar bevidst IKKE her: ugeplanen viser én uge ad gangen, og de uger, man kan
+// blade til med det samme, er hentet i foerste runde. Drift, Lager, Kunder og Tilbud
+// roerer slet ikke opgavebunken.
+const SIDER_DER_KRAEVER_ALT = ["contracts", "reports", "time", "kundetimer", "medExport"];
+
 // Bruger crypto.randomUUID når den er tilgængelig (alle moderne browsere).
 // Math.random gav kun ~36^7 kombinationer og var i praksis kollisionsfølsom,
 // når mange instanser blev genereret i samme sekund ved "Planlæg alle uger".
@@ -428,6 +437,32 @@ function dbFail(error, whatFailed) {
 // hvor den kan proeves af uden at aabne appen.
 function fetchAllRows(table, columns = "*", filter = null) {
   return hentAlleRaekker(supabase, table, columns, filter);
+}
+
+// FOERSTE RUNDE: opgaverne i ugerne omkring i dag.
+//
+// Ét kald pr. aar i vinduet — altsaa ét eller to. Hver med tre almindelige
+// betingelser. Se src/vindue.js for hvorfor det IKKE er ét kald med en or()-streng:
+// den slags fejler tavst med et forkert antal raekker, og et forkert antal raekker
+// her faar horisonten til at danne dubletter.
+async function hentVinduet() {
+  const stykker = vinduetsStykker(new Date());
+  const dele = await Promise.all(stykker.map((s) =>
+    fetchAllRows("instances_let", "*", (q) =>
+      q.is("deleted_at", null).eq("year", s.aar).gte("week", s.fraUge).lte("week", s.tilUge))));
+  return dele.flat();
+}
+
+// ANDEN RUNDE: resten. Koerer i baggrunden, naar ugeplanen allerede er tegnet.
+//
+// Den henter ALT og ikke kun det manglende. Det er med vilje: komplementet til et
+// vindue, der kan gaa hen over et aarsskifte, bliver til fem betingelser, og en fejl
+// i én af dem ville betyde manglende opgaver — den dyreste fejl, appen kan lave.
+// Dubletter fjernes paa id, saa det koster lidt baandbredde og ingen rigtighed.
+//
+// Skal det goeres billigere en dag, er det her, man begynder.
+function hentResten() {
+  return fetchAllRows("instances_let", "*", (q) => q.is("deleted_at", null));
 }
 
 function weekdayKeyFor(date) {
@@ -893,9 +928,31 @@ function saetRyddedePladser(raekker) {
 let planenMaaIkkeDanneMere = false;
 export function stopDannelseAfOpgaver() { planenMaaIkkeDanneMere = true; }
 
+// Hvilke uger er hentet HELT? null = alle.
+//
+// 21.9.2026: opgaverne hentes ikke laengere alle sammen ved opstart. Foerst et vindue
+// omkring i dag, saa ugeplanen kan tegnes med det samme, og resten bagefter i
+// baggrunden.
+//
+// Det gjorde noget farligt muligt. ensureWeekInstances danner en opgave for hver
+// plads, den ikke kan finde i listen — og den kan ikke se forskel paa «pladsen er
+// tom» og «ugen er ikke hentet endnu». Koerte den paa halve data, ville den opfinde
+// dubletter i en plan, nogen arbejder i, og sende dem ud paa medarbejdernes telefoner.
+//
+// Derfor det her vaern: er ugen ikke hentet helt, danner vi ingenting i den. Reglen
+// og listen ligger i src/vindue.js med sin egen proeve.
+//
+// Samme mønster som ryddedePladser ovenfor og af samme grund: den skal gaelde paa
+// ALLE kaldesteder, ogsaa dem nogen tilfoejer senere.
+let hentedeUger = null;
+function saetHentedeUger(uger) { hentedeUger = uger; }
+
 function ensureWeekInstances(week, year, allInstances, templates, employees, areas = [], employeeAreas = [], travelSettings = DEFAULT_TRAVEL) {
   let list = [...allInstances];
   if (planenMaaIkkeDanneMere) return list;
+  // Ugen er ikke hentet endnu. Listen ser tom ud, men det er den ikke — den er bare
+  // ikke kommet. Vent til anden runde er inde.
+  if (!ugenErHentet(hentedeUger, year, week)) return list;
   const weekMonday = mondayOfWeek(week, year);
   const newlyCreatedIds = new Set();
   
@@ -1370,6 +1427,8 @@ const MODULE_HELP = {
         "Opgaverne oprettes automatisk ud fra aftalerne, fire uger frem. Det sker når du åbner appen, og alt nyt gemmes med det samme.",
         "Horisonten opretter opgaverne, men fordeler dem ikke. Aftaler med fast medarbejder får hende straks — alt andet ligger i Ikke tildelt indtil du trykker Planlæg.",
         "Bladrer du længere frem end fire uger, oprettes ugen når du åbner den, men den gemmes først når du rører den. Tildel en medarbejder, flyt eller ret noget, ellers er den væk igen når du lukker appen.",
+        "De første par sekunder efter du har åbnet appen, er kun ugerne omkring i dag hentet. Bladrer du langt frem i det tidsrum, siger siden det med rødt — og så skal du vente, før du lægger noget ind. En tom uge betyder dér ikke «ingen opgaver», men «ikke hentet endnu».",
+        "Rapportering, Aftaler, Fakturering, Kundetimer og Løn data regner på alle opgaver. De siger med gult, at tallene ikke er færdige, indtil resten er hentet. Det tager typisk få sekunder.",
         "Horisonten ruller med dagen, og der kommer aldrig dubletter — systemet tjekker på aftale, uge, år og dag.",
         "Om en opgave overhovedet opstår afhænger af fem ting: dagen skal være valgt på aftalen, intervallet skal ramme, og dagen skal ligge efter startdatoen, før udløbsdatoen og ikke efter en eventuel ophørsdato. Mangler der opgaver, er det næsten altid startdatoen eller intervallet.",
         "Har aftalen en fast medarbejder, sættes vedkommende på med det samme, hver gang en ny opgave opstår.",
@@ -2131,6 +2190,18 @@ function PlanningApp({ session, onSignOut }) {
   // det rigtige i stedet for bare at vise listen.
   const [aabnTilbudId, setAabnTilbudId] = useState(null);
 
+  // Er ANDEN RUNDE inde? Indtil da har appen kun ugerne omkring i dag.
+  //
+  // Ugeplanen er ligeglad — den viser én uge, og den uge er hentet. Men Aftaler,
+  // Rapportering, Fakturering, Kundetimer og Løn data regner paa HELE bunken, og et
+  // tal, der bygger paa en femtedel af opgaverne, er ikke «næsten rigtigt» — det er
+  // forkert. De siger det hoejt i stedet, indtil resten er inde.
+  const [alleOpgaverHentet, setAlleOpgaverHentet] = useState(false);
+  // Den samme liste som vaernet ved ensureWeekInstances bruger — men som tilstand, saa
+  // skaermen kan tegne sig om, naar anden runde lander. Vaernet selv ligger paa
+  // modulniveau, fordi det skal gaelde alle kaldesteder; det her er kun til visningen.
+  const [hentedeUgerNu, setHentedeUgerNu] = useState(null);
+
   // Hvilket statusfilter Aftaler skal staa paa, naar man kommer dertil fra Drift.
   //
   // Knappen «340 kladder mangler kundenavn» skal ikke bare aabne Aftaler — den skal
@@ -2352,7 +2423,15 @@ function PlanningApp({ session, onSignOut }) {
         // Slettemarkerede opgaver (aftalen er sat som udgaaet) hentes aldrig ind.
       // Dermed forsvinder de fra ugeplan, fakturering, rapportering og alt andet
       // paa én gang, uden at hvert modul skal huske at filtrere.
-      fetchAllRows("instances_let", "*", (q) => q.is("deleted_at", null)).then((data) => ({ data })),
+      //
+      // FOERSTE RUNDE: kun ugerne omkring i dag. Anden runde henter resten bagefter.
+      //
+      // Foer 21.9.2026 blev alle 10.893 opgaver hentet her — 6,4 MB i elleve sider,
+      // knap ni sekunder, mens planlaeggeren sad og kiggede paa én uge. 82 % af det
+      // var 2027 og 2028, fordi en aftale danner hele sin loebetid, naar den oprettes.
+      //
+      // Vinduet er cirka 1.500 opgaver og gaar i én side.
+      hentVinduet().then((data) => ({ data })),
       hentMedFornyelse("ønsker om ny tid", () => supabase.from("reschedule_requests").select("*").eq("status", "afventer")),
       hentMedFornyelse("bestillinger fra kunder", () => supabase.from("portal_bestillinger").select("*").eq("status", "ny").order("oprettet")),
       hentMedFornyelse("kommentarer og billeder", () => supabase.from("task_notes").select("*").order("created_at", { ascending: false })),
@@ -2562,7 +2641,11 @@ function PlanningApp({ session, onSignOut }) {
 
         // Opbyg instanser fra skabeloner + eksisterende instanser
         const { week: currentWeek, year: currentYear } = isoWeekInfo(new Date());
-        const existingInst = (instData || []).map((i) => {
+        // Oversaettelsen fra databasens raekke til appens opgave. Lagt i en funktion,
+        // fordi ANDEN RUNDE skal bruge nøjagtig den samme — to naesten-ens
+        // oversaettelser er præcis sådan et felt som poNumber bliver glemt ét af
+        // stederne, og det kostede os 200 skrivninger ved hver opstart.
+        const kortlaegOpgave = (i) => {
           const cust = customersData?.find((c) => c.id === i.customer_id);
           return {
             ...i,
@@ -2626,7 +2709,8 @@ function PlanningApp({ session, onSignOut }) {
             tidFordeling: i.tid_fordeling ?? {},
             kmAnslaaet: i.km_anslaaet ?? null,
           };
-        });
+        };
+        const existingInst = (instData || []).map(kortlaegOpgave);
         // Planlaegningshorisont: opgaverne materialiseres altid fire uger frem, saa
         // planen kan overskues en maaned ud, og aftaler med fast medarbejder faar
         // vedkommende paa med det samme i stedet for foerst naar ugen aabnes.
@@ -2644,6 +2728,11 @@ function PlanningApp({ session, onSignOut }) {
           .from("instances").select("template_id, year, week, day")
           .not("deleted_at", "is", null).not("template_id", "is", null);
         saetRyddedePladser(ryddede);
+        // Foerst nu maa horisonten danne noget — og kun i de uger, foerste runde
+        // faktisk hentede. Se vaernet ved ensureWeekInstances.
+        const vinduetsUger = hentedeUgerFra(vinduetsGraenser(new Date()).uger);
+        saetHentedeUger(vinduetsUger);
+        setHentedeUgerNu(vinduetsUger);
         let allInst = existingInst;
         const horizonAnchor = mondayOf(new Date());
         for (let hw = 0; hw < HORIZON_WEEKS; hw++) {
@@ -2672,6 +2761,31 @@ function PlanningApp({ session, onSignOut }) {
         const helbredte = allInst.filter(
           (t) => knownIds.has(t.id) && arvetAftryk(t) !== aftrykFoer.get(t.id));
         if (helbredte.length) gemArvedeFelter(helbredte);
+
+        // ANDEN RUNDE. Ugeplanen er tegnet nu; resten hentes mens kontoret arbejder.
+        //
+        // Der ventes IKKE paa den her. Falder den paa gulvet, staar appen tilbage med
+        // vinduet — ugeplanen virker, og rapporterne bliver ved at sige «henter».
+        // Det er det rigtige forhold: en tom ugeplan er en arbejdsdag, der gaar i staa,
+        // mens en rapport, der er et minut om at komme, er til at leve med.
+        hentResten().then((alle) => {
+          if (!alle || !alle.length) return;
+          const kortlagt = alle.map(kortlaegOpgave);
+          setInstances((cur) => {
+            // Vinduets udgave vinder. Den har vaeret gennem selvhelbredelsen og kan
+            // have faaet en medarbejder paa af horisonten — og de aendringer er ikke
+            // noedvendigvis skrevet ned endnu.
+            const efterId = new Map(kortlagt.map((t) => [t.id, t]));
+            cur.forEach((t) => efterId.set(t.id, t));
+            return [...efterId.values()];
+          });
+          // Nu maa horisonten røre alle uger igen.
+          saetHentedeUger(null);
+          setHentedeUgerNu(null);
+          setAlleOpgaverHentet(true);
+        }).catch((e) => {
+          console.error("Anden runde af opgaver fejlede:", e);
+        });
       } else if (instData?.length) {
         setInstances(instData.map((i) => ({
           ...i, timeLog: i.time_log ?? [], requiredSkills: i.required_skills ?? [],
@@ -5207,6 +5321,44 @@ function PlanningApp({ session, onSignOut }) {
       {view === "checklists" && (
         <ChecklistsView checklistTemplates={checklistTemplates} onSave={saveChecklistTemplate} onDelete={deleteChecklistTemplate} />
       )}
+
+      {/* Ét sted og ikke fem. Siderne herunder regner paa HELE opgavebunken, og
+          indtil anden runde er inde, har appen kun ugerne omkring i dag. Et tal, der
+          bygger paa en femtedel af opgaverne, er ikke naesten rigtigt — det er
+          forkert, og et forkert tal uden en advarsel er vaerre end at vente.
+          Ugeplanen staar med vilje ikke paa listen: den viser én uge, og den uge ER
+          hentet. */}
+      {!alleOpgaverHentet && SIDER_DER_KRAEVER_ALT.includes(view) && (
+        <div style={{ background: "#FFFBEB", border: "1px solid #FDE68A", borderRadius: 11,
+                      padding: "11px 15px", marginBottom: 12, fontSize: 13.5, color: "#92400E",
+                      display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{ width: 11, height: 11, borderRadius: "50%", background: "#D97706", flexShrink: 0 }} />
+          <div>
+            <b>Tallene er ikke færdige endnu.</b> Opgaverne for resten af året og de
+            kommende år hentes stadig. Vent et øjeblik, og åbn siden igen.
+          </div>
+        </div>
+      )}
+
+      {/* Og den omvendte fare: blader man langt frem, FØR anden runde er inde, er
+          ugen ikke hentet. Den ville se tom ud — og en tom ugeplan er ikke «ingen
+          opgaver», den er «vi ved det ikke endnu». Forskellen er hele arbejdsdagen:
+          ser planlæggeren tomt, lægger hun noget andet ind oveni.
+          Horisonten danner heller ikke noget i sådan en uge; værnet ved
+          ensureWeekInstances holder den ude, så der ikke opstår dubletter. */}
+      {!alleOpgaverHentet && view === "uge" && !ugenErHentet(hentedeUgerNu, wk.year, wk.weekNo) && (
+        <div style={{ background: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 11,
+                      padding: "11px 15px", marginBottom: 12, fontSize: 13.5, color: "#B91C1C",
+                      display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{ width: 11, height: 11, borderRadius: "50%", background: "#DC2626", flexShrink: 0 }} />
+          <div>
+            <b>Denne uge er ikke hentet endnu.</b> Den ser tom ud, men det er den ikke
+            nødvendigvis — resten af opgaverne er stadig på vej. Vent et øjeblik, før
+            du lægger noget ind her.
+          </div>
+        </div>
+      )}
+
       {view === "time" && (
         <TimeView instances={instances} employees={employees} opgaveNoter={opgaveNoter}
           onExportToDinero={exportToDinero} totalLogged={totalLogged} weekLabel={wk.label}
