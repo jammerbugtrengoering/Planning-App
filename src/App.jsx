@@ -9491,7 +9491,7 @@ function PortefoeljeRapport({ templates, instances, pricing }) {
 // Er skaermen bred nok, staar den i stedet i en kolonne til hoejre, der bliver
 // haengende mens man bladrer. Er den ikke, laegger den sig OEVERST og ikke nederst:
 // en instruktion, man skal foelge, hoerer foer arbejdet, ikke efter.
-function useBredSkaerm(graense = 1100) {
+function useBredSkaerm(graense = 1000) {
   const [bred, setBred] = useState(() =>
     typeof window !== "undefined" && window.innerWidth >= graense);
   useEffect(() => {
@@ -9634,6 +9634,19 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
   // planlaeggeren adressen eller dagen, saa den ikke laengere ligner, forsvinder
   // advarslen med det samme. Og omvendt: taster hun en adresse ind, der er optaget,
   // dukker den op, foer hun har trykket paa noget.
+  // Bemaerkningsfeltet vokser med sit indhold.
+  //
+  // Hoejden maales paa elementet selv (scrollHeight) og ikke gaettes ud fra antal
+  // linjeskift. En linje som «Ordret: kl. 8.30 Gustav Zimmersvej 66A, Nørhalne» brydes
+  // over to i et smalt felt, og et gaet paa «\n» ville tro, den fylder én.
+  const noteFelt = useRef(null);
+  useEffect(() => {
+    const el = noteFelt.current;
+    if (!el) return;
+    el.style.height = "auto";          // skal nulstilles, ellers kan den kun vokse
+    el.style.height = `${el.scrollHeight}px`;
+  }, [bemaerkning, bredSkaerm, visSidepanel]);
+
   const dubletLigner = useMemo(() => {
     if (!erKladde || !editId) return [];
     const paavej = { id: editId, status: "kladde", address, days, duration: Number(duration) || 0 };
@@ -9738,8 +9751,8 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
           Paa en kladde staar bemaerkningen og dubletadvarslen i en kolonne ved siden
           af — se sidepanelet nedenfor. */}
       <div style={{ display: "flex", gap: 18, alignItems: "flex-start", justifyContent: "center",
-                    flexWrap: "wrap", maxWidth: visSidepanel ? 1160 : 720, margin: "0 auto" }}>
-      <div style={{ ...styles.formCol, margin: 0, flex: "1 1 660px", minWidth: 0,
+                    flexWrap: "wrap", maxWidth: visSidepanel ? 1120 : 720, margin: "0 auto" }}>
+      <div style={{ ...styles.formCol, margin: 0, flex: "1 1 600px", minWidth: 0,
                     order: bredSkaerm ? 1 : 2 }}>
       <div style={{ ...styles.formSection, borderColor: "#EFAFC9" }}>
         <div style={{ ...styles.formSectionHead, background: "#FCE4EF", borderBottom: "1.5px solid #EFAFC9" }}>
@@ -10050,7 +10063,7 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
           skal afklares FOER godkendelsen, og et felt, der aldrig bliver tomt, holder
           man op med at laese. Teksten bliver staaende i databasen. */}
       {visSidepanel && (
-        <aside style={{ flex: bredSkaerm ? "0 0 380px" : "1 1 100%",
+        <aside style={{ flex: bredSkaerm ? "0 0 360px" : "1 1 100%",
                         order: bredSkaerm ? 2 : 1,
                         // Bliver haengende, mens man bladrer gennem formularen. Toppen
                         // er ikke 0: den gule bjaelke ville ellers ligge klods op ad
@@ -10111,16 +10124,22 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
                 — vises kun så længe aftalen er en kladde
               </span>
             </label>
+            {/* Feltet vokser med teksten i stedet for at have et fast antal linjer.
+                Foer 21.9.2026 stod der «rows», og saa scrollede man inde i en lille
+                kasse, mens der var en halv skaerm tom nedenunder — teksten er en
+                liste, man skal laese HELE, og et felt, der viser fem linjer ad
+                gangen, tvinger én til at holde resten i hovedet.
+                Hoejden saettes efter indholdet, ikke efter en gaetteformel paa antal
+                linjeskift: en lang linje, der brydes over tre, fylder ogsaa tre. */}
             <textarea
-              rows={bredSkaerm
-                ? Math.min(22, Math.max(8, (bemaerkning.match(/\n/g) || []).length + 3))
-                : Math.min(14, Math.max(4, (bemaerkning.match(/\n/g) || []).length + 2))}
+              ref={noteFelt}
               value={bemaerkning}
               onChange={(e) => setBemaerkning(e.target.value)}
               placeholder="Hvad mangler der, før aftalen kan godkendes?"
               style={{ ...styles.input, width: "100%", fontFamily: "inherit", fontSize: 12.5,
                        lineHeight: 1.5, background: "#fff", borderColor: "#FDE68A",
-                       color: "#111111", resize: "vertical" }} />
+                       color: "#111111", resize: "vertical", overflow: "hidden",
+                       minHeight: 90, display: "block" }} />
           </div>
         </aside>
       )}
