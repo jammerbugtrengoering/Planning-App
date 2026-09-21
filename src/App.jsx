@@ -1751,6 +1751,7 @@ const MODULE_HELP = {
         "«Fortryd» sætter aftalen tilbage til den status, den havde før. Den huskes, så en opsagt aftale ikke kan blive aktiv igen ved et uheld.",
         "Brug det til noget, der ikke skulle have været der: en dublet, en fejlindlæsning. Skal en rigtig aftale stoppe, er «Markér som udgået» det rigtige — den beholder historikken og det, der er faktureret.",
         "En aftale, der HAR opgaver, bliver ikke slettet. Sletningen springer den over og siger det, for en sletning ville efterlade opgaverne som løse uden aftale. Brug «udgået» på dem."] },
+    { h: "Konkrete datoer", p: ["Til opgaver uden fast rytme — fx sommerhuse, hvor datoerne kommer fra kunden. Du indtaster hver dato med sit eget klokkeslæt.", "Listen kan rettes løbende: tilføj, ret eller slet en linje, når kunden melder en ændring.", "Ugedage og udløbsdato bruges ikke her. Listen bestemmer selv, hvornår der er opgaver, og hvornår det slutter."] },
   ], warn: "«Hver 3. måned» følger kalenderen: besøget lander i den uge, der indeholder samme dato som startdatoen — altså fire besøg om året på samme tid. Er startdatoen den 31., rammes sidste dag i korte måneder, så intet kvartal springes over. «Hver 4. uge» og «Hver 6. uge» tæller derimod i uger og vandrer gennem kalenderen — 13 henholdsvis 8-9 besøg om året, altid på samme ugedag." },
 
   drift: { title: "Drift", intro: "Kører løsningen, og er der noget, nogen skal tage fat i?", blocks: [
@@ -3412,6 +3413,7 @@ function PlanningApp({ session, onSignOut }) {
       pricingType: payload.pricingType || "hourly",
       fixedPrice: fastPris,
       planInterval: payload.planInterval || "uge",
+      konkreteDatoer: payload.konkreteDatoer || [],
       startDate: payload.startDate || null,
       dineroSynced: payload.dineroSynced || false,
       preferredEmployeeId: payload.assigned_employee_id || "",
@@ -3490,7 +3492,16 @@ function PlanningApp({ session, onSignOut }) {
     // Alle {week, year}-par fra startDate til expiryDate — itererer i rigtige
     // 7-dages spring over kalenderen, så årsskifter håndteres korrekt (i stedet for
     // den tidligere "år*53+uge"-regnestykke, der kunne give ugyldige ugenumre).
-    function weeksUntilExpiry(expiryDateStr, startDateStr) {
+    function weeksUntilExpiry(expiryDateStr, startDateStr, konkreteDatoer) {
+    if (konkreteDatoer && konkreteDatoer.length) {
+      const set = new Map();
+      konkreteDatoer.forEach((d) => {
+        if (!d || !d.dato) return;
+        const info = isoWeekInfo(new Date(d.dato));
+        set.set(info.year + "-" + info.week, info);
+      });
+      return Array.from(set.values());
+    }
       const startMonday = mondayOf(startDateStr ? new Date(startDateStr) : new Date());
       if (!expiryDateStr) return [isoWeekInfo(startMonday)];
 
@@ -3518,6 +3529,7 @@ function PlanningApp({ session, onSignOut }) {
         contractType: payload.contractType, expiryDate: payload.expiryDate,
         pricingType: payload.pricingType || "hourly", fixedPrice: payload.pricingType === "fixed" ? (Number(payload.fixedPrice) || 0) : null,
         planInterval: payload.planInterval || "uge",
+      konkreteDatoer: payload.konkreteDatoer || [],
         startDate: payload.startDate || null, dineroSynced: payload.dineroSynced || false,
         preferredEmployeeId: payload.assigned_employee_id || "",
         dineroContactGuid: payload.dineroContactGuid || "", status: payload.saveAsDraft ? "kladde" : "aktiv",
@@ -3555,7 +3567,7 @@ function PlanningApp({ session, onSignOut }) {
       setTemplates((prevT) => {
         const nextT = [...prevT, tpl]; /* En kladde materialiseres ikke. Opgaverne dannes foerst naar aftalen godkendes under Aftaler. */ if (payload.saveAsDraft) return nextT;
         setInstances((cur) => {
-          const weeks = weeksUntilExpiry(payload.expiryDate, payload.startDate);
+          const weeks = weeksUntilExpiry(payload.expiryDate, payload.startDate, payload.planInterval === "konkrete_datoer" ? payload.konkreteDatoer : null);
           let next = [...cur];
           weeks.forEach(({ week: wk, year: wy }) => {
             const before = next;
@@ -9247,6 +9259,7 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
   const [day, setDay] = useState("Mon");
   const [adhocDate, setAdhocDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [deadline, setDeadline] = useState("Fri");
+  const [konkreteDatoer, setKonkreteDatoer] = useState(copyFrom?.konkreteDatoer || []);
   const [startDate, setStartDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [expiryDate, setExpiryDate] = useState(() => {
     const d = new Date(); d.setFullYear(d.getFullYear() + 1);
@@ -9390,7 +9403,7 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
     contractType,
     pricingType,
     fixedPrice: pricingType === "fixed" ? (Number(fixedPrice) || 0) : null,
-    planInterval,
+    planInterval, konkreteDatoer,
     title: title.trim(),
     requiredSkills,
     duration,
@@ -9654,14 +9667,27 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
           <input type="date" style={styles.input} value={expiryDate} onChange={(e) => setExpiryDate(e.target.value)} />
           <label style={styles.label}>Plan parametre</label>
           <div style={styles.typePicker}>
-            {[["uge","Hver uge"],["14_dage","Hver 14. dag"],["4_uger","Hver 4. uge"],["6_uger","Hver 6. uge"],["3_maaned","Hver 3. måned"]].map(([k,l]) => (
+            {[["uge","Hver uge"],["14_dage","Hver 14. dag"],["4_uger","Hver 4. uge"],["6_uger","Hver 6. uge"],["3_maaned","Hver 3. måned"],["konkrete_datoer","Konkrete datoer"]].map(([k,l]) => (
               <button key={k} type="button" onClick={() => setPlanInterval(k)}
                 style={planInterval === k ? { ...styles.typePickBtn, borderColor:"#D6247A", color:"#D6247A", background:"#FCE4EF" } : styles.typePickBtn}>
                 {l}
               </button>
             ))}
           </div>
-          <label style={styles.label}>Ugedage (gentages hver uge)</label>
+          {planInterval === "konkrete_datoer" && (
+              <div style={{ marginBottom: 10 }}>
+                <label style={styles.label}>Datoer</label>
+                {konkreteDatoer.map((d, i) => (
+                  <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                    <input type="date" style={styles.input} value={d.dato || ""} onChange={(e) => setKonkreteDatoer(konkreteDatoer.map((x, j) => j === i ? { ...x, dato: e.target.value } : x))} />
+                    <input type="time" style={styles.input} value={d.tid || ""} onChange={(e) => setKonkreteDatoer(konkreteDatoer.map((x, j) => j === i ? { ...x, tid: e.target.value } : x))} />
+                    <button type="button" onClick={() => setKonkreteDatoer(konkreteDatoer.filter((x, j) => j !== i))}>Slet</button>
+                  </div>
+                ))}
+                <button type="button" onClick={() => setKonkreteDatoer([...konkreteDatoer, { dato: "", tid: "" }])}>Tilfoej dato</button>
+              </div>
+            )}
+            <label style={styles.label}>{planInterval === "konkrete_datoer" ? "Ugedage (bruges ikke ved konkrete datoer)" : "Ugedage (gentages hver uge)"}</label>
           <div style={styles.skillPicker}>
             {ALL_DAYS.map((d) => <button key={d.key} type="button" onClick={() => toggleDay(d.key)} style={days.includes(d.key) ? styles.skillPickBtnActive : styles.skillPickBtn}>{d.label}</button>)}
           </div>
@@ -10403,7 +10429,13 @@ function ContractsView({ templates: alleTemplates, instances, pricing, employees
     // Kvartalet regnes som 13 uger — det er ikke helt præcist over et år, men
     // forskellen er under én procent, og alternativet er at lade som om en aftale
     // med fire besøg om året har 52.
-    const pr = { uge: 1, "14_dage": 2, "4_uger": 4, "6_uger": 6, maaned: 4, "3_maaned": 13 }[tpl.planInterval] || 1;
+    // Konkrete datoer har hverken fast interval eller udloebsdato: vaerdien er
+  // simpelthen prisen pr. besoeg gange antallet af datoer paa listen.
+  if (tpl.planInterval === "konkrete_datoer") {
+    const antal = (tpl.konkreteDatoer || []).length;
+    return { sum: weeklyValue * antal, weeks: antal, wholePeriod: true };
+  }
+  const pr = { uge: 1, "14_dage": 2, "4_uger": 4, "6_uger": 6, maaned: 4, "3_maaned": 13 }[tpl.planInterval] || 1;
     if (start && expiry) {
       const weeks = Math.max(1, Math.round((expiry - start) / (1000 * 60 * 60 * 24 * 7)));
       return { sum: (weeklyValue * weeks) / pr, weeks, wholePeriod: true };
