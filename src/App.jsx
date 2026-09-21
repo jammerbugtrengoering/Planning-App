@@ -1773,7 +1773,7 @@ const MODULE_HELP = {
     { h: "Gentagelse", p: [
         "En aftale kan gentages hver uge, hver 14. dag, hver 4. uge, hver 6. uge eller hver 3. måned. Kadencen tælles fra startdatoen.",
         "«Hver 4. uge» er ikke det samme som en gang om måneden. Det giver 13 besøg om året i stedet for 12, og dagen vandrer gennem kalenderen — et besøg den 5. bliver med tiden den 28. Til gengæld ligger det altid på den samme ugedag, og det er sådan, rengøring aftales i praksis.",
-        "Vil du have en fast dato i måneden i stedet, findes den mulighed ikke længere. Sig til, hvis I får brug for den."] }, { h: "Under udarbejdelse", p: ["Er du ikke færdig med en ny aftale, så tryk «Gem som kladde» i stedet for «Gem og planlæg».", "En kladde opretter ingen opgaver. Den ligger og venter, og du kan rette alle felter i den så mange gange du vil.", "Find den igen med filteret «Under udarbejdelse» øverst her på siden. Tallet i knappen viser hvor mange der ligger.", "Tryk «Åbn og godkend» for at rette videre. Inde i aftalen vælger du så «Gem kladde» hvis du stadig ikke er færdig, eller «Godkend og planlæg» når den er klar.", "Først ved godkendelsen oprettes opgaverne — fra startdatoen og frem til udløbsdatoen. Det kan være mange på én gang, så tjek datoerne inden du godkender.", "Startdatoen kan ikke ligge i fortiden. Har en kladde ligget så længe at datoen er løbet fra dig, skal den rettes før du kan godkende.", "Er kladden lavet ved en indlæsning, står der en gul «Bemærkning til kontoret» med det, indlæsningen ikke kunne afgøre — manglende kundenavn, en gættet kontrakttype, noter fra det ark den kom fra. Læs den, ret det den peger på, og godkend så.", "På en bred skærm står bemærkningen i en kolonne til højre, og den bliver hængende, mens du bladrer ned gennem felterne. Den hørte før nederst, altså længst væk fra det, den handler om. Er skærmen for smal til to kolonner, står den øverst i stedet.", "Ligner kladden en aftale, der allerede findes, står advarslen øverst i den samme kolonne — med hvilken aftale, hvilken dag og hvor længe. Den regnes ud fra det, der står i felterne lige nu, så retter du adressen eller dagen, forsvinder den af sig selv.", "Feltet vises kun, så længe aftalen er en kladde. Når den er godkendt, er noten gjort op, og feltet forsvinder — teksten bliver stående i databasen, men skal ikke stå og fylde bagefter."] }, { h: "Del kladdebunken op", p: [
+        "Vil du have en fast dato i måneden i stedet, findes den mulighed ikke længere. Sig til, hvis I får brug for den."] }, { h: "Under udarbejdelse", p: ["Er du ikke færdig med en ny aftale, så tryk «Gem som kladde» i stedet for «Gem og planlæg».", "En kladde opretter ingen opgaver. Den ligger og venter, og du kan rette alle felter i den så mange gange du vil.", "Find den igen med filteret «Under udarbejdelse» øverst her på siden. Tallet i knappen viser hvor mange der ligger.", "Tryk «Åbn og godkend» for at rette videre. Inde i aftalen vælger du så «Gem kladde» hvis du stadig ikke er færdig, eller «Godkend og planlæg» når den er klar.", "Først ved godkendelsen oprettes opgaverne — fra startdatoen og frem til udløbsdatoen. Det kan være mange på én gang, så tjek datoerne inden du godkender.", "Startdatoen kan ikke ligge i fortiden. Har en kladde ligget så længe at datoen er løbet fra dig, skal den rettes før du kan godkende — ellers ville der blive dannet opgaver i uger, der allerede er kørt.", "Er det sket, står der en rød besked øverst i kolonnen til højre med den dato, der står, og hvad du skal rette. «Godkend og planlæg» er slået fra imens, og holder du musen over knappen, siger den hvorfor.", "Du kan godt gemme kladden med en passeret startdato. En kladde danner ingen opgaver, så datoen kan ikke nå at gøre skade — og du skal ikke miste det kundenavn, du lige har skrevet ind, fordi en dato længere oppe er løbet ud.", "Er kladden lavet ved en indlæsning, står der en gul «Bemærkning til kontoret» med det, indlæsningen ikke kunne afgøre — manglende kundenavn, en gættet kontrakttype, noter fra det ark den kom fra. Læs den, ret det den peger på, og godkend så.", "På en bred skærm står bemærkningen i en kolonne til højre, og den bliver hængende, mens du bladrer ned gennem felterne. Den hørte før nederst, altså længst væk fra det, den handler om. Er skærmen for smal til to kolonner, står den øverst i stedet.", "Ligner kladden en aftale, der allerede findes, står advarslen øverst i den samme kolonne — med hvilken aftale, hvilken dag og hvor længe. Den regnes ud fra det, der står i felterne lige nu, så retter du adressen eller dagen, forsvinder den af sig selv.", "Feltet vises kun, så længe aftalen er en kladde. Når den er godkendt, er noten gjort op, og feltet forsvinder — teksten bliver stående i databasen, men skal ikke stå og fylde bagefter."] }, { h: "Del kladdebunken op", p: [
         "Vælger du «Under udarbejdelse», kommer der to filtre mere frem, som kun findes dér.",
         "Det ene deler bunken i dem, der ser ud som dubletter, og dem der ikke gør. Tag dubletterne først — det er dem, der enten skal slettes eller lægges sammen med en aftale, der allerede kører, og de fylder mest.",
         "Det andet er en liste med medarbejdere. Listen viser kun dem, der faktisk har kladder, og tallet siger hvor mange. Så kan du tage én medarbejders ruteplan ad gangen og få alle spørgsmålene afklaret med hende på én gang.",
@@ -10073,6 +10073,33 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
                         overflowY: bredSkaerm ? "auto" : undefined,
                         display: "flex", flexDirection: "column", gap: 12, minWidth: 0 }}>
 
+          {/* Startdatoen er loebet fra kladden.
+              Den staar allerhoejest, for den er det eneste, der BLOKERER godkendelsen.
+              Dubletten er en advarsel man kan vaelge at se bort fra; den her er en
+              doer, der er laast.
+              Der stod i forvejen en roed linje ude ved datofeltet, og knappen var
+              slaaet fra. Men paa en lang formular scroller man forbi feltet, trykker
+              «Godkend og planlæg» nederst — og der sker ingenting. En knap, der ikke
+              siger hvorfor den ikke virker, er det samme som ingen besked. */}
+          {type === "fixed" && !!startDate && startDate < todayIso() && (
+            <div style={{ background: "#FEF2F2", border: "1.5px solid #FCA5A5",
+                          borderRadius: 12, padding: "13px 15px" }}>
+              <div style={{ fontWeight: 700, fontSize: 14, color: "#B91C1C", marginBottom: 6 }}>
+                ⛔ Startdatoen er løbet fra kladden
+              </div>
+              <div style={{ fontSize: 13, color: "#7F1D1D", lineHeight: 1.5 }}>
+                Der står <b>{new Date(startDate).toLocaleDateString("da-DK",
+                  { day: "numeric", month: "long", year: "numeric" })}</b>, og den dato er
+                passeret. Aftalen kan ikke godkendes, før startdatoen er rettet til i dag
+                eller senere — ellers ville der blive dannet opgaver i uger, der allerede
+                er kørt.
+                <br /><br />
+                Ret <b>«Startdato»</b> under Tid og gentagelse. Du kan godt gemme kladden
+                i mellemtiden.
+              </div>
+            </div>
+          )}
+
           {/* Dubletadvarslen staar OEVERST og over bemaerkningen. Den er det eneste i
               vinduet, der kan betyde, at kladden slet ikke skal godkendes — resten er
               ting, der skal rettes.
@@ -10150,7 +10177,17 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
         <button
           style={{ ...styles.primaryBtn, opacity: gemmer ? 0.6 : 1 }}
           disabled={gemmer || !title.trim() || manglerDineroKunde || (type === "fixed" && days.length === 0) || requiredSkills.length === 0 || (type === "fixed" && !!startDate && startDate < todayIso())}
-          title={manglerDineroKunde ? "Vælg kunden i Dinero-listen først" : undefined}
+          // En slaaet fra knap uden forklaring er det samme som ingen besked. Her
+          // staar grunden, naar man holder musen over — og for startdatoen staar den
+          // ogsaa i sidepanelet, hvor man ikke skal lede efter den.
+          title={
+            manglerDineroKunde ? "Vælg kunden i Dinero-listen først"
+            : (type === "fixed" && !!startDate && startDate < todayIso())
+              ? "Startdatoen er passeret — ret den til i dag eller senere, før aftalen kan godkendes"
+            : (type === "fixed" && days.length === 0) ? "Vælg mindst én ugedag"
+            : requiredSkills.length === 0 ? "Vælg mindst én kompetence"
+            : !title.trim() ? "Aftalen mangler en titel"
+            : undefined}
           onClick={() => {
             // Paa Nexus og AEldrelov er kunden den der faar REGNINGEN — kommunen.
             // Arbejdet foregaar hjemme hos en borger, og borgerens navn staar i
@@ -10181,7 +10218,12 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
         {type === "fixed" && (
           <button
             style={{ ...styles.secondaryBtn, color: "#9C1B5D", borderColor: "#F4C0D1", opacity: gemmer ? 0.6 : 1 }}
-            disabled={gemmer || !title.trim() || manglerDineroKunde || (!!startDate && startDate < todayIso())}
+            // En passeret startdato blokerer IKKE en kladde. En kladde danner ingen
+            // opgaver, saa datoen kan ikke naa at goere skade — og kunne man ikke
+            // gemme, ville planlaeggeren miste det kundenavn, hun lige har skrevet
+            // ind, fordi en dato laengere oppe var loebet ud.
+            // Godkendelsen er stadig spaerret; se knappen ved siden af.
+            disabled={gemmer || !title.trim() || manglerDineroKunde}
             title="Gemmer aftalen uden at oprette opgaver. Du kan rette alle felter bagefter og godkende den under Aftaler."
             onClick={() => gemEnGang(buildPayload(true))}>
             {gemmer ? "Gemmer…" : (editId ? "Gem kladde" : "Gem som kladde")}
