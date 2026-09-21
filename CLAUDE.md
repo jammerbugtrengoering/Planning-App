@@ -56,6 +56,22 @@ først op, når nogen har taget stilling — også hvis svaret er «ikke persono
 > 20.9.2026 fik `konkrete_datoer` sin kolonne og sin brugerflade, men hverken punkt 2
 > eller 3. Datoerne forsvandt, når vinduet blev lukket, og aftalens værdi blev 0 kr.
 
+**Punkt 3 er den, der gør mindst væsen af sig.** Databasen skriver `po_number`, appen
+læser `t.poNumber`. Mangler oversættelsen, er feltet bare tomt — ingen fejl, ingen
+advarsel. Og er det et felt, selvhelbredelsen også sætter, går det i ring: den fylder
+feltet ud fra aftalen, sammenligningen ser en forskel, opgaven skrives — og næste
+opstart taber oversættelsen igen.
+
+> 21.9.2026 manglede `po_number`, `video_url` og `dinero_contact_guid`. Resultatet var
+> **cirka 200 skrivninger ved hver eneste opstart**, med nøjagtig de værdier der stod
+> der i forvejen, målt tre gange: 202, 411, 201. Det alvorlige var ikke tiden.
+> `poNumber` bærer borgerens navn på kommunens opgaver og ender som kommentar på
+> fakturalinjen i Dinero — og selvhelbredelsen springer opgaver med registreret tid
+> over, altså netop dem der skal faktureres.
+
+`node indlaesning.test.mjs` håndhæver reglen: hvert felt, selvhelbredelsen rører, skal
+findes i oversættelsen. Den kører med i `npm run build`.
+
 ### Du retter i databasen
 
 `execute_sql` i Supabase-værktøjet er **skrivebeskyttet**. Ethvert `insert`, `update`,

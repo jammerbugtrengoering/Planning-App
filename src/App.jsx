@@ -2571,6 +2571,33 @@ function PlanningApp({ session, onSignOut }) {
             requiredSkills: i.required_skills ?? [],
             customerName: (i.customer_name || cust?.name || i.customer_id) ?? "",
             address: (i.address_text || cust?.address) ?? "",
+            // poNumber og videoUrl SKAL staa her, selvom de ser overfloedige ud.
+            //
+            // De manglede indtil 21.9.2026, og raekken beholdt kun sine snake_case-navne
+            // fra databasen. Resten af appen laeser t.poNumber, saa en nyhentet opgave
+            // havde ingen reference — og saa gik det i ring:
+            //
+            //   1. selvhelbredelsen satte poNumber paa ud fra aftalen
+            //   2. syncHealedAssignments saa tomt mod «Grethe Bach Sørensen»,
+            //      troede opgaven var aendret og skrev den — ét kald pr. opgave
+            //   3. naeste opstart tabte oversaettelsen feltet igen
+            //
+            // Cirka 200 opgaver blev skrevet ved hver eneste opstart, med nøjagtig de
+            // samme vaerdier som stod der i forvejen. Maalt tre gange: 202, 411, 201.
+            // Det kunne aldrig konvergere, for fejlen laa i oversaettelsen og ikke i data.
+            //
+            // Det alvorlige var ikke tiden. poNumber baerer borgerens navn paa
+            // kommunens opgaver og ender som kommentar paa fakturalinjen i Dinero.
+            // Selvhelbredelsen springer opgaver med registreret tid over — altsaa
+            // netop dem der skal faktureres — saa for dem var feltet tomt.
+            poNumber: i.po_number ?? "",
+            videoUrl: i.video_url ?? "",
+            // Samme fejl, fundet af proeven i samme ombaering. Kundens nummer i Dinero
+            // er sluppet med, fordi selvhelbredelsen kun skriver det, naar aftalen HAR
+            // et — og det har alle aftaler i dag. Havde én manglet det, ville
+            // syncInstance have skrevet null oven i opgavens eget nummer, og fakturaen
+            // ville ikke kunne finde kunden.
+            dineroContactGuid: i.dinero_contact_guid ?? "",
             accessInstructions: instAccess[i.id] || custAccess[i.customer_id] || "",
             needsKeyPickup: i.needs_key_pickup ?? false,
             contractType: i.contract_type || "privat",
@@ -3182,18 +3209,41 @@ function PlanningApp({ session, onSignOut }) {
   // scheduleWeek (fx en opgave der blev frigivet fra en medarbejder, som i
   // mellemtiden har fået en sygdom/ferie-blokering den dag). Uden dette ville
   // rettelsen kun leve i det lokale state og blive gentaget/tabt ved næste reload.
+  // Skriver de opgaver ned, hvor selvhelbredelsen faktisk aendrede noget.
+  //
+  // Ét kald pr. opgave indtil 21.9.2026. Det gik godt, saa laenge det var en haandfuld
+  // — men en enkelt forskel, der ikke forsvinder af sig selv, bliver til hundredvis af
+  // kald ved hver opstart. Det skete: se forklaringen ved poNumber i indlaesningen.
+  //
+  // Rettelsen dér fjerner aarsagen. Portionerne her er vaernet, saa den naeste forskel
+  // af samme slags koster ét kald i stedet for tre hundrede. Samme greb som i
+  // gemArvedeFelter, der laerte det foerst.
   function syncHealedAssignments(before, after) {
     const beforeById = new Map(before.map((t) => [t.id, t]));
-    after.forEach((t) => {
+    const aendrede = after.filter((t) => {
       const prev = beforeById.get(t.id);
-      if (!prev) return;
+      if (!prev) return false;
       const assigneesChanged = JSON.stringify(prev.assignees || []) !== JSON.stringify(t.assignees || []);
       const fieldsChanged = ["customerName","address","poNumber","accessInstructions","contractType","videoUrl"]
         .some((k) => (prev[k] ?? "") !== (t[k] ?? ""));
-      if (assigneesChanged || fieldsChanged) {
-        syncInstance(t);
-      }
+      return assigneesChanged || fieldsChanged;
     });
+    if (!aendrede.length) return;
+    // To slags aendringer, og de kan ikke skrives ned ad samme vej.
+    //
+    // gemArvedeFelter skriver kun de ni arvede kolonner. Den roerer hverken
+    // medarbejdere eller adgangstekst — adgangsteksten ligger i sin egen beskyttede
+    // tabel, som kun syncInstance kan skrive til. Dem maa vi derfor ikke portionere
+    // vaek, uanset hvor mange der er: en medarbejder, der ikke bliver gemt, er en
+    // opgave, medarbejder-appen aldrig faar at se.
+    const kraeverHelRaekke = aendrede.filter((t) => {
+      const prev = beforeById.get(t.id);
+      return JSON.stringify(prev.assignees || []) !== JSON.stringify(t.assignees || [])
+        || (prev.accessInstructions ?? "") !== (t.accessInstructions ?? "");
+    });
+    const kunArvede = aendrede.filter((t) => !kraeverHelRaekke.includes(t));
+    kraeverHelRaekke.forEach(syncInstance);
+    if (kunArvede.length) gemArvedeFelter(kunArvede);
   }
 
   function changeWeek(delta) {
