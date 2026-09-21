@@ -6,7 +6,7 @@ import { fakturerbareMinutter, registreredeMinutter, oplaeringsFolk, erUnderOpla
          planlagtFakturerbart, afvigelse, planlagtFor, planlagtIAlt,
          fordelingen, harFordeling } from "./opgavetid.js";
 import { supabase } from "./supabaseClient";
-import { aftaleKoererPaaDag, DAG_FRA_INDEKS } from "./aftalerytme";
+import { aftaleKoererPaaDag, DAG_FRA_INDEKS, nyStartdatoHvisPasseret } from "./aftalerytme";
 import { holdOejeMedNyVersion } from "./nyversion";
 import { filtrerUgevalg } from "./ugevalg";
 import { portefoeljeTal, aarMedBesoeg } from "./portefoelje";
@@ -1773,7 +1773,7 @@ const MODULE_HELP = {
     { h: "Gentagelse", p: [
         "En aftale kan gentages hver uge, hver 14. dag, hver 4. uge, hver 6. uge eller hver 3. måned. Kadencen tælles fra startdatoen.",
         "«Hver 4. uge» er ikke det samme som en gang om måneden. Det giver 13 besøg om året i stedet for 12, og dagen vandrer gennem kalenderen — et besøg den 5. bliver med tiden den 28. Til gengæld ligger det altid på den samme ugedag, og det er sådan, rengøring aftales i praksis.",
-        "Vil du have en fast dato i måneden i stedet, findes den mulighed ikke længere. Sig til, hvis I får brug for den."] }, { h: "Under udarbejdelse", p: ["Er du ikke færdig med en ny aftale, så tryk «Gem som kladde» i stedet for «Gem og planlæg».", "En kladde opretter ingen opgaver. Den ligger og venter, og du kan rette alle felter i den så mange gange du vil.", "Find den igen med filteret «Under udarbejdelse» øverst her på siden. Tallet i knappen viser hvor mange der ligger.", "Tryk «Åbn og godkend» for at rette videre. Inde i aftalen vælger du så «Gem kladde» hvis du stadig ikke er færdig, eller «Godkend og planlæg» når den er klar.", "Først ved godkendelsen oprettes opgaverne — fra startdatoen og frem til udløbsdatoen. Det kan være mange på én gang, så tjek datoerne inden du godkender.", "Startdatoen kan ikke ligge i fortiden. Har en kladde ligget så længe at datoen er løbet fra dig, skal den rettes før du kan godkende — ellers ville der blive dannet opgaver i uger, der allerede er kørt.", "Er det sket, står der en rød besked øverst i kolonnen til højre med den dato, der står, og hvad du skal rette. «Godkend og planlæg» er slået fra imens, og holder du musen over knappen, siger den hvorfor.", "Du kan godt gemme kladden med en passeret startdato. En kladde danner ingen opgaver, så datoen kan ikke nå at gøre skade — og du skal ikke miste det kundenavn, du lige har skrevet ind, fordi en dato længere oppe er løbet ud.", "Er kladden lavet ved en indlæsning, står der en gul «Bemærkning til kontoret» med det, indlæsningen ikke kunne afgøre — manglende kundenavn, en gættet kontrakttype, noter fra det ark den kom fra. Læs den, ret det den peger på, og godkend så.", "På en bred skærm står bemærkningen i en kolonne til højre, og den bliver hængende, mens du bladrer ned gennem felterne. Den hørte før nederst, altså længst væk fra det, den handler om. Er skærmen for smal til to kolonner, står den øverst i stedet.", "Ligner kladden en aftale, der allerede findes, står advarslen øverst i den samme kolonne — med hvilken aftale, hvilken dag og hvor længe. Den regnes ud fra det, der står i felterne lige nu, så retter du adressen eller dagen, forsvinder den af sig selv.", "Feltet vises kun, så længe aftalen er en kladde. Når den er godkendt, er noten gjort op, og feltet forsvinder — teksten bliver stående i databasen, men skal ikke stå og fylde bagefter."] }, { h: "Del kladdebunken op", p: [
+        "Vil du have en fast dato i måneden i stedet, findes den mulighed ikke længere. Sig til, hvis I får brug for den."] }, { h: "Under udarbejdelse", p: ["Er du ikke færdig med en ny aftale, så tryk «Gem som kladde» i stedet for «Gem og planlæg».", "En kladde opretter ingen opgaver. Den ligger og venter, og du kan rette alle felter i den så mange gange du vil.", "Find den igen med filteret «Under udarbejdelse» øverst her på siden. Tallet i knappen viser hvor mange der ligger.", "Tryk «Åbn og godkend» for at rette videre. Inde i aftalen vælger du så «Gem kladde» hvis du stadig ikke er færdig, eller «Godkend og planlæg» når den er klar.", "Først ved godkendelsen oprettes opgaverne — fra startdatoen og frem til udløbsdatoen. Det kan være mange på én gang, så tjek datoerne inden du godkender.", "Er startdatoen løbet fra kladden, mens den lå i bunken, flytter appen den frem, når du åbner den — og siger det med blåt øverst i kolonnen til højre, med både den gamle og den nye dato.", "Den nye dato er ikke altid i morgen. Startdatoen er nemlig ankeret for rytmen: for «hver 14. dag» tæller systemet uger fra startdatoens mandag, så flytter man datoen én uge, skifter aftalen fra lige til ulige uger. Derfor vælges den første dag fra i morgen, der holder aftalen i de samme uger som før. Passer det ikke, retter du den selv.", "Datoerne kommer fra kladden. Indtil 21. september 2026 stod der «i dag» og «i dag + 1 år» uanset hvad, så en kladde med toårig løbetid blev etårig ved godkendelsen — uden at nogen fik det at vide.", "Er kladden lavet ved en indlæsning, står der en gul «Bemærkning til kontoret» med det, indlæsningen ikke kunne afgøre — manglende kundenavn, en gættet kontrakttype, noter fra det ark den kom fra. Læs den, ret det den peger på, og godkend så.", "På en bred skærm står bemærkningen i en kolonne til højre, og den bliver hængende, mens du bladrer ned gennem felterne. Den hørte før nederst, altså længst væk fra det, den handler om. Er skærmen for smal til to kolonner, står den øverst i stedet.", "Ligner kladden en aftale, der allerede findes, står advarslen øverst i den samme kolonne — med hvilken aftale, hvilken dag og hvor længe. Den regnes ud fra det, der står i felterne lige nu, så retter du adressen eller dagen, forsvinder den af sig selv.", "Feltet vises kun, så længe aftalen er en kladde. Når den er godkendt, er noten gjort op, og feltet forsvinder — teksten bliver stående i databasen, men skal ikke stå og fylde bagefter."] }, { h: "Del kladdebunken op", p: [
         "Vælger du «Under udarbejdelse», kommer der to filtre mere frem, som kun findes dér.",
         "Det ene deler bunken i dem, der ser ud som dubletter, og dem der ikke gør. Tag dubletterne først — det er dem, der enten skal slettes eller lægges sammen med en aftale, der allerede kører, og de fylder mest.",
         "Det andet er en liste med medarbejdere. Listen viser kun dem, der faktisk har kladder, og tallet siger hvor mange. Så kan du tage én medarbejders ruteplan ad gangen og få alle spørgsmålene afklaret med hende på én gang.",
@@ -9544,8 +9544,30 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
   const [adhocDate, setAdhocDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [deadline, setDeadline] = useState("Fri");
   const [konkreteDatoer, setKonkreteDatoer] = useState(copyFrom?.konkreteDatoer || []);
-  const [startDate, setStartDate] = useState(() => new Date().toISOString().slice(0, 10));
+  // Datoerne kommer FRA aftalen, hvis der er en. Stod her indtil 21.9.2026 som «i dag»
+  // og «i dag + 1 aar» uanset hvad — ogsaa naar man aabnede en kladde.
+  //
+  // Det betoed, at aabne-og-godkende i stilhed skrev begge datoer om. Kladderne fra
+  // ruteplanerne har en toaarig loebetid (328 af 329 udloeb i 2028), og de ville alle
+  // sammen være blevet ETAARIGE ved godkendelsen — uden at nogen fik det at vide, og
+  // med halv vaerdi i aftaleporteføljen, som regner paa de besoeg, loebetiden giver.
+  const [startDate, setStartDate] = useState(() => {
+    // Er datoen loebet fra kladden, foreslaas den foerste gyldige dag fra i morgen.
+    // «Gyldig» betyder: uden at flytte rytmen. Se nyStartdatoHvisPasseret.
+    const gemt = copyFrom?.startDate;
+    if (!gemt) return new Date().toISOString().slice(0, 10);
+    return nyStartdatoHvisPasseret(
+      { startDate: gemt, planInterval: copyFrom?.planInterval }, new Date()) || gemt;
+  });
+  // Hvad datoen VAR, hvis den blev flyttet. Bruges kun til at sige det hoejt.
+  const [startdatoFlyttetFra] = useState(() => {
+    const gemt = copyFrom?.startDate;
+    if (!gemt) return null;
+    return nyStartdatoHvisPasseret(
+      { startDate: gemt, planInterval: copyFrom?.planInterval }, new Date()) ? gemt : null;
+  });
   const [expiryDate, setExpiryDate] = useState(() => {
+    if (copyFrom?.expiryDate) return copyFrom.expiryDate;
     const d = new Date(); d.setFullYear(d.getFullYear() + 1);
     return d.toISOString().slice(0, 10);
   });
@@ -10081,21 +10103,31 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
               slaaet fra. Men paa en lang formular scroller man forbi feltet, trykker
               «Godkend og planlæg» nederst — og der sker ingenting. En knap, der ikke
               siger hvorfor den ikke virker, er det samme som ingen besked. */}
-          {type === "fixed" && !!startDate && startDate < todayIso() && (
-            <div style={{ background: "#FEF2F2", border: "1.5px solid #FCA5A5",
+          {/* Startdatoen var loebet fra kladden og er flyttet.
+              Den staar allerhoejest, for den aendrer HVORNAAR aftalen begynder, og det
+              er en af de faa ting i vinduet, der ikke kan ses ved at kigge paa
+              felterne — datoen ser bare rigtig ud.
+              Foer 21.9.2026 blev godkendelsen blokeret i stedet. Det var en laast
+              doer uden noegle: man kunne ikke godkende, og indtil samme dag kunne man
+              heller ikke gemme. Nu foreslaar appen en dato, og planlaeggeren kan rette
+              den. */}
+          {startdatoFlyttetFra && (
+            <div style={{ background: "#EFF6FF", border: "1.5px solid #BFDBFE",
                           borderRadius: 12, padding: "13px 15px" }}>
-              <div style={{ fontWeight: 700, fontSize: 14, color: "#B91C1C", marginBottom: 6 }}>
-                ⛔ Startdatoen er løbet fra kladden
+              <div style={{ fontWeight: 700, fontSize: 14, color: "#1D4ED8", marginBottom: 6 }}>
+                📅 Startdatoen er flyttet
               </div>
-              <div style={{ fontSize: 13, color: "#7F1D1D", lineHeight: 1.5 }}>
-                Der står <b>{new Date(startDate).toLocaleDateString("da-DK",
-                  { day: "numeric", month: "long", year: "numeric" })}</b>, og den dato er
-                passeret. Aftalen kan ikke godkendes, før startdatoen er rettet til i dag
-                eller senere — ellers ville der blive dannet opgaver i uger, der allerede
-                er kørt.
+              <div style={{ fontSize: 13, color: "#1E3A8A", lineHeight: 1.5 }}>
+                Kladden stod til at begynde <b>{new Date(startdatoFlyttetFra)
+                  .toLocaleDateString("da-DK", { day: "numeric", month: "long", year: "numeric" })}</b>,
+                og den dag er passeret. Den er sat til{" "}
+                <b>{new Date(startDate).toLocaleDateString("da-DK",
+                  { weekday: "long", day: "numeric", month: "long" })}</b>.
                 <br /><br />
-                Ret <b>«Startdato»</b> under Tid og gentagelse. Du kan godt gemme kladden
-                i mellemtiden.
+                {planInterval === "uge"
+                  ? "Aftalen kører hver uge, så datoen er dagen i morgen."
+                  : "Datoen er valgt, så rytmen ikke flytter sig — aftalen kører i de samme uger som før. Derfor er det ikke altid i morgen."}
+                {" "}Passer det ikke, så ret <b>«Startdato»</b> under Tid og gentagelse.
               </div>
             </div>
           )}
