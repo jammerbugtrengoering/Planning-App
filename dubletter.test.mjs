@@ -203,6 +203,29 @@ const t = (id, address, status = "kladde", days = ["Mon"], duration = 60) =>
 er("tom liste vælter ikke noget", findDubletter([]).size, 0);
 er("intet vælter ikke noget", findDubletter().size, 0);
 
+// ── Godkendelsen skal spørge, når kladden er mærket ─────────────────────────
+//
+// 21.9.2026: en kladde med dubletmærke blev godkendt kl. 07.42. Reglen herover havde
+// gjort sit arbejde — mærket stod på, og det pegede på den rigtige aftale. Det blev
+// bare ikke set, og så lå det samme job i planen to gange hver anden onsdag til 2028.
+//
+// Derfor er mærket ikke længere nok alene: godkendelsen SKAL køre reglen igen og
+// spørge. Prøven her kan ikke trykke på knappen, men den kan holde fast i, at
+// spørgsmålet stadig stilles.
+{
+  const { readFileSync } = await import("node:fs");
+  const kilde = readFileSync(new URL("./src/App.jsx", import.meta.url), "utf8");
+  const start = kilde.indexOf("async function updateTemplate(");
+  const blok = start === -1 ? "" : kilde.slice(start, start + 3000);
+  er("updateTemplate findes", start !== -1, true);
+  er("godkendelsen kører dubletreglen", /findDubletter\(/.test(blok), true);
+  er("og spørger, før den godkender", /window\.confirm\(/.test(blok), true);
+  er("den spørger KUN ved godkendelse, ikke når der gemmes som kladde",
+    /!payload\.saveAsDraft/.test(blok), true);
+  er("og kun når aftalen var en kladde i forvejen",
+    /status === "kladde"/.test(blok), true);
+}
+
 // ── Resultat ────────────────────────────────────────────────────────────────
 if (fejl > 0) {
   console.error(`\n  ${fejl} af ${koert} kontroller fejlede i dubletmarkeringen.\n`);
