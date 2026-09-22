@@ -8690,6 +8690,10 @@ const DRIFT_JOB = [
   { job: "slet-gamle-fotos",       timer: 36, navn: "Oprydning i gamle billeder" },
   { job: "daglige-paamindelser",   timer: 80, navn: "Daglig påmindelse" },
   { job: "maaneds-paamindelse",    timer: 80, navn: "Påmindelse før månedsskiftet" },
+  // 22.9.2026: nattejob der retter drift mellem aftaler og opgaver (se
+  // supabase/functions/arvede-felter-sync). 36 timer, samme margin som de andre
+  // natlige job, så en enkelt forsinket kørsel ikke i sig selv tænder en gul lampe.
+  { job: "arvede-felter-sync",     timer: 36, navn: "Synk af arvede felter (aftale → opgave)" },
 ];
 
 // En adresse, der med sikkerhed findes i Danmarks adresseregister, og som ikke hører
