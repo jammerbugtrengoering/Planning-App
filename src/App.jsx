@@ -12267,6 +12267,13 @@ function KunderView({ supabase, currentEmployeeId }) {
                   {k.adresse || "Ingen adresse"} · {k.aktive_aftaler} aftale{k.aktive_aftaler === 1 ? "" : "r"}
                   {k.sidste_besoeg ? ` · sidst ${new Date(k.sidste_besoeg).toLocaleDateString("da-DK")}` : " · aldrig besøgt"}
                 </div>
+                {(k.telefon || k.email || k.kontaktperson) && (
+                  <div style={{ fontSize: 12.5, color: "#475569", marginTop: 2, display: "flex", gap: 12, flexWrap: "wrap" }}>
+                    {k.kontaktperson && <span><b>Kontaktperson:</b> {k.kontaktperson}</span>}
+                    {k.telefon && <span><b>Telefon:</b> {k.telefon}</span>}
+                    {k.email && <span><b>E-mail:</b> {k.email}</span>}
+                  </div>
+                )}
               </div>
               <div style={{ textAlign: "right", flexShrink: 0 }}>
                 <div style={{ fontWeight: 800, fontSize: 15 }}>
@@ -12296,14 +12303,6 @@ function KunderView({ supabase, currentEmployeeId }) {
                     </div>
                   ))}
                 </div>
-                {(k.telefon || k.email || k.kontaktperson) && (
-                  <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginBottom: 14,
-                                fontSize: 12.5, color: "#475569" }}>
-                    {k.kontaktperson && <div><b>Kontaktperson:</b> {k.kontaktperson}</div>}
-                    {k.telefon && <div><b>Telefon:</b> {k.telefon}</div>}
-                    {k.email && <div><b>E-mail:</b> {k.email}</div>}
-                  </div>
-                )}
                 {k.mangler_dinero ? (
                   <KoblTilDinero supabase={supabase} kunde={k}
                     onKoblet={(antal) => { hent(); notifyKobling(antal); }} />
