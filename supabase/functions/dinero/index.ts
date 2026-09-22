@@ -258,7 +258,10 @@ serve(async (req) => {
 
     // ── Herfra er alt planlaeggerens vaerktoejer ──────────────────────────────
     if (action === "search") {
-      const url = `https://api.dinero.dk/v1/${DINERO_ORG_ID}/contacts?queryFilter=${encodeURIComponent("Name contains '" + String(query).replace(/'/g, "") + "'")}&fields=ContactGuid,Name,VatNumber,EanNumber,Street,ZipCode,City&pageSize=10`;
+      // Phone, Email og AttPerson er tilfoejet, saa telefon/mail/kontaktperson kan
+      // autoudfyldes paa aftalen/opgaven, naar planlaeggeren vaelger kunden her —
+      // uden dem skulle kontoret slaa dem op i Dinero for hver aftale.
+      const url = `https://api.dinero.dk/v1/${DINERO_ORG_ID}/contacts?queryFilter=${encodeURIComponent("Name contains '" + String(query).replace(/'/g, "") + "'")}&fields=ContactGuid,Name,VatNumber,EanNumber,Street,ZipCode,City,Phone,Email,AttPerson&pageSize=10`;
       const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
       const text = await res.text();
       return new Response(text, { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: res.status });

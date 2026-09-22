@@ -889,6 +889,7 @@ function scheduleWeek(weekInstances, employees, autoOnly = false, areas = [], em
 const ARVEDE_FELTER = [
   "customerName", "address", "dineroContactGuid", "poNumber",
   "needsKeyPickup", "contractType", "pricingType", "fixedPrice", "videoUrl",
+  "telefon", "email", "kontaktperson",
 ];
 function arvetAftryk(t) {
   return ARVEDE_FELTER.map((f) => JSON.stringify(t?.[f] ?? null)).join("|");
@@ -995,6 +996,7 @@ function ensureWeekInstances(week, year, allInstances, templates, employees, are
           videoUrl: tpl.videoUrl || "",
           customerName: tpl.customerName || "", address: tpl.address || "", poNumber: tpl.poNumber || "",
           dineroContactGuid: tpl.dineroContactGuid || "",
+          telefon: tpl.telefon || "", email: tpl.email || "", kontaktperson: tpl.kontaktperson || "",
           accessInstructions: tpl.accessInstructions || "",
           // Arves fra aftalen. Kan slaas fra paa den enkelte dag hvor noeglen
           // allerede er udleveret, uden at aftalen aendres.
@@ -1040,6 +1042,13 @@ function ensureWeekInstances(week, year, allInstances, templates, employees, are
             // ned ville slette referencen paa 49 opgaver, og fakturaen ville komme
             // uden at kommunen kunne se hvem den vedroerer.
             ...(tpl.poNumber ? { poNumber: tpl.poNumber } : {}),
+            // Samme vaern som poNumber/dineroContactGuid: kun overskriv naar aftalen
+            // faktisk HAR en vaerdi. En opgave, hvor kontoret har sat en anden
+            // stedspecifik kontakt end aftalens, skal ikke miste den, fordi aftalen
+            // selv staar tom.
+            ...(tpl.telefon ? { telefon: tpl.telefon } : {}),
+            ...(tpl.email ? { email: tpl.email } : {}),
+            ...(tpl.kontaktperson ? { kontaktperson: tpl.kontaktperson } : {}),
             accessInstructions: tpl.accessInstructions || "",
             needsKeyPickup: !!tpl.needsKeyPickup,
             contractType: tpl.contractType || "privat",
@@ -1956,7 +1965,7 @@ const MODULE_HELP = {
         "Fravær står som fravær. Systemet gemmer aldrig en årsag — hverken sygdom eller diagnose.",
         "Bliver du spurgt: der er ingen GPS og ingen positionsmåling i Worklist. Kørslen regnes ud fra adresserne på opgaverne, ikke fra hvor telefonen har været. Det er et spørgsmål, medarbejdere stiller, og svaret er entydigt nej."] },
     { h: "Om kunderne og borgerne", p: [
-        "Navn, adresse, kontaktperson og e-mail. Aftale, tider, priser og fakturaer.",
+        "Navn, adresse, telefon, e-mail og kontaktperson. Aftale, tider, priser og fakturaer.",
         "Noter og billeder fra besøget. Adgangsforhold, herunder nøgleboks- og alarmkoder.",
         "Ved accept af et tilbud gemmes desuden IP-adresse og browser sammen med underskriften. Kunden får det oplyst på accept-siden, inden hun trykker.",
         "På Nexus- og ældrelovsopgaver er det kommunen der er dataansvarlig. Spørger en borger om indsigt i sine oplysninger, skal hun henvises til kommunen — vi udfører alene arbejdet efter kommunens instruks."] },
@@ -2626,6 +2635,7 @@ function PlanningApp({ session, onSignOut }) {
             expiryDate: t.expiry_date || null,
             preferredEmployeeId: t.preferred_employee_id || "",
             dineroContactGuid: t.dinero_contact_guid || "",
+            telefon: t.telefon || "", email: t.email || "", kontaktperson: t.kontaktperson || "",
             status: t.status || "aktiv",
             cancelReason: t.cancel_reason || null,
             cancelledAt: t.cancelled_at || null,
@@ -2683,6 +2693,12 @@ function PlanningApp({ session, onSignOut }) {
             // syncInstance have skrevet null oven i opgavens eget nummer, og fakturaen
             // ville ikke kunne finde kunden.
             dineroContactGuid: i.dinero_contact_guid ?? "",
+            // Samme fejl-mønster som poNumber/dineroContactGuid ovenfor: mangler disse
+            // her, er de altid tomme på en nyhentet opgave, og selvhelbredelsen ville
+            // skrive dem tilbage ved hver eneste opstart uden at det nogensinde retter sig.
+            telefon: i.telefon ?? "",
+            email: i.email ?? "",
+            kontaktperson: i.kontaktperson ?? "",
             accessInstructions: instAccess[i.id] || custAccess[i.customer_id] || "",
             needsKeyPickup: i.needs_key_pickup ?? false,
             contractType: i.contract_type || "privat",
@@ -3141,6 +3157,7 @@ function PlanningApp({ session, onSignOut }) {
         pricing_type: t.pricingType || "hourly",
         fixed_price: t.fixedPrice ?? null,
         video_url: t.videoUrl ?? "",
+        telefon: t.telefon ?? "", email: t.email ?? "", kontaktperson: t.kontaktperson ?? "",
       }));
       const { error } = await supabase.from("instances").upsert(raekker, { onConflict: "id" });
       // Ingen besked til planlaeggeren: hun har ikke bedt om det her, og opgaverne
@@ -3175,6 +3192,7 @@ function PlanningApp({ session, onSignOut }) {
       required_skills: inst.requiredSkills ?? [],
       customer_name: inst.customerName ?? "",
       address_text: inst.address ?? "",
+      telefon: inst.telefon ?? "", email: inst.email ?? "", kontaktperson: inst.kontaktperson ?? "",
       // access_instructions skrives IKKE laengere her. Kolonnen staar tom med vilje:
       // den sendes med i ethvert svar til medarbejderen, og saa kunne adgangskoden
       // laeses uden om det loggede opslag. Teksten gemmes i instance_access nedenfor.
@@ -3295,6 +3313,9 @@ function PlanningApp({ session, onSignOut }) {
     if ("contractType" in fields) payload.contract_type = fields.contractType ?? "privat";
     if ("dineroSynced" in fields) payload.dinero_synced = !!fields.dineroSynced;
     if ("dineroContactGuid" in fields) payload.dinero_contact_guid = fields.dineroContactGuid || null;
+    if ("telefon" in fields) payload.telefon = fields.telefon ?? "";
+    if ("email" in fields) payload.email = fields.email ?? "";
+    if ("kontaktperson" in fields) payload.kontaktperson = fields.kontaktperson ?? "";
     if ("preferredEmployeeId" in fields) payload.preferred_employee_id = fields.preferredEmployeeId || null;
     if (Object.keys(payload).length === 0) return;
     const { error } = await supabase.from("service_templates").update(payload).eq("id", tplId);
@@ -3340,7 +3361,7 @@ function PlanningApp({ session, onSignOut }) {
       const prev = beforeById.get(t.id);
       if (!prev) return false;
       const assigneesChanged = JSON.stringify(prev.assignees || []) !== JSON.stringify(t.assignees || []);
-      const fieldsChanged = ["customerName","address","poNumber","accessInstructions","contractType","videoUrl"]
+      const fieldsChanged = ["customerName","address","poNumber","accessInstructions","contractType","videoUrl","telefon","email","kontaktperson"]
         .some((k) => (prev[k] ?? "") !== (t[k] ?? ""));
       return assigneesChanged || fieldsChanged;
     });
@@ -3585,6 +3606,7 @@ function PlanningApp({ session, onSignOut }) {
       expiry_date: payload.expiryDate || null,
       preferred_employee_id: payload.assigned_employee_id || null,
       dinero_contact_guid: payload.dineroContactGuid || null,
+      telefon: payload.telefon || "", email: payload.email || "", kontaktperson: payload.kontaktperson || "",
       status: nyStatus,
     }).eq("id", tplId);
     if (dbFail(updErr, "gemme aftalen")) return;
@@ -3631,6 +3653,7 @@ function PlanningApp({ session, onSignOut }) {
       dineroSynced: payload.dineroSynced || false,
       preferredEmployeeId: payload.assigned_employee_id || "",
       dineroContactGuid: payload.dineroContactGuid || "",
+      telefon: payload.telefon || "", email: payload.email || "", kontaktperson: payload.kontaktperson || "",
       status: nyStatus,
     };
 
@@ -3738,6 +3761,7 @@ function PlanningApp({ session, onSignOut }) {
         checklistItems: checklistItemsCombined,
         videoUrl: payload.videoUrl, customerName: payload.customerName, address: payload.address,
         poNumber: payload.poNumber, accessInstructions: payload.accessInstructions,
+        telefon: payload.telefon || "", email: payload.email || "", kontaktperson: payload.kontaktperson || "",
         needsKeyPickup: !!payload.needsKeyPickup,
         contractType: payload.contractType, expiryDate: payload.expiryDate,
         pricingType: payload.pricingType || "hourly", fixedPrice: payload.pricingType === "fixed" ? (Number(payload.fixedPrice) || 0) : null,
@@ -3765,6 +3789,7 @@ function PlanningApp({ session, onSignOut }) {
         expiry_date: payload.expiryDate || null,
         preferred_employee_id: tpl.preferredEmployeeId || null,
         dinero_contact_guid: tpl.dineroContactGuid || null, status: payload.saveAsDraft ? "kladde" : "aktiv",
+        telefon: tpl.telefon || "", email: tpl.email || "", kontaktperson: tpl.kontaktperson || "",
       });
       if (dbFail(tplErr, "oprette den faste aftale")) return;
       const { data: skillsDb } = await supabase.from("skills").select("id,name");
@@ -3826,6 +3851,7 @@ function PlanningApp({ session, onSignOut }) {
         checklistTemplateIds: payload.checklistTemplateIds || [], extraItems: payload.extraItems || [],
         videoUrl: payload.videoUrl, customerName: payload.customerName,
         address: payload.address, poNumber: payload.poNumber, accessInstructions: payload.accessInstructions,
+        telefon: payload.telefon || "", email: payload.email || "", kontaktperson: payload.kontaktperson || "",
         needsKeyPickup: !!payload.needsKeyPickup,
         contractType: payload.contractType, dineroSynced: payload.dineroSynced || false,
         pricingType: payload.pricingType || "hourly",
@@ -9597,6 +9623,12 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
   const [customerDineroSynced, setCustomerDineroSynced] = useState(!!copyFrom?.dineroSynced);
   // Kundens unikke id i Dinero — saettes naar kunden vaelges i soegningen.
   const [dineroContactGuid, setDineroContactGuid] = useState(copyFrom?.dineroContactGuid || "");
+  // Telefon, mail og kontaktperson (Att. person) hentes automatisk fra Dinero-kontakten,
+  // naar kunden vaelges i soegningen nedenfor (selectDineroCustomer) — ligesom navnet.
+  // Kontoret kan rette dem bagefter, fx til en anden kontakt paa det konkrete sted.
+  const [telefon, setTelefon] = useState(copyFrom?.telefon || "");
+  const [email, setEmail] = useState(copyFrom?.email || "");
+  const [kontaktperson, setKontaktperson] = useState(copyFrom?.kontaktperson || "");
   // En kopieret opgave henter medarbejderen fra den opgave der kopieres
   // (assignees), eller fra aftalens faste medarbejder hvis kopien kommer derfra.
   const [assignedEmployeeId, setAssignedEmployeeId] = useState(
@@ -9644,6 +9676,12 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
     setDineroContactGuid(c.ContactGuid || "");
     // Adressen her er Dineros fakturaadresse for virksomheden — IKKE adressen hvor
     // rengøringen skal udføres, så den skal ikke overskrive "Adresse for udførsel".
+    // Telefon, mail og kontaktperson (Att. person) er derimod netop kontaktoplysninger
+    // og hentes automatisk fra kontakten her — kontoret kan rette dem bagefter, hvis
+    // det konkrete sted har en anden kontakt end aftalens.
+    setTelefon(c.Phone || "");
+    setEmail(c.Email || "");
+    setKontaktperson(c.AttPerson || "");
     setCustomerSelected(true);
     setCustomerDineroSynced(true);
     setDineroResults([]);
@@ -9756,6 +9794,9 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
     needsKeyPickup,
     dineroSynced: customerDineroSynced,
     dineroContactGuid,
+    telefon: telefon.trim(),
+    email: email.trim(),
+    kontaktperson: kontaktperson.trim(),
     assigned_employee_id: assignedEmployeeId,
     saveAsDraft,
   });
@@ -9888,6 +9929,29 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
             </div>
           )}
         </div>
+      </div>
+
+      <div style={{ marginBottom: 12, display: "flex", gap: 10, flexWrap: "wrap" }}>
+        <div style={{ flex: "1 1 160px" }}>
+          <label style={styles.label}>Telefon</label>
+          <input style={styles.input} value={telefon} onChange={(e) => setTelefon(e.target.value)}
+            placeholder="Hentes fra Dinero, kan rettes" />
+        </div>
+        <div style={{ flex: "1 1 200px" }}>
+          <label style={styles.label}>E-mail</label>
+          <input style={styles.input} type="email" value={email} onChange={(e) => setEmail(e.target.value)}
+            placeholder="Hentes fra Dinero, kan rettes" />
+        </div>
+        <div style={{ flex: "1 1 200px" }}>
+          <label style={styles.label}>Kontaktperson (Att.)</label>
+          <input style={styles.input} value={kontaktperson} onChange={(e) => setKontaktperson(e.target.value)}
+            placeholder="Hentes fra Dinero, kan rettes" />
+        </div>
+      </div>
+      <div style={styles.hint}>
+        Udfyldes automatisk ud fra kunden, når du vælger den ovenfor. Kontoret bruger dem
+        til at kontakte kunden ved ændringer i aftalen eller de enkelte opgaver — ret dem
+        her, hvis det konkrete sted har en anden kontakt end den, der står i Dinero.
       </div>
 
       <label style={styles.label}>Adgang (nøgleboks, koder, kontaktperson m.v.)</label>
@@ -14469,6 +14533,11 @@ function TaskDetailModal({ task, employees, templates, onSetPreferredEmployee, o
   const [custAddress, setCustAddress] = useState("");
   const [custPo, setCustPo] = useState("");
   const [custAccess, setCustAccess] = useState("");
+  // Telefon, mail og kontaktperson — samme muster som custGuid/custAddress: hentes
+  // automatisk fra Dinero, naar kunden vaelges, men kan rettes i haanden bagefter.
+  const [custTelefon, setCustTelefon] = useState("");
+  const [custEmail, setCustEmail] = useState("");
+  const [custKontaktperson, setCustKontaktperson] = useState("");
   const [taskSkills, setTaskSkills] = useState([]);
   // Kort visuel "✓ Sendt"-bekræftelse lige efter klik — IKKE det samme som om
   // kunden varigt er kendt i Dinero (det styres af den gemte customerDineroSynced
@@ -14521,6 +14590,9 @@ function TaskDetailModal({ task, employees, templates, onSetPreferredEmployee, o
       setCustAddress(task.address || "");
       setCustPo(task.poNumber || "");
       setCustAccess(task.accessInstructions || "");
+      setCustTelefon(task.telefon || "");
+      setCustEmail(task.email || "");
+      setCustKontaktperson(task.kontaktperson || "");
       // Nulstilles naar en anden opgave aabnes, ellers ville forrige opgaves log
       // staa og lyse paa den nye — og det er en alvorlig forveksling netop her.
       setAdgangLog(null);
@@ -14570,6 +14642,11 @@ function TaskDetailModal({ task, employees, templates, onSetPreferredEmployee, o
     setCustGuid(c.ContactGuid || "");
     // Adressen her er Dineros fakturaadresse for virksomheden — IKKE adressen hvor
     // rengøringen skal udføres, så den skal ikke overskrive "Adresse for udførsel".
+    // Telefon, mail og kontaktperson hentes derimod automatisk herfra, ligesom i
+    // oprettelsesformularen — kontoret kan rette dem bagefter for det konkrete sted.
+    setCustTelefon(c.Phone || "");
+    setCustEmail(c.Email || "");
+    setCustKontaktperson(c.AttPerson || "");
     setCustomerSelected(true);
     setCustomerDineroSynced(true);
     setDineroResults([]);
@@ -14687,7 +14764,11 @@ function TaskDetailModal({ task, employees, templates, onSetPreferredEmployee, o
 
   function saveCustomer() {
     if (kundeIkkeValgt) return;
-    onUpdateCustomerInfo(t.id, { customerName: custName, address: custAddress, poNumber: custPo, accessInstructions: custAccess, dineroSynced: customerDineroSynced, dineroContactGuid: custGuid });
+    onUpdateCustomerInfo(t.id, {
+      customerName: custName, address: custAddress, poNumber: custPo, accessInstructions: custAccess,
+      dineroSynced: customerDineroSynced, dineroContactGuid: custGuid,
+      telefon: custTelefon.trim(), email: custEmail.trim(), kontaktperson: custKontaktperson.trim(),
+    });
     setEditingCustomer(false);
     setDineroResults([]);
   }
@@ -14982,6 +15063,18 @@ return (
             <AdresseFelt vaerdi={custAddress} onChange={setCustAddress}
               placeholder="Adresse" />
             <input style={styles.input} value={custPo} onChange={(e) => setCustPo(e.target.value)} placeholder="Fakturabeskrivelse (PO, navn m.v.)" />
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <input style={{ ...styles.input, flex: "1 1 140px" }} value={custTelefon}
+                onChange={(e) => setCustTelefon(e.target.value)} placeholder="Telefon" />
+              <input style={{ ...styles.input, flex: "1 1 180px" }} type="email" value={custEmail}
+                onChange={(e) => setCustEmail(e.target.value)} placeholder="E-mail" />
+              <input style={{ ...styles.input, flex: "1 1 180px" }} value={custKontaktperson}
+                onChange={(e) => setCustKontaktperson(e.target.value)} placeholder="Kontaktperson (Att.)" />
+            </div>
+            <div style={styles.hint}>
+              Udfyldes automatisk fra Dinero, når kunden vælges ovenfor — ret dem her, hvis
+              dette sted har en anden kontakt.
+            </div>
             <textarea style={{ ...styles.input, minHeight: 60 }} value={custAccess} onChange={(e) => setCustAccess(e.target.value)} placeholder="Adgangsinstruktioner" />
             <div style={{ display: "flex", gap: 8 }}>
               <button style={{ ...styles.primaryBtn, opacity: kundeIkkeValgt ? 0.5 : 1 }}
@@ -14992,7 +15085,7 @@ return (
             </div>
           </div>
         ) : (
-          (custName || custAddress || custPo || custAccess) ? (
+          (custName || custAddress || custPo || custAccess || custTelefon || custEmail || custKontaktperson) ? (
             <div style={styles.customerBox}>
               {custName && <div style={styles.customerName}>{custName}</div>}
               {custAddress && (
@@ -15007,6 +15100,11 @@ return (
                 </div>
               )}
               {custPo && <div style={styles.cardMeta}>Faktura: {custPo}</div>}
+              {(custTelefon || custEmail || custKontaktperson) && (
+                <div style={{ ...styles.cardMeta, marginTop: 2 }}>
+                  {[custKontaktperson, custTelefon, custEmail].filter(Boolean).join(" · ")}
+                </div>
+              )}
               {/* Noeglefluebenet kan saettes her, paa den eksisterende opgave. Det laa
                   foer kun i "Ny opgave", og der kommer man ikke tilbage til naar opgaven
                   er oprettet — saa var funktionen i praksis utilgaengelig. */}
