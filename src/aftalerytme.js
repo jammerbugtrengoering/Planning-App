@@ -83,6 +83,16 @@ export function aftaleKoererPaaDag(tpl, ugensMandag, dagNoegle) {
   // blive ved med at lægge opgaver på en medarbejders plan imens — og det er
   // netop dubletter, statussen er lavet til at rydde.
   if (tpl.status === "kladde" || tpl.status === "slettes") return false;
+  if (tpl.planInterval === "konkrete_datoer") {
+    const liste = Array.isArray(tpl.konkreteDatoer) ? tpl.konkreteDatoer : [];
+    if (liste.length === 0) return false;
+    const dagIndeks = DAG_TIL_INDEKS[dagNoegle];
+    if (dagIndeks === undefined) return false;
+    const dagDato = new Date(ugensMandag);
+    dagDato.setDate(dagDato.getDate() + dagIndeks);
+    const dagStr = isoDato(dagDato);
+    return liste.some((d) => d && d.dato === dagStr);
+  }
   if (!tpl.days || tpl.days.length === 0) return false;
 
   const dage = (tpl.days || [])

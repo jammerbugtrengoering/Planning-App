@@ -2534,6 +2534,7 @@ function PlanningApp({ session, onSignOut }) {
             pricingType: t.pricing_type || "hourly",
             fixedPrice: t.fixed_price,
             planInterval: t.plan_interval || "uge",
+            konkreteDatoer: t.konkrete_datoer || [],
             // Fritekst til kontoret. Vises KUN paa en kladde - se AftaleBemaerkning.
             bemaerkning: t.bemaerkning || "",
             statusFoerSlettes: t.status_foer_slettes || null,
