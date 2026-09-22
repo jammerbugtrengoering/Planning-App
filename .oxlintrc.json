@@ -19,7 +19,9 @@
     "ugevalg.test.mjs",
     "portefoelje.test.mjs",
     "hentalle.test.mjs",
-    "dubletter.test.mjs"
+    "dubletter.test.mjs",
+    "indlaesning.test.mjs",
+    "vindue.test.mjs"
   ],
   "rules": {
     "no-undef": "error",

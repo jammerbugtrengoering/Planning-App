@@ -110,3 +110,63 @@ export function aftaleKoererPaaDag(tpl, ugensMandag, dagNoegle) {
 
   return true;
 }
+
+// Flyt en startdato, der er løbet fra en kladde, frem til i morgen — uden at flytte
+// rytmen med.
+//
+// 21.9.2026. En kladde, der har ligget i bunken et par uger, har en startdato, der er
+// passeret, og så kan den ikke godkendes. Det rigtige er at foreslå en ny dato frem
+// for at låse døren. Men «i morgen» er ikke altid det rigtige svar:
+//
+// Startdatoen er nemlig ANKERET for rytmen. For «hver 14. dag» tæller ugenPasser uger
+// fra startdatoens mandag — så flytter man datoen én uge, skifter aftalen fra lige til
+// ulige uger. Arket sagde «staar kun i lige uger» for halvdelen af kladderne, og et
+// besøg, der pludselig ligger i de forkerte uger, er lige så forkert som intet besøg.
+//
+// Derfor: den nye dato er den FØRSTE dag fra i morgen, der holder rytmen.
+//   hver uge          i morgen. Alle uger passer.
+//   hver 14./4./6.    første dag fra i morgen, hvis uge har samme rest som den gamle.
+//   hver 3. måned     samme dag i måneden, første gang den falder fra i morgen.
+//   ukendt rytme      i morgen. Bedre end at lade være.
+//
+// Returnerer null, når datoen ikke behøver at flyttes.
+export function nyStartdatoHvisPasseret(tpl, idag = new Date()) {
+  if (!tpl || !tpl.startDate) return null;
+  const nu = new Date(idag.getFullYear(), idag.getMonth(), idag.getDate());
+  const start = new Date(tpl.startDate);
+  if (isNaN(start.getTime())) return null;
+  const startDag = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+  if (startDag >= nu) return null;                 // datoen er stadig gyldig
+
+  const imorgen = new Date(nu);
+  imorgen.setDate(imorgen.getDate() + 1);
+
+  const maaneder = MAANEDSINTERVAL[tpl.planInterval];
+  if (maaneder) {
+    // Samme dag i måneden. Rammer datoen ikke i en kort måned (den 31.), tages
+    // sidste dag i måneden — samme regel som ugenPasser bruger.
+    const dag = startDag.getDate();
+    const kandidat = new Date(imorgen.getFullYear(), imorgen.getMonth(), 1);
+    for (let i = 0; i < 24; i++) {
+      const dageIMaaneden = new Date(kandidat.getFullYear(), kandidat.getMonth() + 1, 0).getDate();
+      const d = new Date(kandidat.getFullYear(), kandidat.getMonth(), Math.min(dag, dageIMaaneden));
+      const siden = (d.getFullYear() - startDag.getFullYear()) * 12 + (d.getMonth() - startDag.getMonth());
+      if (d >= imorgen && siden % maaneder === 0) return isoDato(d);
+      kandidat.setMonth(kandidat.getMonth() + 1);
+    }
+    return isoDato(imorgen);
+  }
+
+  const uger = UGEINTERVAL[tpl.planInterval] || 1;
+  if (uger === 1) return isoDato(imorgen);
+
+  const anker = mandagIUgen(startDag);
+  const d = new Date(imorgen);
+  // Højst 7 × intervallet dage frem: så er hver mulig rest prøvet.
+  for (let i = 0; i < uger * 7 + 7; i++) {
+    const ugerSiden = Math.round((mandagIUgen(d) - anker) / (7 * 24 * 60 * 60 * 1000));
+    if (ugerSiden % uger === 0) return isoDato(d);
+    d.setDate(d.getDate() + 1);
+  }
+  return isoDato(imorgen);
+}

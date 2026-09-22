@@ -6,11 +6,12 @@ import { fakturerbareMinutter, registreredeMinutter, oplaeringsFolk, erUnderOpla
          planlagtFakturerbart, afvigelse, planlagtFor, planlagtIAlt,
          fordelingen, harFordeling } from "./opgavetid.js";
 import { supabase } from "./supabaseClient";
-import { aftaleKoererPaaDag, DAG_FRA_INDEKS } from "./aftalerytme";
+import { aftaleKoererPaaDag, DAG_FRA_INDEKS, nyStartdatoHvisPasseret } from "./aftalerytme";
 import { holdOejeMedNyVersion } from "./nyversion";
 import { filtrerUgevalg } from "./ugevalg";
 import { portefoeljeTal, aarMedBesoeg } from "./portefoelje";
 import { hentAlleRaekker } from "./hentalle";
+import { vinduetsGraenser, vinduetsStykker, hentedeUgerFra, ugenErHentet } from "./vindue";
 import { findDubletter } from "./dubletter";
 import {
   Plus, Download, X, Clock, AlertTriangle,
@@ -396,6 +397,14 @@ const DEFAULT_TRAVEL = { defaultMinutes: 20, dayStart: "07:00", overrides: {} };
 // Planlaegningshorisont: hvor mange uger frem opgaverne altid materialiseres.
 const HORIZON_WEEKS = 4;
 
+// Sider, der regner paa samtlige opgaver og derfor ikke kan vise et rigtigt tal,
+// foer anden runde er hentet.
+//
+// «uge» staar bevidst IKKE her: ugeplanen viser én uge ad gangen, og de uger, man kan
+// blade til med det samme, er hentet i foerste runde. Drift, Lager, Kunder og Tilbud
+// roerer slet ikke opgavebunken.
+const SIDER_DER_KRAEVER_ALT = ["contracts", "reports", "time", "kundetimer", "medExport"];
+
 // Bruger crypto.randomUUID når den er tilgængelig (alle moderne browsere).
 // Math.random gav kun ~36^7 kombinationer og var i praksis kollisionsfølsom,
 // når mange instanser blev genereret i samme sekund ved "Planlæg alle uger".
@@ -428,6 +437,32 @@ function dbFail(error, whatFailed) {
 // hvor den kan proeves af uden at aabne appen.
 function fetchAllRows(table, columns = "*", filter = null) {
   return hentAlleRaekker(supabase, table, columns, filter);
+}
+
+// FOERSTE RUNDE: opgaverne i ugerne omkring i dag.
+//
+// Ét kald pr. aar i vinduet — altsaa ét eller to. Hver med tre almindelige
+// betingelser. Se src/vindue.js for hvorfor det IKKE er ét kald med en or()-streng:
+// den slags fejler tavst med et forkert antal raekker, og et forkert antal raekker
+// her faar horisonten til at danne dubletter.
+async function hentVinduet() {
+  const stykker = vinduetsStykker(new Date());
+  const dele = await Promise.all(stykker.map((s) =>
+    fetchAllRows("instances_let", "*", (q) =>
+      q.is("deleted_at", null).eq("year", s.aar).gte("week", s.fraUge).lte("week", s.tilUge))));
+  return dele.flat();
+}
+
+// ANDEN RUNDE: resten. Koerer i baggrunden, naar ugeplanen allerede er tegnet.
+//
+// Den henter ALT og ikke kun det manglende. Det er med vilje: komplementet til et
+// vindue, der kan gaa hen over et aarsskifte, bliver til fem betingelser, og en fejl
+// i én af dem ville betyde manglende opgaver — den dyreste fejl, appen kan lave.
+// Dubletter fjernes paa id, saa det koster lidt baandbredde og ingen rigtighed.
+//
+// Skal det goeres billigere en dag, er det her, man begynder.
+function hentResten() {
+  return fetchAllRows("instances_let", "*", (q) => q.is("deleted_at", null));
 }
 
 function weekdayKeyFor(date) {
@@ -854,6 +889,7 @@ function scheduleWeek(weekInstances, employees, autoOnly = false, areas = [], em
 const ARVEDE_FELTER = [
   "customerName", "address", "dineroContactGuid", "poNumber",
   "needsKeyPickup", "contractType", "pricingType", "fixedPrice", "videoUrl",
+  "telefon", "email", "kontaktperson",
 ];
 function arvetAftryk(t) {
   return ARVEDE_FELTER.map((f) => JSON.stringify(t?.[f] ?? null)).join("|");
@@ -893,9 +929,31 @@ function saetRyddedePladser(raekker) {
 let planenMaaIkkeDanneMere = false;
 export function stopDannelseAfOpgaver() { planenMaaIkkeDanneMere = true; }
 
+// Hvilke uger er hentet HELT? null = alle.
+//
+// 21.9.2026: opgaverne hentes ikke laengere alle sammen ved opstart. Foerst et vindue
+// omkring i dag, saa ugeplanen kan tegnes med det samme, og resten bagefter i
+// baggrunden.
+//
+// Det gjorde noget farligt muligt. ensureWeekInstances danner en opgave for hver
+// plads, den ikke kan finde i listen — og den kan ikke se forskel paa «pladsen er
+// tom» og «ugen er ikke hentet endnu». Koerte den paa halve data, ville den opfinde
+// dubletter i en plan, nogen arbejder i, og sende dem ud paa medarbejdernes telefoner.
+//
+// Derfor det her vaern: er ugen ikke hentet helt, danner vi ingenting i den. Reglen
+// og listen ligger i src/vindue.js med sin egen proeve.
+//
+// Samme mønster som ryddedePladser ovenfor og af samme grund: den skal gaelde paa
+// ALLE kaldesteder, ogsaa dem nogen tilfoejer senere.
+let hentedeUger = null;
+function saetHentedeUger(uger) { hentedeUger = uger; }
+
 function ensureWeekInstances(week, year, allInstances, templates, employees, areas = [], employeeAreas = [], travelSettings = DEFAULT_TRAVEL) {
   let list = [...allInstances];
   if (planenMaaIkkeDanneMere) return list;
+  // Ugen er ikke hentet endnu. Listen ser tom ud, men det er den ikke — den er bare
+  // ikke kommet. Vent til anden runde er inde.
+  if (!ugenErHentet(hentedeUger, year, week)) return list;
   const weekMonday = mondayOfWeek(week, year);
   const newlyCreatedIds = new Set();
   
@@ -938,6 +996,7 @@ function ensureWeekInstances(week, year, allInstances, templates, employees, are
           videoUrl: tpl.videoUrl || "",
           customerName: tpl.customerName || "", address: tpl.address || "", poNumber: tpl.poNumber || "",
           dineroContactGuid: tpl.dineroContactGuid || "",
+          telefon: tpl.telefon || "", email: tpl.email || "", kontaktperson: tpl.kontaktperson || "",
           accessInstructions: tpl.accessInstructions || "",
           // Arves fra aftalen. Kan slaas fra paa den enkelte dag hvor noeglen
           // allerede er udleveret, uden at aftalen aendres.
@@ -983,6 +1042,13 @@ function ensureWeekInstances(week, year, allInstances, templates, employees, are
             // ned ville slette referencen paa 49 opgaver, og fakturaen ville komme
             // uden at kommunen kunne se hvem den vedroerer.
             ...(tpl.poNumber ? { poNumber: tpl.poNumber } : {}),
+            // Samme vaern som poNumber/dineroContactGuid: kun overskriv naar aftalen
+            // faktisk HAR en vaerdi. En opgave, hvor kontoret har sat en anden
+            // stedspecifik kontakt end aftalens, skal ikke miste den, fordi aftalen
+            // selv staar tom.
+            ...(tpl.telefon ? { telefon: tpl.telefon } : {}),
+            ...(tpl.email ? { email: tpl.email } : {}),
+            ...(tpl.kontaktperson ? { kontaktperson: tpl.kontaktperson } : {}),
             accessInstructions: tpl.accessInstructions || "",
             needsKeyPickup: !!tpl.needsKeyPickup,
             contractType: tpl.contractType || "privat",
@@ -1370,6 +1436,8 @@ const MODULE_HELP = {
         "Opgaverne oprettes automatisk ud fra aftalerne, fire uger frem. Det sker når du åbner appen, og alt nyt gemmes med det samme.",
         "Horisonten opretter opgaverne, men fordeler dem ikke. Aftaler med fast medarbejder får hende straks — alt andet ligger i Ikke tildelt indtil du trykker Planlæg.",
         "Bladrer du længere frem end fire uger, oprettes ugen når du åbner den, men den gemmes først når du rører den. Tildel en medarbejder, flyt eller ret noget, ellers er den væk igen når du lukker appen.",
+        "De første par sekunder efter du har åbnet appen, er kun ugerne omkring i dag hentet. Bladrer du langt frem i det tidsrum, siger siden det med rødt — og så skal du vente, før du lægger noget ind. En tom uge betyder dér ikke «ingen opgaver», men «ikke hentet endnu».",
+        "Rapportering, Aftaler, Fakturering, Kundetimer og Løn data regner på alle opgaver. De siger med gult, at tallene ikke er færdige, indtil resten er hentet. Det tager typisk få sekunder.",
         "Horisonten ruller med dagen, og der kommer aldrig dubletter — systemet tjekker på aftale, uge, år og dag.",
         "Om en opgave overhovedet opstår afhænger af fem ting: dagen skal være valgt på aftalen, intervallet skal ramme, og dagen skal ligge efter startdatoen, før udløbsdatoen og ikke efter en eventuel ophørsdato. Mangler der opgaver, er det næsten altid startdatoen eller intervallet.",
         "Har aftalen en fast medarbejder, sættes vedkommende på med det samme, hver gang en ny opgave opstår.",
@@ -1714,7 +1782,7 @@ const MODULE_HELP = {
     { h: "Gentagelse", p: [
         "En aftale kan gentages hver uge, hver 14. dag, hver 4. uge, hver 6. uge eller hver 3. måned. Kadencen tælles fra startdatoen.",
         "«Hver 4. uge» er ikke det samme som en gang om måneden. Det giver 13 besøg om året i stedet for 12, og dagen vandrer gennem kalenderen — et besøg den 5. bliver med tiden den 28. Til gengæld ligger det altid på den samme ugedag, og det er sådan, rengøring aftales i praksis.",
-        "Vil du have en fast dato i måneden i stedet, findes den mulighed ikke længere. Sig til, hvis I får brug for den."] }, { h: "Under udarbejdelse", p: ["Er du ikke færdig med en ny aftale, så tryk «Gem som kladde» i stedet for «Gem og planlæg».", "En kladde opretter ingen opgaver. Den ligger og venter, og du kan rette alle felter i den så mange gange du vil.", "Find den igen med filteret «Under udarbejdelse» øverst her på siden. Tallet i knappen viser hvor mange der ligger.", "Tryk «Åbn og godkend» for at rette videre. Inde i aftalen vælger du så «Gem kladde» hvis du stadig ikke er færdig, eller «Godkend og planlæg» når den er klar.", "Først ved godkendelsen oprettes opgaverne — fra startdatoen og frem til udløbsdatoen. Det kan være mange på én gang, så tjek datoerne inden du godkender.", "Startdatoen kan ikke ligge i fortiden. Har en kladde ligget så længe at datoen er løbet fra dig, skal den rettes før du kan godkende.", "Er kladden lavet ved en indlæsning, står der en gul «Bemærkning til kontoret» i aftalen med det, indlæsningen ikke kunne afgøre — manglende kundenavn, en gættet kontrakttype, noter fra det ark den kom fra. Læs den, ret det den peger på, og godkend så.", "Feltet vises kun, så længe aftalen er en kladde. Når den er godkendt, er noten gjort op, og feltet forsvinder — teksten bliver stående i databasen, men skal ikke stå og fylde bagefter."] }, { h: "Del kladdebunken op", p: [
+        "Vil du have en fast dato i måneden i stedet, findes den mulighed ikke længere. Sig til, hvis I får brug for den."] }, { h: "Under udarbejdelse", p: ["Er du ikke færdig med en ny aftale, så tryk «Gem som kladde» i stedet for «Gem og planlæg».", "En kladde opretter ingen opgaver. Den ligger og venter, og du kan rette alle felter i den så mange gange du vil.", "Find den igen med filteret «Under udarbejdelse» øverst her på siden. Tallet i knappen viser hvor mange der ligger.", "Tryk «Åbn og godkend» for at rette videre. Inde i aftalen vælger du så «Gem kladde» hvis du stadig ikke er færdig, eller «Godkend og planlæg» når den er klar.", "Først ved godkendelsen oprettes opgaverne — fra startdatoen og frem til udløbsdatoen. Det kan være mange på én gang, så tjek datoerne inden du godkender.", "Er startdatoen løbet fra kladden, mens den lå i bunken, flytter appen den frem, når du åbner den — og siger det med blåt øverst i kolonnen til højre, med både den gamle og den nye dato.", "Den nye dato er ikke altid i morgen. Startdatoen er nemlig ankeret for rytmen: for «hver 14. dag» tæller systemet uger fra startdatoens mandag, så flytter man datoen én uge, skifter aftalen fra lige til ulige uger. Derfor vælges den første dag fra i morgen, der holder aftalen i de samme uger som før. Passer det ikke, retter du den selv.", "Datoerne kommer fra kladden. Indtil 21. september 2026 stod der «i dag» og «i dag + 1 år» uanset hvad, så en kladde med toårig løbetid blev etårig ved godkendelsen — uden at nogen fik det at vide.", "Er kladden lavet ved en indlæsning, står der en gul «Bemærkning til kontoret» med det, indlæsningen ikke kunne afgøre — manglende kundenavn, en gættet kontrakttype, noter fra det ark den kom fra. Læs den, ret det den peger på, og godkend så.", "På en bred skærm står bemærkningen i en kolonne til højre, og den bliver hængende, mens du bladrer ned gennem felterne. Den hørte før nederst, altså længst væk fra det, den handler om. Er skærmen for smal til to kolonner, står den øverst i stedet.", "Ligner kladden en aftale, der allerede findes, står advarslen øverst i den samme kolonne — med hvilken aftale, hvilken dag og hvor længe. Den regnes ud fra det, der står i felterne lige nu, så retter du adressen eller dagen, forsvinder den af sig selv.", "Feltet vises kun, så længe aftalen er en kladde. Når den er godkendt, er noten gjort op, og feltet forsvinder — teksten bliver stående i databasen, men skal ikke stå og fylde bagefter."] }, { h: "Del kladdebunken op", p: [
         "Vælger du «Under udarbejdelse», kommer der to filtre mere frem, som kun findes dér.",
         "Det ene deler bunken i dem, der ser ud som dubletter, og dem der ikke gør. Tag dubletterne først — det er dem, der enten skal slettes eller lægges sammen med en aftale, der allerede kører, og de fylder mest.",
         "Det andet er en liste med medarbejdere. Listen viser kun dem, der faktisk har kladder, og tallet siger hvor mange. Så kan du tage én medarbejders ruteplan ad gangen og få alle spørgsmålene afklaret med hende på én gang.",
@@ -1743,7 +1811,9 @@ const MODULE_HELP = {
         "Adressen alene er ikke nok. BHJ har tre forskellige rengøringer på Egevej 49, og på Postvænget 2 bor der både en borger med kommunal ordning og en privatkunde — de skal ikke stå og lyse. Derfor skal dag og varighed også passe.",
         "Rytmen tælles ikke med. En aftale kan sagtens være den samme, selvom den ene står som hver 14. dag og den anden som hver 4. uge — det er netop dét, der er gået galt, når nogen har oprettet den to gange.",
         "Mærket regnes ud på stedet og står ikke gemt nogen steder. Retter du den ene aftale, eller markerer den til sletning, forsvinder mærket af sig selv på den anden.",
-        "Det siger «ser ud som» og ikke «er». To naboer i samme opgang med samme rengøring på samme dag rammer også — se efter, før du sletter."] },
+        "Det siger «ser ud som» og ikke «er». To naboer i samme opgang med samme rengøring på samme dag rammer også — se efter, før du sletter.",
+        "Godkender du en kladde med mærket på, spørger systemet først. Det viser hvilken aftale der allerede ligger, hvilken dag og hvor længe — og siger, at arbejdet bliver lagt i planen to gange. Du kan godt svare ja; er det to forskellige kunder på adressen, er det det rigtige svar.",
+        "Spørgsmålet kom til 21. september 2026, efter en kladde blev godkendt med mærket på. Den samme rengøring lå så i planen to gange hver anden onsdag to år frem, og medarbejderen havde det samme besøg dobbelt på sin dag."] },
     { h: "Markér til sletning", p: [
         "🗑 «Markér til sletning» sætter aftalen til side, uden at slette noget. Den kan findes igen under filteret «Skal slettes», og tallet på knappen siger hvor mange der ligger.",
         "En markeret aftale danner ingen opgaver. Så snart du har markeret den, opfører den sig som om den var væk — også selvom den står der endnu.",
@@ -1895,7 +1965,7 @@ const MODULE_HELP = {
         "Fravær står som fravær. Systemet gemmer aldrig en årsag — hverken sygdom eller diagnose.",
         "Bliver du spurgt: der er ingen GPS og ingen positionsmåling i Worklist. Kørslen regnes ud fra adresserne på opgaverne, ikke fra hvor telefonen har været. Det er et spørgsmål, medarbejdere stiller, og svaret er entydigt nej."] },
     { h: "Om kunderne og borgerne", p: [
-        "Navn, adresse, kontaktperson og e-mail. Aftale, tider, priser og fakturaer.",
+        "Navn, adresse, telefon, e-mail og kontaktperson. Aftale, tider, priser og fakturaer.",
         "Noter og billeder fra besøget. Adgangsforhold, herunder nøgleboks- og alarmkoder.",
         "Ved accept af et tilbud gemmes desuden IP-adresse og browser sammen med underskriften. Kunden får det oplyst på accept-siden, inden hun trykker.",
         "På Nexus- og ældrelovsopgaver er det kommunen der er dataansvarlig. Spørger en borger om indsigt i sine oplysninger, skal hun henvises til kommunen — vi udfører alene arbejdet efter kommunens instruks."] },
@@ -2131,6 +2201,18 @@ function PlanningApp({ session, onSignOut }) {
   // det rigtige i stedet for bare at vise listen.
   const [aabnTilbudId, setAabnTilbudId] = useState(null);
 
+  // Er ANDEN RUNDE inde? Indtil da har appen kun ugerne omkring i dag.
+  //
+  // Ugeplanen er ligeglad — den viser én uge, og den uge er hentet. Men Aftaler,
+  // Rapportering, Fakturering, Kundetimer og Løn data regner paa HELE bunken, og et
+  // tal, der bygger paa en femtedel af opgaverne, er ikke «næsten rigtigt» — det er
+  // forkert. De siger det hoejt i stedet, indtil resten er inde.
+  const [alleOpgaverHentet, setAlleOpgaverHentet] = useState(false);
+  // Den samme liste som vaernet ved ensureWeekInstances bruger — men som tilstand, saa
+  // skaermen kan tegne sig om, naar anden runde lander. Vaernet selv ligger paa
+  // modulniveau, fordi det skal gaelde alle kaldesteder; det her er kun til visningen.
+  const [hentedeUgerNu, setHentedeUgerNu] = useState(null);
+
   // Hvilket statusfilter Aftaler skal staa paa, naar man kommer dertil fra Drift.
   //
   // Knappen «340 kladder mangler kundenavn» skal ikke bare aabne Aftaler — den skal
@@ -2352,7 +2434,15 @@ function PlanningApp({ session, onSignOut }) {
         // Slettemarkerede opgaver (aftalen er sat som udgaaet) hentes aldrig ind.
       // Dermed forsvinder de fra ugeplan, fakturering, rapportering og alt andet
       // paa én gang, uden at hvert modul skal huske at filtrere.
-      fetchAllRows("instances_let", "*", (q) => q.is("deleted_at", null)).then((data) => ({ data })),
+      //
+      // FOERSTE RUNDE: kun ugerne omkring i dag. Anden runde henter resten bagefter.
+      //
+      // Foer 21.9.2026 blev alle 10.893 opgaver hentet her — 6,4 MB i elleve sider,
+      // knap ni sekunder, mens planlaeggeren sad og kiggede paa én uge. 82 % af det
+      // var 2027 og 2028, fordi en aftale danner hele sin loebetid, naar den oprettes.
+      //
+      // Vinduet er cirka 1.500 opgaver og gaar i én side.
+      hentVinduet().then((data) => ({ data })),
       hentMedFornyelse("ønsker om ny tid", () => supabase.from("reschedule_requests").select("*").eq("status", "afventer")),
       hentMedFornyelse("bestillinger fra kunder", () => supabase.from("portal_bestillinger").select("*").eq("status", "ny").order("oprettet")),
       hentMedFornyelse("kommentarer og billeder", () => supabase.from("task_notes").select("*").order("created_at", { ascending: false })),
@@ -2545,6 +2635,7 @@ function PlanningApp({ session, onSignOut }) {
             expiryDate: t.expiry_date || null,
             preferredEmployeeId: t.preferred_employee_id || "",
             dineroContactGuid: t.dinero_contact_guid || "",
+            telefon: t.telefon || "", email: t.email || "", kontaktperson: t.kontaktperson || "",
             status: t.status || "aktiv",
             cancelReason: t.cancel_reason || null,
             cancelledAt: t.cancelled_at || null,
@@ -2562,7 +2653,11 @@ function PlanningApp({ session, onSignOut }) {
 
         // Opbyg instanser fra skabeloner + eksisterende instanser
         const { week: currentWeek, year: currentYear } = isoWeekInfo(new Date());
-        const existingInst = (instData || []).map((i) => {
+        // Oversaettelsen fra databasens raekke til appens opgave. Lagt i en funktion,
+        // fordi ANDEN RUNDE skal bruge nøjagtig den samme — to naesten-ens
+        // oversaettelser er præcis sådan et felt som poNumber bliver glemt ét af
+        // stederne, og det kostede os 200 skrivninger ved hver opstart.
+        const kortlaegOpgave = (i) => {
           const cust = customersData?.find((c) => c.id === i.customer_id);
           return {
             ...i,
@@ -2571,6 +2666,39 @@ function PlanningApp({ session, onSignOut }) {
             requiredSkills: i.required_skills ?? [],
             customerName: (i.customer_name || cust?.name || i.customer_id) ?? "",
             address: (i.address_text || cust?.address) ?? "",
+            // poNumber og videoUrl SKAL staa her, selvom de ser overfloedige ud.
+            //
+            // De manglede indtil 21.9.2026, og raekken beholdt kun sine snake_case-navne
+            // fra databasen. Resten af appen laeser t.poNumber, saa en nyhentet opgave
+            // havde ingen reference — og saa gik det i ring:
+            //
+            //   1. selvhelbredelsen satte poNumber paa ud fra aftalen
+            //   2. syncHealedAssignments saa tomt mod «Grethe Bach Sørensen»,
+            //      troede opgaven var aendret og skrev den — ét kald pr. opgave
+            //   3. naeste opstart tabte oversaettelsen feltet igen
+            //
+            // Cirka 200 opgaver blev skrevet ved hver eneste opstart, med nøjagtig de
+            // samme vaerdier som stod der i forvejen. Maalt tre gange: 202, 411, 201.
+            // Det kunne aldrig konvergere, for fejlen laa i oversaettelsen og ikke i data.
+            //
+            // Det alvorlige var ikke tiden. poNumber baerer borgerens navn paa
+            // kommunens opgaver og ender som kommentar paa fakturalinjen i Dinero.
+            // Selvhelbredelsen springer opgaver med registreret tid over — altsaa
+            // netop dem der skal faktureres — saa for dem var feltet tomt.
+            poNumber: i.po_number ?? "",
+            videoUrl: i.video_url ?? "",
+            // Samme fejl, fundet af proeven i samme ombaering. Kundens nummer i Dinero
+            // er sluppet med, fordi selvhelbredelsen kun skriver det, naar aftalen HAR
+            // et — og det har alle aftaler i dag. Havde én manglet det, ville
+            // syncInstance have skrevet null oven i opgavens eget nummer, og fakturaen
+            // ville ikke kunne finde kunden.
+            dineroContactGuid: i.dinero_contact_guid ?? "",
+            // Samme fejl-mønster som poNumber/dineroContactGuid ovenfor: mangler disse
+            // her, er de altid tomme på en nyhentet opgave, og selvhelbredelsen ville
+            // skrive dem tilbage ved hver eneste opstart uden at det nogensinde retter sig.
+            telefon: i.telefon ?? "",
+            email: i.email ?? "",
+            kontaktperson: i.kontaktperson ?? "",
             accessInstructions: instAccess[i.id] || custAccess[i.customer_id] || "",
             needsKeyPickup: i.needs_key_pickup ?? false,
             contractType: i.contract_type || "privat",
@@ -2599,7 +2727,8 @@ function PlanningApp({ session, onSignOut }) {
             tidFordeling: i.tid_fordeling ?? {},
             kmAnslaaet: i.km_anslaaet ?? null,
           };
-        });
+        };
+        const existingInst = (instData || []).map(kortlaegOpgave);
         // Planlaegningshorisont: opgaverne materialiseres altid fire uger frem, saa
         // planen kan overskues en maaned ud, og aftaler med fast medarbejder faar
         // vedkommende paa med det samme i stedet for foerst naar ugen aabnes.
@@ -2617,6 +2746,11 @@ function PlanningApp({ session, onSignOut }) {
           .from("instances").select("template_id, year, week, day")
           .not("deleted_at", "is", null).not("template_id", "is", null);
         saetRyddedePladser(ryddede);
+        // Foerst nu maa horisonten danne noget — og kun i de uger, foerste runde
+        // faktisk hentede. Se vaernet ved ensureWeekInstances.
+        const vinduetsUger = hentedeUgerFra(vinduetsGraenser(new Date()).uger);
+        saetHentedeUger(vinduetsUger);
+        setHentedeUgerNu(vinduetsUger);
         let allInst = existingInst;
         const horizonAnchor = mondayOf(new Date());
         for (let hw = 0; hw < HORIZON_WEEKS; hw++) {
@@ -2645,6 +2779,31 @@ function PlanningApp({ session, onSignOut }) {
         const helbredte = allInst.filter(
           (t) => knownIds.has(t.id) && arvetAftryk(t) !== aftrykFoer.get(t.id));
         if (helbredte.length) gemArvedeFelter(helbredte);
+
+        // ANDEN RUNDE. Ugeplanen er tegnet nu; resten hentes mens kontoret arbejder.
+        //
+        // Der ventes IKKE paa den her. Falder den paa gulvet, staar appen tilbage med
+        // vinduet — ugeplanen virker, og rapporterne bliver ved at sige «henter».
+        // Det er det rigtige forhold: en tom ugeplan er en arbejdsdag, der gaar i staa,
+        // mens en rapport, der er et minut om at komme, er til at leve med.
+        hentResten().then((alle) => {
+          if (!alle || !alle.length) return;
+          const kortlagt = alle.map(kortlaegOpgave);
+          setInstances((cur) => {
+            // Vinduets udgave vinder. Den har vaeret gennem selvhelbredelsen og kan
+            // have faaet en medarbejder paa af horisonten — og de aendringer er ikke
+            // noedvendigvis skrevet ned endnu.
+            const efterId = new Map(kortlagt.map((t) => [t.id, t]));
+            cur.forEach((t) => efterId.set(t.id, t));
+            return [...efterId.values()];
+          });
+          // Nu maa horisonten røre alle uger igen.
+          saetHentedeUger(null);
+          setHentedeUgerNu(null);
+          setAlleOpgaverHentet(true);
+        }).catch((e) => {
+          console.error("Anden runde af opgaver fejlede:", e);
+        });
       } else if (instData?.length) {
         setInstances(instData.map((i) => ({
           ...i, timeLog: i.time_log ?? [], requiredSkills: i.required_skills ?? [],
@@ -2998,6 +3157,7 @@ function PlanningApp({ session, onSignOut }) {
         pricing_type: t.pricingType || "hourly",
         fixed_price: t.fixedPrice ?? null,
         video_url: t.videoUrl ?? "",
+        telefon: t.telefon ?? "", email: t.email ?? "", kontaktperson: t.kontaktperson ?? "",
       }));
       const { error } = await supabase.from("instances").upsert(raekker, { onConflict: "id" });
       // Ingen besked til planlaeggeren: hun har ikke bedt om det her, og opgaverne
@@ -3032,6 +3192,7 @@ function PlanningApp({ session, onSignOut }) {
       required_skills: inst.requiredSkills ?? [],
       customer_name: inst.customerName ?? "",
       address_text: inst.address ?? "",
+      telefon: inst.telefon ?? "", email: inst.email ?? "", kontaktperson: inst.kontaktperson ?? "",
       // access_instructions skrives IKKE laengere her. Kolonnen staar tom med vilje:
       // den sendes med i ethvert svar til medarbejderen, og saa kunne adgangskoden
       // laeses uden om det loggede opslag. Teksten gemmes i instance_access nedenfor.
@@ -3152,6 +3313,9 @@ function PlanningApp({ session, onSignOut }) {
     if ("contractType" in fields) payload.contract_type = fields.contractType ?? "privat";
     if ("dineroSynced" in fields) payload.dinero_synced = !!fields.dineroSynced;
     if ("dineroContactGuid" in fields) payload.dinero_contact_guid = fields.dineroContactGuid || null;
+    if ("telefon" in fields) payload.telefon = fields.telefon ?? "";
+    if ("email" in fields) payload.email = fields.email ?? "";
+    if ("kontaktperson" in fields) payload.kontaktperson = fields.kontaktperson ?? "";
     if ("preferredEmployeeId" in fields) payload.preferred_employee_id = fields.preferredEmployeeId || null;
     if (Object.keys(payload).length === 0) return;
     const { error } = await supabase.from("service_templates").update(payload).eq("id", tplId);
@@ -3182,18 +3346,41 @@ function PlanningApp({ session, onSignOut }) {
   // scheduleWeek (fx en opgave der blev frigivet fra en medarbejder, som i
   // mellemtiden har fået en sygdom/ferie-blokering den dag). Uden dette ville
   // rettelsen kun leve i det lokale state og blive gentaget/tabt ved næste reload.
+  // Skriver de opgaver ned, hvor selvhelbredelsen faktisk aendrede noget.
+  //
+  // Ét kald pr. opgave indtil 21.9.2026. Det gik godt, saa laenge det var en haandfuld
+  // — men en enkelt forskel, der ikke forsvinder af sig selv, bliver til hundredvis af
+  // kald ved hver opstart. Det skete: se forklaringen ved poNumber i indlaesningen.
+  //
+  // Rettelsen dér fjerner aarsagen. Portionerne her er vaernet, saa den naeste forskel
+  // af samme slags koster ét kald i stedet for tre hundrede. Samme greb som i
+  // gemArvedeFelter, der laerte det foerst.
   function syncHealedAssignments(before, after) {
     const beforeById = new Map(before.map((t) => [t.id, t]));
-    after.forEach((t) => {
+    const aendrede = after.filter((t) => {
       const prev = beforeById.get(t.id);
-      if (!prev) return;
+      if (!prev) return false;
       const assigneesChanged = JSON.stringify(prev.assignees || []) !== JSON.stringify(t.assignees || []);
-      const fieldsChanged = ["customerName","address","poNumber","accessInstructions","contractType","videoUrl"]
+      const fieldsChanged = ["customerName","address","poNumber","accessInstructions","contractType","videoUrl","telefon","email","kontaktperson"]
         .some((k) => (prev[k] ?? "") !== (t[k] ?? ""));
-      if (assigneesChanged || fieldsChanged) {
-        syncInstance(t);
-      }
+      return assigneesChanged || fieldsChanged;
     });
+    if (!aendrede.length) return;
+    // To slags aendringer, og de kan ikke skrives ned ad samme vej.
+    //
+    // gemArvedeFelter skriver kun de ni arvede kolonner. Den roerer hverken
+    // medarbejdere eller adgangstekst — adgangsteksten ligger i sin egen beskyttede
+    // tabel, som kun syncInstance kan skrive til. Dem maa vi derfor ikke portionere
+    // vaek, uanset hvor mange der er: en medarbejder, der ikke bliver gemt, er en
+    // opgave, medarbejder-appen aldrig faar at se.
+    const kraeverHelRaekke = aendrede.filter((t) => {
+      const prev = beforeById.get(t.id);
+      return JSON.stringify(prev.assignees || []) !== JSON.stringify(t.assignees || [])
+        || (prev.accessInstructions ?? "") !== (t.accessInstructions ?? "");
+    });
+    const kunArvede = aendrede.filter((t) => !kraeverHelRaekke.includes(t));
+    kraeverHelRaekke.forEach(syncInstance);
+    if (kunArvede.length) gemArvedeFelter(kunArvede);
   }
 
   function changeWeek(delta) {
@@ -3337,6 +3524,53 @@ function PlanningApp({ session, onSignOut }) {
   // Er saveAsDraft sand, gemmes den bare videre som kladde. Er den falsk, er det en
   // godkendelse: status saettes til aktiv, og opgaverne dannes fra startdatoen.
   async function updateTemplate(payload, tplId) {
+    // Godkendes en kladde, der er MÆRKET som dublet, saa spoerg foerst.
+    //
+    // 21.9.2026 blev en kladde fra Anders' ruteplan godkendt kl. 07.42. Der laa i
+    // forvejen en aktiv aftale paa Sønder Øksevej 14 med samme dag, samme rytme og
+    // samme varighed. Godkendelsen dannede 24 opgaver, der faldt oven i den gamle
+    // aftales — og Anders stod med det samme job to gange hver anden onsdag frem til
+    // 2028.
+    //
+    // Reglen VIRKEDE. Maerket stod paa kladden og pegede paa den rigtige aftale. Det
+    // blev bare ikke set. Et maerke, man kan trykke forbi uden at maerke det, er ikke
+    // et vaern — det er en oplysning.
+    //
+    // Der spoerges med aftalens egne ord: hvilken adresse, hvilken dag, hvor laenge.
+    // Ikke «der er fundet en dublet», for det kan man ikke tage stilling til.
+    //
+    // Man kan stadig sige ja. To naboer i samme opgang med samme rengoering paa samme
+    // dag rammer ogsaa reglen, og saa er svaret ja.
+    if (!payload.saveAsDraft) {
+      const foer = templates.find((t) => t.id === tplId);
+      if (foer && foer.status === "kladde") {
+        // Reglen koeres paa det, der er ved at blive gemt — ikke paa det, der staar i
+        // basen. Har planlaeggeren lige rettet adressen eller dagen i vinduet, er det
+        // den nye udgave, der skal proeves af.
+        const paavej = { ...foer, status: "kladde", address: payload.address,
+                         days: payload.days, duration: payload.duration };
+        const ligner = findDubletter(
+          [...templates.filter((t) => t.id !== tplId), paavej]).get(tplId);
+        if (ligner && ligner.length) {
+          const linjer = ligner.map((a) => {
+            const dage = (a.days || []).map((d) => ALL_DAYS.find((x) => x.key === d)?.label || d).join(", ");
+            const hvem = a.customerName || "(uden kundenavn)";
+            const hvad = a.status === "aktiv" ? "kører allerede" : `er en ${a.status}`;
+            return `  · ${hvem} — ${dage}, ${fmtMin(a.duration)} (${hvad})`;
+          }).join("\n");
+          if (!window.confirm(
+            `Der ligger allerede ${ligner.length === 1 ? "en aftale" : `${ligner.length} aftaler`} `
+            + `på ${payload.address || "samme adresse"}:\n\n${linjer}\n\n`
+            + `Den her kladde er ${(payload.days || []).map((d) => ALL_DAYS.find((x) => x.key === d)?.label || d).join(", ")}, `
+            + `${fmtMin(payload.duration)} — altså samme dag og samme varighed.\n\n`
+            + `Godkender du den, bliver arbejdet lagt i planen TO GANGE, og medarbejderen `
+            + `får det samme besøg to gange på samme dag.\n\n`
+            + `Er det to forskellige kunder på adressen, er svaret ja. Er det den samme `
+            + `aftale læst ind igen, skal kladden slettes i stedet.\n\n`
+            + `Godkend alligevel?`)) return;
+        }
+      }
+    }
     const checklistItemsCombined = [
       ...payload.checklistTemplateIds.flatMap((id) => checklistTemplates.find((c) => c.id === id)?.items || []),
       ...payload.extraItems,
@@ -3372,6 +3606,7 @@ function PlanningApp({ session, onSignOut }) {
       expiry_date: payload.expiryDate || null,
       preferred_employee_id: payload.assigned_employee_id || null,
       dinero_contact_guid: payload.dineroContactGuid || null,
+      telefon: payload.telefon || "", email: payload.email || "", kontaktperson: payload.kontaktperson || "",
       status: nyStatus,
     }).eq("id", tplId);
     if (dbFail(updErr, "gemme aftalen")) return;
@@ -3418,6 +3653,7 @@ function PlanningApp({ session, onSignOut }) {
       dineroSynced: payload.dineroSynced || false,
       preferredEmployeeId: payload.assigned_employee_id || "",
       dineroContactGuid: payload.dineroContactGuid || "",
+      telefon: payload.telefon || "", email: payload.email || "", kontaktperson: payload.kontaktperson || "",
       status: nyStatus,
     };
 
@@ -3525,6 +3761,7 @@ function PlanningApp({ session, onSignOut }) {
         checklistItems: checklistItemsCombined,
         videoUrl: payload.videoUrl, customerName: payload.customerName, address: payload.address,
         poNumber: payload.poNumber, accessInstructions: payload.accessInstructions,
+        telefon: payload.telefon || "", email: payload.email || "", kontaktperson: payload.kontaktperson || "",
         needsKeyPickup: !!payload.needsKeyPickup,
         contractType: payload.contractType, expiryDate: payload.expiryDate,
         pricingType: payload.pricingType || "hourly", fixedPrice: payload.pricingType === "fixed" ? (Number(payload.fixedPrice) || 0) : null,
@@ -3552,6 +3789,7 @@ function PlanningApp({ session, onSignOut }) {
         expiry_date: payload.expiryDate || null,
         preferred_employee_id: tpl.preferredEmployeeId || null,
         dinero_contact_guid: tpl.dineroContactGuid || null, status: payload.saveAsDraft ? "kladde" : "aktiv",
+        telefon: tpl.telefon || "", email: tpl.email || "", kontaktperson: tpl.kontaktperson || "",
       });
       if (dbFail(tplErr, "oprette den faste aftale")) return;
       const { data: skillsDb } = await supabase.from("skills").select("id,name");
@@ -3613,6 +3851,7 @@ function PlanningApp({ session, onSignOut }) {
         checklistTemplateIds: payload.checklistTemplateIds || [], extraItems: payload.extraItems || [],
         videoUrl: payload.videoUrl, customerName: payload.customerName,
         address: payload.address, poNumber: payload.poNumber, accessInstructions: payload.accessInstructions,
+        telefon: payload.telefon || "", email: payload.email || "", kontaktperson: payload.kontaktperson || "",
         needsKeyPickup: !!payload.needsKeyPickup,
         contractType: payload.contractType, dineroSynced: payload.dineroSynced || false,
         pricingType: payload.pricingType || "hourly",
@@ -5157,6 +5396,44 @@ function PlanningApp({ session, onSignOut }) {
       {view === "checklists" && (
         <ChecklistsView checklistTemplates={checklistTemplates} onSave={saveChecklistTemplate} onDelete={deleteChecklistTemplate} />
       )}
+
+      {/* Ét sted og ikke fem. Siderne herunder regner paa HELE opgavebunken, og
+          indtil anden runde er inde, har appen kun ugerne omkring i dag. Et tal, der
+          bygger paa en femtedel af opgaverne, er ikke naesten rigtigt — det er
+          forkert, og et forkert tal uden en advarsel er vaerre end at vente.
+          Ugeplanen staar med vilje ikke paa listen: den viser én uge, og den uge ER
+          hentet. */}
+      {!alleOpgaverHentet && SIDER_DER_KRAEVER_ALT.includes(view) && (
+        <div style={{ background: "#FFFBEB", border: "1px solid #FDE68A", borderRadius: 11,
+                      padding: "11px 15px", marginBottom: 12, fontSize: 13.5, color: "#92400E",
+                      display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{ width: 11, height: 11, borderRadius: "50%", background: "#D97706", flexShrink: 0 }} />
+          <div>
+            <b>Tallene er ikke færdige endnu.</b> Opgaverne for resten af året og de
+            kommende år hentes stadig. Vent et øjeblik, og åbn siden igen.
+          </div>
+        </div>
+      )}
+
+      {/* Og den omvendte fare: blader man langt frem, FØR anden runde er inde, er
+          ugen ikke hentet. Den ville se tom ud — og en tom ugeplan er ikke «ingen
+          opgaver», den er «vi ved det ikke endnu». Forskellen er hele arbejdsdagen:
+          ser planlæggeren tomt, lægger hun noget andet ind oveni.
+          Horisonten danner heller ikke noget i sådan en uge; værnet ved
+          ensureWeekInstances holder den ude, så der ikke opstår dubletter. */}
+      {!alleOpgaverHentet && view === "uge" && !ugenErHentet(hentedeUgerNu, wk.year, wk.weekNo) && (
+        <div style={{ background: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 11,
+                      padding: "11px 15px", marginBottom: 12, fontSize: 13.5, color: "#B91C1C",
+                      display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{ width: 11, height: 11, borderRadius: "50%", background: "#DC2626", flexShrink: 0 }} />
+          <div>
+            <b>Denne uge er ikke hentet endnu.</b> Den ser tom ud, men det er den ikke
+            nødvendigvis — resten af opgaverne er stadig på vej. Vent et øjeblik, før
+            du lægger noget ind her.
+          </div>
+        </div>
+      )}
+
       {view === "time" && (
         <TimeView instances={instances} employees={employees} opgaveNoter={opgaveNoter}
           onExportToDinero={exportToDinero} totalLogged={totalLogged} weekLabel={wk.label}
@@ -5217,7 +5494,7 @@ function PlanningApp({ session, onSignOut }) {
         <SkillsView supabase={supabase} skills={skills} onSkillsChange={setSkills} />
       )}
 
-      {showAddTask && <TaskModal onClose={() => { setShowAddTask(false); setCopyPayload(null); setEditTplId(null); }} onSave={(p, editId) => (editId ? updateTemplate(p, editId) : addTask(p))} editId={editTplId} checklistTemplates={checklistTemplates} skills={skills} copyFrom={copyPayload} employees={aktiveEmployees} />}
+      {showAddTask && <TaskModal onClose={() => { setShowAddTask(false); setCopyPayload(null); setEditTplId(null); }} onSave={(p, editId) => (editId ? updateTemplate(p, editId) : addTask(p))} editId={editTplId} checklistTemplates={checklistTemplates} skills={skills} copyFrom={copyPayload} employees={aktiveEmployees} templates={templates} />}
       {showAddEmp && <EmployeeModal emp={editEmp} onClose={() => { setShowAddEmp(false); setEditEmp(null); }} onSave={saveEmployee} skills={skills} satsHistorik={editEmp ? satsHistorik[editEmp.id] : null} kmSatser={editEmp ? kmSatser[editEmp.id] : null} />}
       {showAddBlock && <BlockModal employees={aktiveEmployees} onClose={() => setShowAddBlock(false)} onSave={addBlock} />}
       {showAddActivity && <ActivityModal employees={aktiveEmployees} onClose={() => setShowAddActivity(false)} onSave={addActivity} />}
@@ -9226,7 +9503,36 @@ function PortefoeljeRapport({ templates, instances, pricing }) {
 }
 
 // ---------- Modals ----------
-function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, employees, editId }) {
+// Er der plads til en kolonne ved siden af formularen?
+//
+// Navnet SKAL begynde med «use», selvom resten af filen er paa dansk: reglen
+// react-hooks/rules-of-hooks kender kun det praefiks, og uden det faar man en
+// lintfejl — ikke en advarsel. Det er den ene slags engelsk, der ikke kan vaelges fra.
+//
+// Bemaerkningen til kontoret er en liste over noget, der skal rettes FOER kladden
+// godkendes — manglende kundenavn, en gaettet kontrakttype, noter fra arket. Den stod
+// nederst i vinduet, altsaa laengst muligt vaek fra de felter, den handler om. Man
+// laeste den, scrollede op for at rette, og kunne saa ikke se resten af listen.
+//
+// Er skaermen bred nok, staar den i stedet i en kolonne til hoejre, der bliver
+// haengende mens man bladrer. Er den ikke, laegger den sig OEVERST og ikke nederst:
+// en instruktion, man skal foelge, hoerer foer arbejdet, ikke efter.
+function useBredSkaerm(graense = 1000) {
+  const [bred, setBred] = useState(() =>
+    typeof window !== "undefined" && window.innerWidth >= graense);
+  useEffect(() => {
+    const mq = window.matchMedia(`(min-width: ${graense}px)`);
+    const lyt = (e) => setBred(e.matches);
+    setBred(mq.matches);
+    // addListener er den gamle stavemaade. Safari under 14 kender ikke
+    // addEventListener paa MediaQueryList, og kontoret har ikke kun nye maskiner.
+    if (mq.addEventListener) { mq.addEventListener("change", lyt); return () => mq.removeEventListener("change", lyt); }
+    mq.addListener(lyt); return () => mq.removeListener(lyt);
+  }, [graense]);
+  return bred;
+}
+
+function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, employees, editId, templates = [] }) {
   // Kopiering af en ældre "flexible"-type opgave (nu nedlagt) skal falde
   // tilbage til "adhoc" ("Fleksibel"), da den type ikke længere findes i
   // CREATABLE_TYPES og derfor ikke kan vælges via knapperne nedenfor. En helt
@@ -9240,6 +9546,10 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
   // der skal afklares, FOER aftalen godkendes. Naar den er godkendt, er noten
   // gjort op, og et felt, der aldrig bliver tomt, holder man op med at laese.
   const erKladde = copyFrom?.status === "kladde";
+  // Sidepanelet findes kun paa en kladde — der er intet at afklare paa en aftale, der
+  // koerer. Er skaermen smal, staar panelet oeverst i stedet for til hoejre.
+  const bredSkaerm = useBredSkaerm();
+  const visSidepanel = erKladde;
   const [bemaerkning, setBemaerkning] = useState(copyFrom?.bemaerkning || "");
   const [pricingType, setPricingType] = useState(copyFrom?.pricingType || "hourly");
   const [fixedPrice, setFixedPrice] = useState(copyFrom?.fixedPrice ?? "");
@@ -9260,8 +9570,30 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
   const [adhocDate, setAdhocDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [deadline, setDeadline] = useState("Fri");
   const [konkreteDatoer, setKonkreteDatoer] = useState(copyFrom?.konkreteDatoer || []);
-  const [startDate, setStartDate] = useState(() => new Date().toISOString().slice(0, 10));
+  // Datoerne kommer FRA aftalen, hvis der er en. Stod her indtil 21.9.2026 som «i dag»
+  // og «i dag + 1 aar» uanset hvad — ogsaa naar man aabnede en kladde.
+  //
+  // Det betoed, at aabne-og-godkende i stilhed skrev begge datoer om. Kladderne fra
+  // ruteplanerne har en toaarig loebetid (328 af 329 udloeb i 2028), og de ville alle
+  // sammen være blevet ETAARIGE ved godkendelsen — uden at nogen fik det at vide, og
+  // med halv vaerdi i aftaleporteføljen, som regner paa de besoeg, loebetiden giver.
+  const [startDate, setStartDate] = useState(() => {
+    // Er datoen loebet fra kladden, foreslaas den foerste gyldige dag fra i morgen.
+    // «Gyldig» betyder: uden at flytte rytmen. Se nyStartdatoHvisPasseret.
+    const gemt = copyFrom?.startDate;
+    if (!gemt) return new Date().toISOString().slice(0, 10);
+    return nyStartdatoHvisPasseret(
+      { startDate: gemt, planInterval: copyFrom?.planInterval }, new Date()) || gemt;
+  });
+  // Hvad datoen VAR, hvis den blev flyttet. Bruges kun til at sige det hoejt.
+  const [startdatoFlyttetFra] = useState(() => {
+    const gemt = copyFrom?.startDate;
+    if (!gemt) return null;
+    return nyStartdatoHvisPasseret(
+      { startDate: gemt, planInterval: copyFrom?.planInterval }, new Date()) ? gemt : null;
+  });
   const [expiryDate, setExpiryDate] = useState(() => {
+    if (copyFrom?.expiryDate) return copyFrom.expiryDate;
     const d = new Date(); d.setFullYear(d.getFullYear() + 1);
     return d.toISOString().slice(0, 10);
   });
@@ -9291,6 +9623,12 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
   const [customerDineroSynced, setCustomerDineroSynced] = useState(!!copyFrom?.dineroSynced);
   // Kundens unikke id i Dinero — saettes naar kunden vaelges i soegningen.
   const [dineroContactGuid, setDineroContactGuid] = useState(copyFrom?.dineroContactGuid || "");
+  // Telefon, mail og kontaktperson (Att. person) hentes automatisk fra Dinero-kontakten,
+  // naar kunden vaelges i soegningen nedenfor (selectDineroCustomer) — ligesom navnet.
+  // Kontoret kan rette dem bagefter, fx til en anden kontakt paa det konkrete sted.
+  const [telefon, setTelefon] = useState(copyFrom?.telefon || "");
+  const [email, setEmail] = useState(copyFrom?.email || "");
+  const [kontaktperson, setKontaktperson] = useState(copyFrom?.kontaktperson || "");
   // En kopieret opgave henter medarbejderen fra den opgave der kopieres
   // (assignees), eller fra aftalens faste medarbejder hvis kopien kommer derfra.
   const [assignedEmployeeId, setAssignedEmployeeId] = useState(
@@ -9338,12 +9676,42 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
     setDineroContactGuid(c.ContactGuid || "");
     // Adressen her er Dineros fakturaadresse for virksomheden — IKKE adressen hvor
     // rengøringen skal udføres, så den skal ikke overskrive "Adresse for udførsel".
+    // Telefon, mail og kontaktperson (Att. person) er derimod netop kontaktoplysninger
+    // og hentes automatisk fra kontakten her — kontoret kan rette dem bagefter, hvis
+    // det konkrete sted har en anden kontakt end aftalens.
+    setTelefon(c.Phone || "");
+    setEmail(c.Email || "");
+    setKontaktperson(c.AttPerson || "");
     setCustomerSelected(true);
     setCustomerDineroSynced(true);
     setDineroResults([]);
   }
 
   const [address, setAddress] = useState(copyFrom?.address || "");
+  // Ligner kladden en aftale, der allerede findes?
+  //
+  // Regnes af de vaerdier, der staar i VINDUET — ikke dem i databasen. Retter
+  // planlaeggeren adressen eller dagen, saa den ikke laengere ligner, forsvinder
+  // advarslen med det samme. Og omvendt: taster hun en adresse ind, der er optaget,
+  // dukker den op, foer hun har trykket paa noget.
+  // Bemaerkningsfeltet vokser med sit indhold.
+  //
+  // Hoejden maales paa elementet selv (scrollHeight) og ikke gaettes ud fra antal
+  // linjeskift. En linje som «Ordret: kl. 8.30 Gustav Zimmersvej 66A, Nørhalne» brydes
+  // over to i et smalt felt, og et gaet paa «\n» ville tro, den fylder én.
+  const noteFelt = useRef(null);
+  useEffect(() => {
+    const el = noteFelt.current;
+    if (!el) return;
+    el.style.height = "auto";          // skal nulstilles, ellers kan den kun vokse
+    el.style.height = `${el.scrollHeight}px`;
+  }, [bemaerkning, bredSkaerm, visSidepanel]);
+
+  const dubletLigner = useMemo(() => {
+    if (!erKladde || !editId) return [];
+    const paavej = { id: editId, status: "kladde", address, days, duration: Number(duration) || 0 };
+    return findDubletter([...(templates || []).filter((t) => t.id !== editId), paavej]).get(editId) || [];
+  }, [erKladde, editId, address, days, duration, templates]);
   const [poNumber, setPoNumber] = useState(copyFrom?.poNumber || "");
   const [accessInstructions, setAccessInstructions] = useState(copyFrom?.accessInstructions || "");
   const [needsKeyPickup, setNeedsKeyPickup] = useState(copyFrom?.needsKeyPickup ?? false);
@@ -9426,6 +9794,9 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
     needsKeyPickup,
     dineroSynced: customerDineroSynced,
     dineroContactGuid,
+    telefon: telefon.trim(),
+    email: email.trim(),
+    kontaktperson: kontaktperson.trim(),
     assigned_employee_id: assignedEmployeeId,
     saveAsDraft,
   });
@@ -9438,8 +9809,14 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
       fullscreen>
       {/* Modalen er fullscreen, saa uden denne kolonne bliver hvert felt over 1500 px
           bredt paa en almindelig skaerm. De tre farvede afsnit betyder det samme her
-          og i serviceordren: rosa = kunden, groen = opgaven, blaa = tid. */}
-      <div style={styles.formCol}>
+          og i serviceordren: rosa = kunden, groen = opgaven, blaa = tid.
+
+          Paa en kladde staar bemaerkningen og dubletadvarslen i en kolonne ved siden
+          af — se sidepanelet nedenfor. */}
+      <div style={{ display: "flex", gap: 18, alignItems: "flex-start", justifyContent: "center",
+                    flexWrap: "wrap", maxWidth: visSidepanel ? 1120 : 720, margin: "0 auto" }}>
+      <div style={{ ...styles.formCol, margin: 0, flex: "1 1 600px", minWidth: 0,
+                    order: bredSkaerm ? 1 : 2 }}>
       <div style={{ ...styles.formSection, borderColor: "#EFAFC9" }}>
         <div style={{ ...styles.formSectionHead, background: "#FCE4EF", borderBottom: "1.5px solid #EFAFC9" }}>
           <div style={{ ...styles.formSectionTitle, color: "#9C1B5D" }}>Aftale og kunde</div>
@@ -9552,6 +9929,29 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
             </div>
           )}
         </div>
+      </div>
+
+      <div style={{ marginBottom: 12, display: "flex", gap: 10, flexWrap: "wrap" }}>
+        <div style={{ flex: "1 1 160px" }}>
+          <label style={styles.label}>Telefon</label>
+          <input style={styles.input} value={telefon} onChange={(e) => setTelefon(e.target.value)}
+            placeholder="Hentes fra Dinero, kan rettes" />
+        </div>
+        <div style={{ flex: "1 1 200px" }}>
+          <label style={styles.label}>E-mail</label>
+          <input style={styles.input} type="email" value={email} onChange={(e) => setEmail(e.target.value)}
+            placeholder="Hentes fra Dinero, kan rettes" />
+        </div>
+        <div style={{ flex: "1 1 200px" }}>
+          <label style={styles.label}>Kontaktperson (Att.)</label>
+          <input style={styles.input} value={kontaktperson} onChange={(e) => setKontaktperson(e.target.value)}
+            placeholder="Hentes fra Dinero, kan rettes" />
+        </div>
+      </div>
+      <div style={styles.hint}>
+        Udfyldes automatisk ud fra kunden, når du vælger den ovenfor. Kontoret bruger dem
+        til at kontakte kunden ved ændringer i aftalen eller de enkelte opgaver — ret dem
+        her, hvis det konkrete sted har en anden kontakt end den, der står i Dinero.
       </div>
 
       <label style={styles.label}>Adgang (nøgleboks, koder, kontaktperson m.v.)</label>
@@ -9748,32 +10148,142 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
           Feltet forsvinder, naar aftalen godkendes: noten er en liste over noget, der
           skal afklares FOER godkendelsen, og et felt, der aldrig bliver tomt, holder
           man op med at laese. Teksten bliver staaende i databasen. */}
-      {erKladde && (
-        <div style={{ margin: "0 -18px", padding: "14px 18px", background: "#FFFBEB",
-                      borderTop: "1px solid #FDE68A", borderBottom: "1px solid #FDE68A" }}>
-          <label style={{ ...styles.label, color: "#92400E" }}>
-            📋 Bemærkning til kontoret
-            <span style={{ fontWeight: 400, color: "#A16207", marginLeft: 6 }}>
-              — vises kun så længe aftalen er en kladde
-            </span>
-          </label>
-          <textarea
-            rows={Math.min(14, Math.max(4, (bemaerkning.match(/\n/g) || []).length + 2))}
-            value={bemaerkning}
-            onChange={(e) => setBemaerkning(e.target.value)}
-            placeholder="Hvad mangler der, før aftalen kan godkendes?"
-            style={{ ...styles.input, width: "100%", fontFamily: "inherit", fontSize: 12.5,
-                     lineHeight: 1.5, background: "#fff", borderColor: "#FDE68A",
-                     color: "#111111", resize: "vertical" }} />
-        </div>
+      {visSidepanel && (
+        <aside style={{ flex: bredSkaerm ? "0 0 360px" : "1 1 100%",
+                        order: bredSkaerm ? 2 : 1,
+                        // Bliver haengende, mens man bladrer gennem formularen. Toppen
+                        // er ikke 0: den gule bjaelke ville ellers ligge klods op ad
+                        // modalens overkant og se ud som en del af titellinjen.
+                        position: bredSkaerm ? "sticky" : "static", top: bredSkaerm ? 8 : undefined,
+                        maxHeight: bredSkaerm ? "calc(100svh - 150px)" : undefined,
+                        overflowY: bredSkaerm ? "auto" : undefined,
+                        display: "flex", flexDirection: "column", gap: 12, minWidth: 0 }}>
+
+          {/* Startdatoen er loebet fra kladden.
+              Den staar allerhoejest, for den er det eneste, der BLOKERER godkendelsen.
+              Dubletten er en advarsel man kan vaelge at se bort fra; den her er en
+              doer, der er laast.
+              Der stod i forvejen en roed linje ude ved datofeltet, og knappen var
+              slaaet fra. Men paa en lang formular scroller man forbi feltet, trykker
+              «Godkend og planlæg» nederst — og der sker ingenting. En knap, der ikke
+              siger hvorfor den ikke virker, er det samme som ingen besked. */}
+          {/* Startdatoen var loebet fra kladden og er flyttet.
+              Den staar allerhoejest, for den aendrer HVORNAAR aftalen begynder, og det
+              er en af de faa ting i vinduet, der ikke kan ses ved at kigge paa
+              felterne — datoen ser bare rigtig ud.
+              Foer 21.9.2026 blev godkendelsen blokeret i stedet. Det var en laast
+              doer uden noegle: man kunne ikke godkende, og indtil samme dag kunne man
+              heller ikke gemme. Nu foreslaar appen en dato, og planlaeggeren kan rette
+              den. */}
+          {startdatoFlyttetFra && (
+            <div style={{ background: "#EFF6FF", border: "1.5px solid #BFDBFE",
+                          borderRadius: 12, padding: "13px 15px" }}>
+              <div style={{ fontWeight: 700, fontSize: 14, color: "#1D4ED8", marginBottom: 6 }}>
+                📅 Startdatoen er flyttet
+              </div>
+              <div style={{ fontSize: 13, color: "#1E3A8A", lineHeight: 1.5 }}>
+                Kladden stod til at begynde <b>{new Date(startdatoFlyttetFra)
+                  .toLocaleDateString("da-DK", { day: "numeric", month: "long", year: "numeric" })}</b>,
+                og den dag er passeret. Den er sat til{" "}
+                <b>{new Date(startDate).toLocaleDateString("da-DK",
+                  { weekday: "long", day: "numeric", month: "long" })}</b>.
+                <br /><br />
+                {planInterval === "uge"
+                  ? "Aftalen kører hver uge, så datoen er dagen i morgen."
+                  : "Datoen er valgt, så rytmen ikke flytter sig — aftalen kører i de samme uger som før. Derfor er det ikke altid i morgen."}
+                {" "}Passer det ikke, så ret <b>«Startdato»</b> under Tid og gentagelse.
+              </div>
+            </div>
+          )}
+
+          {/* Dubletadvarslen staar OEVERST og over bemaerkningen. Den er det eneste i
+              vinduet, der kan betyde, at kladden slet ikke skal godkendes — resten er
+              ting, der skal rettes.
+              Den regnes live af de felter, der staar i vinduet lige nu, saa den
+              forsvinder af sig selv, hvis planlaeggeren retter adressen, dagen eller
+              varigheden, saa den ikke laengere ligner. */}
+          {dubletLigner.length > 0 && (
+            <div style={{ background: "#FEF2F2", border: "1.5px solid #FECACA",
+                          borderRadius: 12, padding: "13px 15px" }}>
+              <div style={{ fontWeight: 700, fontSize: 14, color: "#B91C1C", marginBottom: 6 }}>
+                ⚠ Ser ud som dublet
+              </div>
+              <div style={{ fontSize: 13, color: "#7F1D1D", lineHeight: 1.5, marginBottom: 8 }}>
+                Der ligger {dubletLigner.length === 1 ? "allerede en aftale" : `allerede ${dubletLigner.length} aftaler`} på
+                samme adresse med samme dag og samme varighed:
+              </div>
+              {dubletLigner.map((a) => (
+                <div key={a.id} style={{ fontSize: 13, color: "#111111", background: "#fff",
+                                         border: "1px solid #FECACA", borderRadius: 9,
+                                         padding: "8px 10px", marginBottom: 6, lineHeight: 1.45 }}>
+                  <b>{a.customerName || "(uden kundenavn)"}</b><br />
+                  {(a.days || []).map((d) => ALL_DAYS.find((x) => x.key === d)?.label || d).join(", ")}
+                  {" · "}{fmtMin(a.duration)}
+                  {" · "}{a.status === "aktiv" ? "kører allerede" : a.status}
+                </div>
+              ))}
+              <div style={{ fontSize: 12.5, color: "#7F1D1D", lineHeight: 1.5 }}>
+                Er det den samme aftale læst ind igen, skal kladden slettes — ikke
+                godkendes. Er det to forskellige kunder på adressen, er det i orden.
+              </div>
+            </div>
+          )}
+
+          {/* Bemaerkning til kontoret. KUN paa en kladde.
+              Den kom til, da Anders' ruteplan blev laest ind 17.9.2026: et regneark med
+              adresser og varigheder, ingen kundenavne, og noter som «fra uge 40» og
+              «slut 16/9», der ikke kunne afgoeres maskinelt. Alt det skal staa et sted,
+              hvor kontoret ser det, naar kladden aabnes - og ikke i et felt, der har et
+              andet formaal. po_number ender paa fakturaen; access_instructions vises til
+              medarbejderen.
+              Feltet forsvinder, naar aftalen godkendes: noten er en liste over noget, der
+              skal afklares FOER godkendelsen, og et felt, der aldrig bliver tomt, holder
+              man op med at laese. Teksten bliver staaende i databasen. */}
+          <div style={{ background: "#FFFBEB", border: "1.5px solid #FDE68A",
+                        borderRadius: 12, padding: "13px 15px" }}>
+            <label style={{ ...styles.label, color: "#92400E", marginTop: 0 }}>
+              📋 Bemærkning til kontoret
+              <span style={{ fontWeight: 400, color: "#A16207", marginLeft: 6 }}>
+                — vises kun så længe aftalen er en kladde
+              </span>
+            </label>
+            {/* Feltet vokser med teksten i stedet for at have et fast antal linjer.
+                Foer 21.9.2026 stod der «rows», og saa scrollede man inde i en lille
+                kasse, mens der var en halv skaerm tom nedenunder — teksten er en
+                liste, man skal laese HELE, og et felt, der viser fem linjer ad
+                gangen, tvinger én til at holde resten i hovedet.
+                Hoejden saettes efter indholdet, ikke efter en gaetteformel paa antal
+                linjeskift: en lang linje, der brydes over tre, fylder ogsaa tre. */}
+            <textarea
+              ref={noteFelt}
+              value={bemaerkning}
+              onChange={(e) => setBemaerkning(e.target.value)}
+              placeholder="Hvad mangler der, før aftalen kan godkendes?"
+              style={{ ...styles.input, width: "100%", fontFamily: "inherit", fontSize: 12.5,
+                       lineHeight: 1.5, background: "#fff", borderColor: "#FDE68A",
+                       color: "#111111", resize: "vertical", overflow: "hidden",
+                       minHeight: 90, display: "block" }} />
+          </div>
+        </aside>
       )}
+      </div>
 
       <div style={{ ...styles.modalActions, position: "sticky", bottom: 0, zIndex: 5, background: "#F8FAFC", borderTop: "1px solid #E2E8F0", padding: "12px 84px 12px 18px", margin: "0 -18px -16px" }}>
         <button style={styles.secondaryBtn} disabled={gemmer} onClick={onClose}>Annuller</button>
         <button
           style={{ ...styles.primaryBtn, opacity: gemmer ? 0.6 : 1 }}
           disabled={gemmer || !title.trim() || manglerDineroKunde || (type === "fixed" && days.length === 0) || requiredSkills.length === 0 || (type === "fixed" && !!startDate && startDate < todayIso())}
-          title={manglerDineroKunde ? "Vælg kunden i Dinero-listen først" : undefined}
+          // En slaaet fra knap uden forklaring er det samme som ingen besked. Her
+          // staar grunden, naar man holder musen over — og for startdatoen staar den
+          // ogsaa i sidepanelet, hvor man ikke skal lede efter den.
+          title={
+            manglerDineroKunde ? "Vælg kunden i Dinero-listen først"
+            : (type === "fixed" && !!startDate && startDate < todayIso())
+              ? "Startdatoen er passeret — ret den til i dag eller senere, før aftalen kan godkendes"
+            : (type === "fixed" && days.length === 0) ? "Vælg mindst én ugedag"
+            : requiredSkills.length === 0 ? "Vælg mindst én kompetence"
+            : !title.trim() ? "Aftalen mangler en titel"
+            : undefined}
           onClick={() => {
             // Paa Nexus og AEldrelov er kunden den der faar REGNINGEN — kommunen.
             // Arbejdet foregaar hjemme hos en borger, og borgerens navn staar i
@@ -9804,7 +10314,12 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
         {type === "fixed" && (
           <button
             style={{ ...styles.secondaryBtn, color: "#9C1B5D", borderColor: "#F4C0D1", opacity: gemmer ? 0.6 : 1 }}
-            disabled={gemmer || !title.trim() || manglerDineroKunde || (!!startDate && startDate < todayIso())}
+            // En passeret startdato blokerer IKKE en kladde. En kladde danner ingen
+            // opgaver, saa datoen kan ikke naa at goere skade — og kunne man ikke
+            // gemme, ville planlaeggeren miste det kundenavn, hun lige har skrevet
+            // ind, fordi en dato laengere oppe var loebet ud.
+            // Godkendelsen er stadig spaerret; se knappen ved siden af.
+            disabled={gemmer || !title.trim() || manglerDineroKunde}
             title="Gemmer aftalen uden at oprette opgaver. Du kan rette alle felter bagefter og godkende den under Aftaler."
             onClick={() => gemEnGang(buildPayload(true))}>
             {gemmer ? "Gemmer…" : (editId ? "Gem kladde" : "Gem som kladde")}
@@ -11752,6 +12267,13 @@ function KunderView({ supabase, currentEmployeeId }) {
                   {k.adresse || "Ingen adresse"} · {k.aktive_aftaler} aftale{k.aktive_aftaler === 1 ? "" : "r"}
                   {k.sidste_besoeg ? ` · sidst ${new Date(k.sidste_besoeg).toLocaleDateString("da-DK")}` : " · aldrig besøgt"}
                 </div>
+                {(k.telefon || k.email || k.kontaktperson) && (
+                  <div style={{ fontSize: 12.5, color: "#475569", marginTop: 2, display: "flex", gap: 12, flexWrap: "wrap" }}>
+                    {k.kontaktperson && <span><b>Kontaktperson:</b> {k.kontaktperson}</span>}
+                    {k.telefon && <span><b>Telefon:</b> {k.telefon}</span>}
+                    {k.email && <span><b>E-mail:</b> {k.email}</span>}
+                  </div>
+                )}
               </div>
               <div style={{ textAlign: "right", flexShrink: 0 }}>
                 <div style={{ fontWeight: 800, fontSize: 15 }}>
@@ -14018,6 +14540,11 @@ function TaskDetailModal({ task, employees, templates, onSetPreferredEmployee, o
   const [custAddress, setCustAddress] = useState("");
   const [custPo, setCustPo] = useState("");
   const [custAccess, setCustAccess] = useState("");
+  // Telefon, mail og kontaktperson — samme muster som custGuid/custAddress: hentes
+  // automatisk fra Dinero, naar kunden vaelges, men kan rettes i haanden bagefter.
+  const [custTelefon, setCustTelefon] = useState("");
+  const [custEmail, setCustEmail] = useState("");
+  const [custKontaktperson, setCustKontaktperson] = useState("");
   const [taskSkills, setTaskSkills] = useState([]);
   // Kort visuel "✓ Sendt"-bekræftelse lige efter klik — IKKE det samme som om
   // kunden varigt er kendt i Dinero (det styres af den gemte customerDineroSynced
@@ -14070,6 +14597,9 @@ function TaskDetailModal({ task, employees, templates, onSetPreferredEmployee, o
       setCustAddress(task.address || "");
       setCustPo(task.poNumber || "");
       setCustAccess(task.accessInstructions || "");
+      setCustTelefon(task.telefon || "");
+      setCustEmail(task.email || "");
+      setCustKontaktperson(task.kontaktperson || "");
       // Nulstilles naar en anden opgave aabnes, ellers ville forrige opgaves log
       // staa og lyse paa den nye — og det er en alvorlig forveksling netop her.
       setAdgangLog(null);
@@ -14119,6 +14649,11 @@ function TaskDetailModal({ task, employees, templates, onSetPreferredEmployee, o
     setCustGuid(c.ContactGuid || "");
     // Adressen her er Dineros fakturaadresse for virksomheden — IKKE adressen hvor
     // rengøringen skal udføres, så den skal ikke overskrive "Adresse for udførsel".
+    // Telefon, mail og kontaktperson hentes derimod automatisk herfra, ligesom i
+    // oprettelsesformularen — kontoret kan rette dem bagefter for det konkrete sted.
+    setCustTelefon(c.Phone || "");
+    setCustEmail(c.Email || "");
+    setCustKontaktperson(c.AttPerson || "");
     setCustomerSelected(true);
     setCustomerDineroSynced(true);
     setDineroResults([]);
@@ -14236,7 +14771,11 @@ function TaskDetailModal({ task, employees, templates, onSetPreferredEmployee, o
 
   function saveCustomer() {
     if (kundeIkkeValgt) return;
-    onUpdateCustomerInfo(t.id, { customerName: custName, address: custAddress, poNumber: custPo, accessInstructions: custAccess, dineroSynced: customerDineroSynced, dineroContactGuid: custGuid });
+    onUpdateCustomerInfo(t.id, {
+      customerName: custName, address: custAddress, poNumber: custPo, accessInstructions: custAccess,
+      dineroSynced: customerDineroSynced, dineroContactGuid: custGuid,
+      telefon: custTelefon.trim(), email: custEmail.trim(), kontaktperson: custKontaktperson.trim(),
+    });
     setEditingCustomer(false);
     setDineroResults([]);
   }
@@ -14531,6 +15070,18 @@ return (
             <AdresseFelt vaerdi={custAddress} onChange={setCustAddress}
               placeholder="Adresse" />
             <input style={styles.input} value={custPo} onChange={(e) => setCustPo(e.target.value)} placeholder="Fakturabeskrivelse (PO, navn m.v.)" />
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <input style={{ ...styles.input, flex: "1 1 140px" }} value={custTelefon}
+                onChange={(e) => setCustTelefon(e.target.value)} placeholder="Telefon" />
+              <input style={{ ...styles.input, flex: "1 1 180px" }} type="email" value={custEmail}
+                onChange={(e) => setCustEmail(e.target.value)} placeholder="E-mail" />
+              <input style={{ ...styles.input, flex: "1 1 180px" }} value={custKontaktperson}
+                onChange={(e) => setCustKontaktperson(e.target.value)} placeholder="Kontaktperson (Att.)" />
+            </div>
+            <div style={styles.hint}>
+              Udfyldes automatisk fra Dinero, når kunden vælges ovenfor — ret dem her, hvis
+              dette sted har en anden kontakt.
+            </div>
             <textarea style={{ ...styles.input, minHeight: 60 }} value={custAccess} onChange={(e) => setCustAccess(e.target.value)} placeholder="Adgangsinstruktioner" />
             <div style={{ display: "flex", gap: 8 }}>
               <button style={{ ...styles.primaryBtn, opacity: kundeIkkeValgt ? 0.5 : 1 }}
@@ -14541,7 +15092,7 @@ return (
             </div>
           </div>
         ) : (
-          (custName || custAddress || custPo || custAccess) ? (
+          (custName || custAddress || custPo || custAccess || custTelefon || custEmail || custKontaktperson) ? (
             <div style={styles.customerBox}>
               {custName && <div style={styles.customerName}>{custName}</div>}
               {custAddress && (
@@ -14556,6 +15107,11 @@ return (
                 </div>
               )}
               {custPo && <div style={styles.cardMeta}>Faktura: {custPo}</div>}
+              {(custTelefon || custEmail || custKontaktperson) && (
+                <div style={{ ...styles.cardMeta, marginTop: 2 }}>
+                  {[custKontaktperson, custTelefon, custEmail].filter(Boolean).join(" · ")}
+                </div>
+              )}
               {/* Noeglefluebenet kan saettes her, paa den eksisterende opgave. Det laa
                   foer kun i "Ny opgave", og der kommer man ikke tilbage til naar opgaven
                   er oprettet — saa var funktionen i praksis utilgaengelig. */}

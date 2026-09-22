@@ -5,7 +5,7 @@
 // rydder appen enten opgaver væk, der skulle være der, eller lader opgaver stå, der
 // ikke skulle. Begge dele rammer en rigtig medarbejders dag.
 
-import { aftaleKoererPaaDag, mandagIUgen, isoDato } from "./src/aftalerytme.js";
+import { aftaleKoererPaaDag, mandagIUgen, isoDato, nyStartdatoHvisPasseret } from "./src/aftalerytme.js";
 
 let fejl = 0, koert = 0;
 function er(hvad, faktisk, forventet) {
@@ -119,6 +119,53 @@ er("ingen aftale", aftaleKoererPaaDag(null, man(2026, 9, 10), "Thu"), false);
 // 7., og hele dagsfiltreringen ville rykke sig en dag — kun i sommerhalvåret.
 er("isoDato er lokal i sommertid", isoDato(new Date(2026, 6, 8)), "2026-07-08");
 er("isoDato er lokal i vintertid", isoDato(new Date(2026, 0, 8)), "2026-01-08");
+
+
+// ── Ny startdato, når den gamle er løbet fra kladden ────────────────────────
+//
+// Det farlige er ikke datoen. Det er RYTMEN: startdatoen er ankeret, og for «hver 14.
+// dag» tæller ugenPasser uger fra startdatoens mandag. Flytter man datoen én uge,
+// skifter aftalen fra lige til ulige uger — og arket sagde «staar kun i lige uger» for
+// halvdelen af kladderne.
+{
+  const idag = new Date(2026, 8, 21);          // mandag i uge 39, 2026
+  const iMorgen = "2026-09-22";
+
+  er("en gyldig startdato flyttes ikke",
+    nyStartdatoHvisPasseret({ startDate: "2026-12-01", planInterval: "uge" }, idag), null);
+  er("dags dato er stadig gyldig",
+    nyStartdatoHvisPasseret({ startDate: "2026-09-21", planInterval: "uge" }, idag), null);
+  er("uden startdato er der intet at flytte",
+    nyStartdatoHvisPasseret({ planInterval: "uge" }, idag), null);
+
+  er("hver uge flyttes til i morgen",
+    nyStartdatoHvisPasseret({ startDate: "2026-09-07", planInterval: "uge" }, idag), iMorgen);
+
+  // Uge 37 er ulige. En 14-dages aftale med anker i uge 37 kører i ulige uger, så den
+  // næste gyldige uge fra i morgen (uge 39, ulige) er uge 39 selv.
+  er("hver 14. dag beholder de ulige uger",
+    nyStartdatoHvisPasseret({ startDate: "2026-09-07", planInterval: "14_dage" }, idag), "2026-09-22");
+  // Uge 38 er lige. Så skal den frem til uge 40 — ikke uge 39.
+  er("hver 14. dag beholder de lige uger",
+    nyStartdatoHvisPasseret({ startDate: "2026-09-14", planInterval: "14_dage" }, idag), "2026-09-28");
+
+  // Med det oprindelige anker MÅ den nye dato aldrig ændre, hvilke uger der køres.
+  for (const [interval, gammel] of [["14_dage","2026-08-31"],["4_uger","2026-08-24"],["6_uger","2026-08-10"]]) {
+    const ny = nyStartdatoHvisPasseret({ startDate: gammel, planInterval: interval }, idag);
+    const ugerImellem = Math.round((mandagIUgen(new Date(ny)) - mandagIUgen(new Date(gammel))) / (7*24*3600*1000));
+    const n = { "14_dage": 2, "4_uger": 4, "6_uger": 6 }[interval];
+    er(`${interval}: rytmen er den samme (${gammel} → ${ny})`, ugerImellem % n, 0);
+    er(`${interval}: den nye dato er i morgen eller senere`, ny >= iMorgen, true);
+  }
+
+  // Hver 3. måned følger dagen i måneden. 5. marts → næste gyldige er 5. december.
+  er("hver 3. måned beholder dagen i måneden",
+    nyStartdatoHvisPasseret({ startDate: "2026-03-05", planInterval: "3_maaned" }, idag), "2026-12-05");
+
+  // En rytme, filen ikke kender, må ikke få den til at give op — så er i morgen svaret.
+  er("ukendt rytme falder tilbage på i morgen",
+    nyStartdatoHvisPasseret({ startDate: "2026-01-01", planInterval: "noget_nyt" }, idag), iMorgen);
+}
 
 // ── Resultat ────────────────────────────────────────────────────────────────
 if (fejl > 0) {
