@@ -12296,6 +12296,14 @@ function KunderView({ supabase, currentEmployeeId }) {
                     </div>
                   ))}
                 </div>
+                {(k.telefon || k.email || k.kontaktperson) && (
+                  <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginBottom: 14,
+                                fontSize: 12.5, color: "#475569" }}>
+                    {k.kontaktperson && <div><b>Kontaktperson:</b> {k.kontaktperson}</div>}
+                    {k.telefon && <div><b>Telefon:</b> {k.telefon}</div>}
+                    {k.email && <div><b>E-mail:</b> {k.email}</div>}
+                  </div>
+                )}
                 {k.mangler_dinero ? (
                   <KoblTilDinero supabase={supabase} kunde={k}
                     onKoblet={(antal) => { hent(); notifyKobling(antal); }} />
