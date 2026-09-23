@@ -1841,6 +1841,11 @@ const MODULE_HELP = {
         "Alle de andre tjenester kaldes fra serveren og efterlader spor. Adresseregistret kaldes fra din browser, og det fejler i stilhed — adressefeltet holder bare op med at foreslå adresser uden at sige hvorfor.",
         "Derfor slår siden op med det samme, når den åbnes, og svaret er fra dette sekund.",
         "Under linjen står, hvor mange af de gemte ruter der er slået op i registret, og hvor mange der kom fra reserven hos OpenRouteService. Alt andet end registret er værd at kigge på: findes adressen ikke i registret, kan reserven finde på et svar — og så er kilometerne opdigtede."] },
+    { h: "Cpr-numre på medarbejdernes telefoner", p: [
+        "På Nexus-opgaver står borgerens cpr-nummer forrest i referencen, fordi kommunen skal bruge det på fakturaen. Worklist fjerner det, før medarbejderen ser referencen — men kun når opgaven står som Nexus.",
+        "Står en Nexus-aftale som «privat» eller «erhverv», bliver cpr-nummeret derfor vist. Det skete 23. september 2026 på 32 opgaver: aftalerne kom fra ruteplanerne, hvor kontrakttypen var gættet.",
+        "Siden finder aftaler, der ikke står som Nexus, men har et cpr-nummer i referencen. Er der opgaver på dem, står det med rødt øverst. Er det kun kladder, står det i listen herunder — de har ingen opgaver endnu, så intet er ude på en telefon.",
+        "Er det en Nexus-aftale, så ret kontrakttypen på aftalen. Opgaverne følger med af sig selv i nat. Er det ikke, skal cpr-nummeret ud af referencen."] },
     { h: "Noget nogen skal tage stilling til", p: [
         "Listen er ikke driftsfejl. Det er arbejde, der ligger og venter, og som bliver dyrt, hvis det bliver liggende.",
         "Kladder uden kundenavn kan ikke godkendes. Medarbejdere uden mailadresse får hverken besked om planændringer eller påmindelser. Aftaler markeret til sletning danner ingen opgaver imens.",
@@ -8800,7 +8805,16 @@ function DriftView({ isAdminUser, paaSide }) {
         const medMail      = await t("employees", (q) =>
           q.is("fratraadt_dato", null).not("app_email", "is", null).neq("app_email", ""));
 
+        // Aftaler med cpr-nummer i referencen, som ikke staar som Nexus. Worklist renser
+        // kun cpr paa Nexus-opgaver, saa alle andre viser det urenset paa medarbejderens
+        // telefon. Reglen ligger i databasen (mistaenkte_nexus_aftaler) og ikke her: den
+        // kraever et regulaert udtryk, og et PostgREST-filter skrevet som tekststreng
+        // giver et forkert tal ved en tastefejl i stedet for en fejl.
+        const { data: mistaenkteNexus, error: nexusFejl } = await supabase.rpc("mistaenkte_nexus_aftaler");
+        if (nexusFejl) throw nexusFejl;
+
         const svar = {
+          mistaenkteNexus: mistaenkteNexus || [],
           aktive:   await t("service_templates", (q) => q.eq("status", "aktiv")),
           kladder,
           udenNavn: kladder - kladderNavn,
@@ -8891,7 +8905,26 @@ function DriftView({ isAdminUser, paaSide }) {
   // «gaa: null» er et bevidst valg og ikke en manglende knap: der findes ikke nogen
   // side i appen, hvor de geokodede ruter står. Hellere ingen knap end en knap, der
   // fører et sted hen, hvor svaret ikke er.
+  // Staar oeverst, fordi det er den eneste linje, der handler om noget, der ALLEREDE
+  // sker: et cpr-nummer paa en telefon ude hos en medarbejder. Resten er arbejde, der
+  // venter. Aftalerne naevnes ved navn, for planlaeggeren skal kunne finde dem uden at
+  // lede — og der er sjaeldent mere end en haandfuld.
+  const mistaenkte = (tal && tal.mistaenkteNexus) || [];
+  const mistaenkteStatus = [...new Set(mistaenkte.map((m) => m.status))];
+  // Kun dem, hvor et cpr-nummer faktisk ligger paa en aaben opgave. En kladde har
+  // ingen opgaver endnu — den er en fejl, der venter, ikke en, der sker.
+  const cprPaaTelefoner = mistaenkte.filter((m) => m.opgaver_med_cpr > 0);
   const beslutninger = tal ? [
+    mistaenkte.length > 0 && {
+      t: `${mistaenkte.length} ${mistaenkte.length === 1 ? "aftale har" : "aftaler har"} cpr-nummer i referencen, men står ikke som Nexus`,
+      s: "Worklist fjerner kun cpr-nummeret på Nexus-opgaver, så her kan medarbejderen se det. "
+        + "Er det en Nexus-aftale, så ret kontrakttypen — opgaverne følger med i nat. "
+        + "Ellers skal cpr-nummeret ud af referencen. "
+        + mistaenkte.slice(0, 5).map((m) =>
+            `${m.kunde}${m.adresse ? `, ${m.adresse}` : ""} (${m.kontrakttype}${m.status === "kladde" ? ", kladde" : ""})`).join(" · ")
+        + (mistaenkte.length > 5 ? ` · og ${mistaenkte.length - 5} til` : ""),
+      knap: "Åbn Aftaler",
+      gaa: () => paaSide("contracts", mistaenkteStatus.length === 1 ? mistaenkteStatus[0] : "alle") },
     tal.udenNavn > 0 && { t: `${tal.udenNavn} kladder mangler kundenavn`,
       s: "De kan ikke godkendes, og de kan ikke faktureres, før navnet er på.",
       knap: "Åbn kladderne", gaa: () => paaSide("contracts", "kladde") },
@@ -8917,6 +8950,28 @@ function DriftView({ isAdminUser, paaSide }) {
         <div style={{ background: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 11,
                       padding: "12px 15px", marginBottom: 12, fontSize: 13.5, color: "#B91C1C" }}>
           Noget kunne ikke hentes: {fejl}
+        </div>
+      )}
+
+      {/* Et cpr-nummer paa en medarbejders telefon er ikke «arbejde, der venter», som
+          resten af beslutningslisten er. Det er noget, der sker lige nu. Derfor staar
+          det over det samlede svar — ellers kunne siden sige «Alt kører» med groent,
+          mens et cpr-nummer stod paa en telefon. */}
+      {!henter && cprPaaTelefoner.length > 0 && (
+        <div style={{ borderRadius: 14, padding: "14px 18px", marginBottom: 10,
+                      background: "#FEF2F2", border: "1.5px solid #FCA5A5",
+                      display: "flex", alignItems: "center", gap: 14 }}>
+          <div style={{ width: 14, height: 14, borderRadius: "50%", flexShrink: 0, background: "#DC2626" }} />
+          <div>
+            <div style={{ fontSize: 16, fontWeight: 700, color: "#B91C1C" }}>
+              Cpr-numre kan ses på medarbejdernes telefoner
+            </div>
+            <div style={{ fontSize: 13.5, color: "#7F1D1D" }}>
+              {cprPaaTelefoner.reduce((n, m) => n + m.opgaver_med_cpr, 0)} opgaver på{" "}
+              {cprPaaTelefoner.length === 1 ? "én aftale" : `${cprPaaTelefoner.length} aftaler`}, der ikke
+              står som Nexus, har cpr-nummer i referencen. Se «Noget nogen skal tage stilling til» nedenfor.
+            </div>
+          </div>
         </div>
       )}
 
