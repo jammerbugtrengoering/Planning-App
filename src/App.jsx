@@ -1788,7 +1788,7 @@ const MODULE_HELP = {
         "Det andet er en liste med medarbejdere. Listen viser kun dem, der faktisk har kladder, og tallet siger hvor mange. Så kan du tage én medarbejders ruteplan ad gangen og få alle spørgsmålene afklaret med hende på én gang.",
         "Tallene følger de øvrige filtre. Har du valgt «Erhverv», tæller de kun erhvervskladder.",
         "De to filtre nulstiller sig selv, når du forlader bunken, så du ikke kommer tilbage og ser 12 af 340 uden at kunne huske hvorfor.",
-        "Markerer du en kladde til sletning, forsvinder den fra bunken med det samme — den er afgjort og skal ikke gennemgås igen. Find den under «Skal slettes», hvor «Fortryd» sætter den tilbage."] }, { h: "Søg og filtrér", p: [
+        "Markerer du en kladde til sletning, forsvinder den fra bunken med det samme — den er afgjort og skal ikke gennemgås igen. Find den under «Skal slettes», hvor «Fortryd» sætter den tilbage.", "Kladderne står efter kontraktsum, med den største øverst — i alle tre filtre og uanset kontrakttype og medarbejder. Så kan du tage de aftaler, der er mest værd, først. De øvrige lister på siden står stadig efter udløbsdato."] }, { h: "Søg og filtrér", p: [
         "Søgefeltet under knapperne leder i kundenavn, fakturabeskrivelse, adresse og opgavetekst på én gang.",
         "At den også leder i fakturabeskrivelsen er med vilje: på Nexus- og Ældrelov-aftaler hedder kunden «Jammerbugt Kommune» på dem alle sammen, og borgerens navn står i fakturabeskrivelsen. Søger du på borgeren, finder du den rigtige aftale — søger du på kommunen, får du dem alle.",
         "Adressen er med, fordi det ofte er dét, man husker.",
@@ -11080,7 +11080,19 @@ function ContractsView({ templates: alleTemplates, instances, pricing, employees
         realizedMin, realizedSum: (realizedMin / 60) * rate,
       };
     })
-    .sort((a, b) => a.expiry - b.expiry);
+    // Kladderne sorteres efter VAERDI, stoerst foerst. Alt andet efter udloebsdato.
+    //
+    // 23.9.2026: bunken er paa 258 kladder, og de udloeber alle i efteraaret 2028 —
+    // de blev laest ind paa samme dag med samme loebetid. Sorteret efter udloeb staar
+    // de derfor i en raekkefoelge, der intet betyder. Det, der betyder noget, naar man
+    // skal igennem en bunke, er hvad der er mest vaerd at faa godkendt foerst.
+    //
+    // Gaelder i alle tre kladdefiltre (alle, dubletter, uden mistanke) og paa tvaers af
+    // kontrakttype og medarbejder — sorteringen haenger paa visningen, ikke paa filtret.
+    // Ens vaerdi: udloeb, saa titel, saa raekkefoelgen ikke hopper ved hver tegning.
+    .sort((a, b) => (erKladdevisning
+      ? (b.plannedSum - a.plannedSum) || (a.expiry - b.expiry) || String(a.title).localeCompare(String(b.title), "da")
+      : a.expiry - b.expiry));
 
   const noExpiry = templates
     .filter((t) => !t.expiryDate)
@@ -11121,7 +11133,11 @@ function ContractsView({ templates: alleTemplates, instances, pricing, employees
   return (
     <div style={styles.page}>
       <div style={{ fontWeight: 700, fontSize: 18, color: "#111111", marginBottom: 4 }}>Aftaler</div>
-      <div style={{ fontSize: 13, color: "#64748B", marginBottom: 14 }}>Faste opgaver sorteret efter udløbsdato — nærmest udløbende øverst</div>
+      <div style={{ fontSize: 13, color: "#64748B", marginBottom: 14 }}>
+        {erKladdevisning
+          ? "Kladder sorteret efter kontraktsum — største værdi øverst"
+          : "Faste opgaver sorteret efter udløbsdato — nærmest udløbende øverst"}
+      </div>
 
       {/* To uafhaengige raekker filtre: status og kontrakttype. De virker sammen, saa
           man kan f.eks. se kun kladder af typen hovedrengoering. Antallet staar kun
