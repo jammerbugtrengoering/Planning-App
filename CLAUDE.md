@@ -105,6 +105,19 @@ hvorfor.
 
 Skriv **hvorfor** i migrationen, ikke hvad. SQL'en siger selv hvad.
 
+**En upsert på `instances` skal sende hele rækken.** Sender den kun nogle af kolonnerne,
+fejler den *altid* — også når rækken findes i forvejen. Postgres tjekker NOT NULL på den
+række, der ville blive indsat, før den opdager at id'et er taget, og `title`, `type`,
+`week` og `duration` har ingen standardværdi. Skal kun nogle felter skrives, så brug
+`.update(...).in("id", ...)` eller `rpc("opdater_arvede_felter", ...)`.
+`node indlaesning.test.mjs` fejler, hvis nogen skriver en delvis upsert igen.
+
+> 23.9.2026: `gemArvedeFelter` havde brugt en delvis upsert i tre uger og slugt fejlen.
+> Selvhelbredelsen gemte aldrig noget, og 4.145 opgaver stod uden telefon, e-mail og
+> kontaktperson fra deres aftale — eller med forkert kontrakttype. Natjobbet
+> `arvede-felter-sync` havde samme fejl. Og en fejl, der ikke siges højt, er ikke en fejl,
+> der ikke sker — den er bare en, ingen retter.
+
 **Kun én ad gangen rører databasen.** Koden kan rulles tilbage; en tabel, der er lavet om,
 mens den andens app kørte på den gamle form, kan ikke.
 

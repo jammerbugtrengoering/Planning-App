@@ -92,6 +92,38 @@ if (helbredFn) {
   );
 }
 
+// ---- 5b. Ingen delvis upsert paa instances ---------------------------------
+// 23.9.2026: en upsert, der kun sender NOGLE af kolonnerne, fejler ALTID paa
+// instances. Postgres tjekker NOT NULL paa den raekke, der ville blive indsat, foer
+// den opdager at id'et findes — og title, type, week og duration har ingen
+// standardvaerdi. Bevist med en proeve, der rullede sig selv tilbage.
+//
+// gemArvedeFelter brugte den i tre uger og slugte fejlen: ca. 4.000 opgaver fik
+// aldrig telefon og e-mail fra deres aftale. saetFakturagrundlagFlere brugte den
+// ogsaa, og ville have fejlet ved foerste maanedsafslutning.
+//
+// Reglen: hver upsert paa instances skal sende hele raekken (som syncInstance), ellers
+// skal det vaere en update eller rpc("opdater_arvede_felter").
+{
+  const kald = [...kilde.matchAll(/from\("instances"\)\s*\.upsert\(/g)].map((m) => m.index);
+  for (const i of kald) {
+    const linje = kilde.slice(0, i).split("\n").length;
+    const omkring = kilde.slice(i, i + 900);
+    const sender = ["title", "type", "week", "duration"].filter((k) =>
+      new RegExp(`[\\s{,]${k}:`).test(omkring));
+    tjek(
+      `upsert paa instances (linje ${linje}) sender title/type/week/duration`,
+      sender.length === 4,
+      `Den sender kun: ${sender.join(", ") || "ingen af dem"}. En delvis upsert fejler\n` +
+      "      altid paa instances. Brug .update(...).in(\"id\", ...) eller\n" +
+      "      rpc(\"opdater_arvede_felter\") i stedet.",
+    );
+  }
+  const gem = kilde.slice(kilde.indexOf("const gemArvedeFelter"), kilde.indexOf("const gemArvedeFelter") + 3500);
+  tjek("gemArvedeFelter skriver gennem opdater_arvede_felter",
+    /rpc\("opdater_arvede_felter"/.test(gem));
+}
+
 // ---- 6. Horisonten skal ligge INDEN FOR vinduet -----------------------------
 // Horisonten danner opgaver nogle uger frem. Vinduet henter nogle uger frem. Er
 // horisonten den længste, danner den i uger, der ikke er hentet — og så siger værnet

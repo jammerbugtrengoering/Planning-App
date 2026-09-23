@@ -3140,9 +3140,20 @@ function PlanningApp({ session, onSignOut }) {
 
   // Skriver kun de arvede felter. Bevidst IKKE syncInstance pr. opgave: foerste gang
   // det her koerer, er der flere hundrede opgaver at rette op, og lige saa mange kald
-  // ville tage minutter og kunne ramme et hastighedsloft midt i. En upsert med kun
-  // disse kolonner roerer heller ikke status, tid eller tjekliste — de bliver staaende
-  // som de er, ogsaa hvis en medarbejder skriver samtidig.
+  // ville tage minutter og kunne ramme et hastighedsloft midt i.
+  //
+  // 23.9.2026: DEN HER HAR ALDRIG VIRKET, indtil i dag. Den brugte en upsert med kun
+  // de tolv kolonner, og Postgres tjekker NOT NULL paa den raekke, der ville blive
+  // indsat, FOER den ser at id'et findes — title, type, week og duration har ingen
+  // standardvaerdi. Hvert eneste kald fejlede, og fejlen blev slugt her nedenfor. Ca.
+  // 4.000 opgaver stod uden telefon og e-mail fra deres aftale, uden at nogen saa det.
+  //
+  // Nu skrives der gennem opdater_arvede_felter() — en UPDATE, som kun roerer de tolv
+  // kolonner, og som selv nægter at roere leveret arbejde. Natjobbet arvede-felter-sync
+  // bruger samme funktion, saa de to kan ikke skrive forskelligt.
+  //
+  // Lektien, hvis nogen fristes til at slaa en fejl ned igen: en fejl, der ikke
+  // siges hoejt, er ikke en fejl, der ikke sker. Den er bare en, ingen retter.
   const gemArvedeFelter = useCallback(async (opgaver) => {
     const PORTION = 200;
     for (let i = 0; i < opgaver.length; i += PORTION) {
@@ -3159,10 +3170,12 @@ function PlanningApp({ session, onSignOut }) {
         video_url: t.videoUrl ?? "",
         telefon: t.telefon ?? "", email: t.email ?? "", kontaktperson: t.kontaktperson ?? "",
       }));
-      const { error } = await supabase.from("instances").upsert(raekker, { onConflict: "id" });
+      const { error } = await supabase.rpc("opdater_arvede_felter", { raekker });
       // Ingen besked til planlaeggeren: hun har ikke bedt om det her, og opgaverne
-      // staar rigtigt paa skaermen uanset. Naeste aabning proever igen af sig selv.
-      if (error) { console.error("gemArvedeFelter:", error.message); return; }
+      // staar rigtigt paa skaermen uanset. Naeste aabning proever igen af sig selv —
+      // og natjobbet arvede-felter-sync fanger resten. Men fejlen skal kunne ses af
+      // den, der kigger efter, og ikke bare forsvinde, som den gjorde i tre uger.
+      if (error) { console.error("gemArvedeFelter FEJLEDE — intet blev gemt:", error.message); return; }
     }
   }, []);
 
@@ -3286,8 +3299,12 @@ function PlanningApp({ session, onSignOut }) {
     setInstances((prev) => prev.map((t) => (ider.includes(t.id) ? { ...t, invoiceReady: til } : t)));
     const PORTION = 200;
     for (let i = 0; i < ider.length; i += PORTION) {
-      const raekker = ider.slice(i, i + PORTION).map((id) => ({ id, invoice_ready: til }));
-      const { error } = await supabase.from("instances").upsert(raekker, { onConflict: "id" });
+      // UPDATE og ikke upsert. En upsert med kun id og invoice_ready fejler ALTID paa
+      // instances: Postgres tjekker NOT NULL paa den raekke, der ville blive indsat
+      // (title, type, week, duration), foer den ser at id'et findes. Bevist 23.9.2026.
+      // Alle raekker faar samme vaerdi her, saa én update med en id-liste er nok.
+      const { error } = await supabase.from("instances")
+        .update({ invoice_ready: til }).in("id", ider.slice(i, i + PORTION));
       if (dbFail(error, "gemme fakturagrundlaget")) return;
     }
   }, []);
