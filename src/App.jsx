@@ -12,6 +12,7 @@ import { filtrerUgevalg } from "./ugevalg";
 import { portefoeljeTal, aarMedBesoeg } from "./portefoelje";
 import { hentAlleRaekker } from "./hentalle";
 import { vinduetsGraenser, vinduetsStykker, hentedeUgerFra, ugenErHentet } from "./vindue";
+import { opsummerMaaling } from "./tidsmaaling";
 import { findDubletter } from "./dubletter";
 import {
   Plus, Download, X, Clock, AlertTriangle,
@@ -1620,6 +1621,14 @@ const MODULE_HELP = {
         "Adressen ligger i sin egen tabel med adgang for administratorer og for medarbejderen selv. Kollegerne kan ikke se den, heller ikke gennem medarbejder-appen.",
         "Adressen sendes til rutetjenesten for at beregne køretiden, på samme måde som kundernes adresser. Det er en databehandling af personoplysninger, og den bør stå i jeres dokumentation.",
         "Kilometerpengene røres ikke af ordningen. De beregnes stadig kun mellem opgaver med registreret tid — kørsel mellem hjem og arbejde indgår ikke."] },
+    { h: "Start/stop", p: [
+        "Knappen «⏱ Start/stop» øverst viser hvem der har start/stop, og hvor lange opgaver der skal til, før den bruges. Standard er 60 minutter.",
+        "Har hun start/stop, trykker hun Start når hun er ved kunden, og Afslut når hun går. Står Worklist åben når hun ankommer, kan den starte af sig selv. Den målte tid står klar ved Afslut. Retter hun den med mere end 2 minutter, skal hun skrive hvorfor.",
+        "Start kan ikke trykkes, hvis telefonen viser at hun tydeligt er et andet sted. Er der ingen position, må hun godt starte — det bliver noteret. Afslut kan altid trykkes.",
+        "Der gemmes kun afstanden til adressen, aldrig hvor hun er. Og kun ved start og ved afslut — ikke undervejs.",
+        "Opgaver under grænsen, og alle medarbejdere uden start/stop, registrerer præcis som hidtil: minutter og afvigelsesbegrundelse.",
+        "Slås til på det enkelte kort under «Løn og transport», eller for alle på én gang i panelet. Det er slået fra fra start.",
+        "Start/stop er en kontrolforanstaltning. Medarbejderne skal varsles, før det slås til — typisk 6 uger. Slå det ikke til, før varslingen er givet."] },
     { h: "Hvem kan se lønnen", p: [
         "Timelønnen ligger i sin egen tabel, som kun administratorer har adgang til. Det er håndhævet i databasen, ikke kun i skærmbilledet.",
         "Er du ikke administrator, står feltet tomt, og lønkolonnerne under Løn data vises slet ikke — heller ikke i CSV-filen.",
@@ -1892,8 +1901,13 @@ const MODULE_HELP = {
         "Et plus betyder mere tid end aftalt. Sker det fast hos samme kunde, er det aftalens varighed der er sat for lavt — ret den på aftalen.",
         "Et minus betyder mindre tid. Er opgaven udført, er det enten gået hurtigere, eller også er tiden ikke registreret færdig.",
         "Ved timepris følger fakturaen den registrerede tid, så forskellen ses også der. Ved fast pris gør den ikke — og så er det her du opdager at en aftale er blevet ulønsom."] },
+    { h: "Målt tid (start/stop)", p: [
+        "Har medarbejderen start/stop, står der ⏱ Målt under besøget: den tid der gik fra Start til Afslut, og hvor meget den registrerede tid afviger fra den.",
+        "«Mere end målt» viser besøg hvor der er registreret over 2 minutter mere end målt. Det er dem, hvor kunden kan komme til at betale for tid, der ikke er brugt. Der står altid en begrundelse — den er påkrævet.",
+        "Markeringer som «startet uden position», «afsluttet 3 km fra adressen» eller «sendt senere» er ikke en dom. Der kan være dårligt signal eller en flad telefon. De er der, så du kan spørge.",
+        "Besøg uden start/stop vises som hidtil."] },
     { h: "Eksport", p: [
-        "CSV-filen har en linje pr. besøg med begrundelsen, og en sumlinje pr. kunde.",
+        "CSV-filen har en linje pr. besøg med begrundelsen, den målte tid og markeringerne, og en sumlinje pr. kunde.",
         "Der står ingen priser — hverken på skærmen eller i filen. Skal der kroner på, ligger de under Fakturering."] },
   ], warn: "Tilbudsmøder og interne blokke som ferie og sygdom tæller ikke med. To medarbejdere på samme besøg er ét besøg, og deres minutter lægges sammen — det er sådan kunden ser det. Undtagen dem der er markeret som oplæring: deres tid er med i lønnen, men hverken i denne liste eller på fakturaen." },
 
@@ -2545,6 +2559,9 @@ function PlanningApp({ session, onSignOut }) {
           app_email: e.app_email ?? null,
           isAdmin: e.is_admin ?? false,
           weekendOk: e.weekend_ok ?? false,
+          // Start/stop-tidsregistrering (24.9.2026). Standard FRA. Se afsnittet i
+          // medarbejdervinduet og funktionen afslut_tid i databasen.
+          startStop: e.start_stop ?? false,
           fratraadtDato: e.fratraadt_dato || null,
           startTime: e.start_time || null,
           danloenNr: e.danloen_nr || null,
@@ -3066,9 +3083,22 @@ function PlanningApp({ session, onSignOut }) {
   // fra realtime-haandteringen og fra sync-funktioner der ligger uden for render.
   const instAccessRef = useRef({});
   const custAccessRef = useRef({});
+  // Slaa start/stop til eller fra for ALLE aktive medarbejdere paa én gang.
+  //
+  // En update med et filter og ikke en upsert: kun feltet start_stop roeres, og
+  // fratraadte lades i fred — deres raekke skal staa, som den var, da de stoppede.
+  const startStopForAlle = useCallback(async (til) => {
+    const { error } = await supabase.from("employees")
+      .update({ start_stop: til }).is("fratraadt_dato", null);
+    if (dbFail(error, til ? "slå start/stop til for alle" : "slå start/stop fra for alle")) return false;
+    setEmployees((prev) => prev.map((e) => (e.fratraadtDato ? e : { ...e, startStop: til })));
+    notify(til ? "Start/stop er slået til for alle medarbejdere" : "Start/stop er slået fra for alle medarbejdere");
+    return true;
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   const syncEmployee = useCallback(async (emp) => {
     const { data: skillRows_db } = await supabase.from("skills").select("id, name");
-    const { error: empErr } = await supabase.from("employees").upsert({ id: emp.id, name: emp.name, color: emp.color, is_admin: emp.isAdmin ?? false, weekend_ok: emp.weekendOk ?? false, start_time: emp.startTime || null, danloen_nr: emp.danloenNr ?? null,
+    const { error: empErr } = await supabase.from("employees").upsert({ id: emp.id, name: emp.name, color: emp.color, is_admin: emp.isAdmin ?? false, weekend_ok: emp.weekendOk ?? false, start_stop: emp.startStop ?? false, start_time: emp.startTime || null, danloen_nr: emp.danloenNr ?? null,
       weekend_tillaeg: emp.weekendTillaeg ?? false, sh_betaling: emp.shBetaling ?? false,
       weekend_pct_egen: emp.weekendPctEgen ?? null, sh_pct_egen: emp.shPctEgen ?? null }, { onConflict: "id" });
     if (dbFail(empErr, "gemme medarbejderen")) return;
@@ -5404,6 +5434,7 @@ function PlanningApp({ session, onSignOut }) {
       )}
       {view === "employees" && (
         <EmployeesView employees={employees}
+          onStartStopAlle={startStopForAlle}
           onAdd={() => { setEditEmp(null); setShowAddEmp(true); }}
           onEdit={(e) => { setEditEmp(e); setShowAddEmp(true); }}
           onDelete={(id) => setSletMedarbejder(id)}
@@ -6330,7 +6361,7 @@ function TypeBadge({ type, mini }) {
 // ---------- Employees ----------
 // instances og travelSettings er bevidst ikke props laengere: siden er stamdata og
 // skal ikke afhaenge af hvilken uge man staar i. Belaegningen laeses i ugeplanen.
-function EmployeesView({ employees, onAdd, onEdit, onDelete, supabase, skills, onSkillsChange, areas, employeeAreas, onAreasChange, onEmployeeAreasChange }) {
+function EmployeesView({ employees, onAdd, onEdit, onDelete, supabase, skills, onSkillsChange, areas, employeeAreas, onAreasChange, onEmployeeAreasChange, onStartStopAlle }) {
   // Omraadefordeling er planlaegning. Fratraadte hoerer ikke til der, men de bliver
   // staaende i selve medarbejderlisten nedenfor med deres fratraedelsesdato.
   const aktive = employees.filter((e) => !e.fratraadtDato);
@@ -6384,6 +6415,7 @@ function EmployeesView({ employees, onAdd, onEdit, onDelete, supabase, skills, o
     }), [beregnede, sogLille, omraadeFilter, sortering, employeeAreas]);
   const [showSkillsPanel, setShowSkillsPanel] = useState(false);
   const [showAreasPanel, setShowAreasPanel] = useState(false);
+  const [showStartStopPanel, setShowStartStopPanel] = useState(false);
   const [inviteEmail, setInviteEmail] = useState({});
   const [inviteStatus, setInviteStatus] = useState({});
   const [orderPanel, setOrderPanel] = useState(null); // emp.id
@@ -6481,13 +6513,18 @@ function EmployeesView({ employees, onAdd, onEdit, onDelete, supabase, skills, o
         <button style={styles.primaryBtn} onClick={onAdd}><Plus size={16} /> Ny medarbejder</button>
         <button
           style={{ ...styles.secondaryBtn, ...(showSkillsPanel ? { background: "#FCE4EF", color: "#D6247A", borderColor: "#D6247A" } : {}) }}
-          onClick={() => { setShowSkillsPanel((v) => !v); setShowAreasPanel(false); }}>
+          onClick={() => { setShowSkillsPanel((v) => !v); setShowAreasPanel(false); setShowStartStopPanel(false); }}>
           ⭐ Kompetencer
         </button>
         <button
           style={{ ...styles.secondaryBtn, ...(showAreasPanel ? { background: "#EEF2FF", color: "#4F46E5", borderColor: "#4F46E5" } : {}) }}
-          onClick={() => { setShowAreasPanel((v) => !v); setShowSkillsPanel(false); }}>
+          onClick={() => { setShowAreasPanel((v) => !v); setShowSkillsPanel(false); setShowStartStopPanel(false); }}>
           📍 Områder
+        </button>
+        <button
+          style={{ ...styles.secondaryBtn, ...(showStartStopPanel ? { background: "#ECFDF5", color: "#047857", borderColor: "#A7F3D0" } : {}) }}
+          onClick={() => { setShowStartStopPanel((v) => !v); setShowSkillsPanel(false); setShowAreasPanel(false); }}>
+          ⏱ Start/stop
         </button>
       </div>
 
@@ -6500,6 +6537,9 @@ function EmployeesView({ employees, onAdd, onEdit, onDelete, supabase, skills, o
       {showAreasPanel && (
         <AreasView supabase={supabase} areas={areas} employees={aktive} employeeAreas={employeeAreas}
           onAreasChange={onAreasChange} onEmployeeAreasChange={onEmployeeAreasChange} />
+      )}
+      {showStartStopPanel && (
+        <StartStopPanel supabase={supabase} employees={aktive} onStartStopAlle={onStartStopAlle} />
       )}
       {/* Vaerktoejslinje. Fandtes ikke foer: "hvem kan vinduespolering og har tid" betoed
           at laese tyve kort igennem. */}
@@ -7427,10 +7467,20 @@ function CustomerHoursView({ instances }) {
           .filter((l) => l.note && String(l.note).trim() && l.empId !== "planner")
           .map((l) => l.note.trim())
           .join(" / "),
+        // Start/stop (24.9.2026): maalt tid og markeringer. null, naar opgaven er
+        // registreret paa den gamle maade.
+        maaling: opsummerMaaling(tl),
       });
     });
 
-  const skaeve = alle.filter((b) => b.afvigelse !== 0);
+  // Paa listen kommer et besoeg, hvis den registrerede tid afviger fra den PLANLAGTE —
+  // eller, med start/stop, fra den MAALTE. Det sidste er ikke pynt: planlagt 60, maalt
+  // 30, registreret 60 har ingen afvigelse fra det planlagte og ville aldrig dukke op.
+  // Og det er netop det tilfaelde, start/stop blev bygget til at fange.
+  const rettetOp = (b) => b.maaling && b.maaling.forskel !== null && b.maaling.forskel > 2;
+  const maalingBemaerket = (b) => b.maaling && b.maaling.bemaerk.length > 0;
+  const skaeve = alle.filter((b) => b.afvigelse !== 0 || rettetOp(b) || maalingBemaerket(b));
+  const antalRettetOp = skaeve.filter(rettetOp).length;
 
   // Over- og underforbrug taelles HVER FOR SIG.
   //
@@ -7473,6 +7523,7 @@ function CustomerHoursView({ instances }) {
   if (visning !== "alle") {
     const passer = (b) =>
       visning === "uden"  ? (b.afvigelse > 0 && !b.begrundelse)
+    : visning === "maalt" ? (rettetOp(b) || maalingBemaerket(b))
     : visning === "over"  ? b.afvigelse > 0
     :                       b.afvigelse < 0;
     vist = vist
@@ -7494,13 +7545,17 @@ function CustomerHoursView({ instances }) {
   function eksporter() {
     const header = ["Kunde", "Dato", "Uge", "Dag", "Opgave",
                     "Planlagt (min)", "Registreret (min)",
-                    "Afvigelse (min)", "Afvigelse (timer)", "Begrundelse"];
+                    "Afvigelse (min)", "Afvigelse (timer)", "Begrundelse",
+                    "Målt (min)", "Registreret minus målt (min)", "Bemærkninger til målingen"];
     const data = [];
     kunder.forEach((k) => {
       k.besoeg.forEach((b) => data.push([
         k.navn, b.dato, `Uge ${b.week}`, b.dayLabel, b.titel,
         b.planlagt, b.registreret, b.afvigelse, (b.afvigelse / 60).toFixed(2),
         b.begrundelse || "",
+        b.maaling && b.maaling.maalt !== null ? b.maaling.maalt : "",
+        b.maaling && b.maaling.forskel !== null ? b.maaling.forskel : "",
+        b.maaling ? b.maaling.bemaerk.join("; ") : "",
       ]));
       data.push([`${k.navn} — i alt`, "", "", "", "", "", "",
         k.afvigelse, (k.afvigelse / 60).toFixed(2), ""]);
@@ -7533,6 +7588,13 @@ function CustomerHoursView({ instances }) {
         <StatKnap aktiv={visning === "uden"} onClick={() => setVisning(visning === "uden" ? "alle" : "uden")}
           vaerdi={String(udenBegrundelse)} tekst="Uden begrundelse"
           farve={udenBegrundelse ? "#B91C1C" : "#94A3B8"} />
+        {/* Kun synlig, naar der er noget at vise: foer nogen har start/stop slaaet
+            til, ville den bare staa og sige 0. */}
+        {skaeve.some((b) => b.maaling) && (
+          <StatKnap aktiv={visning === "maalt"} onClick={() => setVisning(visning === "maalt" ? "alle" : "maalt")}
+            vaerdi={String(antalRettetOp)} tekst="Mere end målt"
+            farve={antalRettetOp ? "#7C3AED" : "#94A3B8"} />
+        )}
         <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
           <select style={{ ...styles.inputSm, fontSize: 13, fontWeight: 600 }} value={filterMonth} onChange={(e) => setFilterMonth(Number(e.target.value))}>
             {MONTHS.map((m, i) => <option key={i} value={i}>{m}</option>)}
@@ -7603,9 +7665,24 @@ function CustomerHoursView({ instances }) {
               {/* Begrundelsen staar i fuld bredde under tallene. Den er tit en hel
                   saetning, og klemt ned i en kolonne ville den blive klippet af —
                   netop den tekst man skal laese hoejt for kunden. */}
+              {/* Start/stop: det maalte ved siden af det registrerede. Registreret mere
+                  end maalt staar med lilla; resten er oplysninger, ikke fejl. */}
+              {b.maaling && (
+                <div style={{ fontSize: 12.5, marginTop: 4, lineHeight: 1.5,
+                              color: rettetOp(b) ? "#6D28D9" : "#64748B" }}>
+                  ⏱ {b.maaling.maalt !== null ? <>Målt <b>{fmtMin(b.maaling.maalt)}</b></> : "Ikke målt"}
+                  {b.maaling.forskel !== null && b.maaling.forskel !== 0 && (
+                    <> · registreret {b.maaling.forskel > 0 ? "+" : "−"}{fmtMin(Math.abs(b.maaling.forskel))} i forhold til målt</>
+                  )}
+                  {b.maaling.automatisk && <> · startet ved ankomst</>}
+                  {b.maaling.bemaerk.length > 0 && (
+                    <span style={{ color: "#B91C1C" }}> · {b.maaling.bemaerk.join(" · ")}</span>
+                  )}
+                </div>
+              )}
               {b.begrundelse ? (
                 <div style={{ fontSize: 13, color: "#B45309", marginTop: 4, lineHeight: 1.5 }}>{b.begrundelse}</div>
-              ) : b.afvigelse > 0 ? (
+              ) : (b.afvigelse > 0 || rettetOp(b)) ? (
                 <div style={{ fontSize: 12.5, color: "#B91C1C", marginTop: 4 }}>Ingen begrundelse skrevet</div>
               ) : null}
             </div>
@@ -11535,6 +11612,94 @@ function ContractsView({ templates: alleTemplates, instances, pricing, employees
 }
 
 // ── Areas View ────────────────────────────────────────────────────────────────
+// Start/stop-tidsregistrering: graensen og «slaa til/fra for alle».
+//
+// 24.9.2026. Den enkelte medarbejder slaas til og fra i medarbejdervinduet. Her staar
+// det, der gaelder for alle: fra hvilken varighed start/stop bruges, og to knapper, saa
+// man ikke skal ind i tyve vinduer, naar det skal rulles ud.
+//
+// Knapperne spoerger foerst, og spoergsmaalet naevner varslingen. Start/stop med
+// afstand til adressen er et kontroltiltag, og at slaa det til for alle er netop det
+// oejeblik, varslingen skal ligge foer.
+function StartStopPanel({ supabase, employees, onStartStopAlle }) {
+  const [graense, setGraense] = useState(null);
+  const [kladde, setKladde] = useState("");
+  const [gemmer, setGemmer] = useState(false);
+
+  useEffect(() => {
+    let afbrudt = false;
+    supabase.from("tidsregistrering_indstillinger").select("graense_min").eq("id", "default").maybeSingle()
+      .then(({ data }) => {
+        if (afbrudt) return;
+        const g = data?.graense_min ?? 60;
+        setGraense(g); setKladde(String(g));
+      });
+    return () => { afbrudt = true; };
+  }, [supabase]);
+
+  const med = employees.filter((e) => e.startStop);
+  const tal = Number(kladde);
+  const gyldig = Number.isInteger(tal) && tal >= 1 && tal <= 600;
+
+  async function gemGraense() {
+    if (!gyldig || tal === graense) return;
+    setGemmer(true);
+    const { error } = await supabase.from("tidsregistrering_indstillinger")
+      .update({ graense_min: tal, aendret: new Date().toISOString() }).eq("id", "default");
+    setGemmer(false);
+    if (dbFail(error, "gemme grænsen")) return;
+    setGraense(tal);
+  }
+
+  async function alle(til) {
+    if (!window.confirm(til
+      ? `Slå start/stop til for alle ${employees.length} medarbejdere?\n\n`
+        + `På opgaver fra ${graense} minutter skal de trykke Start ved ankomst og Afslut, når de går. `
+        + `Start kan ikke ske væk fra adressen, og afstanden til adressen gemmes.\n\n`
+        + `Det er et kontroltiltag. Er det varslet til medarbejderne?`
+      : `Slå start/stop fra for alle ${employees.length} medarbejdere?\n\nDe registrerer tid som før: taster minutterne og forklarer en overskridelse.`)) return;
+    await onStartStopAlle(til);
+  }
+
+  return (
+    <div style={{ background: "#fff", border: "1px solid #A7F3D0", borderRadius: 14, padding: "16px 18px", marginBottom: 16 }}>
+      <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>⏱ Start/stop-tidsregistrering</div>
+      <div style={{ fontSize: 13, color: "#64748B", lineHeight: 1.55, marginBottom: 14 }}>
+        Medarbejdere med fluebenet trykker Start ved ankomst og Afslut, når de går — på opgaver, der er
+        mindst så lange som grænsen herunder. Tiden måles, og retter de den, skal de skrive hvorfor.
+        Start kan ikke ske væk fra adressen. Alle andre opgaver, og alle uden fluebenet, registreres som i dag.
+      </div>
+
+      <label style={styles.label}>Gælder opgaver på mindst</label>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
+        <input type="number" min={1} max={600} value={kladde} onChange={(e) => setKladde(e.target.value)}
+          style={{ ...styles.input, width: 90, marginBottom: 0 }} />
+        <span style={{ fontSize: 13, color: "#475569" }}>minutter</span>
+        <button type="button" style={{ ...styles.secondaryBtn, opacity: (!gyldig || tal === graense || gemmer) ? 0.5 : 1 }}
+          disabled={!gyldig || tal === graense || gemmer} onClick={gemGraense}>
+          {gemmer ? "Gemmer…" : "Gem"}
+        </button>
+        {!gyldig && kladde !== "" && <span style={{ fontSize: 12.5, color: "#B91C1C" }}>Mellem 1 og 600</span>}
+      </div>
+
+      <div style={{ fontSize: 13.5, marginBottom: 10 }}>
+        <b>{med.length} af {employees.length}</b> medarbejdere har det slået til
+        {med.length > 0 && med.length < employees.length && (
+          <span style={{ color: "#64748B" }}>: {med.map((e) => e.name).join(", ")}</span>)}
+      </div>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <button type="button" style={styles.secondaryBtn} disabled={graense === null || med.length === employees.length}
+          onClick={() => alle(true)}>Slå til for alle</button>
+        <button type="button" style={styles.secondaryBtn} disabled={med.length === 0}
+          onClick={() => alle(false)}>Slå fra for alle</button>
+      </div>
+      <div style={{ ...styles.hint, marginTop: 10 }}>
+        Den enkelte medarbejder slås til og fra i hendes eget vindue under «Løn og transport».
+      </div>
+    </div>
+  );
+}
+
 function AreasView({ supabase, areas, employees, employeeAreas, onAreasChange, onEmployeeAreasChange }) {
   const [showAdd, setShowAdd] = useState(false);
   const [editArea, setEditArea] = useState(null);
@@ -14299,6 +14464,7 @@ function EmployeeModal({ emp, onClose, onSave, skills: skillList, satsHistorik, 
   const [homeAddress, setHomeAddress] = useState(emp?.homeAddress || "");
   const [travelInWorktime, setTravelInWorktime] = useState(emp?.travelInWorktime ?? false);
   const [weekendOk, setWeekendOk] = useState(emp?.weekendOk ?? false);
+  const [startStop, setStartStop] = useState(emp?.startStop ?? false);
   const [empSkills, setEmpSkills] = useState(emp?.skills || {});
   // Et tomt objekt skal ogsaa falde tilbage: en medarbejder uden raekker i
   // employee_capacity kommer ind som {}, og saa blev hvert felt vist som "NaN".
@@ -14482,6 +14648,23 @@ function EmployeeModal({ emp, onClose, onSave, skills: skillList, satsHistorik, 
           <div style={{ ...styles.empSectionHint, color: "#64748B" }}>Kun administratorer kan se og rette dette</div>
         </div>
         <div style={styles.empSectionBody}>
+          {/* Start/stop-tidsregistrering. Her og ikke ved weekendfeltet: det er et
+              kontroltiltag paa den tid, der loennes og faktureres, og det maa kun
+              kontoret slaa til. Databasen haandhaever det ogsaa — guard_employees_update
+              lader ikke medarbejderen roere feltet. */}
+          <button type="button" style={startStop ? styles.empTjekAktivGroen : styles.empTjek}
+            onClick={() => setStartStop((v) => !v)}>
+            <span style={startStop ? styles.empTjekFirkantGroen : styles.empTjekFirkant}>
+              {startStop && <Check size={11} color="#fff" strokeWidth={3} />}
+            </span>
+            <span style={{ fontSize: 13, color: "#111111" }}>Start/stop-tidsregistrering på længere opgaver</span>
+          </button>
+          <div style={{ ...styles.hint, marginBottom: 12 }}>
+            På opgaver fra grænsen (se Medarbejdere) trykker hun Start ved ankomst og Afslut, når hun
+            går — tiden måles, og retter hun den, skal hun skrive hvorfor. Start kan ikke ske væk fra
+            adressen. Uden fluebenet registrerer hun som i dag. <b>Et kontroltiltag: skal varsles,
+            før det slås til.</b>
+          </div>
           <label style={styles.label}>Timeløn (kr.)</label>
           <input style={{ ...styles.input, maxWidth: 160 }} type="number" min="0" step="1" value={hourlyWage}
             onChange={(e) => setHourlyWage(e.target.value)} placeholder={String(STANDARD_TIMELOEN)} />
@@ -14596,7 +14779,7 @@ function EmployeeModal({ emp, onClose, onSave, skills: skillList, satsHistorik, 
           if (gemmer) return;
           setGemmer(true);
           try {
-            await onSave({ id: emp?.id || uid("e"), name: name.trim(), skills: empSkills, color: emp?.color || color, capacity, isAdmin, weekendOk, startTime: startTime || null, hourlyWage: hourlyWage === "" ? STANDARD_TIMELOEN : Math.max(0, Number(hourlyWage)), wageFrom: satsErAendret || !emp ? wageFrom : null, kmSats: kmSats === "" ? null : Math.max(0, Number(kmSats)), kmSatsFra: kmSats !== "" && (kmSatsErAendret || !emp) ? kmSatsFra : null, homeAddress: homeAddress.trim() || null, travelInWorktime, danloenNr: danloenNr.trim() || null,
+            await onSave({ id: emp?.id || uid("e"), name: name.trim(), skills: empSkills, color: emp?.color || color, capacity, isAdmin, weekendOk, startStop, startTime: startTime || null, hourlyWage: hourlyWage === "" ? STANDARD_TIMELOEN : Math.max(0, Number(hourlyWage)), wageFrom: satsErAendret || !emp ? wageFrom : null, kmSats: kmSats === "" ? null : Math.max(0, Number(kmSats)), kmSatsFra: kmSats !== "" && (kmSatsErAendret || !emp) ? kmSatsFra : null, homeAddress: homeAddress.trim() || null, travelInWorktime, danloenNr: danloenNr.trim() || null,
               weekendTillaeg, shBetaling,
               weekendPctEgen: weekendPctEgen.trim() === "" ? null : Number(weekendPctEgen.replace(",", ".")),
               shPctEgen: shPctEgen.trim() === "" ? null : Number(shPctEgen.replace(",", ".")) });

@@ -121,7 +121,7 @@ kopiere tilbage — og så er det filen her, der skal opdateres, ikke omvendt.
 | `maaneds-paamindelse` | Sidste chance to dage før månedsskiftet | Natligt job |
 | `helsetjek` | Morgentjek: fejlede noget, og gemmer vi noget nyt? | Natligt job |
 | `slet-gamle-fotos` | Rydder billeder ældre end 12 måneder | Natligt job |
-| `plan-beskeder` | Besked til medarbejdere om ændringer i planen | Job hvert kvarter |
+| `plan-beskeder` | Besked til medarbejdere om ændringer i planen, og påmindelse når en startet opgave (start/stop) er et kvarter over tiden | Job hvert kvarter |
 | `send-email` | Sender al mail gennem Brevo | De øvrige funktioner |
 | `send-push` | Push-beskeder til telefonerne | De øvrige funktioner |
 | `travel-distance` | Afstand og køretid mellem to adresser | Planlægningsappen |
