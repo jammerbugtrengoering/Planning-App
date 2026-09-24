@@ -12,7 +12,7 @@ import { filtrerUgevalg } from "./ugevalg";
 import { portefoeljeTal, aarMedBesoeg } from "./portefoelje";
 import { hentAlleRaekker } from "./hentalle";
 import { vinduetsGraenser, vinduetsStykker, hentedeUgerFra, ugenErHentet } from "./vindue";
-import { opsummerMaaling } from "./tidsmaaling";
+import { opsummerMaaling, formatAfstand } from "./tidsmaaling";
 import { findDubletter } from "./dubletter";
 import {
   Plus, Download, X, Clock, AlertTriangle,
@@ -1556,7 +1556,7 @@ const MODULE_HELP = {
         "På en fast aftale: klik på opgaven og find «Aftalt tidspunkt». Klokkeslættet står nu også øverst ved siden af ugedagen.",
         "Vælger du «Gælder alle mandage på aftalen», gemmes tiden på selve aftalen, og alle kommende mandage rettes med. Uden fluebenet ændres kun den ene opgave — og næste uge får aftalens hidtidige tid igen.",
         "Udførte opgaver og opgaver sendt til Dinero røres aldrig. Historikken skal matche det der faktisk blev leveret."] },
-    { h: "Weekend", p: ["Knappen Man–Fre / Man–Søn bestemmer om lørdag og søndag vises.", "Åbner du en uge hvor der allerede ligger opgaver i weekenden, slås kolonnerne til af sig selv.", "Slår du dem fra igen, står der ved siden af knappen hvor mange weekendopgaver der er skjult — så du ikke overser dem."] }, { h: "Sådan er «Ny opgave» og serviceordren bygget op", p: ["Begge skærme er delt i tre farvede afsnit, så det er tydeligt hvad der hører sammen. Farverne betyder det samme begge steder.", "Rosa er kunden: kontrakttype, prismodel, titel, fakturakunde, adresse, fakturabeskrivelse og adgangsforhold. Det er det der ender på fakturaen.", "Grønt er selve opgaven: krævede kompetencer, varighed, tjeklister og instruktionsvideo.", "Blåt er tid: i «Ny opgave» hedder det Planlægning og rummer fast interval eller fleksibel, ansvarlig medarbejder, start- og udløbsdato, interval og ugedage.", "Klikker du på en opgave i ugeplanen, åbner serviceordren med de samme tre farver. Der hedder det blå afsnit Udførelse og rummer status, medarbejdere på opgaven, tasks og tidsregistrering.", "I «Ny opgave» bliver Annuller og Gem og planlæg stående nederst, uanset hvor langt du har scrollet."] },
+    { h: "Weekend", p: ["Knappen Man–Fre / Man–Søn bestemmer om lørdag og søndag vises.", "Åbner du en uge hvor der allerede ligger opgaver i weekenden, slås kolonnerne til af sig selv.", "Slår du dem fra igen, står der ved siden af knappen hvor mange weekendopgaver der er skjult — så du ikke overser dem."] }, { h: "Sådan er «Ny opgave» og serviceordren bygget op", p: ["Begge skærme er delt i tre farvede afsnit, så det er tydeligt hvad der hører sammen. Farverne betyder det samme begge steder.", "Rosa er kunden: kontrakttype, prismodel, titel, fakturakunde, adresse, fakturabeskrivelse og adgangsforhold. Det er det der ender på fakturaen.", "Grønt er selve opgaven: krævede kompetencer, varighed, tjeklister og instruktionsvideo.", "Blåt er tid: i «Ny opgave» hedder det Planlægning og rummer fast interval eller fleksibel, ansvarlig medarbejder, start- og udløbsdato, interval og ugedage.", "Klikker du på en opgave i ugeplanen, åbner serviceordren med de samme tre farver. Der hedder det blå afsnit Udførelse og rummer status, medarbejdere på opgaven, tasks og tidsregistrering.", "Under Tidsregistrering står hver registrering for sig: hvem, hvornår, hvor lang tid og medarbejderens begrundelse. Øverst står afvigelsen fra den planlagte tid for hele holdet.", "Har medarbejderen start/stop, står den målte tid der også, og afstanden til adressen ved start og ved slut. Er noget værd at se på — fx «afsluttet 3,4 km fra adressen» — står det med orange.", "I «Ny opgave» bliver Annuller og Gem og planlæg stående nederst, uanset hvor langt du har scrollet."] },
     { h: "Beskeder fra medarbejderne", p: [
         "Øverst i ugeplanen kommer et banner, når en medarbejder har meldt noget ind. Der er to slags.",
         "«Ønske om ny tid» betyder at medarbejderen har aftalt et nyt tidspunkt med kunden. Tryk «Godkend og flyt», så rykkes opgaven — eller «Afvis» og skriv hvorfor, så får hun en mail.",
@@ -15706,7 +15706,62 @@ return (
       )}
 
       <label style={styles.label}>Tidsregistrering</label>
-      <div style={styles.cardMeta}>{fmtMin(totalLogged)} registreret i alt af {fmtMin(t.duration)} planlagt</div></div></div>
+      <div style={styles.cardMeta}>
+        {fmtMin(totalLogged)} registreret i alt af {fmtMin(t.duration)} planlagt
+        {/* Afvigelsen maales mod hele holdets planlagte tid, samme regnestykke som
+            Kundetimer. Er timerne fordelt, er det summen af andelene. */}
+        {(() => {
+          const antal = Math.max(1, (t.assignees || []).length);
+          const f = t.tidFordeling || t.tid_fordeling || {};
+          const planlagt = Object.keys(f).length > 0
+            ? (t.assignees || []).reduce((sum, id) => sum + (Number(f[id]) > 0 ? Math.round(Number(f[id])) : (t.duration || 0)), 0)
+            : (t.duration || 0) * antal;
+          const afv = totalLogged - planlagt;
+          if (!totalLogged || !planlagt || afv === 0) return null;
+          return <span style={{ marginLeft: 6, fontWeight: 700, color: afv > 0 ? "#B45309" : "#475569" }}>
+            ({afv > 0 ? "+" : "−"}{fmtMin(Math.abs(afv))}{antal > 1 ? ` af ${fmtMin(planlagt)} for ${antal}` : ""})
+          </span>;
+        })()}
+      </div>
+      {/* Hver registrering for sig: hvem, hvor meget, hvorfor — og ved start/stop
+          den maalte tid og afstanden til adressen ved start og slut. Det er dét,
+          man skal bruge, naar kunden ringer, uden at gaa over i Kundetimer. */}
+      {(t.timeLog || []).length > 0 && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 8 }}>
+          {(t.timeLog || []).map((l, i) => {
+            const m = l.startStop ? opsummerMaaling([l]) : null;
+            const navn = (employees || []).find((e) => e.id === l.empId)?.name || "Ukendt";
+            const dato = l.ts ? new Date(l.ts).toLocaleString("da-DK", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "";
+            return (
+              <div key={l.kid || i} style={{ border: "1px solid #E2E8F0", borderRadius: 8, padding: "7px 10px", background: "#fff", fontSize: 12.5, lineHeight: 1.45 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+                  <span style={{ fontWeight: 600, color: "#111111" }}>{navn}</span>
+                  <span style={{ color: "#64748B", whiteSpace: "nowrap" }}>{dato} · <strong style={{ color: "#111111" }}>{fmtMin(l.minutes)}</strong></span>
+                </div>
+                {m && m.maalt !== null && (
+                  <div style={{ color: "#475569" }}>
+                    ⏱ Målt {fmtMin(m.maalt)}
+                    {m.forskel !== 0 && <span style={{ fontWeight: 700, color: m.forskel > 2 ? "#B45309" : "#475569" }}> · registreret {m.forskel > 0 ? "+" : "−"}{fmtMin(Math.abs(m.forskel))} i forhold til målt</span>}
+                    {m.automatisk && " · startet ved ankomst"}
+                  </div>
+                )}
+                {l.startStop && !l.udenStart && (
+                  <div style={{ color: "#475569" }}>
+                    📍 Start {formatAfstand(l.afstandStart)} · slut {formatAfstand(l.afstandSlut)} fra adressen
+                  </div>
+                )}
+                {m && m.bemaerk.length > 0 && (
+                  <div style={{ color: "#B45309", fontWeight: 600 }}>{m.bemaerk.join(" · ")}</div>
+                )}
+                {l.note
+                  ? <div style={{ color: "#111111", marginTop: 2 }}>«{l.note}»</div>
+                  : null}
+              </div>
+            );
+          })}
+        </div>
+      )}
+      </div></div>
 
       <div style={styles.modalActions}>
         {onCopy && <button style={{ ...styles.secondaryBtn, color: "#9C1B5D", borderColor: "#FCE4EF" }} onClick={() => onCopy(t)}><Copy size={14} /> Kopiér</button>}
