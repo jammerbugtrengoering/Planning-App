@@ -6081,7 +6081,8 @@ function WeekView({ employees, instances, unplaced, adgangTekst, onUdskrivMedAdg
             emp={emp} dage={visibleDays} instances={instances}
             travelSettings={travelSettings} weekOffset={weekOffset} weekYear={weekYear}
             onOpenTask={onOpenTask} dragId={dragId} setDragId={setDragId} onPlace={onPlace}
-            alleMedarbejdere={employees} adgangTekst={visAdgang ? adgangTekst : null} />
+            alleMedarbejdere={employees} adgangTekst={visAdgang ? adgangTekst : null}
+            koerendeTider={koerendeTider} stopurNu={stopurNu} />
         </div>
             ))}
           </div>
@@ -10683,7 +10684,8 @@ function TimeOgKmSkema({ emp, dage, instances, ugeLabel }) {
 const TL_PX_PR_MIN = 1.6;
 
 function UgeTidslinje({ emp, dage, instances, travelSettings, weekOffset, weekYear,
-                        onOpenTask, dragId, setDragId, onPlace, alleMedarbejdere, adgangTekst }) {
+                        onOpenTask, dragId, setDragId, onPlace, alleMedarbejdere, adgangTekst,
+                        koerendeTider = {}, stopurNu = Date.now() }) {
   const perDag = dage.map((d) => {
     const dayTasks = instances.filter(
       (t) => t.day === d.key && (t.assignees || []).includes(emp.id)
@@ -10832,6 +10834,13 @@ function UgeTidslinje({ emp, dage, instances, travelSettings, weekOffset, weekYe
                   const forSent = sg.lateBy || 0;
                   const enLinje = { whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" };
                   const Ikon = m.icon;
+                  // Stopuret — samme regel som paa kortene i ugeplanens anden visning
+                  // (stopurStatus i src/tidsmaaling.js). Uden det her saa en opgave med
+                  // afvigelse ud praecis som alle andre udfoerte opgaver i tidslinjen.
+                  const ur = stopurStatus(t, koerendeTider[t.id] || [], stopurNu,
+                    (eid) => (alleMedarbejdere || []).find((e) => e.id === eid)?.name || "Ukendt");
+                  const urFarve = ur && { groen: ["#DCFCE7", "#166534", "#22C55E"], orange: ["#FEF3C7", "#92400E", "#F59E0B"],
+                                          roed: ["#FEE2E2", "#B91C1C", "#DC2626"] }[ur.farve];
                   return (
                     <button key={t.id} onClick={() => onOpenTask(t.id)}
                       draggable={!laast}
@@ -10842,6 +10851,7 @@ function UgeTidslinje({ emp, dage, instances, travelSettings, weekOffset, weekYe
                               udfoert ? `${udfoert.label}${udfoert.when ? " · " + udfoert.when : ""}` : null,
                               t.offSchedule ? "planlagt uden for aftalen" : null,
                               t.outsideArea ? "uden for medarbejderens område" : null,
+                              ur ? `⏱ ${ur.tekst}` : null,
                              ].filter(Boolean).join(" · ")}
                       style={{ position: "absolute", left: 2, right: 2, top, height: h,
                                textAlign: "left", overflow: "hidden", cursor: "pointer",
@@ -10850,6 +10860,7 @@ function UgeTidslinje({ emp, dage, instances, travelSettings, weekOffset, weekYe
                                color: udfoert ? "#166534" : m.color,
                                border: aftalt ? `1px solid ${udfoert ? "#86EFAC" : m.color}`
                                               : `1px dashed ${udfoert ? "#86EFAC" : m.color}`,
+                               ...(urFarve ? { borderLeft: `4px solid ${urFarve[2]}` } : {}),
                                fontSize: 10.5, lineHeight: 1.3 }}>
                       {/* Foerste linje er altid der. Resten kommer til efterhaanden som
                           blokken er hoej nok — en afklippet adresse er vaerre end ingen. */}
@@ -10864,6 +10875,13 @@ function UgeTidslinje({ emp, dage, instances, travelSettings, weekOffset, weekYe
                         {t.offSchedule && <span title="Uden for aftalen">⚠️</span>}
                         {t.outsideArea && <span title="Uden for området">📍</span>}
                         {t.onSchedule && !t.offSchedule && !udfoert && <span title="På aftalt dag">✓</span>}
+                        {ur && (
+                          <span title={ur.tekst}
+                            style={{ flexShrink: 0, fontSize: 9.5, fontWeight: 800, color: urFarve[1],
+                                     background: urFarve[0], borderRadius: 4, padding: "0 4px" }}>
+                            ⏱ {ur.kort}
+                          </span>
+                        )}
                       </div>
 
                       {forSent > 0 && (
