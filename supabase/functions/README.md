@@ -70,6 +70,7 @@ npx supabase@latest functions download travel-distance      --project-ref gteowf
 npx supabase@latest functions download send-email           --project-ref gteowfoahsfpunzgdxum
 npx supabase@latest functions download send-push            --project-ref gteowfoahsfpunzgdxum
 npx supabase@latest functions download plan-beskeder        --project-ref gteowfoahsfpunzgdxum
+npx supabase@latest functions download kontor-beskeder      --project-ref gteowfoahsfpunzgdxum
 npx supabase@latest functions download daglige-paamindelser --project-ref gteowfoahsfpunzgdxum
 npx supabase@latest functions download maaneds-paamindelse  --project-ref gteowfoahsfpunzgdxum
 npx supabase@latest functions download helsetjek            --project-ref gteowfoahsfpunzgdxum
@@ -121,6 +122,7 @@ kopiere tilbage — og så er det filen her, der skal opdateres, ikke omvendt.
 | `maaneds-paamindelse` | Sidste chance to dage før månedsskiftet | Natligt job |
 | `helsetjek` | Morgentjek: fejlede noget, og gemmer vi noget nyt? | Natligt job |
 | `slet-gamle-fotos` | Rydder billeder ældre end 12 måneder | Natligt job |
+| `kontor-beskeder` | Til planlæggerne: push hvert kvarter om det, der haster, og mail kl. 7 med alt, der venter (samme liste som klokken) | Job hvert kvarter og kl. 5+6 UTC |
 | `plan-beskeder` | Besked til medarbejdere om ændringer i planen, og påmindelse når en startet opgave (start/stop) er et kvarter over tiden | Job hvert kvarter |
 | `send-email` | Sender al mail gennem Brevo | De øvrige funktioner |
 | `send-push` | Push-beskeder til telefonerne | De øvrige funktioner |

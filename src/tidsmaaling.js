@@ -11,6 +11,8 @@
 //
 // Aendrer du noget her, saa ret tidsmaaling.test.mjs i samme ombaering.
 
+import { afvigelse, planlagtFor } from "./opgavetid.js";
+
 // Over denne afstand er man ikke «ved adressen». Samme graense som i Worklist.
 export const LANGT_VAEK_M = 150;
 
@@ -55,4 +57,52 @@ export function opsummerMaaling(timeLog) {
     bemaerk: [...new Set(bemaerk)],
     automatisk: poster.some((p) => p.automatisk),
   };
+}
+
+// ── Stopuret paa opgavekortet i ugeplanen (25.9.2026) ─────────────────────────
+// Kontoret skal kunne se det i ugeplanen og reagere med det samme — ikke foerst naar
+// nogen aabner Kundetimer sidst paa maaneden.
+//
+//   groen   tiden koerer lige nu
+//   orange  mere tid end planlagt, men der er skrevet hvorfor
+//   roed    noget at se paa: over tiden uden begrundelse, registreret mere end maalt,
+//           en markering ved maalingen, eller et ur der er gaaet over tiden
+//
+// koerende: tidsstart-raekker for opgaven ([{ employee_id, startet }]).
+// Returnerer null, naar der intet er at vise.
+export const OVER_TIDEN_MIN = 15;   // samme som paamindelsen til medarbejderen
+
+export function stopurStatus(opgave, koerende = [], nu = Date.now(), navnFor = (id) => id) {
+  if (!opgave) return null;
+  if (koerende.length > 0) {
+    const linjer = [];
+    let over = 0;
+    for (const r of koerende) {
+      const start = new Date(r.startet).getTime();
+      const slut = start + (planlagtFor(opgave, r.employee_id) + OVER_TIDEN_MIN) * 60000;
+      const kl = new Date(start).toLocaleTimeString("da-DK", { hour: "2-digit", minute: "2-digit" });
+      if (nu > slut) {
+        over = Math.max(over, Math.round((nu - slut) / 60000) + OVER_TIDEN_MIN);
+        linjer.push(`${navnFor(r.employee_id)} startede kl. ${kl} og er over tiden`);
+      } else {
+        linjer.push(`${navnFor(r.employee_id)} startede kl. ${kl}`);
+      }
+    }
+    return over > 0
+      ? { farve: "roed", kort: `${over}m over`, tekst: "Tiden kører stadig: " + linjer.join(" · ") }
+      : { farve: "groen", kort: "i gang", tekst: "Tiden kører: " + linjer.join(" · ") };
+  }
+
+  const log = opgave.timeLog || opgave.time_log || [];
+  if (log.length === 0) return null;
+  const afv = afvigelse(opgave);
+  const m = opsummerMaaling(log);
+  const begrundet = log.some((l) => l.note && String(l.note).trim() && l.empId !== "planner");
+  const grunde = [];
+  if (m && m.forskel !== null && m.forskel > 2) grunde.push(`registreret ${m.forskel}m mere end målt`);
+  if (m) grunde.push(...m.bemaerk);
+  if (afv > 0 && !begrundet) grunde.push(`${afv}m over planlagt uden begrundelse`);
+  if (grunde.length > 0) return { farve: "roed", kort: afv > 0 ? `+${afv}m` : "se her", tekst: grunde.join(" · ") };
+  if (afv > 0) return { farve: "orange", kort: `+${afv}m`, tekst: `${afv}m over planlagt — begrundet` };
+  return null;
 }

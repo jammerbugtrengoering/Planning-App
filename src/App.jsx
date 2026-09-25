@@ -12,7 +12,7 @@ import { filtrerUgevalg } from "./ugevalg";
 import { portefoeljeTal, aarMedBesoeg } from "./portefoelje";
 import { hentAlleRaekker } from "./hentalle";
 import { vinduetsGraenser, vinduetsStykker, hentedeUgerFra, ugenErHentet } from "./vindue";
-import { opsummerMaaling, formatAfstand } from "./tidsmaaling";
+import { opsummerMaaling, formatAfstand, stopurStatus } from "./tidsmaaling";
 import { findDubletter } from "./dubletter";
 import {
   Plus, Download, X, Clock, AlertTriangle,
@@ -1556,6 +1556,19 @@ const MODULE_HELP = {
         "På en fast aftale: klik på opgaven og find «Aftalt tidspunkt». Klokkeslættet står nu også øverst ved siden af ugedagen.",
         "Vælger du «Gælder alle mandage på aftalen», gemmes tiden på selve aftalen, og alle kommende mandage rettes med. Uden fluebenet ændres kun den ene opgave — og næste uge får aftalens hidtidige tid igen.",
         "Udførte opgaver og opgaver sendt til Dinero røres aldrig. Historikken skal matche det der faktisk blev leveret."] },
+    { h: "Stopuret på opgaverne ⏱", p: [
+        "Et lille ur på opgavekortet viser, at der er noget ved tiden.",
+        "Grønt «i gang»: medarbejderen har trykket Start og er i gang lige nu. Kun medarbejdere med start/stop.",
+        "Orange «+20m»: der er brugt mere tid end planlagt, og medarbejderen har skrevet hvorfor.",
+        "Rødt: noget skal ses på. Over tiden uden begrundelse, registreret mere end målt, målt langt fra adressen, eller en tid der stadig kører et kvarter efter, opgaven skulle være færdig.",
+        "Hold musen over uret for at se hvorfor. Klik på opgaven for at se hver registrering.",
+        "Uret opdaterer sig selv. Du skal ikke genindlæse siden."] },
+    { h: "Klokken — til kontoret 🔔", p: [
+        "Klokken øverst til højre samler alt, der venter på en planlægger: ønsker om ny tid, «kom ikke ind», bestillinger fra kunder, medarbejdernes produktbestillinger, udleveringer der ikke er bekræftet efter 14 dage, tider der er gået over tiden, afvigelser de sidste 14 dage, og fejl fra Drift.",
+        "Tallet er rødt, når noget haster. Tryk «Åbn» for at komme derhen, hvor sagen klares.",
+        "Linjerne forsvinder af sig selv, når sagen er klaret det rigtige sted — et ønske besvaret, en bestilling godkendt, en tid afsluttet.",
+        "Afvigelser har ikke noget andet sted at blive lukket. Tryk «Set ✓», når du har kigget på den. Så forsvinder den for alle planlæggere.",
+        "Alle planlæggere ser den samme liste og får de samme beskeder: push på telefonen, når noget haster (kræver Worklist på telefonen med beskeder slået til), og en mail kl. 7 med alt, der venter."] },
     { h: "Weekend", p: ["Knappen Man–Fre / Man–Søn bestemmer om lørdag og søndag vises.", "Åbner du en uge hvor der allerede ligger opgaver i weekenden, slås kolonnerne til af sig selv.", "Slår du dem fra igen, står der ved siden af knappen hvor mange weekendopgaver der er skjult — så du ikke overser dem."] }, { h: "Sådan er «Ny opgave» og serviceordren bygget op", p: ["Begge skærme er delt i tre farvede afsnit, så det er tydeligt hvad der hører sammen. Farverne betyder det samme begge steder.", "Rosa er kunden: kontrakttype, prismodel, titel, fakturakunde, adresse, fakturabeskrivelse og adgangsforhold. Det er det der ender på fakturaen.", "Grønt er selve opgaven: krævede kompetencer, varighed, tjeklister og instruktionsvideo.", "Blåt er tid: i «Ny opgave» hedder det Planlægning og rummer fast interval eller fleksibel, ansvarlig medarbejder, start- og udløbsdato, interval og ugedage.", "Klikker du på en opgave i ugeplanen, åbner serviceordren med de samme tre farver. Der hedder det blå afsnit Udførelse og rummer status, medarbejdere på opgaven, tasks og tidsregistrering.", "Under Tidsregistrering står hver registrering for sig: hvem, hvornår, hvor lang tid og medarbejderens begrundelse. Øverst står afvigelsen fra den planlagte tid for hele holdet.", "Har medarbejderen start/stop, står den målte tid der også, og afstanden til adressen ved start og ved slut. Er noget værd at se på — fx «afsluttet 3,4 km fra adressen» — står det med orange.", "I «Ny opgave» bliver Annuller og Gem og planlæg stående nederst, uanset hvor langt du har scrollet."] },
     { h: "Beskeder fra medarbejderne", p: [
         "Øverst i ugeplanen kommer et banner, når en medarbejder har meldt noget ind. Der er to slags.",
@@ -3075,6 +3088,62 @@ function PlanningApp({ session, onSignOut }) {
 
     return () => { supabase.removeChannel(channel); };
   }, []);
+
+  // ── Koerende tider (start/stop) til stopuret i ugeplanen ──
+  // { [opgaveId]: [{ employee_id, startet }] }. Hentes én gang og holdes ajour med
+  // realtime; kun administratorer kan laese andres raekker, saa for alle andre er den tom.
+  const [koerendeTider, setKoerendeTider] = useState({});
+  // Uret skal kunne skifte fra groent til roedt, uden at der sker noget i databasen.
+  const [stopurNu, setStopurNu] = useState(() => Date.now());
+  useEffect(() => {
+    const ur = setInterval(() => setStopurNu(Date.now()), 60000);
+    return () => clearInterval(ur);
+  }, []);
+  useEffect(() => {
+    let afbrudt = false;
+    const saml = (raekker) => {
+      const kort = {};
+      for (const r of raekker || []) (kort[r.instance_id] ||= []).push({ employee_id: r.employee_id, startet: r.startet });
+      return kort;
+    };
+    supabase.from("tidsstart").select("instance_id, employee_id, startet").then(({ data }) => {
+      if (!afbrudt && data) setKoerendeTider(saml(data));
+    });
+    const kanal = supabase
+      .channel("tidsstart-sync")
+      .on("postgres_changes", { event: "*", schema: "public", table: "tidsstart" }, (payload) => {
+        setKoerendeTider((prev) => {
+          const next = { ...prev };
+          const gammel = payload.old;
+          if (gammel?.instance_id) {
+            next[gammel.instance_id] = (next[gammel.instance_id] || []).filter((r) => r.employee_id !== gammel.employee_id);
+            if (next[gammel.instance_id].length === 0) delete next[gammel.instance_id];
+          }
+          if (payload.eventType !== "DELETE" && payload.new?.instance_id) {
+            const ny = payload.new;
+            next[ny.instance_id] = [...(next[ny.instance_id] || []).filter((r) => r.employee_id !== ny.employee_id),
+              { employee_id: ny.employee_id, startet: ny.startet }];
+          }
+          return next;
+        });
+      })
+      .subscribe();
+    return () => { afbrudt = true; supabase.removeChannel(kanal); };
+  }, []);
+
+  // Fra klokken til det sted, sagen klares. Opgaver aabnes direkte, hvis de er hentet;
+  // ellers vises den side, hvor sagen staar.
+  function gaaTilIndbakkeLinje(l) {
+    if (l.instance_id && (l.art === "afvigelse" || l.art === "over_tiden")) {
+      if (instances.some((t) => t.id === l.instance_id)) { setOpenTaskId(l.instance_id); return; }
+      setView("kundetimer");
+      notify("Opgaven ligger uden for de hentede uger — den står på Kundetimer");
+      return;
+    }
+    if (l.art === "produktbestilling" || l.art === "udlevering") { setView("inventory"); return; }
+    if (l.art === "drift") { setView("drift"); return; }
+    setView("uge");
+  }
 
   // ── Supabase: sync-helpers ──
   // Saettes laengere nede i render, hvor isAdminUser er regnet ud.
@@ -5235,6 +5304,9 @@ function PlanningApp({ session, onSignOut }) {
             );
           })}
           {/* Sprogvalg og Google Translate fjernet - planlaegningsappen bruges kun paa dansk. */}
+          <KontorKlokke isAdminUser={isAdminUser}
+            signal={instances.length + ":" + Object.keys(koerendeTider).length + ":" + (bestillinger?.length || 0)}
+            onGaaTil={gaaTilIndbakkeLinje} />
           <button onClick={onSignOut} style={{ ...styles.navBtn, marginLeft: 4, color: "#E8AFC9", borderLeft: "1px solid #333", paddingLeft:12 }}>{L.signOut}</button>
         </nav>
       </header>
@@ -5404,6 +5476,7 @@ function PlanningApp({ session, onSignOut }) {
       {view === "uge" && (
         <WeekView
           employees={aktiveEmployees} instances={weekInstancesList} unplaced={unplaced} opgaveNoter={opgaveNoter}
+          koerendeTider={koerendeTider} stopurNu={stopurNu}
           onHentTjeklisterTilPrint={hentTjeklisterFor}
           // Adgangsoplysningerne ligger allerede i hukommelsen: planlaeggeren er
           // administrator og henter dem ved opstart. De sendes med, men bruges KUN
@@ -5694,7 +5767,7 @@ function todayKeyGuess() {
 // ---------- Week view ----------
 // Send email notification to employee about day changes
 
-function WeekView({ employees, instances, unplaced, adgangTekst, onUdskrivMedAdgang, onHentTjeklisterTilPrint, onAdd, onAuto, onScheduleWeek, onAutoAllWeeks, onPlace, onUnplace, onRemoveAssignee, onDelete, onOpenTask, onToggleInclude, onEditEmp, dragId, setDragId, weekLabel, weekNo, weekOffset, weekYear, onPrevWeek, onNextWeek, onTodayWeek, travelSettings, onOpenTravelSettings, currentIsoWeek, areas, employeeAreas, onOpenAddBlock, onOpenAddActivity, opgaveNoter }) {
+function WeekView({ employees, instances, unplaced, adgangTekst, onUdskrivMedAdgang, onHentTjeklisterTilPrint, onAdd, onAuto, onScheduleWeek, onAutoAllWeeks, onPlace, onUnplace, onRemoveAssignee, onDelete, onOpenTask, onToggleInclude, onEditEmp, dragId, setDragId, weekLabel, weekNo, weekOffset, weekYear, onPrevWeek, onNextWeek, onTodayWeek, travelSettings, onOpenTravelSettings, currentIsoWeek, areas, employeeAreas, onOpenAddBlock, onOpenAddActivity, opgaveNoter, koerendeTider = {}, stopurNu = Date.now() }) {
   const [addMenuTaskId, setAddMenuTaskId] = useState(null);
   const [showWeekend, setShowWeekend] = useState(false);
   // Belaegningen er foldet vaek som udgangspunkt. Se kommentaren ved selve blokken.
@@ -6156,6 +6229,20 @@ function WeekView({ employees, instances, unplaced, adgangTekst, onUdskrivMedAdg
                                   {opgaveNoter[t.id].some((n) => (n.photos || []).length > 0) ? "📷" : "💬"}
                                 </span>
                               )}
+                              {/* Stopuret (25.9.2026). Se stopurStatus() i src/tidsmaaling.js. */}
+                              {(() => {
+                                const ur = stopurStatus(t, koerendeTider[t.id] || [], stopurNu,
+                                  (id) => employees.find((e) => e.id === id)?.name || "Ukendt");
+                                if (!ur) return null;
+                                const farver = { groen: ["#DCFCE7", "#166534"], orange: ["#FEF3C7", "#92400E"], roed: ["#FEE2E2", "#B91C1C"] }[ur.farve];
+                                return (
+                                  <span title={ur.tekst}
+                                    style={{ fontSize: 10.5, fontWeight: 800, color: farver[1], background: farver[0],
+                                             borderRadius: 4, padding: "1px 4px", marginLeft: 2, whiteSpace: "nowrap", flexShrink: 0 }}>
+                                    ⏱ {ur.kort}
+                                  </span>
+                                );
+                              })()}
                               {done
                                 ? <span style={styles.doneCheck} title={completion?.label}>✓</span>
                                 : <span style={{ ...styles.statusDot, background: statusColor(t.status) }} />}
@@ -11621,6 +11708,113 @@ function ContractsView({ templates: alleTemplates, instances, pricing, employees
 // Knapperne spoerger foerst, og spoergsmaalet naevner varslingen. Start/stop med
 // afstand til adressen er et kontroltiltag, og at slaa det til for alle er netop det
 // oejeblik, varslingen skal ligge foer.
+// ── Kontorets indbakke (klokken) ─────────────────────────────────────────────
+// 25.9.2026, bestilt af Jonn: alt der venter paa en planlaegger, samlet ét sted.
+// Listen kommer fra databasen (kontor_indbakke), saa klokken, morgenmailen og
+// pushbeskederne altid siger det samme. Der kopieres ingenting: en linje forsvinder,
+// naar sagen er klaret det rigtige sted. Kun afvigelser kvitteres for her.
+const INDBAKKE_FARVE = { roed: "#DC2626", orange: "#D97706", blaa: "#4F46E5" };
+function KontorKlokke({ isAdminUser, signal, onGaaTil }) {
+  const [linjer, setLinjer] = useState(null);
+  const [aaben, setAaben] = useState(false);
+  const [fejl, setFejl] = useState("");
+  const boks = useRef(null);
+
+  const hent = useCallback(async () => {
+    if (!isAdminUser) return;
+    const { data, error } = await supabase.rpc("kontor_indbakke");
+    if (error) { setFejl(error.message); return; }
+    setFejl("");
+    setLinjer(data || []);
+  }, [isAdminUser]);
+
+  // Hvert minut, naar vinduet kommer i fokus, og naar der sker noget i planen.
+  useEffect(() => {
+    hent();
+    const ur = setInterval(hent, 60000);
+    const fokus = () => hent();
+    window.addEventListener("focus", fokus);
+    return () => { clearInterval(ur); window.removeEventListener("focus", fokus); };
+  }, [hent]);
+  useEffect(() => {
+    const t = setTimeout(hent, 1500);   // samler en bunke realtime-haendelser til ét opslag
+    return () => clearTimeout(t);
+  }, [signal, hent]);
+
+  useEffect(() => {
+    if (!aaben) return;
+    const luk = (e) => { if (boks.current && !boks.current.contains(e.target)) setAaben(false); };
+    document.addEventListener("mousedown", luk);
+    return () => document.removeEventListener("mousedown", luk);
+  }, [aaben]);
+
+  if (!isAdminUser) return null;
+  const alle = linjer || [];
+  const haster = alle.filter((l) => l.haster).length;
+  const sorteret = [...alle].sort((a, b) => (b.haster - a.haster)
+    || ({ roed: 0, orange: 1, blaa: 2 }[a.farve] - { roed: 0, orange: 1, blaa: 2 }[b.farve])
+    || String(b.tidspunkt).localeCompare(String(a.tidspunkt)));
+
+  async function kvitter(l) {
+    setLinjer((prev) => (prev || []).filter((x) => !(x.art === l.art && x.ref === l.ref)));
+    const { error } = await supabase.rpc("kontor_kvitter", { p_art: l.art, p_ref: l.ref });
+    if (error) { setFejl(error.message); hent(); }
+  }
+
+  return (
+    <div ref={boks} style={{ position: "relative" }}>
+      <button onClick={() => { setAaben((v) => !v); if (!aaben) hent(); }}
+        title={alle.length ? `${alle.length} ting venter på kontoret` : "Intet venter"}
+        style={{ ...styles.navBtn, position: "relative", fontSize: 16, padding: "6px 10px" }}>
+        🔔
+        {alle.length > 0 && (
+          <span style={{ position: "absolute", top: 0, right: 0, minWidth: 17, height: 17, borderRadius: 9,
+                         background: haster ? "#DC2626" : "#D6247A", color: "#fff", fontSize: 10.5, fontWeight: 800,
+                         display: "flex", alignItems: "center", justifyContent: "center", padding: "0 4px" }}>
+            {alle.length}
+          </span>
+        )}
+      </button>
+      {aaben && (
+        <div style={{ position: "absolute", right: 0, top: "calc(100% + 6px)", width: 420, maxWidth: "92vw",
+                      maxHeight: "72vh", overflowY: "auto", background: "#fff", borderRadius: 12, zIndex: 60,
+                      boxShadow: "0 12px 32px rgba(0,0,0,0.22)", border: "1px solid #E2E8F0", color: "#111111" }}>
+          <div style={{ padding: "12px 14px", borderBottom: "1px solid #F1F5F9", fontWeight: 800, fontSize: 14 }}>
+            Til kontoret {alle.length > 0 && <span style={{ color: "#64748B", fontWeight: 600 }}>· {alle.length}</span>}
+          </div>
+          {fejl && <div style={{ padding: 12, color: "#B91C1C", fontSize: 13 }}>Kunne ikke hente: {fejl}</div>}
+          {linjer === null && !fejl && <div style={{ padding: 14, color: "#64748B", fontSize: 13 }}>Henter …</div>}
+          {linjer !== null && alle.length === 0 && (
+            <div style={{ padding: 18, color: "#64748B", fontSize: 13, textAlign: "center" }}>Intet venter. ✓</div>
+          )}
+          {sorteret.map((l) => (
+            <div key={l.art + l.ref} style={{ display: "flex", gap: 10, padding: "10px 14px", borderBottom: "1px solid #F1F5F9", alignItems: "flex-start" }}>
+              <span style={{ width: 8, height: 8, borderRadius: 4, marginTop: 6, flexShrink: 0, background: INDBAKKE_FARVE[l.farve] || "#94A3B8" }} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 700 }}>
+                  {l.titel}{l.haster && <span style={{ marginLeft: 6, fontSize: 10.5, color: "#fff", background: "#DC2626", borderRadius: 4, padding: "1px 5px" }}>haster</span>}
+                </div>
+                <div style={{ fontSize: 12.5, color: "#475569", lineHeight: 1.4, marginTop: 2, wordBreak: "break-word" }}>{l.tekst}</div>
+                <div style={{ fontSize: 11, color: "#94A3B8", marginTop: 3 }}>
+                  {l.tidspunkt ? new Date(l.tidspunkt).toLocaleString("da-DK", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : ""}
+                </div>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 4, flexShrink: 0 }}>
+                <button style={{ ...styles.secondaryBtn, padding: "4px 10px", fontSize: 12 }}
+                  onClick={() => { setAaben(false); onGaaTil(l); }}>Åbn</button>
+                {l.kvitterbar && (
+                  <button style={{ ...styles.secondaryBtn, padding: "4px 10px", fontSize: 12, color: "#166534", borderColor: "#BBF7D0" }}
+                    title="Markér som set. Den forsvinder for alle planlæggere." onClick={() => kvitter(l)}>Set ✓</button>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function StartStopPanel({ supabase, employees, onStartStopAlle }) {
   const [graense, setGraense] = useState(null);
   const [kladde, setKladde] = useState("");

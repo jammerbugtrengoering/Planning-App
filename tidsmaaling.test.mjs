@@ -2,7 +2,7 @@
 //
 // Det, der ikke må gå galt: en ren registrering må ikke få en markering, og en
 // registrering, der er rettet op i forhold til det målte, må ikke gå under radaren.
-import { opsummerMaaling, formatAfstand, LANGT_VAEK_M } from "./src/tidsmaaling.js";
+import { opsummerMaaling, formatAfstand, LANGT_VAEK_M, stopurStatus } from "./src/tidsmaaling.js";
 
 let fejl = 0, ok = 0;
 function er(navn, faktisk, forventet) {
@@ -74,6 +74,28 @@ er("meter", formatAfstand(42), "42 m");
 er("kilometer med komma", formatAfstand(3400), "3,4 km");
 er("hele kilometer", formatAfstand(12000), "12 km");
 er("ukendt", formatAfstand(null), "ukendt");
+
+// ---- Stopuret i ugeplanen ----
+const nu = new Date(2026, 8, 25, 12, 0).getTime();
+const opg = { duration: 60, assignees: ["e1"], timeLog: [] };
+er("intet registreret, intet koerende: intet ur", stopurStatus(opg, [], nu), null);
+er("koerer inden for tiden: groen",
+  stopurStatus(opg, [{ employee_id: "e1", startet: new Date(nu - 30 * 60000).toISOString() }], nu).farve, "groen");
+er("koerer 90 min paa 60: roed",
+  stopurStatus(opg, [{ employee_id: "e1", startet: new Date(nu - 90 * 60000).toISOString() }], nu).farve, "roed");
+er("praecis som planlagt: intet ur",
+  stopurStatus({ ...opg, timeLog: [{ minutes: 60, empId: "e1" }] }, [], nu), null);
+er("over uden begrundelse: roed",
+  stopurStatus({ ...opg, timeLog: [{ minutes: 80, empId: "e1" }] }, [], nu).farve, "roed");
+er("over med begrundelse: orange",
+  stopurStatus({ ...opg, timeLog: [{ minutes: 80, empId: "e1", note: "ekstra vinduer" }] }, [], nu).farve, "orange");
+er("maalt 30, registreret 60 — som planlagt, men roed",
+  stopurStatus({ ...opg, timeLog: [{ minutes: 60, empId: "e1", startStop: true, maalt: 30, afstandStart: 5, afstandSlut: 5, note: "x" }] }, [], nu).farve, "roed");
+er("afsluttet langt vaek: roed",
+  stopurStatus({ ...opg, timeLog: [{ minutes: 60, empId: "e1", startStop: true, maalt: 60, afstandStart: 5, afstandSlut: 4000 }] }, [], nu).farve, "roed");
+er("oplaering taeller ikke som overforbrug",
+  stopurStatus({ ...opg, assignees: ["e1", "e2"], oplaeringMedarbejdere: ["e2"],
+    timeLog: [{ minutes: 60, empId: "e1" }, { minutes: 60, empId: "e2" }] }, [], nu), null);
 
 console.log(fejl ? `\nTidsmåling: ${fejl} fejlede, ${ok} i orden.` : `Tidsmåling: ${ok} kontroller i orden.`);
 process.exit(fejl ? 1 : 0);
