@@ -18,6 +18,21 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+
+// «JWT issued at future» (26.9.2026). Supabase laver en kortlivet noegle til hvert
+// kald, og en gang imellem gaar databasens ur et splitsekund bagefter den, der lavede
+// noeglen. Saa afvises kaldet, selvom intet er galt. Det ramte ca. hvert femtende
+// kvarter og gav en fejlmail om morgenen. Kaldet proeves derfor igen op til tre gange
+// med en kort pause — KUN ved netop den fejl. Alt andet kommer frem som foer.
+async function fetchMedGentagelse(input: Request | URL | string, init?: RequestInit): Promise<Response> {
+  for (let forsoeg = 0; ; forsoeg++) {
+    const res = await fetch(input, init);
+    if (res.status !== 401 || forsoeg >= 3) return res;
+    const tekst = await res.clone().text().catch(() => "");
+    if (!/issued at future/i.test(tekst)) return res;
+    await new Promise((r) => setTimeout(r, 800 * (forsoeg + 1)));
+  }
+}
 const JOB = "kontor-beskeder";
 const PLANLAEGNING_URL = "https://jammerbugtrengoering-service.netlify.app";
 
@@ -45,7 +60,7 @@ function danskTime(): number {
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
-  const admin = createClient(SUPABASE_URL, SERVICE_KEY);
+  const admin = createClient(SUPABASE_URL, SERVICE_KEY, { global: { fetch: fetchMedGentagelse } });
   const log = (ok: boolean, besked: string) => admin.rpc("log_job", { p_job: JOB, p_ok: ok, p_besked: besked });
 
   let job = "push";
