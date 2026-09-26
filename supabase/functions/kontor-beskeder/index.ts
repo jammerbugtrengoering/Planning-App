@@ -34,7 +34,8 @@ async function fetchMedGentagelse(input: Request | URL | string, init?: RequestI
   }
 }
 const JOB = "kontor-beskeder";
-const PLANLAEGNING_URL = "https://jammerbugtrengoering-service.netlify.app";
+// jammerbugtrengoering-service er WORKLIST. Planlaegningsappen ligger her.
+const PLANLAEGNING_URL = "https://jammerbugtrengoering-planning.netlify.app";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
