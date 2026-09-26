@@ -2209,8 +2209,8 @@ function PlanningApp({ session, onSignOut }) {
   }), []);
 
   const L = {
-    da: { schedule:"Ugeplan", employees:"Medarbejdere", checklists:"Tjeklister", time:"Fakturering", inventory:"Lager", contracts:"Aftaler", kunder:"Kunder", tilbud:"Tilbud", kundetimer:"Kundetimer", reports:"Rapportering", medExport:"Løn data", signOut:"Log ud", sub:"Ugeplanlægning · kapacitet · kompetenceniveauer" },
-    en: { schedule:"Schedule", employees:"Employees", checklists:"Checklists", time:"Time & Export", inventory:"Inventory", contracts:"Contracts", kunder:"Customers", tilbud:"Quotes", kundetimer:"Customer hours", reports:"Reporting", medExport:"Payroll data", signOut:"Sign out", sub:"Weekly planning · capacity · skill levels" },
+    da: { schedule:"Ugeplan", employees:"Medarbejdere", checklists:"Tjeklister", time:"Fakturering", inventory:"Lager", contracts:"Aftaler", kunder:"Kunder", tilbud:"Tilbud", kundetimer:"Kundetimer", reports:"Rapportering", medExport:"Løn data", signOut:"Log ud", sub:"Planlægning og fakturering" },
+    en: { schedule:"Schedule", employees:"Employees", checklists:"Checklists", time:"Time & Export", inventory:"Inventory", contracts:"Contracts", kunder:"Customers", tilbud:"Quotes", kundetimer:"Customer hours", reports:"Reporting", medExport:"Payroll data", signOut:"Sign out", sub:"Planning and invoicing" },
   }[lang];
   // ── Dynamiske master-data fra Supabase ──
   const [skills, setSkills] = useState(SKILLS_FALLBACK);
@@ -5289,9 +5289,9 @@ function PlanningApp({ session, onSignOut }) {
       )}
       <header style={styles.header}>
         <div style={styles.brand}>
-          <img src="/app-icon.png" alt="Worklist" style={{ width: 36, height: 36, minWidth: 36, borderRadius: 10, objectFit: "contain", display: "block" }} />
+          <img src="/app-icon.png" alt="Jammerbugt Rengøring" style={{ width: 36, height: 36, minWidth: 36, borderRadius: 10, objectFit: "cover", background: "#000", display: "block" }} />
           <div>
-            <div style={styles.brandTitle}>Rengøringsplan</div>
+            <div style={styles.brandTitle}>Jammerbugt Rengøring</div>
             <div style={styles.brandSub}>{L.sub}</div>
           </div>
         </div>
