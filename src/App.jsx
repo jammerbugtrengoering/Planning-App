@@ -1735,7 +1735,9 @@ const MODULE_HELP = {
         "Kundeportalens Basis og Udvidet står her. Deres pris bruges på kundekortet og til de månedlige abonnementslinjer under Fakturering.",
         "Produkter mærket «Bruges af systemet» kan ikke slettes, fordi koden slår dem op. Du kan ændre navn og pris og slå dem fra.",
         "Nye produkter opretter du nederst: navn, slags, enhed og pris ekskl. moms.",
-        "Fluebenet «I portalen» bestemmer, om en ydelse står på listen under Bestil i kundeportalen. Den skal også være aktiv. Kunden ser ikke prisen."] },
+        "Fluebenet «I portalen» bestemmer, om en ydelse står på listen under Bestil i kundeportalen. Den skal også være aktiv.",
+        "Ydelser har ingen pris. De bruges kun til bestilling. Prisen sættes på den opgave, du opretter, når du godkender bestillingen — timepris eller fastpris som alle andre opgaver.",
+        "Pris har kun abonnementer og tilvalg, fx kundeportalens Basis og Udvidet."] },
     { h: "Priser", p: [
         "En ny pris gælder fra de linjer, der dannes efter ændringen. Linjer, der allerede er sendt til Dinero, ændres aldrig.",
         "Står prisen til 0 kr., dannes linjen stadig, men den sendes ikke til Dinero."] },
@@ -11885,11 +11887,13 @@ function ProdukterView({ isAdminUser, notify }) {
 
   async function opret() {
     setFejl("");
-    const pris = Number(String(ny.pris).replace(",", "."));
+    const pris = ny.slags === "ydelse" ? 0 : Number(String(ny.pris || 0).replace(",", "."));
     if (!ny.navn.trim()) { setFejl("Skriv et navn på produktet."); return; }
     if (!Number.isFinite(pris) || pris < 0) { setFejl("Prisen skal være et tal, 0 eller mere."); return; }
     const { error } = await supabase.from("produkter").insert({
-      navn: ny.navn.trim(), slags: ny.slags, enhed: ny.enhed, pris,
+      navn: ny.navn.trim(), slags: ny.slags, enhed: ny.slags === "ydelse" ? "gang" : ny.enhed, pris,
+      // En ny ydelse skal kunne bestilles; det er det eneste, den bruges til.
+      i_portalen: ny.slags === "ydelse",
       raekkefoelge: 100 + (produkter?.length || 0),
     });
     if (error) { setFejl(error.message); return; }
@@ -11944,6 +11948,7 @@ function ProdukterView({ isAdminUser, notify }) {
               {Object.entries(PRODUKT_SLAGS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
             </select>
           </div>
+          {ny.slags !== "ydelse" && (<>
           <div style={{ width: 130 }}>
             <label style={styles.label}>Enhed</label>
             <select style={styles.input} value={ny.enhed} onChange={(e) => setNy({ ...ny, enhed: e.target.value })}>
@@ -11954,6 +11959,7 @@ function ProdukterView({ isAdminUser, notify }) {
             <label style={styles.label}>Pris</label>
             <input style={styles.input} inputMode="decimal" value={ny.pris} onChange={(e) => setNy({ ...ny, pris: e.target.value })} placeholder="0" />
           </div>
+          </>)}
           <button style={styles.primaryBtn} onClick={opret}><Plus size={14} /> Opret</button>
         </div>
       </div>
@@ -11974,9 +11980,14 @@ function ProduktRaekke({ p, onGem }) {
         {p.noegle && <div style={{ fontSize: 11, color: "#94A3B8", marginTop: 1 }}>Bruges af systemet ({p.noegle})</div>}
       </td>
       <td style={{ padding: "6px 8px" }}>{PRODUKT_SLAGS[p.slags] || p.slags}</td>
-      <td style={{ padding: "6px 8px" }}>{PRODUKT_ENHED[p.enhed] || p.enhed}</td>
+      {/* Ydelser har ingen pris (Jonn 28.9.2026): de bruges kun til bestilling i
+          portalen. Prisen kommer fra den opgave, planlaeggeren opretter bagefter —
+          timepris eller fastpris, som alle andre opgaver. */}
+      <td style={{ padding: "6px 8px" }}>{p.slags === "ydelse" ? <span style={{ color: "#CBD5E1" }}>—</span> : (PRODUKT_ENHED[p.enhed] || p.enhed)}</td>
       <td style={{ padding: "6px 8px", textAlign: "right" }}>
-        <input style={{ ...styles.inputSm, width: 90, textAlign: "right" }} inputMode="decimal" value={pris} onChange={(e) => setPris(e.target.value)} />
+        {p.slags === "ydelse"
+          ? <span style={{ fontSize: 12, color: "#94A3B8" }}>Prises på opgaven</span>
+          : <input style={{ ...styles.inputSm, width: 90, textAlign: "right" }} inputMode="decimal" value={pris} onChange={(e) => setPris(e.target.value)} />}
         {aendret && (
           <button style={{ ...styles.secondaryBtn, marginLeft: 6, padding: "4px 10px" }}
             disabled={!navn.trim() || !Number.isFinite(tal) || tal < 0}
