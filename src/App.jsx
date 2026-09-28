@@ -225,7 +225,7 @@ function instanceDateString(t) {
 // og ikke sidefaner — der er ikke andre sider at skifte til.
 const MENU_GRUPPER = [
   { key: "drift",     navn: "Ugeplan",    sider: [["uge", "Ugeplan"]] },
-  { key: "salg",      navn: "Salg",       sider: [["kunder", "Kunder"], ["tilbud", "Tilbud"], ["contracts", "Aftaler"]] },
+  { key: "salg",      navn: "Salg",       sider: [["kunder", "Kunder"], ["tilbud", "Tilbud"], ["contracts", "Aftaler"], ["produkter", "Produkter"]] },
   // Lager er sin egen gruppe og ikke en fane under Opsaetning. Det er drift, ikke
   // opsaetning: beholdningen roeres i loebet af ugen, mens medarbejdere og
   // tjeklister saettes op én gang og saa staar. At skulle gennem Opsaetning for at
@@ -1673,6 +1673,11 @@ const MODULE_HELP = {
   ], warn: "Retter du i en tjekliste, slår ændringen igennem med det samme på alle opgaver der endnu ikke er udført — også dem der allerede ligger i kalenderen. Punkter medarbejderen har sat flueben ved bevares. Udførte opgaver røres ikke, så det står fast hvad der faktisk blev gjort." },
 
   time: { title: "Fakturering", intro: "Her omsætter du udført arbejde til fakturakladder i Dinero.", blocks: [
+    { h: "Abonnementer", p: [
+        "Øverst står månedens abonnementer: én linje pr. kunde med en aktiv kundeportal.",
+        "Prisen kommer fra Produkter under Salg. Linjerne opdateres, hver gang du åbner måneden, indtil de er sendt til Dinero. Derefter røres de ikke.",
+        "«Send til Dinero» laver én fakturakladde pr. kunde med abonnementet. Linjer på 0 kr. vises, men sendes ikke.",
+        "Er portalen lukket i løbet af måneden, kommer den stadig med den måned, men ikke den næste."] },
     { h: "Kunder oprettes i Dinero", p: [
         "Kunder oprettes altid i Dinero, aldrig herfra. I feltet «Fakturakunde» søger du i Dinero mens du skriver, og vælger kunden i listen.",
         "Når du vælger kunden, gemmes hendes unikke kundenummer på opgaven og på aftalen. Det er det nummer eksporten bruger — så to kunder med samme navn ikke kan forveksles.",
@@ -1725,6 +1730,18 @@ const MODULE_HELP = {
         "Listen «Udleveret, ikke afleveret hos kunden endnu» viser hvad der er undervejs. Står noget der længe, er varen ikke kommet frem — og den bliver ikke faktureret."] },
   ], warn: "Retter du prisen på et kundeprodukt, slår den igennem i Fakturering med det samme. Allerede sendte fakturalinjer røres ikke." },
 
+  produkter: { title: "Produkter", intro: "Alle produkter og priser samlet ét sted.", blocks: [
+    { h: "Hvad der står her", p: [
+        "Kundeportalens Basis og Udvidet står her. Deres pris bruges på kundekortet og til de månedlige abonnementslinjer under Fakturering.",
+        "Produkter mærket «Bruges af systemet» kan ikke slettes, fordi koden slår dem op. Du kan ændre navn og pris og slå dem fra.",
+        "Nye produkter opretter du nederst: navn, slags, enhed og pris ekskl. moms."] },
+    { h: "Priser", p: [
+        "En ny pris gælder fra de linjer, der dannes efter ændringen. Linjer, der allerede er sendt til Dinero, ændres aldrig.",
+        "Står prisen til 0 kr., dannes linjen stadig, men den sendes ikke til Dinero."] },
+    { h: "Slå fra i stedet for at slette", p: [
+        "Et produkt slettes ikke. Slå det fra, så det ikke bruges fremover, men stadig kan slås op på gamle fakturaer."] },
+  ] },
+
   kunder: { title: "Kunder", intro: "Kunden set samlet — og stedet hvor kundeportalen tændes.", blocks: [
     { h: "Sådan læses listen", p: [
         "Her ser du hver kunde ét sted: hvad hun har givet i omsætning, hvor mange aftaler hun har, og hvornår hun sidst fik besøg.",
@@ -1752,7 +1769,8 @@ const MODULE_HELP = {
         "Basis giver kunden sine opgaver og sine fakturaer. Det er den de fleste skal have.",
         "Udvidet lægger en Bestil-fane oveni, hvor kunden kan bestille ekstra arbejde. Fanen vises kun ved Udvidet, og databasen afviser en bestilling fra en basis-kunde uanset hvad.",
         "Option skiftes på den tændte portal: fold kunden ud under Kunder, og vælg i feltet ved siden af adressen. Det slår igennem med det samme, næste gang kunden åbner portalen.",
-        "Slår du Udvidet fra, forsvinder fanen hos kunden, men allerede afgivne bestillinger bliver stående og skal stadig besvares."] },
+        "Slår du Udvidet fra, forsvinder fanen hos kunden, men allerede afgivne bestillinger bliver stående og skal stadig besvares.",
+        "Prisen for Basis og Udvidet står under Produkter og vises under valget på kundekortet. Hver aktiv portal giver en abonnementslinje pr. måned under Fakturering."] },
     { h: "Når kunden bestiller", p: [
         "Kunden vælger en ydelse fra listen eller skriver sit eget ønske, med ønsket dato og eventuelt en anden adresse.",
         "Bestillingen bliver IKKE til en opgave af sig selv. Den lægger sig i en blå boks øverst i Ugeplan, og du får en mail.",
@@ -5586,6 +5604,8 @@ function PlanningApp({ session, onSignOut }) {
         <KunderView supabase={supabase} currentEmployeeId={currentEmployeeForAuth?.id || ""} />
       )}
 
+      {view === "produkter" && <ProdukterView isAdminUser={isAdminUser} notify={notify} />}
+
       {view === "tilbud" && (
         <TilbudView supabase={supabase} checklistTemplates={checklistTemplates}
           pricing={pricing} currentUserName={currentEmployeeForAuth?.name || ""}
@@ -7205,6 +7225,8 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
           try { await onExportToDinero(placed, `${MONTHS[filterMonth]}-${filterYear}`); } finally { setExportingToDinero(false); }
         }}><Download size={16} /> {exportingToDinero ? "Eksporterer…" : "Eksporter til Dinero"}</button>
       </div>
+
+      {isAdminUser && <AbonnementLinjer maaned={filterMonth} aar={filterYear} maanedNavn={MONTHS[filterMonth]} />}
 
       {/* Timepris-panel */}
       {showPricing && (
@@ -11833,6 +11855,218 @@ function KontorKlokke({ isAdminUser, signal, onGaaTil }) {
   );
 }
 
+// ── Produkter (servicekatalog) ───────────────────────────────────────────────
+// 28.9.2026, bestilt af Jonn: ét sted med alle produkter og deres priser. Foerst
+// kundeportalens to valg. Et produkt med en «noegle» bruges af koden (portal_basis,
+// portal_udvidet) og kan ikke slettes eller omdoebes til noget andet — kun prissaettes
+// og slaas fra. Intet slettes: et produkt, der har vaeret faktureret, skal kunne slaas op.
+const PRODUKT_SLAGS = { abonnement: "Abonnement", tilvalg: "Tilvalg", ydelse: "Ydelse" };
+const PRODUKT_ENHED = { maaned: "pr. måned", gang: "pr. gang", time: "pr. time", stk: "pr. stk" };
+function ProdukterView({ isAdminUser, notify }) {
+  const [produkter, setProdukter] = useState(null);
+  const [fejl, setFejl] = useState("");
+  const [ny, setNy] = useState({ navn: "", slags: "ydelse", enhed: "gang", pris: "" });
+
+  const hent = useCallback(async () => {
+    const { data, error } = await supabase.from("produkter").select("*").order("raekkefoelge").order("navn");
+    if (error) { setFejl(error.message); return; }
+    setProdukter(data || []);
+  }, []);
+  useEffect(() => { hent(); }, [hent]);
+
+  async function gem(id, felter) {
+    setFejl("");
+    const { error } = await supabase.from("produkter").update({ ...felter, aendret: new Date().toISOString() }).eq("id", id);
+    if (error) { setFejl(error.message); return; }
+    setProdukter((prev) => prev.map((p) => (p.id === id ? { ...p, ...felter } : p)));
+    notify("Produktet er gemt");
+  }
+
+  async function opret() {
+    setFejl("");
+    const pris = Number(String(ny.pris).replace(",", "."));
+    if (!ny.navn.trim()) { setFejl("Skriv et navn på produktet."); return; }
+    if (!Number.isFinite(pris) || pris < 0) { setFejl("Prisen skal være et tal, 0 eller mere."); return; }
+    const { error } = await supabase.from("produkter").insert({
+      navn: ny.navn.trim(), slags: ny.slags, enhed: ny.enhed, pris,
+      raekkefoelge: 100 + (produkter?.length || 0),
+    });
+    if (error) { setFejl(error.message); return; }
+    setNy({ navn: "", slags: "ydelse", enhed: "gang", pris: "" });
+    hent();
+    notify("Produktet er oprettet");
+  }
+
+  if (!isAdminUser) return <div style={styles.page}><div style={{ color: "#64748B" }}>Siden er kun for administratorer.</div></div>;
+
+  return (
+    <div style={styles.page}>
+      <div style={{ background: "#fff", borderRadius: 10, padding: 16, boxShadow: "0 1px 3px rgba(0,0,0,0.06)", marginBottom: 16 }}>
+        <div style={{ fontSize: 15, fontWeight: 800 }}>Produkter</div>
+        <div style={{ fontSize: 12.5, color: "#64748B", marginTop: 2, marginBottom: 12, lineHeight: 1.5 }}>
+          Alle produkter og priser samlet ét sted. Kundeportalens Basis og Udvidet henter prisen herfra,
+          og hver aktiv portal giver en linje pr. måned under Fakturering.
+        </div>
+        {fejl && <div style={{ color: "#B91C1C", fontSize: 13, marginBottom: 8 }}>{fejl}</div>}
+        {produkter === null ? <div style={{ color: "#64748B", fontSize: 13 }}>Henter …</div> : (
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+              <thead>
+                <tr style={{ textAlign: "left", color: "#64748B", fontSize: 12 }}>
+                  <th style={{ padding: "6px 8px" }}>Navn</th><th style={{ padding: "6px 8px" }}>Slags</th>
+                  <th style={{ padding: "6px 8px" }}>Enhed</th><th style={{ padding: "6px 8px", textAlign: "right" }}>Pris (kr. ekskl. moms)</th>
+                  <th style={{ padding: "6px 8px" }}>Aktiv</th>
+                </tr>
+              </thead>
+              <tbody>
+                {produkter.map((p) => (
+                  <ProduktRaekke key={p.id} p={p} onGem={(felter) => gem(p.id, felter)} />
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      <div style={{ background: "#fff", borderRadius: 10, padding: 16, boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
+        <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 8 }}>Nyt produkt</div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end" }}>
+          <div style={{ flex: 2, minWidth: 180 }}>
+            <label style={styles.label}>Navn</label>
+            <input style={styles.input} value={ny.navn} onChange={(e) => setNy({ ...ny, navn: e.target.value })} placeholder="Vinduespudsning" />
+          </div>
+          <div style={{ width: 140 }}>
+            <label style={styles.label}>Slags</label>
+            <select style={styles.input} value={ny.slags} onChange={(e) => setNy({ ...ny, slags: e.target.value })}>
+              {Object.entries(PRODUKT_SLAGS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+            </select>
+          </div>
+          <div style={{ width: 130 }}>
+            <label style={styles.label}>Enhed</label>
+            <select style={styles.input} value={ny.enhed} onChange={(e) => setNy({ ...ny, enhed: e.target.value })}>
+              {Object.entries(PRODUKT_ENHED).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+            </select>
+          </div>
+          <div style={{ width: 120 }}>
+            <label style={styles.label}>Pris</label>
+            <input style={styles.input} inputMode="decimal" value={ny.pris} onChange={(e) => setNy({ ...ny, pris: e.target.value })} placeholder="0" />
+          </div>
+          <button style={styles.primaryBtn} onClick={opret}><Plus size={14} /> Opret</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ProduktRaekke({ p, onGem }) {
+  const [navn, setNavn] = useState(p.navn);
+  const [pris, setPris] = useState(String(p.pris ?? 0));
+  const tal = Number(String(pris).replace(",", "."));
+  const aendret = navn.trim() !== p.navn || tal !== Number(p.pris);
+  return (
+    <tr style={{ borderTop: "1px solid #F1F5F9", opacity: p.aktiv ? 1 : 0.55 }}>
+      <td style={{ padding: "6px 8px" }}>
+        <input style={{ ...styles.inputSm, width: "100%" }} value={navn} onChange={(e) => setNavn(e.target.value)} />
+        {p.beskrivelse && <div style={{ fontSize: 11.5, color: "#64748B", marginTop: 2 }}>{p.beskrivelse}</div>}
+        {p.noegle && <div style={{ fontSize: 11, color: "#94A3B8", marginTop: 1 }}>Bruges af systemet ({p.noegle})</div>}
+      </td>
+      <td style={{ padding: "6px 8px" }}>{PRODUKT_SLAGS[p.slags] || p.slags}</td>
+      <td style={{ padding: "6px 8px" }}>{PRODUKT_ENHED[p.enhed] || p.enhed}</td>
+      <td style={{ padding: "6px 8px", textAlign: "right" }}>
+        <input style={{ ...styles.inputSm, width: 90, textAlign: "right" }} inputMode="decimal" value={pris} onChange={(e) => setPris(e.target.value)} />
+        {aendret && (
+          <button style={{ ...styles.secondaryBtn, marginLeft: 6, padding: "4px 10px" }}
+            disabled={!navn.trim() || !Number.isFinite(tal) || tal < 0}
+            onClick={() => onGem({ navn: navn.trim(), pris: tal })}>Gem</button>
+        )}
+      </td>
+      <td style={{ padding: "6px 8px" }}>
+        <input type="checkbox" checked={!!p.aktiv} onChange={(e) => onGem({ aktiv: e.target.checked })}
+          title={p.aktiv ? "Slå produktet fra" : "Slå produktet til"} />
+      </td>
+    </tr>
+  );
+}
+
+// ── Abonnementer under Fakturering ───────────────────────────────────────────
+// Én linje pr. aktiv kundeportal pr. maaned (dan_abonnement_linjer i databasen).
+// Linjerne dannes, naar maaneden vises — funktionen kan koeres igen og igen uden
+// dobbeltlinjer, og en linje sendt til Dinero roeres aldrig. Linjer paa 0 kr vises,
+// men sendes ikke: en fakturakladde paa 0 kr er bare noget, bogholderiet skal slette.
+function AbonnementLinjer({ maaned, aar, maanedNavn }) {
+  const [linjer, setLinjer] = useState(null);
+  const [fejl, setFejl] = useState("");
+  const [sender, setSender] = useState(false);
+  const foerste = `${aar}-${String(maaned + 1).padStart(2, "0")}-01`;
+
+  const hent = useCallback(async () => {
+    setFejl("");
+    const { error: dFejl } = await supabase.rpc("dan_abonnement_linjer", { p_maaned: foerste });
+    if (dFejl) { setFejl(dFejl.message); }
+    const { data, error } = await supabase.from("abonnement_linjer")
+      .select("*").eq("maaned", foerste).order("kunde_navn");
+    if (error) { setFejl(error.message); return; }
+    setLinjer(data || []);
+  }, [foerste]);
+  useEffect(() => { setLinjer(null); hent(); }, [hent]);
+
+  const klar = (linjer || []).filter((l) => !l.dinero_exported && Number(l.beloeb) > 0);
+
+  async function send() {
+    if (!klar.length) return;
+    if (!window.confirm(`Opret ${new Set(klar.map((l) => l.dinero_contact_guid)).size} fakturakladde(r) i Dinero for abonnementer i ${maanedNavn} ${aar}?`)) return;
+    setSender(true);
+    const pr = {};
+    for (const l of klar) (pr[l.dinero_contact_guid] ||= []).push(l);
+    const fejlede = [];
+    let ok = 0;
+    for (const [guid, ls] of Object.entries(pr)) {
+      const { data, error } = await supabase.functions.invoke("dinero", {
+        body: {
+          action: "createInvoiceDraft", customerName: ls[0].kunde_navn || "Kunde", contactGuid: guid,
+          date: new Date().toISOString().slice(0, 10), invoiceDescription: `Abonnement ${maanedNavn} ${aar}`,
+          lines: ls.map((l) => ({ description: l.tekst, quantity: 1, unitPrice: Number(l.beloeb), unit: "parts" })),
+        },
+      });
+      if (error || data?.error || !data?.Guid) { fejlede.push(`${ls[0].kunde_navn}: ${data?.message || data?.error || error?.message || "ukendt fejl"}`); continue; }
+      await supabase.from("abonnement_linjer")
+        .update({ dinero_exported: true, dinero_exported_at: new Date().toISOString() })
+        .in("id", ls.map((l) => l.id));
+      ok++;
+    }
+    setSender(false);
+    if (fejlede.length) window.alert(`${ok} kladde(r) oprettet.\n\nFejl:\n${fejlede.join("\n")}`);
+    hent();
+  }
+
+  if (linjer === null && !fejl) return null;
+  if (linjer && linjer.length === 0 && !fejl) return null;
+  return (
+    <div style={{ background: "#fff", borderRadius: 10, padding: "12px 16px", boxShadow: "0 1px 3px rgba(0,0,0,0.06)", marginBottom: 14 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+        <div>
+          <div style={{ fontSize: 14, fontWeight: 700 }}>Abonnementer · {maanedNavn} {aar}</div>
+          <div style={{ fontSize: 12, color: "#64748B" }}>Kundeportaler. Prisen kommer fra Produkter, eller fra kunden, hvis hun har sin egen.</div>
+        </div>
+        <button style={styles.secondaryBtn} disabled={sender || !klar.length} onClick={send}
+          title={klar.length ? "" : "Intet at sende: linjerne er sendt eller står til 0 kr."}>
+          <Download size={14} /> {sender ? "Sender…" : `Send ${klar.length} til Dinero`}
+        </button>
+      </div>
+      {fejl && <div style={{ color: "#B91C1C", fontSize: 13, marginTop: 6 }}>{fejl}</div>}
+      {(linjer || []).map((l) => (
+        <div key={l.id} style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 13, padding: "7px 0", borderTop: "1px solid #F1F5F9", marginTop: 6 }}>
+          <span><strong>{l.kunde_navn}</strong> · {l.tekst}</span>
+          <span style={{ whiteSpace: "nowrap", color: l.dinero_exported ? "#16A34A" : Number(l.beloeb) > 0 ? "#111111" : "#94A3B8" }}>
+            {Number(l.beloeb).toLocaleString("da-DK")} kr.
+            {l.dinero_exported ? " · sendt til Dinero" : Number(l.beloeb) > 0 ? "" : " · sendes ikke"}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function StartStopPanel({ supabase, employees, onStartStopAlle }) {
   const [graense, setGraense] = useState(null);
   const [kladde, setKladde] = useState("");
@@ -12467,6 +12701,14 @@ function PortalAfsnit({ supabase, kunde, currentEmployeeId, onAendret }) {
   const [arbejder, setArbejder] = useState("");
   const [fejl, setFejl] = useState("");
   const [besked, setBesked] = useState("");
+  // Prisen for Basis og Udvidet kommer fra Produkter (servicekataloget).
+  const [priser, setPriser] = useState({});
+  useEffect(() => {
+    supabase.from("produkter").select("noegle, pris").in("noegle", ["portal_basis", "portal_udvidet"])
+      .then(({ data }) => setPriser(Object.fromEntries((data || []).map((r) => [r.noegle, Number(r.pris)]))));
+  }, [supabase]);
+  const prisTekst = (opt) => (priser[`portal_${opt}`] === undefined ? ""
+    : `${priser[`portal_${opt}`].toLocaleString("da-DK")} kr./md. (fra Produkter)`);
 
   // Kun smaa bogstaver, tal og bindestreg — det skal kunne staa i en adresse.
   // Foreslaas ud fra navnet, saa planlaeggeren ikke skal finde paa noget.
@@ -12577,6 +12819,7 @@ function PortalAfsnit({ supabase, kunde, currentEmployeeId, onAendret }) {
             {arbejder === "taender" ? "Tænder…" : "Tænd portalen"}
           </button>
         </div>
+        {prisTekst(option) && <div style={styles.hint}>Pris: {prisTekst(option)}</div>}
         {option === "udvidet" && (
           <div style={styles.hint}>
             Kunden får en Bestil-fane, hvor hun kan bestille ekstra arbejde.
@@ -12616,6 +12859,9 @@ function PortalAfsnit({ supabase, kunde, currentEmployeeId, onAendret }) {
                   ? "Bestillinger skal godkendes i Ugeplan."
                   : "Slå til, hvis kunden skal kunne bestille ekstra arbejde.")}
           </div>
+          {prisTekst(kunde.portal_option || "basis") && (
+            <div style={styles.hint}>Pris: {prisTekst(kunde.portal_option || "basis")}</div>
+          )}
         </div>
         <button style={{ ...styles.secondaryBtn, color: "#B91C1C", borderColor: "#FCA5A5" }}
           disabled={!!arbejder} onClick={sluk}>
