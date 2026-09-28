@@ -1613,7 +1613,7 @@ const MODULE_HELP = {
         "Ligger to opgaver efter hinanden samme dag med forskellig adresse, lægger ugeplanen transport ind imellem.",
         "Køretiden slås op i en rutetjeneste, første gang de to adresser ligger efter hinanden, og gemmes i listen «Kendte rejsetider». Næste gang bruges den gemte tid.",
         "Standardtiden bruges kun, indtil ruten er slået op, eller hvis opslaget fejler.",
-        "Arbejdsdagens starttidspunkt er det tidspunkt, dagen tidligst regnes fra."] },
+        "Hvornår dagen starter, står på den enkelte medarbejder som mødetid under Medarbejdere."] },
     { h: "Ret en tid", p: [
         "Ved du, at en tur tager længere eller kortere tid, så slet den i listen og tilføj den rigtige nederst. Husk at trykke Gem.",
         "Kørsel til og fra medarbejderens hjem står ikke her. Den gemmes for sig, så privatadresser ikke vises i listen."] },
@@ -14861,7 +14861,7 @@ function ActivityModal({ employees, onClose, onSave }) {
 
 function TravelSettingsForm({ settings, onSave }) {
   const [defaultMinutes, setDefaultMinutes] = useState(settings.defaultMinutes);
-  const [dayStart, setDayStart] = useState(settings.dayStart);
+  const dayStart = settings.dayStart;
   const [overrides, setOverrides] = useState(settings.overrides || {});
   const [addrA, setAddrA] = useState("");
   const [addrB, setAddrB] = useState("");
@@ -14886,8 +14886,9 @@ function TravelSettingsForm({ settings, onSave }) {
       <label style={styles.label}>Standard transporttid mellem forskellige adresser (minutter)</label>
       <input type="number" min={0} step={5} style={styles.input} value={defaultMinutes} onChange={(e) => setDefaultMinutes(Number(e.target.value))} />
 
-      <label style={styles.label}>Arbejdsdagens starttidspunkt</label>
-      <input type="time" style={styles.input} value={dayStart} onChange={(e) => setDayStart(e.target.value)} />
+      {/* «Arbejdsdagens starttidspunkt» er fjernet herfra (28.9.2026). Dagen regnes fra
+          medarbejderens egen moedetid, og alle har én. Den faelles vaerdi bliver staaende
+          i databasen som et stille sikkerhedsnet, hvis en moedetid nogensinde mangler. */}
 
       <label style={styles.label}>Kendte rejsetider mellem specifikke adresser (valgfrit, mere præcist)</label>
       {Object.entries(overrides).map(([key, min]) => (
@@ -14927,7 +14928,9 @@ function EmployeeModal({ emp, onClose, onSave, skills: skillList, satsHistorik, 
   // skrivninger af en loensats er ikke noget, nogen skal sidde og regne baglaens paa.
   const [gemmer, setGemmer] = useState(false);
   const [name, setName] = useState(emp?.name || "");
-  const [startTime, setStartTime] = useState(emp?.startTime || "");
+  // En ny medarbejder starter paa 07:00. Dagen i ugeplanen regnes fra moedetiden, og
+  // den faelles standard er ikke laengere noget, man kan se eller rette.
+  const [startTime, setStartTime] = useState(emp?.startTime || (emp ? "" : "07:00"));
   // Medarbejderens nummer i Danloen. Navne duer ikke som noegle - to kan hedde det
   // samme, og folk skifter efternavn. Er feltet tomt, kommer medarbejderen slet
   // ikke med i loeneksporten; det er bedre end at gaette paa hvem hun er.
