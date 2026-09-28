@@ -232,7 +232,7 @@ const MENU_GRUPPER = [
   // se om der er saebe nok, var et led for meget.
   { key: "lager",     navn: "Lager",      sider: [["inventory", "Lager"]] },
   { key: "oekonomi",  navn: "Økonomi",     sider: [["time", "Fakturering"], ["kundetimer", "Kundetimer"], ["reports", "Rapportering"], ["medExport", "Løn data"]] },
-  { key: "opsaetning", navn: "Opsætning", sider: [["employees", "Medarbejdere"], ["checklists", "Tjeklister"]] },
+  { key: "opsaetning", navn: "Opsætning", sider: [["employees", "Medarbejdere"], ["checklists", "Tjeklister"], ["transport", "Transporttid"]] },
   // Drift staar sidst og kun for administratorer. Den hoerer ikke til i en
   // arbejdsdag — man gaar derind, naar man vil vide, om det hele koerer, eller naar
   // noget ser forkert ud. Laa den mellem de oevrige, ville den blive aabnet ved en
@@ -1608,6 +1608,17 @@ const MODULE_HELP = {
         "Er der intet mærke, er der kvitteret, eller opgaven er ikke en Nexus-opgave."] },
   ], warn: "En fleksibel opgave har en «senest udført»-dato. Er fristen passeret, planlægges opgaven ikke — den rulles ikke videre af sig selv. Ret fristen, så placeres den med det samme." },
 
+  transport: { title: "Transporttid", intro: "Hvor lang tid der lægges ind til kørsel mellem to opgaver i ugeplanen.", blocks: [
+    { h: "Sådan virker det", p: [
+        "Ligger to opgaver efter hinanden samme dag med forskellig adresse, lægger ugeplanen transport ind imellem.",
+        "Køretiden slås op i en rutetjeneste, første gang de to adresser ligger efter hinanden, og gemmes i listen «Kendte rejsetider». Næste gang bruges den gemte tid.",
+        "Standardtiden bruges kun, indtil ruten er slået op, eller hvis opslaget fejler.",
+        "Arbejdsdagens starttidspunkt er det tidspunkt, dagen tidligst regnes fra."] },
+    { h: "Ret en tid", p: [
+        "Ved du, at en tur tager længere eller kortere tid, så slet den i listen og tilføj den rigtige nederst. Husk at trykke Gem.",
+        "Kørsel til og fra medarbejderens hjem står ikke her. Den gemmes for sig, så privatadresser ikke vises i listen."] },
+  ] },
+
   employees: { title: "Medarbejdere", intro: "Her styrer du hvem der kan hvad, hvor meget tid de har, og hvilke områder de dækker.", blocks: [
     { h: "Sådan læses listen", p: [
         "Denne side er stamdata: hvem medarbejderne er, hvad de kan, hvor mange timer de har, og hvem der har adgang til appen. Hvor meget der er planlagt i en bestemt uge, står i Ugeplan — ikke her.",
@@ -2359,7 +2370,6 @@ function PlanningApp({ session, onSignOut }) {
     setInstances((prev) => prev.map((t) =>
       hentede.has(t.id) && !Array.isArray(t.checklist) ? { ...t, checklist: hentede.get(t.id) } : t));
   }, []);
-  const [showTravelSettings, setShowTravelSettings] = useState(false);
   const [productUsage, setProductUsage] = useState([]);
 
   function notify(msg) { setToast(msg); setTimeout(() => setToast(null), 2800); }
@@ -5521,7 +5531,7 @@ function PlanningApp({ session, onSignOut }) {
           weekLabel={wk.label} weekNo={wk.weekNo} weekOffset={weekOffset} weekYear={weekYear}
           onPrevWeek={() => changeWeek(-1)} onNextWeek={() => changeWeek(1)} onTodayWeek={() => setWeekAnchor(mondayOf(new Date()))}
           currentIsoWeek={currentIsoWeek}
-          travelSettings={travelSettings} onOpenTravelSettings={() => setShowTravelSettings(true)}
+          travelSettings={travelSettings}
           onOpenAddBlock={() => setShowAddBlock(true)}
           onOpenAddActivity={() => setShowAddActivity(true)}
         />
@@ -5647,15 +5657,22 @@ function PlanningApp({ session, onSignOut }) {
       {showAddEmp && <EmployeeModal emp={editEmp} onClose={() => { setShowAddEmp(false); setEditEmp(null); }} onSave={saveEmployee} skills={skills} satsHistorik={editEmp ? satsHistorik[editEmp.id] : null} kmSatser={editEmp ? kmSatser[editEmp.id] : null} />}
       {showAddBlock && <BlockModal employees={aktiveEmployees} onClose={() => setShowAddBlock(false)} onSave={addBlock} />}
       {showAddActivity && <ActivityModal employees={aktiveEmployees} onClose={() => setShowAddActivity(false)} onSave={addActivity} />}
-      {showTravelSettings && (
-        <TravelSettingsModal
-          settings={travelSettings}
-          onClose={() => setShowTravelSettings(false)}
-          // Flettes ind i det nuvaerende, ikke sat i stedet: modalen kender ikke
-          // hjemOverrides, saa en ren erstatning ville smide hjemmebenenes rutetider
-          // vaek hver gang nogen aabnede og gemte transportindstillingerne.
-          onSave={(s) => { setTravelSettings((prev) => ({ ...prev, ...s })); setShowTravelSettings(false); }}
-        />
+      {/* Transporttid ligger under Opsaetning (28.9.2026). Den saettes én gang og
+          fyldes siden af rutetjenesten — den hoerer ikke til i ugeplanens vaerktoejslinje. */}
+      {view === "transport" && (
+        <div style={styles.page}>
+          <div style={{ background: "#fff", borderRadius: 10, padding: 16, boxShadow: "0 1px 3px rgba(0,0,0,0.06)", maxWidth: 760 }}>
+            <div style={{ fontSize: 15, fontWeight: 800, marginBottom: 8 }}>Transporttid mellem opgaver</div>
+            <TravelSettingsForm
+              key={travelSettings.defaultMinutes + "|" + travelSettings.dayStart + "|" + Object.keys(travelSettings.overrides || {}).length}
+              settings={travelSettings}
+              // Flettes ind i det nuvaerende, ikke sat i stedet: formularen kender ikke
+              // hjemOverrides, saa en ren erstatning ville smide hjemmebenenes rutetider
+              // vaek hver gang nogen gemte transportindstillingerne.
+              onSave={(s) => { setTravelSettings((prev) => ({ ...prev, ...s })); notify("Transporttid er gemt"); }}
+            />
+          </div>
+        </div>
       )}
       {openTaskId && (
         <TaskDetailModal
@@ -5790,7 +5807,7 @@ function todayKeyGuess() {
 // ---------- Week view ----------
 // Send email notification to employee about day changes
 
-function WeekView({ employees, instances, unplaced, adgangTekst, onUdskrivMedAdgang, onHentTjeklisterTilPrint, onAdd, onAuto, onScheduleWeek, onAutoAllWeeks, onPlace, onUnplace, onRemoveAssignee, onDelete, onOpenTask, onToggleInclude, onEditEmp, dragId, setDragId, weekLabel, weekNo, weekOffset, weekYear, onPrevWeek, onNextWeek, onTodayWeek, travelSettings, onOpenTravelSettings, currentIsoWeek, areas, employeeAreas, onOpenAddBlock, onOpenAddActivity, opgaveNoter, koerendeTider = {}, stopurNu = Date.now() }) {
+function WeekView({ employees, instances, unplaced, adgangTekst, onUdskrivMedAdgang, onHentTjeklisterTilPrint, onAdd, onAuto, onScheduleWeek, onAutoAllWeeks, onPlace, onUnplace, onRemoveAssignee, onDelete, onOpenTask, onToggleInclude, onEditEmp, dragId, setDragId, weekLabel, weekNo, weekOffset, weekYear, onPrevWeek, onNextWeek, onTodayWeek, travelSettings, currentIsoWeek, areas, employeeAreas, onOpenAddBlock, onOpenAddActivity, opgaveNoter, koerendeTider = {}, stopurNu = Date.now() }) {
   const [addMenuTaskId, setAddMenuTaskId] = useState(null);
   const [showWeekend, setShowWeekend] = useState(false);
   // Belaegningen er foldet vaek som udgangspunkt. Se kommentaren ved selve blokken.
@@ -5875,7 +5892,6 @@ function WeekView({ employees, instances, unplaced, adgangTekst, onUdskrivMedAdg
       <div style={styles.toolbar}>
         <button style={styles.primaryBtn} onClick={onAdd}><Plus size={16} /> Ny opgave</button>
         <button style={styles.secondaryBtn} onClick={onScheduleWeek}><Wand2 size={16} /> Planlæg</button>
-        <button style={styles.secondaryBtn} onClick={onOpenTravelSettings}><Car size={16} /> Transporttid</button>
         <button style={{ ...styles.secondaryBtn, color: "#B91C1C", borderColor: "#FECACA" }} onClick={onOpenAddBlock}><Thermometer size={16} /> Sygdom/Ferie</button>
         <button style={{ ...styles.secondaryBtn, color: "#7C3AED", borderColor: "#DDD6FE" }} onClick={onOpenAddActivity}><Building2 size={16} /> Anden aktivitet</button>
         <button
@@ -14843,7 +14859,7 @@ function ActivityModal({ employees, onClose, onSave }) {
   );
 }
 
-function TravelSettingsModal({ settings, onClose, onSave }) {
+function TravelSettingsForm({ settings, onSave }) {
   const [defaultMinutes, setDefaultMinutes] = useState(settings.defaultMinutes);
   const [dayStart, setDayStart] = useState(settings.dayStart);
   const [overrides, setOverrides] = useState(settings.overrides || {});
@@ -14859,11 +14875,12 @@ function TravelSettingsModal({ settings, onClose, onSave }) {
   function removeOverride(key) { setOverrides((prev) => { const next = { ...prev }; delete next[key]; return next; }); }
 
   return (
-    <Modal onClose={onClose} title="Transporttid mellem opgaver">
+    <div>
       <div style={styles.hint}>
-        Der beregnes automatisk en "Transport"-aktivitet mellem to opgaver samme dag, hvis de har forskellig adresse.
-        Da denne prototype ikke har adgang til en rutevejledningstjeneste (kræver en betalt API, f.eks. Google Distance Matrix),
-        bruges et estimat i stedet for en beregnet køretid.
+        Mellem to opgaver samme dag med forskellig adresse lægges der automatisk transport ind i ugeplanen.
+        Køretiden slås op i en rutetjeneste, første gang to adresser ligger efter hinanden, og gemmes i listen
+        herunder. Standardtiden bruges kun, indtil ruten er slået op, eller hvis opslaget fejler.
+        Ved du bedre, kan du slette en tid og tilføje den rigtige nederst.
       </div>
 
       <label style={styles.label}>Standard transporttid mellem forskellige adresser (minutter)</label>
@@ -14890,10 +14907,9 @@ function TravelSettingsModal({ settings, onClose, onSave }) {
       </div>
 
       <div style={styles.modalActions}>
-        <button style={styles.secondaryBtn} onClick={onClose}>Annuller</button>
         <button style={styles.primaryBtn} onClick={() => onSave({ defaultMinutes: Number(defaultMinutes), dayStart, overrides })}>Gem</button>
       </div>
-    </Modal>
+    </div>
   );
 }
 
