@@ -103,6 +103,20 @@ serve(async (req) => {
     const { email, name, subject, html } = await req.json();
     if (!email || !subject) return svar({ error: "mangler_felter" }, 400);
 
+    // Afsendernavn og svaradresse laeses fra Opsaetning -> Firma (28.9.2026), saa
+    // kontoret selv kan rette dem. Selve afsenderADRESSEN bliver en indstilling i
+    // Supabase (AFSENDER_EMAIL), fordi domaenet skal vaere godkendt i Brevo foerst.
+    // Kan tabellen ikke laeses, bruges de gamle vaerdier: en indstilling maa aldrig
+    // stoppe en mail.
+    let afsenderNavn = AFSENDER_NAVN;
+    let svarTil = SVAR_TIL;
+    try {
+      const db = createClient(SUPABASE_URL, SERVICE_KEY);
+      const { data: f } = await db.from("firma").select("afsender_navn, svar_til").eq("id", "default").maybeSingle();
+      if (f?.afsender_navn?.trim()) afsenderNavn = f.afsender_navn.trim();
+      if (f?.svar_til?.trim()) svarTil = f.svar_til.trim();
+    } catch { /* de gamle vaerdier bruges */ }
+
     const brevoKey = Deno.env.get("BREVO_API_KEY");
     if (!brevoKey) return svar({ error: "BREVO_API_KEY not configured" }, 500);
 
@@ -113,8 +127,8 @@ serve(async (req) => {
       method: "POST",
       headers: { "api-key": brevoKey, "Content-Type": "application/json" },
       body: JSON.stringify({
-        sender: { name: AFSENDER_NAVN, email: AFSENDER_EMAIL },
-        ...(SVAR_TIL ? { replyTo: { email: SVAR_TIL } } : {}),
+        sender: { name: afsenderNavn, email: AFSENDER_EMAIL },
+        ...(svarTil ? { replyTo: { email: svarTil } } : {}),
         to: [{ email, ...(name ? { name } : {}) }],
         subject,
         htmlContent: html,

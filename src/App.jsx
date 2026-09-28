@@ -232,7 +232,7 @@ const MENU_GRUPPER = [
   // se om der er saebe nok, var et led for meget.
   { key: "lager",     navn: "Lager",      sider: [["inventory", "Lager"]] },
   { key: "oekonomi",  navn: "Økonomi",     sider: [["time", "Fakturering"], ["kundetimer", "Kundetimer"], ["reports", "Rapportering"], ["medExport", "Løn data"]] },
-  { key: "opsaetning", navn: "Opsætning", sider: [["employees", "Medarbejdere"], ["checklists", "Tjeklister"], ["transport", "Transporttid"]] },
+  { key: "opsaetning", navn: "Opsætning", sider: [["employees", "Medarbejdere"], ["checklists", "Tjeklister"], ["transport", "Transporttid"], ["firma", "Firma"]] },
   // Drift staar sidst og kun for administratorer. Den hoerer ikke til i en
   // arbejdsdag — man gaar derind, naar man vil vide, om det hele koerer, eller naar
   // noget ser forkert ud. Laa den mellem de oevrige, ville den blive aabnet ved en
@@ -1607,6 +1607,20 @@ const MODULE_HELP = {
         "Kommunen betaler efter det der står i Nexus, så en manglende kvittering er noget du skal følge op på med medarbejderen — ikke noget du kan rette her.",
         "Er der intet mærke, er der kvitteret, eller opgaven er ikke en Nexus-opgave."] },
   ], warn: "En fleksibel opgave har en «senest udført»-dato. Er fristen passeret, planlægges opgaven ikke — den rulles ikke videre af sig selv. Ret fristen, så placeres den med det samme." },
+
+  firma: { title: "Firma", intro: "Firmaets egne indstillinger: navn, udseende, mails og moduler.", blocks: [
+    { h: "Hvad der virker nu", p: [
+        "Navn, undertekst og logo står øverst i menuen, så snart du trykker Gem.",
+        "Afsendernavn og «Svar går til» bruges på alle mails fra systemet: påmindelser, invitationer og morgenmailen.",
+        "Hovedfarve og lys/mørk menu gemmes nu og tages i brug i næste trin.",
+        "Modulerne vises her, men slås til og fra i næste trin."] },
+    { h: "Logo", p: [
+        "PNG, JPG, SVG eller WEBP på højst 1 MB. Et kvadratisk logo ser bedst ud.",
+        "«Brug standardikonet» går tilbage til appens eget ikon. Husk at trykke Gem."] },
+    { h: "Hvem kan rette", p: [
+        "Kun administratorer. Det håndhæves i databasen, ikke kun på skærmen.",
+        "Dinero og Nexus er låst. De kan ikke slås fra her, heller ikke ved et uheld."] },
+  ] },
 
   transport: { title: "Transporttid", intro: "Hvor lang tid der lægges ind til kørsel mellem to opgaver i ugeplanen.", blocks: [
     { h: "Sådan virker det", p: [
@@ -3160,6 +3174,15 @@ function PlanningApp({ session, onSignOut }) {
       })
       .subscribe();
     return () => { afbrudt = true; supabase.removeChannel(kanal); };
+  }, []);
+
+  // ── Firma-indstillinger (Opsaetning -> Firma, 28.9.2026) ──
+  // Det, der foer stod fast i koden. Mangler raekken, bruges de gamle vaerdier, saa
+  // menuen aldrig staar tom.
+  const [firma, setFirma] = useState(null);
+  useEffect(() => {
+    supabase.from("firma").select("*").eq("id", "default").maybeSingle()
+      .then(({ data }) => { if (data) setFirma(data); });
   }, []);
 
   // Fra klokken til det sted, sagen klares. Opgaver aabnes direkte, hvis de er hentet;
@@ -5320,10 +5343,10 @@ function PlanningApp({ session, onSignOut }) {
       )}
       <header style={styles.header}>
         <div style={styles.brand}>
-          <img src="/app-icon.png" alt="Jammerbugt Rengøring" style={{ width: 36, height: 36, minWidth: 36, borderRadius: 10, objectFit: "cover", background: "#000", display: "block" }} />
+          <img src={firma?.logo_url || "/app-icon.png"} alt={firma?.navn || "Jammerbugt Rengøring"} style={{ width: 36, height: 36, minWidth: 36, borderRadius: 10, objectFit: "cover", background: "#000", display: "block" }} />
           <div>
-            <div style={styles.brandTitle}>Jammerbugt Rengøring</div>
-            <div style={styles.brandSub}>{L.sub}</div>
+            <div style={styles.brandTitle}>{firma?.navn || "Jammerbugt Rengøring"}</div>
+            <div style={styles.brandSub}>{firma?.undertekst ?? L.sub}</div>
           </div>
         </div>
         <nav style={styles.nav}>
@@ -5618,6 +5641,12 @@ function PlanningApp({ session, onSignOut }) {
       )}
 
       {view === "produkter" && <ProdukterView isAdminUser={isAdminUser} notify={notify} />}
+
+      {view === "firma" && (
+        <FirmaView isAdminUser={isAdminUser} firma={firma} notify={notify}
+          medarbejderId={currentEmployeeForAuth?.id || null}
+          onGemt={(ny) => setFirma(ny)} />
+      )}
 
       {view === "tilbud" && (
         <TilbudView supabase={supabase} checklistTemplates={checklistTemplates}
@@ -12100,6 +12129,147 @@ function AbonnementLinjer({ maaned, aar, maanedNavn }) {
           </span>
         </div>
       ))}
+    </div>
+  );
+}
+
+// ── Opsaetning -> Firma ──────────────────────────────────────────────────────
+// Fase 1 af kundeloesningen: det, der stod skrevet fast i koden, samles her. Hos
+// Jammerbugt Rengoering staar jeres nuvaerende vaerdier, saa intet ser anderledes ud.
+// Kun administratorer kan rette — det haandhaeves i databasen. Dinero og Nexus er
+// laast og kan kun aendres af os.
+const MODUL_TEKST = [
+  ["modul_start_stop", "Start/stop"],
+  ["modul_lager", "Lager og udlevering"],
+  ["modul_tilbud", "Tilbud"],
+  ["modul_kundeportal", "Kundeportal"],
+];
+function FirmaView({ isAdminUser, firma, notify, medarbejderId, onGemt }) {
+  const [f, setF] = useState(firma);
+  const [fejl, setFejl] = useState("");
+  const [gemmer, setGemmer] = useState(false);
+  const [uploader, setUploader] = useState(false);
+  useEffect(() => { setF(firma); }, [firma]);
+
+  if (!isAdminUser) return <div style={styles.page}><div style={{ color: "#64748B" }}>Siden er kun for administratorer.</div></div>;
+  if (!f) return <div style={styles.page}><div style={{ color: "#64748B" }}>Henter …</div></div>;
+
+  const saet = (k) => (e) => setF({ ...f, [k]: e.target.value });
+
+  async function gem() {
+    setFejl("");
+    if (!f.navn?.trim()) { setFejl("Firmaet skal have et navn."); return; }
+    if (!/^#[0-9A-Fa-f]{6}$/.test(f.hovedfarve || "")) { setFejl("Hovedfarven skal skrives som #RRGGBB, fx #D6247A."); return; }
+    if (f.svar_til && !/^\S+@\S+\.\S+$/.test(f.svar_til.trim())) { setFejl("«Svar går til» skal være en mailadresse."); return; }
+    setGemmer(true);
+    const felter = {
+      navn: f.navn.trim(), undertekst: f.undertekst?.trim() || null, telefon: f.telefon?.trim() || null,
+      hovedfarve: f.hovedfarve, menu_tema: f.menu_tema,
+      afsender_navn: f.afsender_navn?.trim() || null, svar_til: f.svar_til?.trim() || null,
+      logo_url: f.logo_url || null, aendret_af: medarbejderId,
+      ...Object.fromEntries(MODUL_TEKST.map(([k]) => [k, !!f[k]])),
+    };
+    const { data, error } = await supabase.from("firma").update(felter).eq("id", "default").select().maybeSingle();
+    setGemmer(false);
+    if (error || !data) { setFejl(error?.message || "Indstillingerne blev ikke gemt."); return; }
+    onGemt(data);
+    notify("Firmaindstillingerne er gemt");
+  }
+
+  async function uploadLogo(fil) {
+    if (!fil) return;
+    setFejl("");
+    if (!/^image\/(png|jpeg|svg\+xml|webp)$/.test(fil.type)) { setFejl("Logoet skal være PNG, JPG, SVG eller WEBP."); return; }
+    if (fil.size > 1024 * 1024) { setFejl("Logoet må højst fylde 1 MB."); return; }
+    setUploader(true);
+    const endelse = (fil.name.split(".").pop() || "png").toLowerCase();
+    // Nyt filnavn hver gang: saa henter ingen browser det gamle logo fra sin cache.
+    const sti = `logo-${Date.now()}.${endelse}`;
+    const { error } = await supabase.storage.from("firma").upload(sti, fil, { contentType: fil.type, upsert: false });
+    setUploader(false);
+    if (error) { setFejl(error.message); return; }
+    const { data } = supabase.storage.from("firma").getPublicUrl(sti);
+    setF({ ...f, logo_url: data.publicUrl });
+  }
+
+  const kort = { background: "#fff", borderRadius: 10, padding: 16, boxShadow: "0 1px 3px rgba(0,0,0,0.06)" };
+  const titel = { fontSize: 14, fontWeight: 700, marginBottom: 8 };
+  return (
+    <div style={styles.page}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 14, maxWidth: 1000 }}>
+        <div style={kort}>
+          <div style={titel}>Firma</div>
+          <label style={styles.label}>Navn</label>
+          <input style={styles.input} value={f.navn || ""} onChange={saet("navn")} />
+          <label style={styles.label}>Undertekst i menuen</label>
+          <input style={styles.input} value={f.undertekst || ""} onChange={saet("undertekst")} />
+          <label style={styles.label}>Telefon til kontoret</label>
+          <input style={styles.input} value={f.telefon || ""} onChange={saet("telefon")} placeholder="Ikke sat" />
+          <div style={styles.hint}>Navn og undertekst står øverst i menuen.</div>
+        </div>
+
+        <div style={kort}>
+          <div style={titel}>Udseende</div>
+          <label style={styles.label}>Logo</label>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <img src={f.logo_url || "/app-icon.png"} alt="" style={{ width: 44, height: 44, borderRadius: 10, objectFit: "cover", background: "#000" }} />
+            <label style={{ ...styles.secondaryBtn, cursor: "pointer" }}>
+              {uploader ? "Uploader …" : "Skift logo"}
+              <input type="file" accept="image/png,image/jpeg,image/svg+xml,image/webp" style={{ display: "none" }}
+                onChange={(e) => uploadLogo(e.target.files?.[0])} />
+            </label>
+            {f.logo_url && <button style={styles.secondaryBtn} onClick={() => setF({ ...f, logo_url: null })}>Brug standardikonet</button>}
+          </div>
+          <label style={styles.label}>Hovedfarve</label>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <input type="color" value={f.hovedfarve || "#D6247A"} onChange={saet("hovedfarve")}
+              style={{ width: 44, height: 34, padding: 0, border: "1px solid #E2E8F0", borderRadius: 8, background: "none" }} />
+            <input style={{ ...styles.input, width: 120, fontFamily: "monospace" }} value={f.hovedfarve || ""} onChange={saet("hovedfarve")} />
+          </div>
+          <label style={styles.label}>Menu</label>
+          <div style={{ display: "flex", gap: 14, fontSize: 13.5 }}>
+            <label><input type="radio" checked={f.menu_tema === "lys"} onChange={() => setF({ ...f, menu_tema: "lys" })} /> Lys</label>
+            <label><input type="radio" checked={f.menu_tema !== "lys"} onChange={() => setF({ ...f, menu_tema: "moerk" })} /> Mørk</label>
+          </div>
+          <div style={styles.hint}>Logoet vises i menuen med det samme. Farve og menu gemmes nu og tages i brug i næste trin.</div>
+        </div>
+
+        <div style={kort}>
+          <div style={titel}>Mails fra systemet</div>
+          <label style={styles.label}>Afsendernavn</label>
+          <input style={styles.input} value={f.afsender_navn || ""} onChange={saet("afsender_navn")} placeholder={f.navn || ""} />
+          <label style={styles.label}>Svar går til</label>
+          <input style={styles.input} type="email" value={f.svar_til || ""} onChange={saet("svar_til")} placeholder="Samme som afsenderen" />
+          <div style={styles.hint}>
+            Gælder påmindelser, invitationer og morgenmailen. Afsenderadressen skiftes, når jeres eget domæne er godkendt til mail.
+          </div>
+        </div>
+
+        <div style={kort}>
+          <div style={titel}>Moduler</div>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13.5, padding: "6px 0", borderBottom: "1px solid #F1F5F9" }}>
+            <span>Planlægning og Worklist</span><span style={{ color: "#64748B", fontSize: 12.5 }}>altid</span>
+          </div>
+          {MODUL_TEKST.map(([k, navn]) => (
+            <div key={k} style={{ display: "flex", justifyContent: "space-between", fontSize: 13.5, padding: "6px 0", borderBottom: "1px solid #F1F5F9" }}>
+              <span>{navn}</span>
+              <span style={{ fontSize: 12.5, color: f[k] ? "#16A34A" : "#94A3B8", fontWeight: 600 }}>{f[k] ? "slået til" : "slået fra"}</span>
+            </div>
+          ))}
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13.5, padding: "6px 0", borderBottom: "1px solid #F1F5F9" }}>
+            <span>Dinero</span><span style={{ fontSize: 12.5, color: "#64748B" }}>{f.modul_dinero ? "slået til" : "slået fra"} · låst</span>
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13.5, padding: "6px 0" }}>
+            <span>Nexus og kommunefakturering</span><span style={{ fontSize: 12.5, color: "#64748B" }}>{f.modul_nexus ? "slået til" : "slået fra"} · låst</span>
+          </div>
+          <div style={styles.hint}>Modulerne kan slås til og fra i næste trin. Dinero og Nexus er låst og kan kun ændres af os.</div>
+        </div>
+      </div>
+      {fejl && <div style={{ color: "#B91C1C", fontSize: 13, marginTop: 10 }}>{fejl}</div>}
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 14 }}>
+        <button style={styles.primaryBtn} disabled={gemmer} onClick={gem}>{gemmer ? "Gemmer …" : "Gem"}</button>
+        <span style={{ fontSize: 12.5, color: "#64748B" }}>Kun administratorer kan se og ændre siden.</span>
+      </div>
     </div>
   );
 }
