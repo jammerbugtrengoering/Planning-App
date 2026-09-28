@@ -1613,13 +1613,13 @@ const MODULE_HELP = {
         "Navn, undertekst og logo står øverst i menuen, så snart du trykker Gem.",
         "Afsendernavn og «Svar går til» bruges på alle mails fra systemet: påmindelser, invitationer og morgenmailen.",
         "Hovedfarve og lys/mørk menu gemmes nu og tages i brug i næste trin.",
-        "Modulerne vises her, men slås til og fra i næste trin."] },
+        "Modulerne vises her, men kan ikke ændres. Hos Jammerbugt Rengøring er alle altid med; hos en kunde er det de købte moduler, der afgør det."] },
     { h: "Logo", p: [
         "PNG, JPG, SVG eller WEBP på højst 1 MB. Et kvadratisk logo ser bedst ud.",
         "«Brug standardikonet» går tilbage til appens eget ikon. Husk at trykke Gem."] },
     { h: "Hvem kan rette", p: [
         "Kun administratorer. Det håndhæves i databasen, ikke kun på skærmen.",
-        "Dinero og Nexus er låst. De kan ikke slås fra her, heller ikke ved et uheld."] },
+        "Modulerne kan ingen slå til eller fra her, heller ikke ved et uheld. Det håndhæves også i databasen."] },
   ] },
 
   transport: { title: "Transporttid", intro: "Hvor lang tid der lægges ind til kørsel mellem to opgaver i ugeplanen.", blocks: [
@@ -12136,13 +12136,18 @@ function AbonnementLinjer({ maaned, aar, maanedNavn }) {
 // ── Opsaetning -> Firma ──────────────────────────────────────────────────────
 // Fase 1 af kundeloesningen: det, der stod skrevet fast i koden, samles her. Hos
 // Jammerbugt Rengoering staar jeres nuvaerende vaerdier, saa intet ser anderledes ud.
-// Kun administratorer kan rette — det haandhaeves i databasen. Dinero og Nexus er
-// laast og kan kun aendres af os.
+// Kun administratorer kan rette — det haandhaeves i databasen.
+//
+// Modulerne kan INGEN rette her (Jonn 28.9.2026): hos Jammerbugt Rengoering er alle
+// altid slaaet til, og hos en kunde er det de koebte moduler, der afgoer det. De
+// saettes af os, naar et abonnement aendres, og databasen afviser alt andet.
 const MODUL_TEKST = [
   ["modul_start_stop", "Start/stop"],
   ["modul_lager", "Lager og udlevering"],
   ["modul_tilbud", "Tilbud"],
   ["modul_kundeportal", "Kundeportal"],
+  ["modul_dinero", "Dinero"],
+  ["modul_nexus", "Nexus og kommunefakturering"],
 ];
 function FirmaView({ isAdminUser, firma, notify, medarbejderId, onGemt }) {
   const [f, setF] = useState(firma);
@@ -12167,7 +12172,7 @@ function FirmaView({ isAdminUser, firma, notify, medarbejderId, onGemt }) {
       hovedfarve: f.hovedfarve, menu_tema: f.menu_tema,
       afsender_navn: f.afsender_navn?.trim() || null, svar_til: f.svar_til?.trim() || null,
       logo_url: f.logo_url || null, aendret_af: medarbejderId,
-      ...Object.fromEntries(MODUL_TEKST.map(([k]) => [k, !!f[k]])),
+      // Modulerne sendes ikke: de kan ikke aendres herfra (se kommentaren ved MODUL_TEKST).
     };
     const { data, error } = await supabase.from("firma").update(felter).eq("id", "default").select().maybeSingle();
     setGemmer(false);
@@ -12253,16 +12258,10 @@ function FirmaView({ isAdminUser, firma, notify, medarbejderId, onGemt }) {
           {MODUL_TEKST.map(([k, navn]) => (
             <div key={k} style={{ display: "flex", justifyContent: "space-between", fontSize: 13.5, padding: "6px 0", borderBottom: "1px solid #F1F5F9" }}>
               <span>{navn}</span>
-              <span style={{ fontSize: 12.5, color: f[k] ? "#16A34A" : "#94A3B8", fontWeight: 600 }}>{f[k] ? "slået til" : "slået fra"}</span>
+              <span style={{ fontSize: 12.5, color: f[k] ? "#16A34A" : "#94A3B8", fontWeight: 600 }}>{f[k] ? "med" : "ikke med"}</span>
             </div>
           ))}
-          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13.5, padding: "6px 0", borderBottom: "1px solid #F1F5F9" }}>
-            <span>Dinero</span><span style={{ fontSize: 12.5, color: "#64748B" }}>{f.modul_dinero ? "slået til" : "slået fra"} · låst</span>
-          </div>
-          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13.5, padding: "6px 0" }}>
-            <span>Nexus og kommunefakturering</span><span style={{ fontSize: 12.5, color: "#64748B" }}>{f.modul_nexus ? "slået til" : "slået fra"} · låst</span>
-          </div>
-          <div style={styles.hint}>Modulerne kan slås til og fra i næste trin. Dinero og Nexus er låst og kan kun ændres af os.</div>
+          <div style={styles.hint}>Modulerne følger abonnementet og kan ikke ændres her. Hos Jammerbugt Rengøring er alle med.</div>
         </div>
       </div>
       {fejl && <div style={{ color: "#B91C1C", fontSize: 13, marginTop: 10 }}>{fejl}</div>}
