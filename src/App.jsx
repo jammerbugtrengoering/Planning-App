@@ -1734,7 +1734,8 @@ const MODULE_HELP = {
     { h: "Hvad der står her", p: [
         "Kundeportalens Basis og Udvidet står her. Deres pris bruges på kundekortet og til de månedlige abonnementslinjer under Fakturering.",
         "Produkter mærket «Bruges af systemet» kan ikke slettes, fordi koden slår dem op. Du kan ændre navn og pris og slå dem fra.",
-        "Nye produkter opretter du nederst: navn, slags, enhed og pris ekskl. moms."] },
+        "Nye produkter opretter du nederst: navn, slags, enhed og pris ekskl. moms.",
+        "Fluebenet «I portalen» bestemmer, om en ydelse står på listen under Bestil i kundeportalen. Den skal også være aktiv. Kunden ser ikke prisen."] },
     { h: "Priser", p: [
         "En ny pris gælder fra de linjer, der dannes efter ændringen. Linjer, der allerede er sendt til Dinero, ændres aldrig.",
         "Står prisen til 0 kr., dannes linjen stadig, men den sendes ikke til Dinero."] },
@@ -1779,7 +1780,7 @@ const MODULE_HELP = {
         "«Afvis» kræver en begrundelse, som sendes til kunden på mail.",
         "Kunden ser ingen pris i portalen, og der trækkes ingen betaling. Godkendt arbejde faktureres på registreret tid som alt andet."] },
     { h: "Hvad kunden kan bestille", p: [
-        "Listen af ydelser er din — den ligger i portal_ydelser og er ikke det samme som tjeklisterne.",
+        "Listen af ydelser er din. Den står under Produkter (Salg): alle ydelser med fluebenet «I portalen» kan bestilles. Den er ikke det samme som tjeklisterne.",
         "Tjeklisterne hedder ting som «Ældreloven (2)» og «Kommunal Rengøring (Nexus)1». De er interne arbejdssedler, og en kunde ville hverken forstå dem eller have godt af at se dem.",
         "Kunden kan altid skrive frit ved siden af listen, så et usædvanligt ønske ikke falder på gulvet."] },
     { h: "Når portalen lukkes", p: [
@@ -11905,7 +11906,8 @@ function ProdukterView({ isAdminUser, notify }) {
         <div style={{ fontSize: 15, fontWeight: 800 }}>Produkter</div>
         <div style={{ fontSize: 12.5, color: "#64748B", marginTop: 2, marginBottom: 12, lineHeight: 1.5 }}>
           Alle produkter og priser samlet ét sted. Kundeportalens Basis og Udvidet henter prisen herfra,
-          og hver aktiv portal giver en linje pr. måned under Fakturering.
+          og hver aktiv portal giver en linje pr. måned under Fakturering. Ydelser med «I portalen» kan
+          kunderne bestille under Bestil.
         </div>
         {fejl && <div style={{ color: "#B91C1C", fontSize: 13, marginBottom: 8 }}>{fejl}</div>}
         {produkter === null ? <div style={{ color: "#64748B", fontSize: 13 }}>Henter …</div> : (
@@ -11916,6 +11918,7 @@ function ProdukterView({ isAdminUser, notify }) {
                   <th style={{ padding: "6px 8px" }}>Navn</th><th style={{ padding: "6px 8px" }}>Slags</th>
                   <th style={{ padding: "6px 8px" }}>Enhed</th><th style={{ padding: "6px 8px", textAlign: "right" }}>Pris (kr. ekskl. moms)</th>
                   <th style={{ padding: "6px 8px" }}>Aktiv</th>
+                  <th style={{ padding: "6px 8px" }} title="Kan bestilles under Bestil i kundeportalen">I portalen</th>
                 </tr>
               </thead>
               <tbody>
@@ -11983,6 +11986,13 @@ function ProduktRaekke({ p, onGem }) {
       <td style={{ padding: "6px 8px" }}>
         <input type="checkbox" checked={!!p.aktiv} onChange={(e) => onGem({ aktiv: e.target.checked })}
           title={p.aktiv ? "Slå produktet fra" : "Slå produktet til"} />
+      </td>
+      <td style={{ padding: "6px 8px" }}>
+        {/* Kun ydelser kan bestilles af kunden. Et abonnement bestilles ikke i portalen. */}
+        {p.slags === "ydelse" ? (
+          <input type="checkbox" checked={!!p.i_portalen} onChange={(e) => onGem({ i_portalen: e.target.checked })}
+            title={p.i_portalen ? "Fjern fra listen under Bestil i kundeportalen" : "Vis under Bestil i kundeportalen"} />
+        ) : <span style={{ color: "#CBD5E1" }}>—</span>}
       </td>
     </tr>
   );
