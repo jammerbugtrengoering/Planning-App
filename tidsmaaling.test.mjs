@@ -2,7 +2,7 @@
 //
 // Det, der ikke må gå galt: en ren registrering må ikke få en markering, og en
 // registrering, der er rettet op i forhold til det målte, må ikke gå under radaren.
-import { opsummerMaaling, formatAfstand, LANGT_VAEK_M, stopurStatus } from "./src/tidsmaaling.js";
+import { opsummerMaaling, formatAfstand, LANGT_VAEK_M, stopurStatus, startSlutLinjer } from "./src/tidsmaaling.js";
 
 let fejl = 0, ok = 0;
 function er(navn, faktisk, forventet) {
@@ -96,6 +96,24 @@ er("afsluttet langt vaek: roed",
 er("oplaering taeller ikke som overforbrug",
   stopurStatus({ ...opg, assignees: ["e1", "e2"], oplaeringMedarbejdere: ["e2"],
     timeLog: [{ minutes: 60, empId: "e1" }, { minutes: 60, empId: "e2" }] }, [], nu), null);
+
+// 29.9.2026: afslutning langt vaek skal ses ogsaa uden start, og tidspunkterne skal vises.
+const udenStartVaek = opsummerMaaling([{ startStop: true, udenStart: true, minutes: 60, afstandSlut: 5358 }]);
+er("uden start, afsluttet 5,4 km vaek: begge markeret", udenStartVaek.bemaerk,
+  ["ingen start registreret", "afsluttet 5,4 km fra adressen"]);
+er("uden start, afsluttet 5,4 km vaek: roed",
+  stopurStatus({ ...opg, timeLog: [{ minutes: 60, empId: "e1", startStop: true, udenStart: true, afstandSlut: 5358 }] }, [], nu).farve, "roed");
+const stop = Date.UTC(2026, 8, 29, 5, 31);   // 07:31 dansk sommertid
+const linjer = startSlutLinjer([{ startStop: true, udenStart: true, minutes: 60, empId: "e1", stop, afstandSlut: 5358 }]);
+er("linje: ingen start", linjer[0].start, "Ingen start");
+er("linje: afsluttet kl. og afstand", linjer[0].slut, "Afsluttet kl. 07.31 · 5,4 km fra adressen");
+er("linje: langt vaek", linjer[0].vaekSlut, true);
+const sys = startSlutLinjer([{ startStop: true, minutes: 60, empId: "e1", start: Date.UTC(2026, 8, 29, 5, 0), stop, startetAfSystem: true, afstandSlut: 20 }]);
+er("linje: startet af systemet", sys[0].start, "Startet kl. 07.00 af systemet");
+er("systemstart markeres", opsummerMaaling([{ startStop: true, minutes: 31, maalt: 31, startetAfSystem: true, afstandStart: null, afstandSlut: 20 }]).bemaerk,
+  ["startet af systemet"]);
+er("koerende systemstart vises i teksten",
+  stopurStatus(opg, [{ employee_id: "e1", startet: new Date(nu - 5 * 60000).toISOString(), kilde: "system" }], nu).tekst.includes("startet af systemet"), true);
 
 console.log(fejl ? `\nTidsmåling: ${fejl} fejlede, ${ok} i orden.` : `Tidsmåling: ${ok} kontroller i orden.`);
 process.exit(fejl ? 1 : 0);

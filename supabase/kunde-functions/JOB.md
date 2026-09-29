@@ -9,6 +9,7 @@ kundekortet hos Jammerbugt, springes over.
 | Funktion | Hvad | Hvornår (som hos Jammerbugt) |
 |---|---|---|
 | `plan-beskeder` `{job:"aendringer"}` | Samlede planændringer + «Er du færdig?» ved start/stop | hvert kvarter |
+| `plan-beskeder` `{job:"start"}` | Glemt Start: push efter 5 min, systemstart efter 10 min | hvert 5. minut |
 | `plan-beskeder` `{job:"i_morgen"}` | Hvad der står i morgen | 17 UTC, søn–tors |
 | `kontor-beskeder` `{job:"push"}` | Det hastende til planlæggerne | hvert kvarter |
 | `kontor-beskeder` `{job:"morgen"}` | Morgenmail kl. 7 dansk tid | 5 og 6 UTC |
@@ -45,6 +46,7 @@ declare
 begin
   kald := 'select net.http_post(url := %L, headers := %L::jsonb, body := %L::jsonb, timeout_milliseconds := 60000)';
   perform cron.schedule('plan-aendringer-kvartal', '*/15 * * * *', format(kald, u||'plan-beskeder', h, '{"job":"aendringer"}'));
+  perform cron.schedule('glemt-start-5min',        '*/5 * * * *',  format(kald, u||'plan-beskeder', h, '{"job":"start"}'));
   perform cron.schedule('plan-i-morgen-aften',     '0 17 * * 0-4',  format(kald, u||'plan-beskeder', h, '{"job":"i_morgen"}'));
   perform cron.schedule('kontor-push-kvartal',     '*/15 * * * *', format(kald, u||'kontor-beskeder', h, '{"job":"push"}'));
   perform cron.schedule('kontor-morgenmail',       '0 5,6 * * *',  format(kald, u||'kontor-beskeder', h, '{"job":"morgen"}'));

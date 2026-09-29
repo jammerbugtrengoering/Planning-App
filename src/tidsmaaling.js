@@ -38,10 +38,17 @@ export function opsummerMaaling(timeLog) {
     registreret += Number(p.minutes) || 0;
     if (p.udenStart) {
       bemaerk.push("ingen start registreret");
+      // Afslutningens afstand skal med ogsaa uden start (29.9.2026): en opgave, der er
+      // afsluttet 5 km vaek, er vaerd at se, hvad enten tiden blev startet eller ej.
+      if (Number.isFinite(Number(p.afstandSlut)) && p.afstandSlut !== null && Number(p.afstandSlut) > LANGT_VAEK_M) {
+        bemaerk.push(`afsluttet ${formatAfstand(p.afstandSlut)} fra adressen`);
+      }
       continue;
     }
+    if (p.startetAfSystem) bemaerk.push("startet af systemet");
     if (Number.isFinite(Number(p.maalt))) { maalt += Number(p.maalt); harMaalt = true; }
-    if (p.afstandStart === null || p.afstandStart === undefined) bemaerk.push("startet uden position");
+    if (p.startetAfSystem) { /* ingen position ved en systemstart — det er ikke en fejl */ }
+    else if (p.afstandStart === null || p.afstandStart === undefined) bemaerk.push("startet uden position");
     else if (Number(p.afstandStart) > LANGT_VAEK_M) bemaerk.push(`startet ${formatAfstand(p.afstandStart)} fra adressen`);
     if (p.afstandSlut === null || p.afstandSlut === undefined) bemaerk.push("afsluttet uden position");
     else if (Number(p.afstandSlut) > LANGT_VAEK_M) bemaerk.push(`afsluttet ${formatAfstand(p.afstandSlut)} fra adressen`);
@@ -57,6 +64,29 @@ export function opsummerMaaling(timeLog) {
     bemaerk: [...new Set(bemaerk)],
     automatisk: poster.some((p) => p.automatisk),
   };
+}
+
+// «07:31». Tom tekst, hvis tidspunktet mangler.
+export function klokken(ms) {
+  if (ms === null || ms === undefined || !Number.isFinite(Number(ms))) return "";
+  return new Date(Number(ms)).toLocaleTimeString("da-DK", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Copenhagen" });
+}
+
+// Hvornaar og hvor blev der startet og afsluttet? Én linje pr. start/stop-post
+// (29.9.2026, Jonn: «planlagt 7.00, afsluttet 7.31, 5,4 km fra adressen» skal kunne
+// ses paa opgaven og i ugeplanen). Aldrig koordinater — kun afstanden.
+export function startSlutLinjer(timeLog) {
+  return (timeLog || []).filter((l) => l && l.startStop).map((p) => {
+    const vaekSlut = Number.isFinite(Number(p.afstandSlut)) && p.afstandSlut !== null && Number(p.afstandSlut) > LANGT_VAEK_M;
+    const vaekStart = Number.isFinite(Number(p.afstandStart)) && p.afstandStart !== null && Number(p.afstandStart) > LANGT_VAEK_M;
+    const start = p.udenStart ? "Ingen start"
+      : `Startet kl. ${klokken(p.start)}${p.startetAfSystem ? " af systemet"
+        : p.automatisk ? " ved ankomst" : ""}${p.startetAfSystem ? "" : ` · ${formatAfstand(p.afstandStart)} fra adressen`}`;
+    const slut = `Afsluttet kl. ${klokken(p.stop ?? p.ts)} · ${formatAfstand(p.afstandSlut)} fra adressen`;
+    return { empId: p.empId, start, slut, startKl: p.udenStart ? "" : klokken(p.start),
+             slutKl: klokken(p.stop ?? p.ts), vaekStart, vaekSlut, udenStart: !!p.udenStart,
+             system: !!p.startetAfSystem, afstandSlut: p.afstandSlut };
+  });
 }
 
 // ── Stopuret paa opgavekortet i ugeplanen (25.9.2026) ─────────────────────────
@@ -80,7 +110,8 @@ export function stopurStatus(opgave, koerende = [], nu = Date.now(), navnFor = (
     for (const r of koerende) {
       const start = new Date(r.startet).getTime();
       const slut = start + (planlagtFor(opgave, r.employee_id) + OVER_TIDEN_MIN) * 60000;
-      const kl = new Date(start).toLocaleTimeString("da-DK", { hour: "2-digit", minute: "2-digit" });
+      const kl = new Date(start).toLocaleTimeString("da-DK", { hour: "2-digit", minute: "2-digit" })
+        + (r.kilde === "system" ? " (startet af systemet)" : "");
       if (nu > slut) {
         over = Math.max(over, Math.round((nu - slut) / 60000) + OVER_TIDEN_MIN);
         linjer.push(`${navnFor(r.employee_id)} startede kl. ${kl} og er over tiden`);

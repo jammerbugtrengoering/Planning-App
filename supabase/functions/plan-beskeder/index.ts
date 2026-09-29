@@ -8,6 +8,10 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 //                             paamindelsen om startede opgaver, der burde vaere
 //                             afsluttet (start/stop, 24.9.2026).
 //   { job: "i_morgen" }     - koeres om aftenen. Fortaeller hvad der staar i morgen.
+//   { job: "start" }        - koeres hvert 5. minut (29.9.2026). Glemt Start: push
+//                             5 min efter planlagt start, og systemet starter tiden
+//                             efter 10 min. Databasen udvaelger og markerer
+//                             (start_mangler_behandl), saa hver ting sker én gang.
 //
 // HVORFOR SAMLET OG IKKE STRAKS. En planlaegger der rydder op i ugeplanen roerer
 // tyve opgaver paa fem minutter. Én besked pr. rettelse ville give medarbejderen
@@ -137,6 +141,33 @@ async function tidPaamindelser(admin: ReturnType<typeof createClient>) {
   }
 }
 
+// Glemt Start (Jonn 29.9.2026). Push med opgavens id som maerke, saa systemstarten
+// erstatter paamindelsen paa telefonen i stedet for at laegge sig oven i.
+async function startPaamindelser(admin: ReturnType<typeof createClient>) {
+  const { data, error } = await admin.rpc("start_mangler_behandl");
+  if (error) {
+    await livstegn(admin, false, "glemt start fejlede: " + error.message, true);
+    return { error: error.message };
+  }
+  const raekker = (data ?? []) as { employee_id: string; instance_id: string; titel: string; slags: string; kl: string }[];
+  let sendt = 0;
+  for (const r of raekker) {
+    const ok = r.slags === "systemstart"
+      ? await push(admin, r.employee_id, "Tiden er startet for dig",
+          `${r.titel}: tiden kører fra kl. ${r.kl}. Er det forkert, så tryk «Fortryd start» i Worklist og start selv.`,
+          "start-" + r.instance_id)
+      : await push(admin, r.employee_id, "Husk at trykke Start",
+          `${r.titel} skulle være startet kl. ${r.kl}. Åbn Worklist — står du ved adressen, starter tiden af sig selv.`,
+          "start-" + r.instance_id);
+    if (ok) sendt++;
+  }
+  const starter = raekker.filter((r) => r.slags === "systemstart").length;
+  if (raekker.length) {
+    await livstegn(admin, true, `glemt start: ${raekker.length - starter} paamindelse(r), ${starter} systemstart(er), ${sendt} push sendt`, true);
+  }
+  return { paamindelser: raekker.length - starter, systemstarter: starter, sendt };
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
 
@@ -144,7 +175,9 @@ Deno.serve(async (req) => {
   let job = "aendringer";
   try {
     const body = await req.json().catch(() => ({}));
-    job = body.job === "i_morgen" ? "i_morgen" : "aendringer";
+    job = body.job === "i_morgen" ? "i_morgen" : body.job === "start" ? "start" : "aendringer";
+
+    if (job === "start") return svar({ ok: true, ...(await startPaamindelser(admin)) });
 
     // ── Samlede planaendringer ──────────────────────────────────────
     if (job === "aendringer") {

@@ -6,6 +6,8 @@ import { forHvertFirma, sendPush, cors, svar, type Db, type Firma } from "../_fe
 //   { job: "aendringer" }   - hvert kvarter. Samlede planaendringer, én besked pr.
 //                             medarbejder, og paamindelsen om startede opgaver.
 //   { job: "i_morgen" }     - om aftenen. Hvad der staar i morgen.
+//   { job: "start" }        - hvert 5. minut. Glemt Start: push efter 5 min,
+//                             systemstart efter 10 min (start_mangler_behandl).
 //
 // { firma: "<id>" } koerer kun det ene firma (til afproevning).
 
@@ -111,12 +113,29 @@ async function iMorgen(db: Db, f: Firma) {
   return { medarbejdere: pr.size, sendt };
 }
 
+async function glemtStart(db: Db, f: Firma) {
+  const { data, error } = await db.rpc("start_mangler_behandl");
+  if (error) throw new Error("glemt start fejlede: " + error.message);
+  const raekker = (data ?? []) as { employee_id: string; instance_id: string; titel: string; slags: string; kl: string }[];
+  let sendt = 0;
+  for (const r of raekker) {
+    const system = r.slags === "systemstart";
+    if (await sendPush(db, { medarbejdere: [r.employee_id], maerke: "start-" + r.instance_id,
+      titel: system ? "Tiden er startet for dig" : "Husk at trykke Start",
+      tekst: system
+        ? `${r.titel}: tiden kører fra kl. ${r.kl}. Er det forkert, så tryk «Fortryd start» i Worklist og start selv.`
+        : `${r.titel} skulle være startet kl. ${r.kl}. Åbn Worklist — står du ved adressen, starter tiden af sig selv.` }) >= 0) sendt++;
+  }
+  if (raekker.length) await livstegn(db, f, true, `glemt start: ${raekker.length} besked(er), ${sendt} push sendt`, true);
+  return { beskeder: raekker.length, sendt };
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   try {
     const body = await req.json().catch(() => ({}));
-    const job = body.job === "i_morgen" ? "i_morgen" : "aendringer";
-    const res = await forHvertFirma(JOB, body.firma ?? null, job === "i_morgen" ? iMorgen : aendringer);
+    const job = body.job === "i_morgen" ? "i_morgen" : body.job === "start" ? "start" : "aendringer";
+    const res = await forHvertFirma(JOB, body.firma ?? null, job === "i_morgen" ? iMorgen : job === "start" ? glemtStart : aendringer);
     return svar({ ok: res.every((r) => r.ok), job, firmaer: res });
   } catch (e) {
     return svar({ error: String((e as Error)?.message ?? e) }, 500);

@@ -13,7 +13,7 @@ import { filtrerUgevalg } from "./ugevalg";
 import { portefoeljeTal, aarMedBesoeg } from "./portefoelje";
 import { hentAlleRaekker } from "./hentalle";
 import { vinduetsGraenser, vinduetsStykker, hentedeUgerFra, ugenErHentet } from "./vindue";
-import { opsummerMaaling, formatAfstand, stopurStatus } from "./tidsmaaling";
+import { opsummerMaaling, formatAfstand, stopurStatus, startSlutLinjer } from "./tidsmaaling";
 import { findDubletter } from "./dubletter";
 import {
   Plus, Download, X, Clock, AlertTriangle,
@@ -1604,6 +1604,15 @@ const MODULE_HELP = {
         "Rødt: noget skal ses på. Over tiden uden begrundelse, registreret mere end målt, målt langt fra adressen, eller en tid der stadig kører et kvarter efter, opgaven skulle være færdig.",
         "Hold musen over uret for at se hvorfor. Klik på opgaven for at se hver registrering.",
         "Uret opdaterer sig selv. Du skal ikke genindlæse siden."] },
+    { h: "Start og afslut på kortet ▶ ■", p: [
+        "Under en opgave med start/stop står, hvornår tiden blev startet (▶) og afsluttet (■). Står der en afstand, blev opgaven afsluttet så langt fra adressen.",
+        "Linjen er rød, når der ikke blev trykket Start, eller når der blev startet eller afsluttet mere end 150 m fra adressen. Hold musen over linjen for at se hvem.",
+        "Åbn opgaven for at se det hele pr. medarbejder: planlagt tidspunkt, startet kl. og afstand, afsluttet kl. og afstand."] },
+    { h: "Glemt Start", p: [
+        "Har en medarbejder med start/stop ikke startet tiden 5 minutter efter det planlagte tidspunkt, får hun en besked på telefonen: «Husk at trykke Start».",
+        "Er tiden stadig ikke startet efter 10 minutter, starter systemet den fra det planlagte tidspunkt (eller fra hendes sidste afslutning, hvis den ligger senere). Så står der «(system)» ved starten.",
+        "En tid startet af systemet er et skøn, ikke en måling. Medarbejderen skal ikke forklare det, hvis hun retter tiden ved Afslut.",
+        "Der sker intet, mens hun har en anden tid kørende, eller hvis opgaven ikke har et fast tidspunkt."] },
     { h: "Klokken — til kontoret 🔔", p: [
         "Klokken øverst til højre samler alt, der venter på en planlægger: ønsker om ny tid, «kom ikke ind», bestillinger fra kunder, medarbejdernes produktbestillinger, udleveringer der ikke er bekræftet efter 14 dage, tider der er gået over tiden, afvigelser de sidste 14 dage, og fejl fra Drift.",
         "Tallet er rødt, når noget haster. Tryk «Åbn» for at komme derhen, hvor sagen klares.",
@@ -3220,10 +3229,10 @@ function PlanningApp({ session, onSignOut }) {
     let afbrudt = false;
     const saml = (raekker) => {
       const kort = {};
-      for (const r of raekker || []) (kort[r.instance_id] ||= []).push({ employee_id: r.employee_id, startet: r.startet });
+      for (const r of raekker || []) (kort[r.instance_id] ||= []).push({ employee_id: r.employee_id, startet: r.startet, kilde: r.kilde });
       return kort;
     };
-    supabase.from("tidsstart").select("instance_id, employee_id, startet").then(({ data }) => {
+    supabase.from("tidsstart").select("instance_id, employee_id, startet, kilde").then(({ data }) => {
       if (!afbrudt && data) setKoerendeTider(saml(data));
     });
     const kanal = supabase
@@ -3239,7 +3248,7 @@ function PlanningApp({ session, onSignOut }) {
           if (payload.eventType !== "DELETE" && payload.new?.instance_id) {
             const ny = payload.new;
             next[ny.instance_id] = [...(next[ny.instance_id] || []).filter((r) => r.employee_id !== ny.employee_id),
-              { employee_id: ny.employee_id, startet: ny.startet }];
+              { employee_id: ny.employee_id, startet: ny.startet, kilde: ny.kilde }];
           }
           return next;
         });
@@ -6427,6 +6436,16 @@ function WeekView({ employees, instances, unplaced, adgangTekst, onUdskrivMedAdg
                                 ✓ {completion.label}{completion.when ? ` · ${completion.when}` : ""}
                               </div>
                             )}
+                            {/* Start/stop (29.9.2026): hvornaar og hvor langt fra adressen der
+                                blev startet og afsluttet. Roed, naar det skete langt fra adressen. */}
+                            {startSlutLinjer(t.timeLog).map((l, i) => (
+                              <div key={i} title={`${employees.find((e) => e.id === l.empId)?.name || ""}: ${l.start} · ${l.slut}`}
+                                style={{ fontSize: 10.5, fontWeight: 700, marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                                         color: l.vaekSlut || l.vaekStart || l.udenStart ? "#B91C1C" : "#475569" }}>
+                                {l.udenStart ? "▶ ingen start" : `▶ ${l.startKl}${l.system ? " (system)" : ""}`} · ■ {l.slutKl}
+                                {l.vaekSlut ? ` · ${formatAfstand(l.afstandSlut)} væk` : ""}
+                              </div>
+                            ))}
                             <div style={styles.chipAssigneeRow} onClick={(e) => e.stopPropagation()}>
                               {assignedEmps.map((a) => (
                                 <button key={a.id} type="button" style={{ ...styles.chipAvatar, background: a.color }} title={`Fjern ${a.name}`}
@@ -16893,11 +16912,18 @@ return (
                     {m.automatisk && " · startet ved ankomst"}
                   </div>
                 )}
-                {l.startStop && !l.udenStart && (
-                  <div style={{ color: "#475569" }}>
-                    📍 Start {formatAfstand(l.afstandStart)} · slut {formatAfstand(l.afstandSlut)} fra adressen
-                  </div>
-                )}
+                {/* Hvornaar og hvor (29.9.2026): planlagt, startet og afsluttet med
+                    klokkeslaet og afstand til adressen. Roed, naar det er langt vaek. */}
+                {l.startStop && (() => {
+                  const sl = startSlutLinjer([l])[0];
+                  return (
+                    <div style={{ color: "#475569" }}>
+                      {t.scheduledTime && <div>🕒 Planlagt kl. {String(t.scheduledTime).slice(0, 5).replace(":", ".")}</div>}
+                      <div style={{ color: sl.vaekStart || sl.udenStart ? "#B91C1C" : "#475569", fontWeight: sl.vaekStart || sl.udenStart ? 700 : 400 }}>▶ {sl.start}</div>
+                      <div style={{ color: sl.vaekSlut ? "#B91C1C" : "#475569", fontWeight: sl.vaekSlut ? 700 : 400 }}>■ {sl.slut}</div>
+                    </div>
+                  );
+                })()}
                 {m && m.bemaerk.length > 0 && (
                   <div style={{ color: "#B45309", fontWeight: 600 }}>{m.bemaerk.join(" · ")}</div>
                 )}
