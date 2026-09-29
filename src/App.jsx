@@ -6,7 +6,7 @@ import { fakturerbareMinutter, registreredeMinutter, oplaeringsFolk, erUnderOpla
          planlagtFakturerbart, afvigelse, planlagtFor, planlagtIAlt,
          fordelingen, harFordeling } from "./opgavetid.js";
 import { supabase } from "./supabaseClient";
-import { FIRMA, useFirma, brugTitel, opdaterFirma, farveHex } from "./firma";
+import { FIRMA, useFirma, brugTitel, opdaterFirma, farveHex, harModul } from "./firma";
 import { aftaleKoererPaaDag, DAG_FRA_INDEKS, nyStartdatoHvisPasseret } from "./aftalerytme";
 import { holdOejeMedNyVersion } from "./nyversion";
 import { filtrerUgevalg } from "./ugevalg";
@@ -246,6 +246,12 @@ const MENU_GRUPPER = [
 ];
 function gruppeFor(view) {
   return MENU_GRUPPER.find((g) => g.sider.some(([k]) => k === view)) || MENU_GRUPPER[0];
+}
+// Sider, der hoerer til et modul (fase 2, 29.9.2026). Er modulet ikke med, forsvinder
+// siden fra menuen — og databasen afviser den alligevel. Hos Jammerbugt er alle med.
+const SIDE_MODUL = { inventory: "lager", tilbud: "tilbud" };
+function synligeSider(gr) {
+  return gr.sider.filter(([k]) => !SIDE_MODUL[k] || harModul(SIDE_MODUL[k]));
 }
 
 // Hvem staar paa opgaven — kunden eller borgeren?
@@ -1638,7 +1644,8 @@ const MODULE_HELP = {
         "Afsendernavn og «Svar går til» bruges på alle mails fra systemet: påmindelser, invitationer og morgenmailen.",
         "Hovedfarve og lys/mørk menu slår igennem i planlægningen, Worklist og kundeportalen. Systemet regner selv de lyse og mørke nuancer ud.",
         "Modulerne vises her, men kan ikke ændres. Hos Jammerbugt Rengøring er alle altid med; hos en kunde er det de købte moduler, der afgør det.",
-        "Uden modulet Nexus kan man ikke vælge kontrakttyperne Nexus og Ældrelov, når man opretter opgaver og aftaler."] },
+        "Uden modulet Nexus kan man ikke vælge kontrakttyperne Nexus og Ældrelov, når man opretter opgaver og aftaler.",
+        "Et modul, der ikke er med, forsvinder fra menuen og fra Worklist — Lager, Tilbud, Kundeportal og Start/stop. Databasen afviser det også, så det kan ikke omgås."] },
     { h: "Logo", p: [
         "PNG, JPG, SVG eller WEBP på højst 1 MB. Et kvadratisk logo ser bedst ud.",
         "«Brug standardikonet» går tilbage til appens eget ikon. Husk at trykke Gem."] },
@@ -3205,6 +3212,8 @@ function PlanningApp({ session, onSignOut }) {
   // Det, der foer stod fast i koden. Mangler raekken, bruges de gamle vaerdier, saa
   // menuen aldrig staar tom.
   const [firma, setFirma] = useState(null);
+  // Genrender, naar firmaets moduler er hentet, saa menuen passer til dem.
+  useFirma(null);
   useEffect(() => {
     supabase.from("firma").select("*").eq("id", "default").maybeSingle()
       .then(({ data }) => { if (data) setFirma(data); });
@@ -5375,10 +5384,10 @@ function PlanningApp({ session, onSignOut }) {
           </div>
         </div>
         <nav style={styles.nav}>
-          {MENU_GRUPPER.filter((gr) => !gr.kunAdmin || isAdminUser).map((gr) => {
+          {MENU_GRUPPER.filter((gr) => (!gr.kunAdmin || isAdminUser) && synligeSider(gr).length > 0).map((gr) => {
             const aktiv = gruppeFor(view).key === gr.key;
             return (
-              <button key={gr.key} onClick={() => setView(gr.sider[0][0])}
+              <button key={gr.key} onClick={() => setView(synligeSider(gr)[0][0])}
                 style={aktiv ? styles.navBtnActive : styles.navBtn}>{gr.navn}</button>
             );
           })}
@@ -5392,9 +5401,9 @@ function PlanningApp({ session, onSignOut }) {
 
       {/* Anden raekke: siderne i den valgte gruppe. Ugeplanen har kun én side, og
           dens egen vaerktoejslinje staar allerede her — saa der vises ingen faner. */}
-      {gruppeFor(view).sider.length > 1 && (
+      {synligeSider(gruppeFor(view)).length > 1 && (
         <div style={styles.underNav}>
-          {gruppeFor(view).sider.map(([k, l]) => (
+          {synligeSider(gruppeFor(view)).map(([k, l]) => (
             <button key={k} onClick={() => setView(k)}
               style={view === k ? styles.underNavAktiv : styles.underNavBtn}>{l}</button>
           ))}
@@ -6702,11 +6711,13 @@ function EmployeesView({ employees, onAdd, onEdit, onDelete, supabase, skills, o
           onClick={() => { setShowAreasPanel((v) => !v); setShowSkillsPanel(false); setShowStartStopPanel(false); }}>
           📍 Områder
         </button>
+        {harModul("start_stop") && (
         <button
           style={{ ...styles.secondaryBtn, ...(showStartStopPanel ? { background: "#ECFDF5", color: "#047857", borderColor: "#A7F3D0" } : {}) }}
           onClick={() => { setShowStartStopPanel((v) => !v); setShowSkillsPanel(false); setShowAreasPanel(false); }}>
           ⏱ Start/stop
         </button>
+        )}
       </div>
 
       {showSkillsPanel && (
@@ -7299,7 +7310,7 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
         }}><Download size={16} /> {exportingToDinero ? "Eksporterer…" : "Eksporter til Dinero"}</button>
       </div>
 
-      {isAdminUser && <AbonnementLinjer maaned={filterMonth} aar={filterYear} maanedNavn={MONTHS[filterMonth]} />}
+      {isAdminUser && harModul("kundeportal") && <AbonnementLinjer maaned={filterMonth} aar={filterYear} maanedNavn={MONTHS[filterMonth]} />}
 
       {/* Timepris-panel */}
       {showPricing && (
@@ -13256,7 +13267,7 @@ function KunderView({ supabase, currentEmployeeId }) {
                 ) : (
                   <>
                     <KundeFakturaer supabase={supabase} guid={k.guid} />
-                    <PortalAfsnit supabase={supabase} kunde={k} currentEmployeeId={currentEmployeeId} onAendret={hent} />
+                    {harModul("kundeportal") && <PortalAfsnit supabase={supabase} kunde={k} currentEmployeeId={currentEmployeeId} onAendret={hent} />}
                   </>
                 )}
               </div>
@@ -15345,6 +15356,7 @@ function EmployeeModal({ emp, onClose, onSave, skills: skillList, satsHistorik, 
               kontroltiltag paa den tid, der loennes og faktureres, og det maa kun
               kontoret slaa til. Databasen haandhaever det ogsaa — guard_employees_update
               lader ikke medarbejderen roere feltet. */}
+          {harModul("start_stop") && (<>
           <button type="button" style={startStop ? styles.empTjekAktivGroen : styles.empTjek}
             onClick={() => setStartStop((v) => !v)}>
             <span style={startStop ? styles.empTjekFirkantGroen : styles.empTjekFirkant}>
@@ -15358,6 +15370,7 @@ function EmployeeModal({ emp, onClose, onSave, skills: skillList, satsHistorik, 
             adressen. Uden fluebenet registrerer hun som i dag. <b>Et kontroltiltag: skal varsles,
             før det slås til.</b>
           </div>
+          </>)}
           <label style={styles.label}>Timeløn (kr.)</label>
           <input style={{ ...styles.input, maxWidth: 160 }} type="number" min="0" step="1" value={hourlyWage}
             onChange={(e) => setHourlyWage(e.target.value)} placeholder={String(STANDARD_TIMELOEN)} />
