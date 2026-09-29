@@ -14,6 +14,7 @@ import { portefoeljeTal, aarMedBesoeg } from "./portefoelje";
 import { hentAlleRaekker } from "./hentalle";
 import { vinduetsGraenser, vinduetsStykker, hentedeUgerFra, ugenErHentet } from "./vindue";
 import { opsummerMaaling, formatAfstand, stopurStatus, startSlutLinjer } from "./tidsmaaling";
+import { hentXlsx } from "./excel";
 import { findDubletter } from "./dubletter";
 import {
   Plus, Download, X, Clock, AlertTriangle,
@@ -1771,7 +1772,12 @@ const MODULE_HELP = {
         "Vælg tjeklisten når du opretter en opgave. Der kan vælges flere."] },
   ], warn: "Retter du i en tjekliste, slår ændringen igennem med det samme på alle opgaver der endnu ikke er udført — også dem der allerede ligger i kalenderen. Punkter medarbejderen har sat flueben ved bevares. Udførte opgaver røres ikke, så det står fast hvad der faktisk blev gjort." },
 
-  time: { title: "Fakturering", intro: "Her omsætter du udført arbejde til fakturakladder i Dinero.", blocks: [
+  time: { title: "Fakturering", intro: KUNDEUDGAVE ? "Her ser du planlagt og registreret tid og beløb, og henter det som en Excel-fil." : "Her omsætter du udført arbejde til fakturakladder i Dinero.", blocks: [
+    ...(KUNDEUDGAVE ? [{ h: "Eksporter til Excel", p: [
+        "Knappen «Eksporter til Excel» henter præcis de rækker, du ser: samme måned, samme status og samme filtre.",
+        "Filen har uge, dag, medarbejder, kunde, adresse, opgave, status, planlagt og registreret tid i timer, beløbene og om rækken er fakturagrundlag.",
+        "Beløbene regnes ud fra timepriserne under «Timepriser» eller opgavens fastpris.",
+        "Filen kan åbnes i Excel, Numbers og Google Sheets og lægges ind i jeres eget regnskabsprogram."] }] : []),
     { h: "Abonnementer", p: [
         "Øverst står månedens abonnementer: én linje pr. kunde med en aktiv kundeportal.",
         "Prisen kommer fra Produkter under Salg. Linjerne opdateres, hver gang du åbner måneden, indtil de er sendt til Dinero. Derefter røres de ikke.",
@@ -2974,7 +2980,17 @@ function PlanningApp({ session, onSignOut }) {
         // Det er det rigtige forhold: en tom ugeplan er en arbejdsdag, der gaar i staa,
         // mens en rapport, der er et minut om at komme, er til at leve med.
         hentResten().then((alle) => {
-          if (!alle || !alle.length) return;
+          // Ingen opgaver uden for vinduet er ogsaa et svar (29.9.2026): et nyt firma
+          // har kun de faa, foerste runde allerede hentede. Foer blev der returneret
+          // her uden at melde faerdig, og banneret «Tallene er ikke færdige endnu»
+          // stod saa for evigt. Kun en fejl (catch nedenfor) lader det staa.
+          if (!alle) return;
+          if (!alle.length) {
+            saetHentedeUger(null);
+            setHentedeUgerNu(null);
+            setAlleOpgaverHentet(true);
+            return;
+          }
           const kortlagt = alle.map(kortlaegOpgave);
           setInstances((cur) => {
             // Vinduets udgave vinder. Den har vaeret gennem selvhelbredelsen og kan
@@ -2991,8 +3007,12 @@ function PlanningApp({ session, onSignOut }) {
         }).catch((e) => {
           console.error("Anden runde af opgaver fejlede:", e);
         });
-      } else if (instData?.length) {
-        setInstances(instData.map((i) => ({
+      } else {
+        // Ingen aftaler endnu (fx et nyt firma i kundeudgaven, 29.9.2026). Foer
+        // stod her «else if (instData?.length)»: uden opgaver blev bestillinger og
+        // noter aldrig sat, og der kom ingen anden runde — saa opgaver uden for
+        // vinduet manglede, og banneret «Tallene er ikke færdige endnu» stod for evigt.
+        setInstances((instData || []).map((i) => ({
           ...i, timeLog: i.time_log ?? [], requiredSkills: i.required_skills ?? [],
           templateId: i.template_id ?? null,
           contractType: i.contract_type || "privat",
@@ -3015,6 +3035,21 @@ function PlanningApp({ session, onSignOut }) {
         setNyTidOnsker(onskerData || []);
         setBestillinger(bestillingerData || []);
         setOpgaveNoter(grupperNoter(noterData));
+        hentResten().then((alle) => {
+          if (alle?.length) {
+            const kortlagt = alle.map(kortlaegOpgave);
+            setInstances((cur) => {
+              const efterId = new Map(kortlagt.map((t) => [t.id, t]));
+              cur.forEach((t) => efterId.set(t.id, t));
+              return [...efterId.values()];
+            });
+          }
+          saetHentedeUger(null);
+          setHentedeUgerNu(null);
+          setAlleOpgaverHentet(true);
+        }).catch((e) => {
+          console.error("Anden runde af opgaver fejlede:", e);
+        });
       }
 
       // Transport
@@ -7381,7 +7416,7 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
           </span>
           Kun fakturagrundlag
         </label>
-        {invoiceOnly && (
+        {invoiceOnly && harModul("dinero") && (
           <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: showDineroExported ? 700 : 400, color: showDineroExported ? "#4F46E5" : "#475569", cursor: "pointer" }}
             onClick={() => setShowDineroExported((v) => !v)}>
             <span style={{ width: 18, height: 18, borderRadius: 5, border: showDineroExported ? "2px solid #4F46E5" : "2px solid #CBD5E1", background: showDineroExported ? "#4F46E5" : "#fff", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -7395,10 +7430,34 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
           onClick={() => setShowPricing((v) => !v)}>
           💰 Timepriser
         </button>
-        <button style={styles.primaryBtn} disabled={exportingToDinero} onClick={async () => {
-          setExportingToDinero(true);
-          try { await onExportToDinero(placed, `${MONTHS[filterMonth]}-${filterYear}`); } finally { setExportingToDinero(false); }
-        }}><Download size={16} /> {exportingToDinero ? "Eksporterer…" : "Eksporter til Dinero"}</button>
+        {/* Kundeudgaven har ingen Dinero (Jonn 29.9.2026): der eksporteres til Excel i
+            stedet. Hos Jammerbugt Rengoering er knappen den samme som altid. */}
+        {harModul("dinero") ? (
+          <button style={styles.primaryBtn} disabled={exportingToDinero} onClick={async () => {
+            setExportingToDinero(true);
+            try { await onExportToDinero(placed, `${MONTHS[filterMonth]}-${filterYear}`); } finally { setExportingToDinero(false); }
+          }}><Download size={16} /> {exportingToDinero ? "Eksporterer…" : "Eksporter til Dinero"}</button>
+        ) : (
+          <button style={styles.primaryBtn} disabled={placed.length === 0} onClick={() => {
+            const t2 = (m) => Math.round((Number(m) || 0) / 60 * 100) / 100;
+            const raekker = [["Uge", "Dag", "Medarbejder", "Kunde", "Adresse", "Opgave", "Status",
+              "Planlagt (timer)", "Planlagt kr.", "Registreret (timer)", "Registreret kr.", "Difference kr.", "Fakturagrundlag"]];
+            for (const t of placed) {
+              const rate = localPricing[t.contractType || "privat"] || 0;
+              const fast = t.pricingType === "fixed";
+              const logget = fakturerbareMinutter(t);
+              const planKr = fast ? Math.round(Number(t.fixedPrice) || 0) : Math.round((samletArbejde(t) / 60) * rate);
+              const regKr = fast ? (logget > 0 ? planKr : 0) : Math.round((logget / 60) * rate);
+              raekker.push([
+                Number(t.week) || "", ALL_DAYS.find((d) => d.key === t.day)?.label || t.day || "",
+                (t.assignees || []).map((id) => employees.find((e) => e.id === id)?.name).filter(Boolean).join(", "),
+                t.customerName || "", t.address || "", t.title || "", t.status || "",
+                t2(samletArbejde(t)), planKr, t2(logget), regKr, regKr - planKr, t.invoiceReady ? "Ja" : "Nej",
+              ]);
+            }
+            hentXlsx(`Fakturering-${MONTHS[filterMonth]}-${filterYear}`, `${MONTHS[filterMonth]} ${filterYear}`, raekker);
+          }}><Download size={16} /> Eksporter til Excel</button>
+        )}
       </div>
 
       {isAdminUser && harModul("kundeportal") && <AbonnementLinjer maaned={filterMonth} aar={filterYear} maanedNavn={MONTHS[filterMonth]} />}
