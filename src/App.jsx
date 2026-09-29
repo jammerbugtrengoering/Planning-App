@@ -473,18 +473,45 @@ function fetchAllRows(table, columns = "*", filter = null) {
 //   * kompetencerne paa nogle aftaler manglede i appen og kunne gaa tabt, naar
 //     aftalen blev gemt
 // Sorteret paa noeglekolonnerne, saa siderne ikke overlapper; siderne hentes samtidig.
+//
+// Hoejst to sider ad gangen, og hver side proeves op til tre gange (29.9.2026).
+// Foerst hentede den alle 16 sider paa én gang. Under belastning svarede databasen
+// 500 paa halvdelen, hele adgangslisten blev tom — og selvhelbredelsen gemte saa
+// ~600 opgaver, hvilket belastede databasen endnu mere. En ond cirkel, maalt i
+// loggen: 10 af 16 sider fejlede ved hver opstart.
 async function hentAlleSider(tabel, kolonner, sortering) {
   const { count, error: tFejl } = await supabase.from(tabel).select("*", { count: "exact", head: true });
   if (tFejl) return { data: null, error: tFejl };
   const sider = Math.max(1, Math.ceil((count || 0) / 1000));
-  const svar = await Promise.all(Array.from({ length: sider }, (_, i) => {
-    let q = supabase.from(tabel).select(kolonner);
-    for (const k of sortering) q = q.order(k, { ascending: true });
-    return q.range(i * 1000, i * 1000 + 999);
-  }));
+  const hentSide = async (i) => {
+    let sidste = null;
+    for (let forsoeg = 0; forsoeg < 3; forsoeg++) {
+      if (forsoeg) await new Promise((r) => setTimeout(r, 400 * forsoeg));
+      let q = supabase.from(tabel).select(kolonner);
+      for (const k of sortering) q = q.order(k, { ascending: true });
+      const r = await q.range(i * 1000, i * 1000 + 999);
+      if (!r.error) return r;
+      sidste = r;
+    }
+    return sidste;
+  };
+  const svar = [];
+  for (let i = 0; i < sider; i += 2) {
+    svar.push(...await Promise.all([i, i + 1].filter((n) => n < sider).map(hentSide)));
+  }
   const fejl = svar.find((r) => r.error);
   if (fejl) return { data: null, error: fejl.error };
   return { data: svar.flatMap((r) => r.data || []) };
+}
+
+// Blev adgangsteksterne hentet? Hvis ikke, ved appen ikke hvad der staar paa
+// opgaverne, og selvhelbredelsen maa ikke sammenligne adgangstekst — ellers ser alle
+// opgaver med en tekst paa aftalen «aendrede» ud og bliver gemt, med praecis den
+// tekst der stod i forvejen (29.9.2026: 641 opgaver ved hver opstart).
+let adgangIndlaest = false;
+function adgangAendret(foer, efter) {
+  if (!adgangIndlaest) return false;
+  return (foer.accessInstructions ?? "").trim() !== (efter.accessInstructions ?? "").trim();
 }
 
 // FOERSTE RUNDE: opgaverne i ugerne omkring i dag.
@@ -2879,6 +2906,7 @@ function PlanningApp({ session, onSignOut }) {
       const custAccess = Object.fromEntries((custAccessData || []).map((r) => [r.customer_id, r.adgangstekst]));
       instAccessRef.current = instAccess;
       custAccessRef.current = custAccess;
+      adgangIndlaest = Array.isArray(instAccessData);
 
       // Serviceordre-skabeloner – saml skills op + hent kundedata
       // Oversaettelsen fra databasens raekke til appens opgave. Lagt i en funktion,
@@ -3766,8 +3794,9 @@ function PlanningApp({ session, onSignOut }) {
       const prev = beforeById.get(t.id);
       if (!prev) return false;
       const assigneesChanged = JSON.stringify(prev.assignees || []) !== JSON.stringify(t.assignees || []);
-      const fieldsChanged = ["customerName","address","poNumber","accessInstructions","contractType","videoUrl","telefon","email","kontaktperson"]
-        .some((k) => (prev[k] ?? "") !== (t[k] ?? ""));
+      const fieldsChanged = ["customerName","address","poNumber","contractType","videoUrl","telefon","email","kontaktperson"]
+        .some((k) => (prev[k] ?? "") !== (t[k] ?? ""))
+        || adgangAendret(prev, t);
       return assigneesChanged || fieldsChanged;
     });
     if (!aendrede.length) return;
@@ -3781,7 +3810,7 @@ function PlanningApp({ session, onSignOut }) {
     const kraeverHelRaekke = aendrede.filter((t) => {
       const prev = beforeById.get(t.id);
       return JSON.stringify(prev.assignees || []) !== JSON.stringify(t.assignees || [])
-        || (prev.accessInstructions ?? "") !== (t.accessInstructions ?? "");
+        || adgangAendret(prev, t);
     });
     const kunArvede = aendrede.filter((t) => !kraeverHelRaekke.includes(t));
     kraeverHelRaekke.forEach(syncInstance);
