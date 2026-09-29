@@ -1881,6 +1881,8 @@ const MODULE_HELP = {
         "Option er en trappe: Basis < Udvidet < Premium. Hvert trin har alt fra trinnet under. Premium er Udvidet plus kundens egen planlægning og Worklist til sine egne medarbejdere.",
         "Vælg Premium i Option-feltet. Første gang folder felterne ud: administratorens navn og mail, det korte navn i adressen, branchen og tilvalgene. Branchen giver en første tjekliste, så kunden ikke starter på en tom skærm.",
         "Tilvalgene er Start/stop, Lager, Tilbud og Kundeportal (kundens egen portal til sine kunder).",
+        "Har kunden allerede en portal, er administratoren udfyldt med portalens administrator. Portalen og planlægningen er to logins: portalen logger ind med en kode på mail, planlægningen med en adgangskode, hun selv vælger via linket. Samme mail kan bruges begge steder.",
+        "Portalen, dens brugere og adressen bliver som de er, når kunden går til Premium. Planlægningen får sin egen adresse.",
         "«Opret og send link» opretter planlægningen og skifter kunden til Premium i samme skridt. Administratoren får en mail med et link til at vælge adgangskode. Er mailen gået tabt, tryk «Send link igen».",
         "Planlægningen kan kun oprettes herfra. Der er ingen tilmelding på nettet.",
         "Kundens data ligger i en database for sig, adskilt fra jeres. I kan ikke se kundens medarbejdere eller opgaver, og kunden kan ikke se jeres.",
@@ -13320,6 +13322,18 @@ function PremiumDel({ kunde, kl, priser, foreslaaetSlug, onAnnuller, onGemt }) {
   useEffect(() => {
     if (kl) setValgt(Object.fromEntries(LOESNING_TILVALG.map(([k]) => [k, !!kl["modul_" + k]])));
   }, [kl]);
+  // Samme person som portalens administrator, som udgangspunkt (Jonn 29.9.2026). Det er
+  // to forskellige logins — portalen hos jer, planlaegningen i kundedatabasen — men
+  // samme mail kan bruges begge steder.
+  useEffect(() => {
+    if (kl) return;
+    supabase.from("portal_brugere").select("navn, email").eq("dinero_contact_guid", kunde.guid)
+      .eq("rolle", "admin").eq("aktiv", true).order("oprettet").limit(1)
+      .then(({ data }) => {
+        const a = data?.[0];
+        if (a?.email) { setAdminEmail(a.email); if (a.navn) setAdminNavn(a.navn); }
+      });
+  }, [kl, kunde.guid]);
 
   const kr = (n) => `${Number(n || 0).toLocaleString("da-DK")} kr./md.`;
   const tilvalgSum = LOESNING_TILVALG.reduce((s, [k]) => s + (valgt[k] ? (priser["loesning_" + k] || 0) : 0), 0);
@@ -13419,6 +13433,7 @@ function PremiumDel({ kunde, kl, priser, foreslaaetSlug, onAnnuller, onGemt }) {
       <div style={{ fontSize: 13, fontWeight: 700 }}>Opret kundens egen planlægning og Worklist</div>
       <div style={{ fontSize: 12.5, color: "#64748B", lineHeight: 1.5, marginTop: 2 }}>
         Kundens data ligger i en database for sig, adskilt fra jeres. Administratoren får en mail med et link.
+        Portalen og planlægningen er to logins; som udgangspunkt er det portalens administrator, og samme mail kan bruges begge steder.
       </div>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         <div style={{ flex: 1, minWidth: 170 }}>
@@ -13433,7 +13448,8 @@ function PremiumDel({ kunde, kl, priser, foreslaaetSlug, onAnnuller, onGemt }) {
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         <div style={{ flex: 1, minWidth: 170 }}>
           <label style={styles.label}>Kort navn i adressen</label>
-          <input style={styles.input} value={slug} onChange={(e) => setSlug(e.target.value.toLowerCase())} />
+          <input style={styles.input} value={slug}
+            onChange={(e) => setSlug(e.target.value.toLowerCase().replace(/[æä]/g, "ae").replace(/[øö]/g, "oe").replace(/å/g, "aa").replace(/[^a-z0-9-]+/g, "-"))} />
           <div style={styles.hint}>{PLANLAEGNING_KUNDE_URL}/{slug}</div>
         </div>
         <div style={{ flex: 1, minWidth: 200 }}>
