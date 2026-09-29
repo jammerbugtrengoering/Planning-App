@@ -487,6 +487,40 @@ function hentResten() {
   return fetchAllRows("instances_let", "*", (q) => q.is("deleted_at", null));
 }
 
+// ── Kundeopslag (29.9.2026) ──────────────────────────────────────────────────
+// Hos Jammerbugt Rengoering slaas kunden op i Dinero. Kundeudgaven har INGEN Dinero
+// (Jonn): der slaas op i firmaets egen kundeliste (tabellen customers), og en ny kunde
+// oprettes direkte fra soegningen. Svaret har Dineros form (ContactGuid, Name, ...),
+// saa resten af appen ikke skal kende forskel. Kundens id gemmes som altid i
+// dinero_contact_guid — feltet er kundenoeglen i hele appen, navnet er historisk.
+const KUNDER_I_DINERO = () => harModul("dinero");
+async function soegKunder(q) {
+  if (KUNDER_I_DINERO()) {
+    const { data, error } = await supabase.functions.invoke("dinero", { body: { action: "search", query: q } });
+    if (error) throw error;
+    return data?.Collection || [];
+  }
+  const tekst = String(q || "").trim();
+  const { data, error } = await supabase.from("customers")
+    .select("id, name, address, telefon, email, kontaktperson")
+    .ilike("name", `%${tekst.replace(/[%_]/g, "")}%`).order("name").limit(20);
+  if (error) throw error;
+  const liste = (data || []).map((k) => ({ ContactGuid: k.id, Name: k.name, Street: k.address,
+    Phone: k.telefon, Email: k.email, AttPerson: k.kontaktperson }));
+  if (tekst.length >= 2 && !liste.some((k) => (k.Name || "").trim().toLowerCase() === tekst.toLowerCase())) {
+    liste.push({ ContactGuid: "__ny__", Name: tekst, Street: "＋ Opret som ny kunde", ny: true });
+  }
+  return liste;
+}
+// Er den valgte kunde «＋ Opret som ny kunde», oprettes hun nu og faar sit id.
+async function sikrKunde(c) {
+  if (!c?.ny) return c;
+  const { data, error } = await supabase.from("customers").insert({ name: c.Name }).select("id, name").single();
+  if (error) throw error;
+  return { ...c, ContactGuid: data.id, Street: "", ny: false };
+}
+const KUNDE_SOEG_TEKST = () => (KUNDER_I_DINERO() ? "Søger i Dinero mens du skriver" : "Søger i jeres kundeliste — ny kunde oprettes herfra");
+
 function weekdayKeyFor(date) {
   const dayKeys = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
   const dow = date.getDay();
@@ -1778,6 +1812,8 @@ const MODULE_HELP = {
         "Filen har uge, dag, medarbejder, kunde, adresse, opgave, status, planlagt og registreret tid i timer, beløbene og om rækken er fakturagrundlag.",
         "Beløbene regnes ud fra timepriserne under «Timepriser» eller opgavens fastpris.",
         "Filen kan åbnes i Excel, Numbers og Google Sheets og lægges ind i jeres eget regnskabsprogram."] }] : []),
+    ...(KUNDEUDGAVE ? [{ h: "Kunder", p: [
+        "Kunden vælges i feltet «Fakturakunde» på aftalen eller opgaven. Skriv navnet; findes kunden ikke, vælger du «＋ Opret som ny kunde»."] }] : [
     { h: "Abonnementer", p: [
         "Øverst står månedens abonnementer: én linje pr. kunde med en aktiv kundeportal.",
         "Prisen kommer fra Produkter under Salg. Linjerne opdateres, hver gang du åbner måneden, indtil de er sendt til Dinero. Derefter røres de ikke.",
@@ -1787,13 +1823,14 @@ const MODULE_HELP = {
         "Kunder oprettes altid i Dinero, aldrig herfra. I feltet «Fakturakunde» søger du i Dinero mens du skriver, og vælger kunden i listen.",
         "Når du vælger kunden, gemmes hendes unikke kundenummer på opgaven og på aftalen. Det er det nummer eksporten bruger — så to kunder med samme navn ikke kan forveksles.",
         "Finder søgningen ingen, skal kunden oprettes i Dinero først. Så kan du finde den her bagefter.",
-        "Svarer Dinero ikke, så vent lidt og prøv igen. Du kan ikke oprette kunden midlertidigt i systemet — en kunde uden Dinero-nummer kan ikke faktureres."] },
+        "Svarer Dinero ikke, så vent lidt og prøv igen. Du kan ikke oprette kunden midlertidigt i systemet — en kunde uden Dinero-nummer kan ikke faktureres."] }]),
     { h: "Kolonnerne", p: ["Planlagt er den tid der er sat af. Registreret er den tid der kan faktureres.",
         "Er nogen markeret som oplæring på opgaven, er deres timer trukket fra her. Tre mand på en opgave til to timer giver seks timer i løn og to timer på fakturaen. Vil du se den fulde tid, står den på opgaven og under Løn data.",
-        "Dinero (blå) markerer at linjen er sendt. Det grønne flueben er fakturagrundlag."] },
+        KUNDEUDGAVE ? "Det grønne flueben er fakturagrundlag." : "Dinero (blå) markerer at linjen er sendt. Det grønne flueben er fakturagrundlag."] },
     { h: "Sådan fakturerer du", p: ["Vælg måned og år.", "Gennemgå listen og ret manglende registreringer med medarbejderen.",
-        "Sæt fakturagrundlag på det der skal faktureres.", "Tryk «Eksportér til Dinero» og bekræft.",
-        "Linjerne markeres som sendt, så de ikke kan faktureres igen."] },
+        "Sæt fakturagrundlag på det der skal faktureres.",
+        ...(KUNDEUDGAVE ? ["Sæt «Kun fakturagrundlag», og tryk «Eksporter til Excel». Læg filen ind i jeres eget regnskabsprogram."]
+          : ["Tryk «Eksportér til Dinero» og bekræft.", "Linjerne markeres som sendt, så de ikke kan faktureres igen."])] },
     { h: "Ret den registrerede tid", p: [
         "Klik på minuttallet i listen for at rette det. Du kan skrive præcis det antal minutter, der er brugt — 18 minutter er lige så gyldigt som 15 eller 20.",
         "Tiden skal passe med det, der faktisk er brugt. Runder man op til nærmeste kvarter, betaler kunden for noget, der ikke er sket, og medarbejderen får løn for det samme.",
@@ -1802,7 +1839,7 @@ const MODULE_HELP = {
         "Knappen «Sæt fakturagrundlag på N viste» sætter flueben på alt i listen på én gang. Vælg måneden, sæt status til «Udført», og tryk.",
         "Knappen findes KUN under status «Udført». Fakturagrundlag på en opgave, der ikke er kørt endnu, er en regning for noget kunden ikke har fået — og under «Alle statusser» ligger de blandet, så man ikke kan se hvad et klik ville ramme.",
         "Den rammer præcis det, du kan se — samme måned, samme filtre. Skifter du filter, skifter tallet i knappen med.",
-        "To slags springes over: linjer der allerede er sendt til Dinero, og linjer uden fakturerbar tid. Hold musen over knappen, så står der hvor mange det er.",
+        KUNDEUDGAVE ? "Linjer uden fakturerbar tid springes over. Hold musen over knappen, så står der hvor mange det er." : "To slags springes over: linjer der allerede er sendt til Dinero, og linjer uden fakturerbar tid. Hold musen over knappen, så står der hvor mange det er.",
         "Er alt i listen allerede sat, bliver knappen til «Fjern fakturagrundlag fra N viste». Så kan man fortryde uden at klikke sig igennem hver linje."] },
     { h: "Produkter", p: ["Produktforbrug vises som egne linjer under opgaven med antal og beløb.",
         "Hver produktlinje har sit eget flueben, men kræver at selve opgaven også er fakturagrundlag."] },
@@ -1866,13 +1903,15 @@ const MODULE_HELP = {
         "Her ser du hver kunde ét sted: hvad hun har givet i omsætning, hvor mange aftaler hun har, og hvornår hun sidst fik besøg.",
         "Omsætningen er realiseret — registreret tid gange satsen for kontrakttypen, plus udførte fastprisopgaver. Planlagt tid tæller ikke med; det er ikke penge før nogen har været der.",
         "Står der «aldrig besøgt», er der oprettet opgaver men endnu ikke registreret tid på nogen af dem.",
-        "Kunderne kommer fra Dinero. Der oprettes ingen kunder her — det sker i Dinero, og de findes derefter via opslag.",
+        KUNDEUDGAVE
+          ? "Kunderne er jeres egen kundeliste. En ny kunde oprettes, når du skriver navnet på en aftale, en opgave eller et tilbud og vælger «＋ Opret som ny kunde»."
+          : "Kunderne kommer fra Dinero. Der oprettes ingen kunder her — det sker i Dinero, og de findes derefter via opslag.",
         "Løse opgaver tæller med. En kunde uden aftale, som bare har fået en enkelt opgave, står også på listen."] },
-    { h: "«Ikke i Dinero»", p: [
+    ...(KUNDEUDGAVE ? [] : [{ h: "«Ikke i Dinero»", p: [
         "Mærkatet betyder at kundens opgaver ikke har hendes kundenummer fra Dinero. Det kan ikke længere opstå: en fakturerbar opgave kan ikke gemmes før kunden er valgt i Dinero-listen. Mærkatet er kun på kunder fra før den spærring.",
         "Fakturaen bliver dannet alligevel, fordi kunden så slås op på navnet. Men det opslag fejler den dag to kontakter i Dinero hedder det samme — og kunden kan ikke få en portal, for portalen hænger på kundenummeret.",
         "Fold kunden ud og tryk «Find i Dinero». Er der præcis ét træf, kan du koble hende, og alle hendes opgaver og aftaler får nummeret. Er der flere træf, skal dubletterne ryddes op i Dinero først.",
-        "Lykkes en fakturering på et navneopslag, gemmer systemet selv nummeret bagefter, så mærkatet forsvinder af sig selv."] },
+        "Lykkes en fakturering på et navneopslag, gemmer systemet selv nummeret bagefter, så mærkatet forsvinder af sig selv."] }]),
     { h: "Tænd kundeportalen", p: [
         "Fold kunden ud og vælg et kort navn til adressen. Det foreslås ud fra kundens navn og må kun indeholde små bogstaver, tal og bindestreg.",
         "Kunden får sin egen adresse med sit navn på, og hun ser kun sine egne data. Det er håndhævet i databasen, ikke i skærmbilledet.",
@@ -1930,7 +1969,7 @@ const MODULE_HELP = {
 
   tilbud: { title: "Tilbud", intro: "Tilbuddet er forløberen for aftalen. Accepterer kunden, dannes aftalen af sig selv — som kladde.", blocks: [
     { h: "Sådan laver du et", p: [
-        "Tryk «Nyt tilbud», find kunden i Dinero, og udfyld kontrakttype, pris og hvilke tjeklister der er med.",
+        (KUNDEUDGAVE ? "Tryk «Nyt tilbud», find eller opret kunden," : "Tryk «Nyt tilbud», find kunden i Dinero,") + " og udfyld kontrakttype, pris og hvilke tjeklister der er med.",
         "Timeprisen foreslås ud fra kontrakttypen, men du kan rette den. Vælger du fast pris, gælder den uanset hvor lang tid besøget tager.",
         "«Anslået tid pr. besøg» bliver til varigheden på aftalen ved accept. Ved timepris står det også i tilbuddet som et cirka-beløb — der faktureres stadig kun for registreret tid.",
         "Tjeklisternes punkter kommer med i PDF'en, så kunden kan se præcis hvad der bliver gjort."] },
@@ -2039,7 +2078,7 @@ const MODULE_HELP = {
     { h: "De tre faner", p: [
         "«Budget og omsætning» svarer på, hvad der er kommet ind måned for måned i år.",
         "«Aftaleportefølje» svarer på, hvad der er aftalt — hvad de aftaler, I har, er værd, og hvordan de fordeler sig.",
-        "Det andet kan ikke læses ud af det første. En aftale, du skriver under i dag, fylder næsten ingenting i budgettet i år og kan alligevel være en halv million værd over sin løbetid.", "«Overskud» viser overskuddet måned for måned. Kun administratorer kan se den."] }, { h: "Overskud", p: ["Overskuddet regnes som omsætning minus lønsum, kørsel og frie omkostninger, måned for måned.", "Er en måned allerede godkendt til løn og «låst», ændrer senere rettelser i lønnen ikke det overskud, der allerede er opgjort for den måned.", "«Oms. (Dinero)» er betalte fakturaer hentet fra Dinero natten før — kun til sammenligning, den tæller ikke med i selve overskuddet."] },
+        "Det andet kan ikke læses ud af det første. En aftale, du skriver under i dag, fylder næsten ingenting i budgettet i år og kan alligevel være en halv million værd over sin løbetid.", "«Overskud» viser overskuddet måned for måned. Kun administratorer kan se den."] }, { h: "Overskud", p: ["Overskuddet regnes som omsætning minus lønsum, kørsel og frie omkostninger, måned for måned.", "Er en måned allerede godkendt til løn og «låst», ændrer senere rettelser i lønnen ikke det overskud, der allerede er opgjort for den måned.", ...(KUNDEUDGAVE ? [] : ["«Oms. (Dinero)» er betalte fakturaer hentet fra Dinero natten før — kun til sammenligning, den tæller ikke med i selve overskuddet."])] },
     { h: "Budget og omsætning", p: ["Budget er det du selv lægger ind med «Redigér budget».",
         "Planlagt er værdien af det der ligger i kalenderen.",
         "Registreret er den tid der faktisk er logget.",
@@ -7190,6 +7229,17 @@ function ChecklistModal({ checklist, onClose, onSave }) {
 }
 
 // ---------- Time & Export ----------
+// Overskud: kolonnen «Oms. (Dinero)» findes kun med Dinero-modulet (29.9.2026).
+const OVERSKUD_GRID = () => harModul("dinero")
+  ? "1fr 110px 110px 110px 110px 110px 110px 110px"
+  : "1fr 110px 0px 110px 110px 110px 110px 110px";
+
+// Fakturering: kolonnen «Dinero» findes kun med Dinero-modulet (29.9.2026). I
+// kundeudgaven er den 0 bred og tom, saa de oevrige kolonner staar hvor de plejer.
+const FAKT_GRID = () => harModul("dinero")
+  ? "50px 140px 120px 160px 1fr 70px 80px 100px 100px 100px 90px 70px 28px"
+  : "50px 140px 120px 160px 1fr 70px 80px 100px 100px 100px 90px 0px 28px";
+
 function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLabel, onUpdateInstance, onSaetFakturagrundlagFlere, pricing: pricingProp, onPricingChange, isAdminUser, onOpenTask, productUsage, onToggleProductInvoice, onToggleProductDinero, opgaveNoter }) {
   const productLinesByTask = useMemo(() => {
     const map = {};
@@ -7460,7 +7510,7 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
         )}
       </div>
 
-      {isAdminUser && harModul("kundeportal") && <AbonnementLinjer maaned={filterMonth} aar={filterYear} maanedNavn={MONTHS[filterMonth]} />}
+      {isAdminUser && harModul("kundeportal") && harModul("dinero") && <AbonnementLinjer maaned={filterMonth} aar={filterYear} maanedNavn={MONTHS[filterMonth]} />}
 
       {/* Timepris-panel */}
       {showPricing && (
@@ -7488,7 +7538,7 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
         </div>
       )}
 
-      <div style={{ display: "grid", gridTemplateColumns: "50px 140px 120px 160px 1fr 70px 80px 100px 100px 100px 90px 70px 28px", gap: 0, background: "#F8FAFC", borderRadius: "10px 10px 0 0", padding: "8px 14px", fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.04em", marginTop: 8 }}>
+      <div style={{ display: "grid", gridTemplateColumns: FAKT_GRID(), gap: 0, background: "#F8FAFC", borderRadius: "10px 10px 0 0", padding: "8px 14px", fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.04em", marginTop: 8 }}>
         <span>Uge</span><span>Medarbejder</span><span>Kunde</span><span>Adresse</span><span>Opgave</span><span>Dag</span>
         {/* Tid og kroner parvis, som under Loen data: planlagt tid ved siden af
             planlagt beloeb, registreret tid ved siden af registreret beloeb. */}
@@ -7497,7 +7547,7 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
         <span style={{ textAlign: "right" }}>Registreret</span>
         <span style={{ textAlign: "right" }}>Registreret kr.</span>
         <span style={{ textAlign: "right" }}>Difference</span>
-        <span style={{ textAlign: "center" }}>Dinero</span>
+        <span style={{ textAlign: "center" }}>{harModul("dinero") ? "Dinero" : ""}</span>
         <span style={{ textAlign: "center" }}>📄</span>
       </div>
 
@@ -7530,7 +7580,7 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
           const taskNoter = (opgaveNoter || {})[t.id] || [];
           return (
             <React.Fragment key={t.id}>
-            <div style={{ display: "grid", gridTemplateColumns: "50px 140px 120px 160px 1fr 70px 80px 100px 100px 100px 90px 70px 28px", gap: 0, padding: "10px 14px", borderBottom: (idx < placed.length - 1 || taskProductLines.length > 0) ? "1px solid #F1F5F9" : "none", alignItems: "center", background: t.dineroExported ? "#EEF2FF" : t.invoiceReady ? "#F0FDF4" : "transparent" }}>
+            <div style={{ display: "grid", gridTemplateColumns: FAKT_GRID(), gap: 0, padding: "10px 14px", borderBottom: (idx < placed.length - 1 || taskProductLines.length > 0) ? "1px solid #F1F5F9" : "none", alignItems: "center", background: t.dineroExported ? "#EEF2FF" : t.invoiceReady ? "#F0FDF4" : "transparent" }}>
               <div style={{ fontSize: 12, color: "#94A3B8", fontWeight: 600 }}>{t.week}</div>
               <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
                 {emps.length === 0 ? (
@@ -7605,9 +7655,10 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
               <div style={{ fontSize: 13, fontWeight: 700, color: diffKr > 0 ? "#16A34A" : diffKr < 0 ? "#DC2626" : "#94A3B8", textAlign: "right" }}>
                 {rate > 0 && logged > 0 ? `${diffKr > 0 ? "+" : ""}${diffKr.toLocaleString("da-DK")} kr` : "—"}
               </div>
-              {/* Dinero-status – kun administrator må ændre denne, for at undgå dobbelt-eksport */}
+              {/* Dinero-status – kun administrator må ændre denne, for at undgå dobbelt-eksport.
+                  I kundeudgaven en tom plads (kolonnen er 0 bred). */}
               <div style={{ display: "flex", justifyContent: "center" }}>
-                <span
+                {harModul("dinero") && <span
                   style={{
                     width: 18, height: 18, borderRadius: 5,
                     border: t.dineroExported ? "2px solid #4F46E5" : "2px solid #CBD5E1",
@@ -7623,7 +7674,7 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
                   }
                   onClick={() => { if (isAdminUser) onUpdateInstance(t.id, { dineroExported: !t.dineroExported }); }}>
                   {t.dineroExported && <Check size={11} color="#fff" strokeWidth={3} />}
-                </span>
+                </span>}
               </div>
               {/* Fakturagrundlag toggle */}
               <div style={{ display: "flex", justifyContent: "center" }}>
@@ -7647,10 +7698,10 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
               </div>
             )}
             {taskProductLines.map((pl, plIdx) => (
-              <div key={pl.id} style={{ display: "grid", gridTemplateColumns: "50px 140px 120px 160px 1fr 70px 80px 100px 100px 100px 90px 70px 28px", gap: 0, padding: "4px 14px", alignItems: "center", background: pl.dineroExported ? "#EEF2FF" : pl.invoiceReady ? "#FFFBEB" : "#F8F8F8", borderBottom: (idx < placed.length - 1 || plIdx < taskProductLines.length - 1) ? "1px solid #F1F5F9" : "none" }}>
+              <div key={pl.id} style={{ display: "grid", gridTemplateColumns: FAKT_GRID(), gap: 0, padding: "4px 14px", alignItems: "center", background: pl.dineroExported ? "#EEF2FF" : pl.invoiceReady ? "#FFFBEB" : "#F8F8F8", borderBottom: (idx < placed.length - 1 || plIdx < taskProductLines.length - 1) ? "1px solid #F1F5F9" : "none" }}>
                 <div style={{ gridColumn: "5", display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: pl.invoiceReady ? "#92600A" : "#B0B0B0", textDecoration: pl.invoiceReady ? "none" : "line-through", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", paddingLeft: 20 }}>
                   📦 {pl.label}
-                  {pl.dineroExported && <span style={{ textDecoration: "none", fontSize: 9, fontWeight: 700, color: "#4F46E5", background: "#E0E7FF", borderRadius: 4, padding: "1px 5px", flexShrink: 0 }}>Sendt til Dinero</span>}
+                  {pl.dineroExported && harModul("dinero") && <span style={{ textDecoration: "none", fontSize: 9, fontWeight: 700, color: "#4F46E5", background: "#E0E7FF", borderRadius: 4, padding: "1px 5px", flexShrink: 0 }}>Sendt til Dinero</span>}
                 </div>
                 {/* Kolonnenumrene skal foelge overskrifterne. Da beloebskolonnerne
                     flyttede ind mellem tiderne, rykkede "Registreret" fra 8 til 9 —
@@ -7658,7 +7709,7 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
                 <div style={{ gridColumn: "9", textAlign: "right", fontSize: 11, color: pl.invoiceReady ? "#B45309" : "#B0B0B0" }}>{pl.qty} {pl.unit}</div>
                 <div style={{ gridColumn: "10", textAlign: "right", fontSize: 11, fontWeight: 600, color: pl.invoiceReady ? "#92600A" : "#B0B0B0" }}>{Math.round(pl.amount)} kr</div>
                 <div style={{ gridColumn: "12", display: "flex", justifyContent: "center" }}>
-                  {isAdminUser && (
+                  {isAdminUser && harModul("dinero") && (
                     <span
                       title={pl.dineroExported ? "Fjern markering: sendt til Dinero" : "Markér manuelt som sendt til Dinero"}
                       style={{ width: 18, height: 18, borderRadius: 5, border: pl.dineroExported ? "2px solid #4F46E5" : "2px solid #CBD5E1", background: pl.dineroExported ? "#4F46E5" : "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
@@ -7694,7 +7745,7 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
         const totalRegisteredKr = Math.round(expectedRevenue);
         const totalDiff = totalRegisteredKr - totalPlannedKr;
         return (
-          <div style={{ display: "grid", gridTemplateColumns: "50px 140px 120px 160px 1fr 70px 80px 100px 100px 100px 90px 70px 28px", gap: 0, padding: "10px 14px", background: "var(--farve-lys)", borderRadius: 10, marginTop: 8, fontWeight: 700, fontSize: 13 }}>
+          <div style={{ display: "grid", gridTemplateColumns: FAKT_GRID(), gap: 0, padding: "10px 14px", background: "var(--farve-lys)", borderRadius: 10, marginTop: 8, fontWeight: 700, fontSize: 13 }}>
             <span /><span style={{ color: "var(--farve-moerk)" }}>I alt</span>
             <span /><span /><span /><span />
             <span style={{ textAlign: "right", color: "#111111" }}>{fmtMin(totalPlanned)}</span>
@@ -8972,13 +9023,13 @@ function OverskudRapport({ instances, employees, satsHistorik, kmSatser, kmLog, 
       {godkFejl && <div style={{ color: "#DC2626", fontSize: 12.5, marginBottom: 10 }}>{godkFejl}</div>}
       <div style={{ fontSize: 12.5, color: "#94A3B8", marginBottom: 10 }}>
         Kun godkendte timer og kilometer (samme godkendelser som bruges til Danløn-eksporten) tælles med i lønsum og kørsel.
-        {" "}"Oms. (Dinero)" er betalte fakturaer hentet fra Dinero natten før — kun til sammenligning, den tæller ikke med i overskuddet.
+        {harModul("dinero") && <>{" "}"Oms. (Dinero)" er betalte fakturaer hentet fra Dinero natten før — kun til sammenligning, den tæller ikke med i overskuddet.</>}
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 110px 110px 110px 110px 110px 110px 110px", gap: 0, background: "#F8FAFC", borderRadius: "10px 10px 0 0", padding: "8px 14px", fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+      <div style={{ display: "grid", gridTemplateColumns: OVERSKUD_GRID(), gap: 0, background: "#F8FAFC", borderRadius: "10px 10px 0 0", padding: "8px 14px", fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.04em" }}>
         <span>Måned</span>
         <span style={{ textAlign: "right" }}>Omsætning</span>
-        <span style={{ textAlign: "right" }}>Oms. (Dinero)</span>
+        <span style={{ textAlign: "right" }}>{harModul("dinero") ? "Oms. (Dinero)" : ""}</span>
         <span style={{ textAlign: "right" }}>Løn</span>
         <span style={{ textAlign: "right" }}>Kørsel</span>
         <span style={{ textAlign: "right" }}>Andet</span>
@@ -8987,10 +9038,10 @@ function OverskudRapport({ instances, employees, satsHistorik, kmSatser, kmLog, 
       </div>
       <div style={{ background: "#fff", borderRadius: "0 0 10px 10px", boxShadow: "0 1px 3px rgba(0,0,0,0.06)", overflow: "hidden" }}>
         {monthRows.map((r, idx) => (
-          <div key={r.month} style={{ display: "grid", gridTemplateColumns: "1fr 110px 110px 110px 110px 110px 110px 110px", gap: 0, padding: "9px 14px", borderBottom: idx < monthRows.length - 1 ? "1px solid #F1F5F9" : "none", alignItems: "center" }}>
+          <div key={r.month} style={{ display: "grid", gridTemplateColumns: OVERSKUD_GRID(), gap: 0, padding: "9px 14px", borderBottom: idx < monthRows.length - 1 ? "1px solid #F1F5F9" : "none", alignItems: "center" }}>
             <div style={{ fontSize: 13, fontWeight: 600, color: "#111111" }}>{r.label}</div>
             <div style={{ fontSize: 13, color: "#334155", textAlign: "right" }}>{r.omsaetning > 0 ? kr(r.omsaetning) : "—"}</div>
-            <div style={{ fontSize: 13, color: "#0369A1", textAlign: "right" }} title={r.dineroAntal != null ? `${r.dineroAntal} betalte fakturaer` : undefined}>{r.dineroKr != null ? kr(r.dineroKr) : "—"}</div>
+            <div style={{ fontSize: 13, color: "#0369A1", textAlign: "right" }} title={r.dineroAntal != null ? `${r.dineroAntal} betalte fakturaer` : undefined}>{!harModul("dinero") ? "" : r.dineroKr != null ? kr(r.dineroKr) : "—"}</div>
             <div style={{ fontSize: 13, color: "#64748B", textAlign: "right" }}>{r.loenKr > 0 ? kr(r.loenKr) : "—"}</div>
             <div style={{ fontSize: 13, color: "#64748B", textAlign: "right" }}>{r.kmKr > 0 ? kr(r.kmKr) : "—"}</div>
             <div style={{ fontSize: 13, color: "#64748B", textAlign: "right" }}>{r.manuelleKr > 0 ? kr(r.manuelleKr) : "—"}</div>
@@ -8999,10 +9050,10 @@ function OverskudRapport({ instances, employees, satsHistorik, kmSatser, kmLog, 
           </div>
         ))}
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 110px 110px 110px 110px 110px 110px 110px", gap: 0, padding: "10px 14px", background: "var(--farve-lys)", borderRadius: 10, marginTop: 8, fontWeight: 700, fontSize: 13 }}>
+      <div style={{ display: "grid", gridTemplateColumns: OVERSKUD_GRID(), gap: 0, padding: "10px 14px", background: "var(--farve-lys)", borderRadius: 10, marginTop: 8, fontWeight: 700, fontSize: 13 }}>
         <span style={{ color: "var(--farve-moerk)" }}>I alt {selectedYear}</span>
         <span style={{ textAlign: "right", color: "#111111" }}>{kr(aarTotal.omsaetning)}</span>
-        <span style={{ textAlign: "right", color: "#0369A1" }}>{kr(aarTotal.dineroKr)}</span>
+        <span style={{ textAlign: "right", color: "#0369A1" }}>{harModul("dinero") ? kr(aarTotal.dineroKr) : ""}</span>
         <span />
         <span />
         <span />
@@ -9462,13 +9513,13 @@ function DriftView({ isAdminUser, paaSide }) {
           Svarede, da den her side blev hentet. Kunne den ikke, ville siden være tom.
         </DriftTjeneste>
 
-        <DriftTjeneste navn="Dinero"
+        {harModul("dinero") && <DriftTjeneste navn="Dinero"
           maerkat={job?.get("dinero-omsaetning-sync") ? "Svarede" : "ukendt"}
           slags={job?.get("dinero-omsaetning-sync") ? "ok" : "graa"}>
           {job?.get("dinero-omsaetning-sync")
             ? <>{job.get("dinero-omsaetning-sync").besked} — <b>{dkNaar(job.get("dinero-omsaetning-sync").tidspunkt)}</b>.</>
             : <>Ingen synkronisering endnu.</>}
-        </DriftTjeneste>
+        </DriftTjeneste>}
 
         <DriftTjeneste navn="Brevo (mail)"
           maerkat={job?.get("daglige-paamindelser") ? "Svarede" : "ukendt"}
@@ -10149,18 +10200,10 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
     if (q.length < 2) { setDineroResults([]); return; }
     setDineroSearching(true);
     try {
-      const { data, error } = await supabase.functions.invoke("dinero", {
-        body: { action: "search", query: q },
-      });
-      if (!error && data?.Collection) {
-        // Virker opslaget, retter appen sig selv i stedet for at blive ved med at
-        // paastaa at Dinero er utilgaengelig.
-        setDineroAvailable(true);
-        setDineroResults(data.Collection);
-      } else {
-        setDineroResults([]);
-        if (error) setDineroAvailable(false); // Slå Dinero fra ved fejl
-      }
+      // soegKunder: Dinero hos Jammerbugt, egen kundeliste i kundeudgaven.
+      const liste = await soegKunder(q);
+      setDineroAvailable(true);
+      setDineroResults(liste);
     } catch {
       setDineroResults([]);
       setDineroAvailable(false);
@@ -10168,7 +10211,9 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
     setDineroSearching(false);
   }
 
-  function selectDineroCustomer(c) {
+  async function selectDineroCustomer(valgt) {
+    let c = valgt;
+    try { c = await sikrKunde(valgt); } catch (e) { window.alert("Kunden kunne ikke oprettes: " + (e.message || e)); return; }
     setCustomerName(c.Name);
     setDineroContactGuid(c.ContactGuid || "");
     // Adressen her er Dineros fakturaadresse for virksomheden — IKKE adressen hvor
@@ -10355,7 +10400,7 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
       <label style={styles.label}>
         Fakturakunde
         {dineroAvailable
-          ? <span style={{ fontSize: 11, color: "#94A3B8", marginLeft: 6 }}>— søger i Dinero</span>
+          ? <span style={{ fontSize: 11, color: "#94A3B8", marginLeft: 6 }}>— {KUNDER_I_DINERO() ? "søger i Dinero" : "søger i jeres kundeliste"}</span>
           : <span style={{ fontSize: 11, color: "#D97706", marginLeft: 6 }}>— Dinero svarer ikke, prøv igen om lidt</span>
         }
       </label>
@@ -10364,13 +10409,13 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
           style={styles.input}
           value={customerName}
           onChange={(e) => { setCustomerSelected(false); setCustomerDineroSynced(false); searchDinero(e.target.value); }}
-          placeholder="Skriv kundenavn for at søge i Dinero…"
+          placeholder={KUNDER_I_DINERO() ? "Skriv kundenavn for at søge i Dinero…" : "Skriv kundenavn…"}
         />
         {dineroSearching && <span style={{ position: "absolute", right: 10, top: 10, fontSize: 11, color: "#94A3B8" }}>Søger…</span>}
         {dineroResults.length > 0 && (
           <div style={{ position: "absolute", top: "100%", left: 0, right: 0, background: "#fff", border: "1px solid #E2E8F0", borderRadius: 10, boxShadow: "0 4px 16px rgba(0,0,0,0.10)", zIndex: 100, maxHeight: 220, overflowY: "auto" }}>
             {dineroResults.map((c) => (
-              <div key={c.ContactGuid}
+              <div key={c.ContactGuid || c.Name}
                 style={{ padding: "10px 14px", cursor: "pointer", borderBottom: "1px solid #F1F5F9", fontSize: 13 }}
                 onMouseDown={() => selectDineroCustomer(c)}>
                 <div style={{ fontWeight: 600, color: "#111111" }}>{c.Name}</div>
@@ -10390,7 +10435,7 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
             oprettede kunden — og faldt Dinero ud, oprettede den i stedet en lokal kunde
             uden Dinero-id, som saa ikke kunne faktureres. Nu siger vi bare hvor kunden
             skal oprettes, saa den kan findes i soegningen bagefter. */}
-        {!dineroSearching && !customerSelected && customerName.length >= 2 && dineroResults.length === 0 && (
+        {KUNDER_I_DINERO() && !dineroSearching && !customerSelected && customerName.length >= 2 && dineroResults.length === 0 && (
           <div style={styles.hint}>
             Ingen kunde i Dinero hedder det. Opret kunden i Dinero først — så kan du finde den her.
           </div>
@@ -10774,7 +10819,7 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
           // staar grunden, naar man holder musen over — og for startdatoen staar den
           // ogsaa i sidepanelet, hvor man ikke skal lede efter den.
           title={
-            manglerDineroKunde ? "Vælg kunden i Dinero-listen først"
+            manglerDineroKunde ? (KUNDER_I_DINERO() ? "Vælg kunden i Dinero-listen først" : "Vælg kunden i listen først")
             : (type === "fixed" && !!startDate && startDate < todayIso())
               ? "Startdatoen er passeret — ret den til i dag eller senere, før aftalen kan godkendes"
             : (type === "fixed" && days.length === 0) ? "Vælg mindst én ugedag"
@@ -13772,7 +13817,7 @@ function KunderView({ supabase, currentEmployeeId }) {
                     <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 700, padding: "2px 8px",
                                    borderRadius: 999, background: "#F0F9FF", color: "#0369A1" }}>Premium</span>
                   )}
-                  {k.mangler_dinero && (
+                  {k.mangler_dinero && harModul("dinero") && (
                     <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 700, padding: "2px 8px",
                                    borderRadius: 999, background: "#FFFBEB", color: "#B45309" }}>
                       Ikke i Dinero
@@ -13819,7 +13864,13 @@ function KunderView({ supabase, currentEmployeeId }) {
                     </div>
                   ))}
                 </div>
-                {k.mangler_dinero ? (
+                {/* Kundeudgaven har ingen Dinero (29.9.2026): ingen fakturaer herfra og
+                    ingen kobling. Portalen kraever en kunde fra listen (et id). */}
+                {!harModul("dinero") ? (
+                  k.guid
+                    ? (harModul("kundeportal") && <PortalAfsnit supabase={supabase} kunde={k} currentEmployeeId={currentEmployeeId} onAendret={hent} />)
+                    : <div style={styles.hint}>Kunden er kun skrevet med navn på opgaverne. Vælg hende i kundelisten på en opgave, så kan hun få en portal.</div>
+                ) : k.mangler_dinero ? (
                   <KoblTilDinero supabase={supabase} kunde={k}
                     onKoblet={(antal) => { hent(); notifyKobling(antal); }} />
                 ) : (
@@ -14323,13 +14374,14 @@ function TilbudEditor({ supabase, checklistTemplates, pricing, currentUserName, 
     if (q.length < 2) { setDineroResultater([]); return; }
     setSoeger(true);
     try {
-      const { data, error } = await supabase.functions.invoke("dinero", { body: { action: "search", query: q } });
-      setDineroResultater(!error && data?.Collection ? data.Collection : []);
+      setDineroResultater(await soegKunder(q));
     } catch { setDineroResultater([]); }
     setSoeger(false);
   }
 
-  function vaelgKunde(c) {
+  async function vaelgKunde(valgt) {
+    let c = valgt;
+    try { c = await sikrKunde(valgt); } catch (e) { window.alert("Kunden kunne ikke oprettes: " + (e.message || e)); return; }
     setKundeNavn(c.Name);
     setGuid(c.ContactGuid || "");
     if (!adresse && c.Street) {
@@ -14463,13 +14515,13 @@ function TilbudEditor({ supabase, checklistTemplates, pricing, currentUserName, 
             <div style={{ ...styles.formSectionHint, color: "#B4436F" }}>Hvem tilbuddet gælder, og hvor det skal sendes hen</div>
           </div>
           <div style={styles.formSectionBody}>
-            <label style={styles.label}>Kunde (søges i Dinero)</label>
+            <label style={styles.label}>{KUNDER_I_DINERO() ? "Kunde (søges i Dinero)" : "Kunde"}</label>
             <div style={{ position: "relative" }}>
               <input style={styles.input} value={kundeNavn} disabled={laast}
                 onChange={(e) => soegDinero(e.target.value)} placeholder="Skriv de første bogstaver…" />
               {soeger && <span style={{ position: "absolute", right: 10, top: 10, fontSize: 11, color: "#94A3B8" }}>Søger…</span>}
             </div>
-            {guid && <div style={styles.hint}>✓ Koblet til Dinero</div>}
+            {guid && <div style={styles.hint}>{KUNDER_I_DINERO() ? "✓ Koblet til Dinero" : "✓ Kunde valgt"}</div>}
             {dineroResultater.length > 0 && (
               <div style={{ border: "1px solid #E2E8F0", borderRadius: 8, marginTop: 6, overflow: "hidden" }}>
                 {dineroResultater.map((c) => (
@@ -14477,6 +14529,7 @@ function TilbudEditor({ supabase, checklistTemplates, pricing, currentUserName, 
                     style={{ padding: "9px 11px", cursor: "pointer", fontSize: 13.5, borderBottom: "1px solid #F1F5F9" }}>
                     {c.Name}
                     {c.City && <span style={{ color: "#94A3B8" }}> · {c.City}</span>}
+                    {c.ny && <span style={{ color: "#2563EB", fontWeight: 700 }}> · ＋ opret som ny kunde</span>}
                   </div>
                 ))}
               </div>
@@ -16166,18 +16219,9 @@ function TaskDetailModal({ task, employees, templates, onSetPreferredEmployee, o
     if (q.length < 2) { setDineroResults([]); return; }
     setDineroSearching(true);
     try {
-      const { data, error } = await supabase.functions.invoke("dinero", {
-        body: { action: "search", query: q },
-      });
-      if (!error && data?.Collection) {
-        // Virker opslaget, retter appen sig selv i stedet for at blive ved med at
-        // paastaa at Dinero er utilgaengelig.
-        setDineroAvailable(true);
-        setDineroResults(data.Collection);
-      } else {
-        setDineroResults([]);
-        if (error) setDineroAvailable(false);
-      }
+      const liste = await soegKunder(q);
+      setDineroAvailable(true);
+      setDineroResults(liste);
     } catch {
       setDineroResults([]);
       setDineroAvailable(false);
@@ -16185,7 +16229,9 @@ function TaskDetailModal({ task, employees, templates, onSetPreferredEmployee, o
     setDineroSearching(false);
   }
 
-  function selectDineroCustomerForEdit(c) {
+  async function selectDineroCustomerForEdit(valgt) {
+    let c = valgt;
+    try { c = await sikrKunde(valgt); } catch (e) { window.alert("Kunden kunne ikke oprettes: " + (e.message || e)); return; }
     setCustName(c.Name);
     setCustGuid(c.ContactGuid || "");
     // Adressen her er Dineros fakturaadresse for virksomheden — IKKE adressen hvor
@@ -16572,14 +16618,14 @@ return (
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             <div>
               <div style={{ fontSize: 11, color: dineroAvailable ? "#94A3B8" : "#D97706", marginBottom: 4 }}>
-                {dineroAvailable ? "Søger i Dinero mens du skriver" : "Dinero svarer ikke — prøv igen om lidt"}
+                {dineroAvailable ? KUNDE_SOEG_TEKST() : "Kundeopslaget svarer ikke — prøv igen om lidt"}
               </div>
               <div style={{ position: "relative" }}>
                 <input
                   style={styles.input}
                   value={custName}
                   onChange={(e) => { setCustomerSelected(false); setCustomerDineroSynced(false); searchDineroForCustomer(e.target.value); }}
-                  placeholder="Skriv kundenavn for at søge i Dinero…"
+                  placeholder={KUNDER_I_DINERO() ? "Skriv kundenavn for at søge i Dinero…" : "Skriv kundenavn…"}
                 />
                 {dineroSearching && <span style={{ position: "absolute", right: 10, top: 10, fontSize: 11, color: "#94A3B8" }}>Søger…</span>}
                 {dineroResults.length > 0 && (
@@ -16601,7 +16647,7 @@ return (
                     ))}
                   </div>
                 )}
-                {!dineroSearching && !customerSelected && custName.length >= 2 && dineroResults.length === 0 && (
+                {KUNDER_I_DINERO() && !dineroSearching && !customerSelected && custName.length >= 2 && dineroResults.length === 0 && (
                   <div style={styles.hint}>
                     Ingen kunde i Dinero hedder det. Opret kunden i Dinero først — så kan du finde den her.
                   </div>
