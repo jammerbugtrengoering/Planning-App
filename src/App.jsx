@@ -6373,6 +6373,10 @@ function WeekView({ employees, instances, unplaced, adgangTekst, onUdskrivMedAdg
         {/* Det fortrolige baand laa her og blev aldrig printet: alt uden for
             #print-week-plan er «visibility: hidden» paa papiret. Baandet staar nu
             samme sted som resten af udskriften. */}
+        {/* Egen linje (29.9.2026, Jonn): Print og de to valg venstrestillet, ugevaelgeren
+            til hoejre. width 100% tvinger linjen ned under knapperne i stedet for at
+            Print havner sidst paa foerste linje og valgene alene paa den naeste. */}
+        <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", width: "100%" }}>
         <button style={styles.secondaryBtn} onClick={() => udskriv()}>🖨️ Print ugeplan</button>
 
         {/* Adgangsoplysninger paa papir er et bevidst fravalg af den beskyttelse,
@@ -6412,6 +6416,7 @@ function WeekView({ employees, instances, unplaced, adgangTekst, onUdskrivMedAdg
           </div>
           <button style={styles.weekNavBtn} onClick={onNextWeek}><ChevronRight size={16} /></button>
           {!(weekOffset === currentIsoWeek.week && weekYear === currentIsoWeek.year) && <button style={styles.secondaryBtn} onClick={onTodayWeek}>I dag</button>}
+        </div>
         </div>
       </div>
 
