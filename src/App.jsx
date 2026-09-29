@@ -1942,7 +1942,8 @@ const MODULE_HELP = {
         KUNDEUDGAVE
           ? "Kunderne er jeres egen kundeliste. En ny kunde oprettes, når du skriver navnet på en aftale, en opgave eller et tilbud og vælger «＋ Opret som ny kunde»."
           : "Kunderne kommer fra Dinero. Der oprettes ingen kunder her — det sker i Dinero, og de findes derefter via opslag.",
-        "Løse opgaver tæller med. En kunde uden aftale, som bare har fået en enkelt opgave, står også på listen."] },
+        "Løse opgaver tæller med. En kunde uden aftale, som bare har fået en enkelt opgave, står også på listen.",
+        "Vælg sortering ved siden af søgefeltet: kundenavn (A–Å), senest besøg (nyeste først, aldrig besøgt til sidst) eller portaladgang (Premium, Udvidet, Basis og til sidst kunder uden portal)."] },
     ...(KUNDEUDGAVE ? [] : [{ h: "«Ikke i Dinero»", p: [
         "Mærkatet betyder at kundens opgaver ikke har hendes kundenummer fra Dinero. Det kan ikke længere opstå: en fakturerbar opgave kan ikke gemmes før kunden er valgt i Dinero-listen. Mærkatet er kun på kunder fra før den spærring.",
         "Fakturaen bliver dannet alligevel, fordi kunden så slås op på navnet. Men det opslag fejler den dag to kontakter i Dinero hedder det samme — og kunden kan ikke få en portal, for portalen hænger på kundenummeret.",
@@ -13944,8 +13945,27 @@ function KunderView({ supabase, currentEmployeeId }) {
   }
   useEffect(() => { hent(); }, []);
 
+  // Sortering (Jonn 29.9.2026): kundenavn, senest besøg eller portaladgang.
+  const [sortering, setSortering] = useState("navn");
+  const navnSort = (a, b) => (a.navn || "").localeCompare(b.navn || "", "da", { sensitivity: "base" });
+  const portalTrin = (k) => (k.portal_status !== "aktiv" ? 0
+    : k.portal_option === "premium" ? 3 : k.portal_option === "udvidet" ? 2 : 1);
   const vist = kunder.filter((k) =>
-    !soeg.trim() || (k.navn || "").toLowerCase().includes(soeg.trim().toLowerCase()));
+    !soeg.trim() || (k.navn || "").toLowerCase().includes(soeg.trim().toLowerCase()))
+    .sort((a, b) => {
+      if (sortering === "besoeg") {
+        // Nyeste besøg først; aldrig besøgt til sidst.
+        const da = a.sidste_besoeg || "", db = b.sidste_besoeg || "";
+        if (da !== db) return da < db ? 1 : -1;
+        return navnSort(a, b);
+      }
+      if (sortering === "portal") {
+        // Premium, Udvidet, Basis — og kunder uden portal til sidst.
+        const d = portalTrin(b) - portalTrin(a);
+        return d !== 0 ? d : navnSort(a, b);
+      }
+      return navnSort(a, b);
+    });
 
   const samletKr = kunder.reduce((s, k) => s + Number(k.realiseret_kr || 0), 0);
   const medPortal = kunder.filter((k) => k.portal_status === "aktiv").length;
@@ -13976,9 +13996,17 @@ function KunderView({ supabase, currentEmployeeId }) {
           {koblBesked}
         </div>
       )}
-      <input style={{ ...styles.input, marginBottom: 12, fontSize: 16, padding: "12px 12px" }}
-        value={soeg} onChange={(e) => setSoeg(e.target.value)}
-        placeholder="Søg efter kunde…" autoComplete="off" />
+      <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
+        <input style={{ ...styles.input, flex: "1 1 260px", fontSize: 16, padding: "12px 12px" }}
+          value={soeg} onChange={(e) => setSoeg(e.target.value)}
+          placeholder="Søg efter kunde…" autoComplete="off" />
+        <select style={{ ...styles.input, flex: "0 0 220px", fontSize: 16, padding: "12px 12px" }}
+          value={sortering} onChange={(e) => setSortering(e.target.value)} aria-label="Sortér kunder">
+          <option value="navn">Sortér: Kundenavn (A–Å)</option>
+          <option value="besoeg">Sortér: Senest besøg</option>
+          {harModul("kundeportal") && <option value="portal">Sortér: Portaladgang</option>}
+        </select>
+      </div>
 
       {vist.map((k) => {
         const erAaben = aaben === k.noegle;
