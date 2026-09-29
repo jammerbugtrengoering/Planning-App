@@ -255,7 +255,9 @@ function gruppeFor(view) {
 }
 // Sider, der hoerer til et modul (fase 2, 29.9.2026). Er modulet ikke med, forsvinder
 // siden fra menuen — og databasen afviser den alligevel. Hos Jammerbugt er alle med.
-const SIDE_MODUL = { inventory: "lager", tilbud: "tilbud" };
+// Produkter er kundeportalens abonnementer og bestillingsliste. Uden kundeportal (som i
+// kundeudgaven, 29.9.2026) er der intet at saette priser paa, saa siden forsvinder.
+const SIDE_MODUL = { inventory: "lager", tilbud: "tilbud", produkter: "kundeportal" };
 function synligeSider(gr) {
   return gr.sider.filter(([k]) => !SIDE_MODUL[k] || harModul(SIDE_MODUL[k]));
 }
@@ -1898,7 +1900,7 @@ const MODULE_HELP = {
         "Godkendt arbejde faktureres af Jammerbugt Rengøring sammen med jeres abonnement."] },
   ] },
 
-  kunder: { title: "Kunder", intro: "Kunden set samlet — og stedet hvor kundeportalen og kundeløsningen tændes.", blocks: [
+  kunder: { title: "Kunder", intro: KUNDEUDGAVE ? "Kunden set samlet: omsætning, aftaler og besøg." : "Kunden set samlet — og stedet hvor kundeportalen og kundeløsningen tændes.", blocks: [
     { h: "Sådan læses listen", p: [
         "Her ser du hver kunde ét sted: hvad hun har givet i omsætning, hvor mange aftaler hun har, og hvornår hun sidst fik besøg.",
         "Omsætningen er realiseret — registreret tid gange satsen for kontrakttypen, plus udførte fastprisopgaver. Planlagt tid tæller ikke med; det er ikke penge før nogen har været der.",
@@ -1947,7 +1949,7 @@ const MODULE_HELP = {
     { h: "Premium: kundens egen planlægning og Worklist", p: [
         "Option er en trappe: Basis < Udvidet < Premium. Hvert trin har alt fra trinnet under. Premium er Udvidet plus kundens egen planlægning og Worklist til sine egne medarbejdere.",
         "Vælg Premium i Option-feltet. Første gang folder felterne ud: administratorens navn og mail, det korte navn i adressen, branchen og tilvalgene. Branchen giver en første tjekliste, så kunden ikke starter på en tom skærm.",
-        "Tilvalgene er Start/stop, Lager, Tilbud og Kundeportal (kundens egen portal til sine kunder).",
+        "Tilvalgene er Start/stop, Lager og Tilbud. Premium-kunden får ikke en portal til sine egne kunder.",
         "Administratoren er udfyldt med portalens administrator. Så er der ét login: hun logger ind i kundeportalen som altid og trykker på fanen «Planlægning» — planlægningen åbner logget ind, uden adgangskode.",
         "Kun portalens administratorer ser fanen «Planlægning». Almindelige portalbrugere ser kun portalen. Mailen skal være den samme i portalen og i planlægningen.",
         "Vælger du en anden mail end portalens administrator, logger den person ind direkte på planlægningens adresse med en adgangskode, hun vælger via linket i mailen.",
@@ -2224,6 +2226,15 @@ const MODULE_HELP = {
         "Hvert opslag skrives i loggen med medarbejder, opgave og tidspunkt. Vi kan altså altid svare en kunde på, hvem der har haft koden."] },
   ], warn: "Ændrer I hvad systemet gemmer, skal teksten her rettes — og de samme afsnit i Worklist og kundeportalen. Fortegnelsen over behandlingsaktiviteter skal opdateres i samme ombæring." },
 };
+
+// Kundeudgaven har ingen kundeportal til firmaets egne kunder og ingen Dinero
+// (29.9.2026). Afsnittene om dem fjernes fra hjaelpen til Kunder, saa den kun
+// forklarer det, der findes.
+if (KUNDEUDGAVE && MODULE_HELP.kunder) {
+  MODULE_HELP.kunder.blocks = MODULE_HELP.kunder.blocks.filter((b) =>
+    !/portal|premium|dinero|pris og fakturering|ekstra hjælp fra kunden|bestiller|basis og udvidet|logger kunden ind|hvad kunden kan bestille/i.test(b.h));
+  delete MODULE_HELP.kunder.warn;
+}
 
 // Udskriver hjaelpen som den staar lige nu. Hjaelpeteksten er kilden — der findes
 // ikke en separat PDF der skal huskes opdateret. Browserens "Gem som PDF" i
@@ -5828,7 +5839,7 @@ function PlanningApp({ session, onSignOut }) {
         <KunderView supabase={supabase} currentEmployeeId={currentEmployeeForAuth?.id || ""} />
       )}
 
-      {view === "produkter" && <ProdukterView isAdminUser={isAdminUser} notify={notify} />}
+      {view === "produkter" && harModul("kundeportal") && <ProdukterView isAdminUser={isAdminUser} notify={notify} />}
       {view === "ekstrahjaelp" && KUNDEUDGAVE && isAdminUser && <EkstraHjaelpView />}
 
       {view === "firma" && (
@@ -13185,7 +13196,6 @@ const LOESNING_TILVALG = [
   ["start_stop", "Start/stop", "Målt tid med start og stop i Worklist."],
   ["lager", "Lager", "Lagerstyring og udlevering."],
   ["tilbud", "Tilbud", "Tilbud til kundens egne kunder."],
-  ["kundeportal", "Kundeportal", "Portal til kundens egne kunder."],
 ];
 const LOESNING_BRANCHER = [["andet", "Andet"], ["hotel", "Hotel eller overnatning"], ["haandvaerk", "Håndværk og service"], ["institution", "Institution"]];
 const PLANLAEGNING_KUNDE_URL = "https://kunde-planlaegning.netlify.app";
@@ -13776,7 +13786,7 @@ function KunderView({ supabase, currentEmployeeId }) {
           { label: "Kunder", value: kunder.length, color: "#111111" },
           { label: "Realiseret i alt", value: Math.round(samletKr).toLocaleString("da-DK") + " kr", color: "var(--farve-moerk)" },
           { label: "Aktive aftaler", value: kunder.reduce((s, k) => s + Number(k.aktive_aftaler || 0), 0), color: "#0F766E" },
-          { label: "Med kundeportal", value: medPortal, color: "#4F46E5" },
+          ...(harModul("kundeportal") ? [{ label: "Med kundeportal", value: medPortal, color: "#4F46E5" }] : []),
         ].map((s) => (
           <div key={s.label} style={{ background: "#fff", borderRadius: 10, padding: "12px 14px", boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
             <div style={{ fontSize: 22, fontWeight: 800, color: s.color }}>{s.value}</div>
@@ -13869,7 +13879,7 @@ function KunderView({ supabase, currentEmployeeId }) {
                 {!harModul("dinero") ? (
                   k.guid
                     ? (harModul("kundeportal") && <PortalAfsnit supabase={supabase} kunde={k} currentEmployeeId={currentEmployeeId} onAendret={hent} />)
-                    : <div style={styles.hint}>Kunden er kun skrevet med navn på opgaverne. Vælg hende i kundelisten på en opgave, så kan hun få en portal.</div>
+                    : (harModul("kundeportal") && <div style={styles.hint}>Kunden er kun skrevet med navn på opgaverne. Vælg hende i kundelisten på en opgave, så kan hun få en portal.</div>)
                 ) : k.mangler_dinero ? (
                   <KoblTilDinero supabase={supabase} kunde={k}
                     onKoblet={(antal) => { hent(); notifyKobling(antal); }} />
