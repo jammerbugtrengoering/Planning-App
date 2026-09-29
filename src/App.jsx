@@ -2698,8 +2698,33 @@ function PlanningApp({ session, onSignOut }) {
       return { data: svar.data };
     }
 
+    // Alt det smaa i ét kald (29.9.2026). Foer var det ~30 kald paa én gang, og paa
+    // databasens lille maskine stod de i koe: selv en tabel med fem raekker tog 2-4 s.
+    // planlaegning_start() koerer som brugeren selv, saa raekke-politikkerne gaelder
+    // uaendret. Fejler den (fx en database uden funktionen), bruges de enkelte kald.
+    async function hentStartdata() {
+      const { data: d, error } = await supabase.rpc("planlaegning_start");
+      if (error || !d || typeof d !== "object") {
+        if (error) console.warn("planlaegning_start fejlede — henter tabellerne enkeltvis:", error.message);
+        return null;
+      }
+      const r = (k) => ({ data: d[k] ?? [] });
+      return [
+        r("skills"), r("customers"), r("employees"), r("employee_skills"), r("employee_capacity"),
+        r("checklist_templates"), r("checklist_template_items"), r("service_templates"),
+        r("service_template_skills"),
+        null, // opgaverne i vinduet hentes for sig
+        r("reschedule_requests"), r("portal_bestillinger"), r("task_notes"),
+        r("employee_wage_history"), r("km_sats_historik"), r("omkostninger"), r("km_log"),
+        r("bonus"), r("dinero_omsaetning"), r("employee_home"), r("instance_access"),
+        r("customer_access"), { data: d.travel_settings ?? null }, r("travel_overrides"),
+        r("areas"), r("employee_areas"), r("pricing"), r("budgets"),
+      ];
+    }
+
     async function loadAll() {
       setLoading(true);
+      const [samlet, vinduet] = await Promise.all([hentStartdata(), hentVinduet()]);
       const [
         { data: skillsData },
         { data: customersData },
@@ -2725,7 +2750,7 @@ function PlanningApp({ session, onSignOut }) {
       { data: custAccessData },
         { data: travelData },
         { data: overridesData },
-      ] = await Promise.all([
+      ] = samlet ? samlet.slice(0, 24).map((x) => x ?? { data: vinduet }) : await Promise.all([
         supabase.from("skills").select("*"),
         supabase.from("customers").select("*"),
         supabase.from("employees").select("*"),
@@ -2746,7 +2771,7 @@ function PlanningApp({ session, onSignOut }) {
       // var 2027 og 2028, fordi en aftale danner hele sin loebetid, naar den oprettes.
       //
       // Vinduet er cirka 1.500 opgaver og gaar i én side.
-      hentVinduet().then((data) => ({ data })),
+      Promise.resolve({ data: vinduet }),
       hentMedFornyelse("ønsker om ny tid", () => supabase.from("reschedule_requests").select("*").eq("status", "afventer")),
       hentMedFornyelse("bestillinger fra kunder", () => supabase.from("portal_bestillinger").select("*").eq("status", "ny").order("oprettet")),
       hentMedFornyelse("kommentarer og billeder", () => supabase.from("task_notes").select("*").order("created_at", { ascending: false })),
@@ -2777,7 +2802,7 @@ function PlanningApp({ session, onSignOut }) {
         supabase.from("travel_overrides").select("*"),
       ]);
       // Load areas
-      const [{ data: areasData }, { data: empAreasData }, { data: pricingData }, { data: budgetsData }] = await Promise.all([
+      const [{ data: areasData }, { data: empAreasData }, { data: pricingData }, { data: budgetsData }] = samlet ? samlet.slice(24) : await Promise.all([
         supabase.from("areas").select("*").order("name"),
         supabase.from("employee_areas").select("*"),
         supabase.from("pricing").select("*"),
