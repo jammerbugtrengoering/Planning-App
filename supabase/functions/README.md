@@ -143,8 +143,9 @@ kopiere tilbage — og så er det filen her, der skal opdateres, ikke omvendt.
 
 ## Tilføjet 29.9.2026 — broen til kundeløsningen (fase 5)
 
-- `kundeloesning` — kundekortets afsnit «Planlægning og Worklist»: opret, tilvalg, luk/åbn
-  og nyt link. Kun planlæggere. Kalder kundedatabasens `jr-bro` med broens nøgle.
+- `kundeloesning` — Premium på kundekortet (Option: Basis < Udvidet < Premium). Handlingen
+  «niveau» skifter trin og opretter/lukker/åbner kundens planlægning i samme skridt;
+  derudover tilvalg og nyt link. Kun planlæggere. Kalder kundedatabasens `jr-bro` med broens nøgle.
 - `bro-modtag` — modtager «Ekstra hjælp» fra kundedatabasen og lægger den i
   `portal_bestillinger` med `kilde = 'kundeloesning'`. Kun med broens nøgle
   (`verify_jwt` fra).

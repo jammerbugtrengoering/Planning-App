@@ -13,6 +13,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 // databaser kender (bro.noegle).
 //
 // Handlinger:
+//   { handling: "niveau", guid, niveau: "basis"|"udvidet"|"premium", (+ opret-felter foerste gang Premium) }
 //   { handling: "aktiver", guid, slug, admin_navn, admin_email, branche?, moduler }
 //   { handling: "moduler", guid, moduler }
 //   { handling: "luk", guid }
@@ -82,8 +83,9 @@ Deno.serve(async (req) => {
     const { data: kl } = await admin.from("kundeloesning").select("*").eq("dinero_contact_guid", guid).maybeSingle();
     const nu = new Date().toISOString();
 
-    if (b.handling === "aktiver") {
-      if (kl) return svar({ error: FEJL.findes_allerede }, 409);
+    // Opretter firmaet i kundedatabasen og gemmer koblingen. Bruges af "aktiver" og af
+    // "niveau", naar kunden foerste gang saettes til Premium.
+    async function opret(): Promise<Response | null> {
       const { data: kunde } = await admin.from("kundeoversigt").select("navn").eq("guid", guid).maybeSingle();
       if (!kunde?.navn) return svar({ error: "Kunden findes ikke." }, 404);
       const m = moduler(b.moduler);
@@ -99,7 +101,46 @@ Deno.serve(async (req) => {
         admin_navn: adminNavn, admin_email: email,
       });
       if (error) return svar({ error: "Firmaet er oprettet, men koblingen kunne ikke gemmes: " + error.message }, 500);
-      return svar({ ok: true, mailSendt: r.d.mailSendt !== false });
+      mailSendt = r.d.mailSendt !== false;
+      return null;
+    }
+    let mailSendt = true;
+
+    async function saetStatus(status: "aktiv" | "lukket"): Promise<Response | null> {
+      const r = await bro({ handling: "status", firma_id: kl.firma_id, status });
+      if (!r.ok) return fejl(r.d);
+      await admin.from("kundeloesning").update({
+        status, opsagt_dato: status === "lukket" ? nu.slice(0, 10) : null, aendret: nu,
+      }).eq("dinero_contact_guid", guid);
+      return null;
+    }
+
+    // Trappen (Jonn 29.9.2026): Basis < Udvidet < Premium. Premium = Udvidet + kundens
+    // egen planlaegning og Worklist. Skiftes der ned fra Premium, lukkes planlaegningen;
+    // skiftes der op igen, aabnes den (data er bevaret).
+    if (b.handling === "niveau") {
+      const niveau = ["basis", "udvidet", "premium"].includes(b.niveau) ? b.niveau : null;
+      if (!niveau) return svar({ error: "Ukendt niveau." }, 400);
+      const { data: pa } = await admin.from("portal_abonnement").select("status")
+        .eq("dinero_contact_guid", guid).maybeSingle();
+      if (pa?.status !== "aktiv") return svar({ error: "Tænd kundeportalen først." }, 400);
+      if (niveau === "premium") {
+        const f = !kl ? await opret() : kl.status === "lukket" ? await saetStatus("aktiv") : null;
+        if (f) return f;
+      } else if (kl?.status === "aktiv") {
+        const f = await saetStatus("lukket");
+        if (f) return f;
+      }
+      const { error } = await admin.from("portal_abonnement").update({ option: niveau }).eq("dinero_contact_guid", guid);
+      if (error) return svar({ error: error.message }, 500);
+      return svar({ ok: true, niveau, mailSendt: !kl && niveau === "premium" ? mailSendt : undefined });
+    }
+
+    if (b.handling === "aktiver") {
+      if (kl) return svar({ error: FEJL.findes_allerede }, 409);
+      const f = await opret();
+      if (f) return f;
+      return svar({ ok: true, mailSendt });
     }
 
     if (!kl) return svar({ error: "Kunden har ikke kundeløsningen." }, 404);
@@ -117,11 +158,8 @@ Deno.serve(async (req) => {
 
     if (b.handling === "luk" || b.handling === "genaabn") {
       const status = b.handling === "luk" ? "lukket" : "aktiv";
-      const r = await bro({ handling: "status", firma_id: kl.firma_id, status });
-      if (!r.ok) return fejl(r.d);
-      await admin.from("kundeloesning").update({
-        status, opsagt_dato: status === "lukket" ? nu.slice(0, 10) : null, aendret: nu,
-      }).eq("dinero_contact_guid", guid);
+      const f = await saetStatus(status);
+      if (f) return f;
       return svar({ ok: true, status });
     }
 
