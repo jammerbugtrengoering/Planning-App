@@ -140,3 +140,15 @@ kopiere tilbage — og så er det filen her, der skal opdateres, ikke omvendt.
 | `tilbud-pdf` | Laver tilbuddet som PDF | Planlægningsappen |
 | `dinero-kontakt-sync` | Henter kundenumre og kontaktoplysninger fra Dinero ind på aftalerne | Natligt job kl. 6.20 |
 | `arvede-felter-sync` | Retter opgaver, der er kommet ud af trit med deres aftale — kontrakttype, adresse, telefon, e-mail m.m. Skriver gennem `opdater_arvede_felter()` | Natligt job kl. 6.25 |
+
+## Tilføjet 29.9.2026 — broen til kundeløsningen (fase 5)
+
+- `kundeloesning` — kundekortets afsnit «Planlægning og Worklist»: opret, tilvalg, luk/åbn
+  og nyt link. Kun planlæggere. Kalder kundedatabasens `jr-bro` med broens nøgle.
+- `bro-modtag` — modtager «Ekstra hjælp» fra kundedatabasen og lægger den i
+  `portal_bestillinger` med `kilde = 'kundeloesning'`. Kun med broens nøgle
+  (`verify_jwt` fra).
+- `bestilling-besked` — hentet ned og lagt her; svaret til kunden peger nu på «Ekstra
+  hjælp», når bestillingen kom fra kundeløsningen.
+
+Se `../kunde-functions/README.md` for den anden ende af broen.

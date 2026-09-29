@@ -6,7 +6,7 @@ import { fakturerbareMinutter, registreredeMinutter, oplaeringsFolk, erUnderOpla
          planlagtFakturerbart, afvigelse, planlagtFor, planlagtIAlt,
          fordelingen, harFordeling } from "./opgavetid.js";
 import { supabase } from "./supabaseClient";
-import { FIRMA, useFirma, brugTitel, opdaterFirma, farveHex, harModul } from "./firma";
+import { FIRMA, useFirma, brugTitel, opdaterFirma, farveHex, harModul, KUNDEUDGAVE, hentFirmaEfterSlug, slugFraAdresse, genhentFirma } from "./firma";
 import { aftaleKoererPaaDag, DAG_FRA_INDEKS, nyStartdatoHvisPasseret } from "./aftalerytme";
 import { holdOejeMedNyVersion } from "./nyversion";
 import { filtrerUgevalg } from "./ugevalg";
@@ -234,6 +234,10 @@ const MENU_GRUPPER = [
   { key: "lager",     navn: "Lager",      sider: [["inventory", "Lager"]] },
   { key: "oekonomi",  navn: "Økonomi",     sider: [["time", "Fakturering"], ["kundetimer", "Kundetimer"], ["reports", "Rapportering"], ["medExport", "Løn data"]] },
   { key: "opsaetning", navn: "Opsætning", sider: [["employees", "Medarbejdere"], ["checklists", "Tjeklister"], ["transport", "Transporttid"], ["firma", "Firma"]] },
+  // Kun i kundeudgaven (fase 5, 29.9.2026): kundefirmaet bestiller ekstra hjaelp hos
+  // Jammerbugt Rengoering. Hos Jammerbugt selv findes siden ikke — der er man den,
+  // der modtager bestillingerne.
+  { key: "ekstra", navn: "Ekstra hjælp", kunAdmin: true, kunKunde: true, sider: [["ekstrahjaelp", "Ekstra hjælp"]] },
   // Drift staar sidst og kun for administratorer. Den hoerer ikke til i en
   // arbejdsdag — man gaar derind, naar man vil vide, om det hele koerer, eller naar
   // noget ser forkert ud. Laa den mellem de oevrige, ville den blive aabnet ved en
@@ -1268,6 +1272,12 @@ export default function App() {
   useEffect(() => { brugTitel("app_navn"); }, []);
   // ── Auth ──
   const [session, setSession] = useState(null);
+  // Kundeudgaven: foer login viser /hansen firmaets navn og logo; efter login hentes
+  // firmaet paa login'et.
+  useEffect(() => {
+    if (session?.user?.id) genhentFirma(supabase);
+    else hentFirmaEfterSlug(supabase, slugFraAdresse());
+  }, [session?.user?.id]);
   const [authLoading, setAuthLoading] = useState(true);
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
@@ -1795,7 +1805,8 @@ const MODULE_HELP = {
         "Nye produkter opretter du nederst: navn, slags, enhed og pris ekskl. moms.",
         "Fluebenet «I portalen» bestemmer, om en ydelse står på listen under Bestil i kundeportalen. Den skal også være aktiv.",
         "Ydelser har ingen pris. De bruges kun til bestilling. Prisen sættes på den opgave, du opretter, når du godkender bestillingen — timepris eller fastpris som alle andre opgaver.",
-        "Pris har kun abonnementer og tilvalg, fx kundeportalens Basis og Udvidet."] },
+        "Pris har kun abonnementer og tilvalg, fx kundeportalens Basis og Udvidet.",
+        "«Planlægning og Worklist» og de fire «Tilvalg: …» er prisen på kundeløsningen, som oprettes fra kundekortet. De står til 0 kr., til I sætter prisen."] },
     { h: "Priser", p: [
         "En ny pris gælder fra de linjer, der dannes efter ændringen. Linjer, der allerede er sendt til Dinero, ændres aldrig.",
         "Står prisen til 0 kr., dannes linjen stadig, men den sendes ikke til Dinero."] },
@@ -1803,7 +1814,17 @@ const MODULE_HELP = {
         "Et produkt slettes ikke. Slå det fra, så det ikke bruges fremover, men stadig kan slås op på gamle fakturaer."] },
   ] },
 
-  kunder: { title: "Kunder", intro: "Kunden set samlet — og stedet hvor kundeportalen tændes.", blocks: [
+  ekstrahjaelp: { title: "Ekstra hjælp", intro: "Bestil hjælp hos Jammerbugt Rengøring.", blocks: [
+    { h: "Sådan bestiller du", p: [
+        "Vælg en ydelse fra listen, eller skriv selv hvad I har brug for. Tilføj en ønsket dato og en adresse, hvis det ikke er jeres sædvanlige.",
+        "Tryk «Send bestilling». Bestillingen er et ønske, ikke en aftale: Jammerbugt Rengøring svarer, og I får besked på mail.",
+        "Kun planlæggere kan bestille. Medarbejderne ser ikke siden."] },
+    { h: "Status", p: [
+        "Under «Jeres bestillinger» ser I, om en bestilling afventer svar, er godkendt eller afvist, og hvad Jammerbugt Rengøring har skrevet.",
+        "Godkendt arbejde faktureres af Jammerbugt Rengøring sammen med jeres abonnement."] },
+  ] },
+
+  kunder: { title: "Kunder", intro: "Kunden set samlet — og stedet hvor kundeportalen og kundeløsningen tændes.", blocks: [
     { h: "Sådan læses listen", p: [
         "Her ser du hver kunde ét sted: hvad hun har givet i omsætning, hvor mange aftaler hun har, og hvornår hun sidst fik besøg.",
         "Omsætningen er realiseret — registreret tid gange satsen for kontrakttypen, plus udførte fastprisopgaver. Planlagt tid tæller ikke med; det er ikke penge før nogen har været der.",
@@ -1846,6 +1867,22 @@ const MODULE_HELP = {
     { h: "Når portalen lukkes", p: [
         "«Luk portalen» stopper adgangen med det samme for alle kundens brugere. Du behøver ikke slette dem enkeltvis.",
         "Det korte navn bliver stående, så portalen kan tændes igen senere og det gamle link virker."] },
+    { h: "Planlægning og Worklist til kunden", p: [
+        "Afsnittet under Kundeportal giver kunden sin egen planlægning og Worklist til sine egne medarbejdere. Det er det eneste sted, løsningen kan oprettes — der er ingen tilmelding på nettet.",
+        "Tryk «Opret planlægning til kunden», og udfyld administratorens navn og mail, det korte navn i adressen og branchen. Branchen giver en første tjekliste, så kunden ikke starter på en tom skærm.",
+        "Vælg tilvalgene: Start/stop, Lager, Tilbud og Kundeportal. Grundpakken er altid med: planlægning, medarbejdere, tjeklister, Worklist og Ekstra hjælp.",
+        "«Opret og send link» opretter firmaet og sender administratoren en mail med et link til at vælge adgangskode. Er mailen gået tabt, tryk «Send link igen».",
+        "Kundens data ligger i en database for sig, adskilt fra jeres. I kan ikke se kundens medarbejdere eller opgaver, og kunden kan ikke se jeres.",
+        "Tilvalg kan ændres bagefter. Tryk «Gem tilvalg»; det slår igennem hos kunden med det samme.",
+        "«Luk løsningen» spærrer alle kundens logins med det samme. Data bliver liggende, så «Åbn igen» giver alt tilbage.",
+        "Mærkatet «Planlægning» på kundelisten viser, hvem der har løsningen."] },
+    { h: "Pris og fakturering", p: [
+        "Priserne står under Salg → Produkter: «Planlægning og Worklist» (grundpakken) og et produkt pr. tilvalg. Summen vises på kundekortet.",
+        "Hver måned dannes en abonnementslinje for grundpakken og én for hvert tilvalg under Fakturering → Abonnementer, præcis som for kundeportalen.",
+        "Slås et tilvalg fra, forsvinder linjen for måneden, så længe den ikke er sendt til Dinero. Lukkes løsningen, faktureres den indeværende måned stadig."] },
+    { h: "Ekstra hjælp fra kunden", p: [
+        "Kunden kan bestille ekstra hjælp fra sin egen planlægning. Bestillingen lander som en almindelig bestilling: i klokken, i den blå boks i Ugeplan og som mail til planlæggerne.",
+        "Den behandles præcis som en bestilling fra kundeportalen. Svaret sendes til den, der bestilte, og kunden ser status under Ekstra hjælp."] },
   ], warn: "Kunden ser sine opgaver med tid, tjekliste og hvem der udførte dem — men aldrig interne advarsler, kontrakttype eller lønrelevante tal. Felterne er valgt enkeltvis i databasen." },
 
   tilbud: { title: "Tilbud", intro: "Tilbuddet er forløberen for aftalen. Accepterer kunden, dannes aftalen af sig selv — som kladde.", blocks: [
@@ -2166,7 +2203,7 @@ function ModuleHelp({ view, onClose }) {
                 style={{ border:"1px solid #555", background:"transparent", color:"#fff", borderRadius:8, padding:"4px 10px", fontSize:11.5, cursor:"pointer" }}>
                 Udskriv dette afsnit
               </button>
-              <button onClick={() => udskrivHjaelp(Object.keys(MODULE_HELP))}
+              <button onClick={() => udskrivHjaelp(Object.keys(MODULE_HELP).filter((k) => KUNDEUDGAVE || k !== "ekstrahjaelp"))}
                 style={{ border:"1px solid #555", background:"transparent", color:"#fff", borderRadius:8, padding:"4px 10px", fontSize:11.5, cursor:"pointer" }}>
                 Hele vejledningen
               </button>
@@ -5386,7 +5423,7 @@ function PlanningApp({ session, onSignOut }) {
           </div>
         </div>
         <nav style={styles.nav}>
-          {MENU_GRUPPER.filter((gr) => (!gr.kunAdmin || isAdminUser) && synligeSider(gr).length > 0).map((gr) => {
+          {MENU_GRUPPER.filter((gr) => (!gr.kunAdmin || isAdminUser) && (!gr.kunKunde || KUNDEUDGAVE) && synligeSider(gr).length > 0).map((gr) => {
             const aktiv = gruppeFor(view).key === gr.key;
             return (
               <button key={gr.key} onClick={() => setView(synligeSider(gr)[0][0])}
@@ -5410,6 +5447,10 @@ function PlanningApp({ session, onSignOut }) {
               style={view === k ? styles.underNavAktiv : styles.underNavBtn}>{l}</button>
           ))}
         </div>
+      )}
+
+      {KUNDEUDGAVE && isAdminUser && view === "uge" && (
+        <KomIGang firma={firma} employees={employees} instances={instances} onGaaTil={setView} />
       )}
 
       {toast && <div style={styles.toast}>{toast}</div>}
@@ -5677,6 +5718,7 @@ function PlanningApp({ session, onSignOut }) {
       )}
 
       {view === "produkter" && <ProdukterView isAdminUser={isAdminUser} notify={notify} />}
+      {view === "ekstrahjaelp" && KUNDEUDGAVE && isAdminUser && <EkstraHjaelpView />}
 
       {view === "firma" && (
         <FirmaView isAdminUser={isAdminUser} firma={firma} notify={notify}
@@ -12313,6 +12355,45 @@ function FirmaView({ isAdminUser, firma, notify, medarbejderId, onGemt }) {
   );
 }
 
+// ── Kom i gang (kundeudgaven, fase 4) ─────────────────────────────────────────
+// Fire trin til et nyt firma. Hvert trin er faerdigt, naar det faktisk ER gjort — ikke
+// naar man har klikket paa det. Forsvinder, naar alle fire er gjort, eller man lukker den.
+function KomIGang({ firma, employees, instances, onGaaTil }) {
+  const [skjult, setSkjult] = useState(() => {
+    try { return localStorage.getItem("komigang_skjult") === "1"; } catch { return false; }
+  });
+  const aktive = (employees || []).filter((e) => !e.fratraadtDato);
+  const trin = [
+    ["Firmaoplysninger, logo og farve", !!firma?.aendret_af, "firma"],
+    ["Opret jeres medarbejdere", aktive.length > 1, "employees"],
+    ["Giv en medarbejder adgang til Worklist", aktive.some((e) => !e.isAdmin && e.auth_user_id), "employees"],
+    ["Opret den første opgave", (instances || []).length > 0, "uge"],
+  ];
+  const gjort = trin.filter((t) => t[1]).length;
+  if (skjult || gjort === trin.length) return null;
+  return (
+    <div style={{ background: "#fff", border: "1px solid #E2E8F0", borderRadius: 12, padding: "14px 16px", margin: "12px 24px 0" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+        <div style={{ fontWeight: 800, fontSize: 15 }}>Kom i gang <span style={{ color: "#64748B", fontWeight: 600, fontSize: 13 }}>· {gjort} af {trin.length}</span></div>
+        <button style={{ ...styles.secondaryBtn, padding: "4px 10px", fontSize: 12 }}
+          onClick={() => { setSkjult(true); try { localStorage.setItem("komigang_skjult", "1"); } catch { /* */ } }}>Skjul</button>
+      </div>
+      <div style={{ height: 6, background: "#F1F5F9", borderRadius: 3, margin: "10px 0" }}>
+        <div style={{ height: 6, width: `${(gjort / trin.length) * 100}%`, background: "var(--farve)", borderRadius: 3 }} />
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 8 }}>
+        {trin.map(([tekst, ok, side]) => (
+          <button key={tekst} onClick={() => onGaaTil(side)}
+            style={{ textAlign: "left", border: "1px solid " + (ok ? "#BBF7D0" : "#E2E8F0"), background: ok ? "#F0FDF4" : "#fff",
+                     borderRadius: 10, padding: "9px 12px", fontSize: 13.5, cursor: "pointer", color: ok ? "#166534" : "#111111", fontFamily: "inherit" }}>
+            {ok ? "✓ " : "○ "}{tekst}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function StartStopPanel({ supabase, employees, onStartStopAlle }) {
   const [graense, setGraense] = useState(null);
   const [kladde, setKladde] = useState("");
@@ -13139,6 +13220,359 @@ function PortalAfsnit({ supabase, kunde, currentEmployeeId, onAendret }) {
   );
 }
 
+// ── Kundeløsningen på kundekortet (fase 5, 29.9.2026) ───────────────────────
+// Planlaegning og Worklist til en af jeres kunder. Aktiveres KUN herfra (Jonn): der er
+// ingen aaben tilmelding. Edge-funktionen kundeloesning opretter firmaet i
+// kundedatabasen, sender administratoren et link og gemmer tilvalgene, som
+// abonnementslinjerne i Fakturering dannes ud fra (priserne staar under Produkter).
+const LOESNING_TILVALG = [
+  ["start_stop", "Start/stop", "Målt tid med start og stop i Worklist."],
+  ["lager", "Lager", "Lagerstyring og udlevering."],
+  ["tilbud", "Tilbud", "Tilbud til kundens egne kunder."],
+  ["kundeportal", "Kundeportal", "Portal til kundens egne kunder."],
+];
+const LOESNING_BRANCHER = [["andet", "Andet"], ["hotel", "Hotel eller overnatning"], ["haandvaerk", "Håndværk og service"], ["institution", "Institution"]];
+const PLANLAEGNING_KUNDE_URL = "https://kunde-planlaegning.netlify.app";
+
+function LoesningAfsnit({ kunde, onAendret }) {
+  const [kl, setKl] = useState(undefined);
+  const [priser, setPriser] = useState({});
+  const [aaben, setAaben] = useState(false);
+  const [slug, setSlug] = useState("");
+  const [adminNavn, setAdminNavn] = useState(kunde.kontaktperson || "");
+  const [adminEmail, setAdminEmail] = useState(kunde.email || "");
+  const [branche, setBranche] = useState("andet");
+  const [valgt, setValgt] = useState({});
+  const [arbejder, setArbejder] = useState("");
+  const [fejl, setFejl] = useState("");
+  const [besked, setBesked] = useState("");
+
+  const hent = useCallback(async () => {
+    const [{ data }, { data: p }] = await Promise.all([
+      supabase.from("kundeloesning").select("*").eq("dinero_contact_guid", kunde.guid).maybeSingle(),
+      supabase.from("produkter").select("noegle, pris").like("noegle", "loesning\\_%"),
+    ]);
+    setKl(data || null);
+    setPriser(Object.fromEntries((p || []).map((r) => [r.noegle, Number(r.pris)])));
+    if (data) setValgt(Object.fromEntries(LOESNING_TILVALG.map(([k]) => [k, !!data["modul_" + k]])));
+  }, [kunde.guid]);
+  useEffect(() => { hent(); }, [hent]);
+
+  const foreslaaSlug = () => (kunde.navn || "").toLowerCase()
+    .replace(/[æä]/g, "ae").replace(/[øö]/g, "oe").replace(/å/g, "aa")
+    .replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 30);
+  const kr = (n) => `${Number(n || 0).toLocaleString("da-DK")} kr./md.`;
+  const samlet = (v) => (priser.loesning_grund || 0)
+    + LOESNING_TILVALG.reduce((s, [k]) => s + (v[k] ? (priser["loesning_" + k] || 0) : 0), 0);
+
+  async function kald(body, arbejde) {
+    setFejl(""); setBesked(""); setArbejder(arbejde);
+    const { data, error } = await supabase.functions.invoke("kundeloesning", { body: { guid: kunde.guid, ...body } });
+    setArbejder("");
+    let f = data?.error;
+    if (!f && error) {
+      try { f = (await error.context?.json())?.error; } catch { /* ingen tekst */ }
+      f = f || error.message;
+    }
+    if (f) { setFejl(f); return null; }
+    return data;
+  }
+
+  async function aktiver() {
+    const s = (slug || foreslaaSlug()).trim();
+    if (!/^[a-z0-9][a-z0-9-]{1,38}[a-z0-9]$/.test(s)) { setFejl("Det korte navn må kun have små bogstaver, tal og bindestreg, og mindst tre tegn."); return; }
+    if (adminNavn.trim().length < 2) { setFejl("Skriv navnet på kundens administrator."); return; }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(adminEmail.trim())) { setFejl("Skriv administratorens mail."); return; }
+    if (!window.confirm(`Opret planlægning og Worklist til ${kunde.navn}? ${adminEmail.trim()} får en mail med et link. Abonnementet kommer på fakturaen fra denne måned.`)) return;
+    const d = await kald({ handling: "aktiver", slug: s, admin_navn: adminNavn.trim(), admin_email: adminEmail.trim(), branche, moduler: valgt }, "aktiverer");
+    if (!d) return;
+    setAaben(false);
+    setBesked(d.mailSendt === false
+      ? "Løsningen er oprettet, men mailen kunne ikke sendes. Tryk «Send link igen»."
+      : `Løsningen er oprettet. ${adminEmail.trim()} har fået en mail med et link.`);
+    await hent(); onAendret?.();
+  }
+
+  async function gemTilvalg() {
+    const d = await kald({ handling: "moduler", moduler: valgt }, "tilvalg");
+    if (!d) return;
+    setBesked("Tilvalgene er gemt. De gælder med det samme hos kunden, og fakturaen følger med.");
+    await hent();
+  }
+
+  async function lukEllerAaben(luk) {
+    if (luk && !window.confirm(`Luk planlægningen for ${kunde.navn}? Ingen hos kunden kan logge ind, før I åbner den igen. Data bliver liggende.`)) return;
+    const d = await kald({ handling: luk ? "luk" : "genaabn" }, "status");
+    if (!d) return;
+    setBesked(luk ? "Løsningen er lukket. Abonnementet stopper fra næste måned." : "Løsningen er åbnet igen.");
+    await hent(); onAendret?.();
+  }
+
+  async function inviterIgen() {
+    const d = await kald({ handling: "inviter_igen" }, "inviter");
+    if (d) setBesked(`Et nyt link er sendt til ${kl.admin_email}.`);
+  }
+
+  if (kl === undefined) return null;
+  const tilvalgAendret = kl && LOESNING_TILVALG.some(([k]) => !!kl["modul_" + k] !== !!valgt[k]);
+  const beskeder = (
+    <>
+      {fejl && <div style={{ color: "#B91C1C", fontSize: 13, marginTop: 8 }}>{fejl}</div>}
+      {besked && <div style={{ color: "#166534", fontSize: 13, marginTop: 8 }}>{besked}</div>}
+    </>
+  );
+  const tilvalgFelter = (
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(210px, 1fr))", gap: 8, marginTop: 8 }}>
+      {LOESNING_TILVALG.map(([k, navn, forklaring]) => (
+        <label key={k} style={{ display: "flex", gap: 8, alignItems: "flex-start", border: "1px solid #E2E8F0",
+                                 borderRadius: 9, padding: "9px 10px", cursor: "pointer", background: valgt[k] ? "#F0F9FF" : "#fff" }}>
+          <input type="checkbox" checked={!!valgt[k]} disabled={!!arbejder}
+            onChange={(e) => setValgt({ ...valgt, [k]: e.target.checked })} style={{ marginTop: 3 }} />
+          <span>
+            <span style={{ fontSize: 13, fontWeight: 700 }}>{navn}</span>
+            <span style={{ fontSize: 12, color: "#64748B" }}> · {kr(priser["loesning_" + k])}</span>
+            <span style={{ display: "block", fontSize: 12, color: "#64748B" }}>{forklaring}</span>
+          </span>
+        </label>
+      ))}
+    </div>
+  );
+
+  if (!kl) {
+    return (
+      <div style={{ borderTop: "1px solid #F1F5F9", paddingTop: 12, marginTop: 12 }}>
+        <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>Planlægning og Worklist</div>
+        <div style={{ fontSize: 12.5, color: "#64748B", lineHeight: 1.5, marginBottom: 10 }}>
+          Kunden får sin egen planlægning og Worklist til sine egne medarbejdere, og kan bestille
+          ekstra hjælp hos jer. Kundens data ligger i en database for sig, adskilt fra jeres.
+        </div>
+        {!aaben ? (
+          <button style={styles.secondaryBtn} onClick={() => { setAaben(true); setSlug(foreslaaSlug()); }}>
+            Opret planlægning til kunden
+          </button>
+        ) : (
+          <div style={{ border: "1px solid #E2E8F0", borderRadius: 10, padding: 12, background: "#fff" }}>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <div style={{ flex: 1, minWidth: 170 }}>
+                <label style={styles.label}>Administrator hos kunden</label>
+                <input style={styles.input} value={adminNavn} onChange={(e) => setAdminNavn(e.target.value)} placeholder="Hanne Nielsen" />
+              </div>
+              <div style={{ flex: 1, minWidth: 200 }}>
+                <label style={styles.label}>Administratorens mail</label>
+                <input style={styles.input} type="email" value={adminEmail} onChange={(e) => setAdminEmail(e.target.value)} placeholder="hanne@virksomhed.dk" />
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
+              <div style={{ flex: 1, minWidth: 170 }}>
+                <label style={styles.label}>Kort navn i adressen</label>
+                <input style={styles.input} value={slug} onChange={(e) => setSlug(e.target.value.toLowerCase())} placeholder={foreslaaSlug()} />
+                <div style={styles.hint}>{PLANLAEGNING_KUNDE_URL}/{slug || foreslaaSlug()}</div>
+              </div>
+              <div style={{ flex: 1, minWidth: 200 }}>
+                <label style={styles.label}>Branche</label>
+                <select style={styles.input} value={branche} onChange={(e) => setBranche(e.target.value)}>
+                  {LOESNING_BRANCHER.map(([k, t]) => <option key={k} value={k}>{t}</option>)}
+                </select>
+                <div style={styles.hint}>Giver en første tjekliste, så kunden ikke starter på en tom skærm.</div>
+              </div>
+            </div>
+            <div style={{ fontSize: 13, fontWeight: 700, marginTop: 10 }}>
+              Grundpakke · {kr(priser.loesning_grund)}
+              <span style={{ fontWeight: 400, color: "#64748B" }}> — planlægning, medarbejdere, tjeklister, Worklist og ekstra hjælp</span>
+            </div>
+            <div style={{ fontSize: 13, fontWeight: 700, marginTop: 8 }}>Tilvalg</div>
+            {tilvalgFelter}
+            <div style={{ ...styles.hint, marginTop: 8 }}>
+              I alt {kr(samlet(valgt))}. Priserne sættes under Salg → Produkter.
+            </div>
+            <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+              <button style={styles.primaryBtn} disabled={!!arbejder} onClick={aktiver}>
+                {arbejder === "aktiverer" ? "Opretter…" : "Opret og send link"}
+              </button>
+              <button style={styles.secondaryBtn} disabled={!!arbejder} onClick={() => { setAaben(false); setFejl(""); }}>Annullér</button>
+            </div>
+          </div>
+        )}
+        {beskeder}
+      </div>
+    );
+  }
+
+  const lukket = kl.status === "lukket";
+  const adresse = `${PLANLAEGNING_KUNDE_URL}/${kl.slug}`;
+  return (
+    <div style={{ borderTop: "1px solid #F1F5F9", paddingTop: 12, marginTop: 12 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 8 }}>
+        <div>
+          <div style={{ fontSize: 13, fontWeight: 700 }}>
+            Planlægning og Worklist
+            <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 999,
+                           background: lukket ? "#FEF2F2" : "#F0FDF4", color: lukket ? "#B91C1C" : "#166534" }}>
+              {lukket ? "Lukket" : "Aktiv"}
+            </span>
+          </div>
+          <a href={adresse} target="_blank" rel="noreferrer" style={{ fontSize: 12.5, color: "#4F46E5" }}>{adresse}</a>
+          <div style={{ fontSize: 12, color: "#64748B", marginTop: 2 }}>
+            Administrator: {kl.admin_navn || "—"} · {kl.admin_email || "—"}
+            {kl.start_dato && ` · siden ${new Date(kl.start_dato).toLocaleDateString("da-DK")}`}
+          </div>
+        </div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {!lukket && (
+            <button style={styles.secondaryBtn} disabled={!!arbejder} onClick={inviterIgen}>
+              {arbejder === "inviter" ? "Sender…" : "Send link igen"}
+            </button>
+          )}
+          <button style={lukket ? styles.secondaryBtn : { ...styles.secondaryBtn, color: "#B91C1C", borderColor: "#FCA5A5" }}
+            disabled={!!arbejder} onClick={() => lukEllerAaben(!lukket)}>
+            {arbejder === "status" ? "Gemmer…" : lukket ? "Åbn igen" : "Luk løsningen"}
+          </button>
+        </div>
+      </div>
+      {!lukket && (
+        <>
+          <div style={{ fontSize: 13, fontWeight: 700, marginTop: 10 }}>Tilvalg</div>
+          {tilvalgFelter}
+          <div style={{ display: "flex", gap: 10, alignItems: "center", marginTop: 8, flexWrap: "wrap" }}>
+            <span style={styles.hint}>Grundpakke og tilvalg i alt {kr(samlet(valgt))}.</span>
+            {tilvalgAendret && (
+              <button style={styles.primaryBtn} disabled={!!arbejder} onClick={gemTilvalg}>
+                {arbejder === "tilvalg" ? "Gemmer…" : "Gem tilvalg"}
+              </button>
+            )}
+          </div>
+        </>
+      )}
+      {beskeder}
+    </div>
+  );
+}
+
+// ── Ekstra hjælp (kun kundeudgaven, fase 5) ─────────────────────────────────
+// Kundefirmaet bestiller hjaelp hos Jammerbugt Rengoering. Bestillingen gemmes ikke
+// her: den gaar over broen (bestil-hjaelp -> bro-modtag) og lander i Jammerbugts
+// Ugeplan til godkendelse. Status hentes derfra, saa der kun findes ét svar.
+const HJAELP_STATUS = {
+  ny: { tekst: "Afventer svar", farve: "#B45309", bag: "#FFFBEB" },
+  godkendt: { tekst: "Godkendt", farve: "#166534", bag: "#F0FDF4" },
+  afvist: { tekst: "Afvist", farve: "#B91C1C", bag: "#FEF2F2" },
+};
+const HJAELP_FEJL = {
+  tom_bestilling: "Vælg en ydelse, eller skriv hvad I har brug for.",
+  dato_fortid: "Den ønskede dato er overskredet.",
+  for_mange_aabne: "I har mange bestillinger, der venter på svar. Vent på svar, før I bestiller mere.",
+  ikke_aktiv: "Bestilling er ikke slået til for jeres firma. Kontakt Jammerbugt Rengøring.",
+  jr_utilgaengelig: "Jammerbugt Rengøring kunne ikke nås. Prøv igen om lidt.",
+};
+
+function EkstraHjaelpView() {
+  const [ydelser, setYdelser] = useState([]);
+  const [liste, setListe] = useState(null);
+  const [ydelseId, setYdelseId] = useState("");
+  const [fritekst, setFritekst] = useState("");
+  const [dato, setDato] = useState("");
+  const [adresse, setAdresse] = useState("");
+  const [bemaerkning, setBemaerkning] = useState("");
+  const [sender, setSender] = useState(false);
+  const [fejl, setFejl] = useState("");
+  const [kvittering, setKvittering] = useState(false);
+
+  async function kald(body) {
+    const { data, error } = await supabase.functions.invoke("bestil-hjaelp", { body });
+    let f = data?.error;
+    if (!f && error) {
+      try { f = (await error.context?.json())?.error; } catch { /* ingen tekst */ }
+      f = f || "jr_utilgaengelig";
+    }
+    return f ? { fejl: HJAELP_FEJL[f] || "Det gik ikke. Prøv igen om lidt." } : data;
+  }
+  const hentListe = useCallback(async () => {
+    const d = await kald({ handling: "liste" });
+    setListe(d.fejl ? [] : (d.bestillinger || []));
+    if (d.fejl) setFejl(d.fejl);
+  }, []);
+  useEffect(() => {
+    kald({ handling: "ydelser" }).then((d) => setYdelser(d.ydelser || []));
+    hentListe();
+  }, [hentListe]);
+
+  const kanSende = !!ydelseId || fritekst.trim().length > 0;
+  async function send() {
+    if (!kanSende || sender) return;
+    setSender(true); setFejl(""); setKvittering(false);
+    const d = await kald({ handling: "bestil", ydelse_id: ydelseId || null, fritekst: fritekst.trim() || null,
+                           oensket_dato: dato || null, adresse: adresse.trim() || null, bemaerkning: bemaerkning.trim() || null });
+    setSender(false);
+    if (d.fejl) { setFejl(d.fejl); return; }
+    setYdelseId(""); setFritekst(""); setDato(""); setAdresse(""); setBemaerkning("");
+    setKvittering(true);
+    hentListe();
+  }
+
+  const kort = { background: "#fff", borderRadius: 10, padding: "14px 15px", boxShadow: "0 1px 3px rgba(0,0,0,0.06)", marginBottom: 12 };
+  return (
+    <div style={{ ...styles.page, maxWidth: 760 }}>
+      <div style={kort}>
+        <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 4 }}>Bestil ekstra hjælp</div>
+        <div style={{ fontSize: 13, color: "#64748B", lineHeight: 1.5, marginBottom: 10 }}>
+          Bestil hjælp hos Jammerbugt Rengøring, fx en hovedrengøring eller ekstra hænder i en travl uge.
+          Bestillingen er et ønske: Jammerbugt Rengøring svarer, og I får besked på mail.
+        </div>
+        <label style={styles.label}>Ydelse</label>
+        <select style={styles.input} value={ydelseId} onChange={(e) => setYdelseId(e.target.value)}>
+          <option value="">Vælg fra listen, eller skriv selv nedenfor</option>
+          {ydelser.map((y) => <option key={y.id} value={y.id}>{y.titel}</option>)}
+        </select>
+        {ydelser.find((y) => y.id === ydelseId)?.beskrivelse && (
+          <div style={styles.hint}>{ydelser.find((y) => y.id === ydelseId).beskrivelse}</div>
+        )}
+        <label style={{ ...styles.label, marginTop: 8 }}>Hvad har I brug for?</label>
+        <textarea style={{ ...styles.input, minHeight: 70 }} value={fritekst} onChange={(e) => setFritekst(e.target.value)} />
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
+          <div style={{ width: 180 }}>
+            <label style={styles.label}>Ønsket dato</label>
+            <input type="date" style={styles.input} value={dato} min={new Date().toISOString().slice(0, 10)} onChange={(e) => setDato(e.target.value)} />
+          </div>
+          <div style={{ flex: 1, minWidth: 220 }}>
+            <label style={styles.label}>Adresse</label>
+            <input style={styles.input} value={adresse} onChange={(e) => setAdresse(e.target.value)} placeholder="Hvis det ikke er jeres sædvanlige adresse" />
+          </div>
+        </div>
+        <label style={{ ...styles.label, marginTop: 8 }}>Bemærkning</label>
+        <input style={styles.input} value={bemaerkning} onChange={(e) => setBemaerkning(e.target.value)} placeholder="Nøgle, adgang, kontaktperson …" />
+        {fejl && <div style={{ color: "#B91C1C", fontSize: 13, marginTop: 8 }}>{fejl}</div>}
+        {kvittering && <div style={{ color: "#166534", fontSize: 13, marginTop: 8 }}>Bestillingen er sendt. I får svar på mail.</div>}
+        <button style={{ ...styles.primaryBtn, marginTop: 10, opacity: kanSende && !sender ? 1 : 0.6 }} disabled={!kanSende || sender} onClick={send}>
+          {sender ? "Sender…" : "Send bestilling"}
+        </button>
+      </div>
+
+      <div style={kort}>
+        <div style={{ fontSize: 14, fontWeight: 800, marginBottom: 8 }}>Jeres bestillinger</div>
+        {liste === null && <div style={styles.hint}>Henter…</div>}
+        {liste && liste.length === 0 && <div style={styles.hint}>Ingen bestillinger endnu.</div>}
+        {(liste || []).map((b) => {
+          const s = HJAELP_STATUS[b.status] || HJAELP_STATUS.ny;
+          return (
+            <div key={b.id} style={{ borderTop: "1px solid #F1F5F9", padding: "9px 0" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                <div style={{ fontSize: 13.5, fontWeight: 700 }}>{b.ydelse_titel || (b.fritekst || "").slice(0, 60) || "Bestilling"}</div>
+                <span style={{ fontSize: 11.5, fontWeight: 700, padding: "2px 8px", borderRadius: 999, background: s.bag, color: s.farve }}>{s.tekst}</span>
+              </div>
+              <div style={{ fontSize: 12, color: "#64748B", marginTop: 2 }}>
+                Bestilt {new Date(b.oprettet).toLocaleDateString("da-DK")}
+                {b.bestilt_af_navn && ` af ${b.bestilt_af_navn}`}
+                {b.oensket_dato && ` · ønsket ${new Date(b.oensket_dato).toLocaleDateString("da-DK")}`}
+              </div>
+              {b.planlaegger_note && <div style={{ fontSize: 12.5, color: "#334155", marginTop: 4 }}>Svar: {b.planlaegger_note}</div>}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ── Kunder ───────────────────────────────────────────────────────────────────
 // Der har aldrig vaeret ét sted at se en kunde samlet. customers-tabellen er doede
 // data, og kunderne kommer fra Dinero — saa omsaetning, aftaler og sidste besoeg laa
@@ -13156,11 +13590,17 @@ function KunderView({ supabase, currentEmployeeId }) {
     setTimeout(() => setKoblBesked(""), 6000);
   }
   const [soeg, setSoeg] = useState("");
+  const [medLoesning, setMedLoesning] = useState(new Set());
 
   async function hent() {
     setHenter(true);
-    const { data } = await supabase.from("kundeoversigt").select("*").order("navn");
+    const [{ data }, { data: loesninger }] = await Promise.all([
+      supabase.from("kundeoversigt").select("*").order("navn"),
+      KUNDEUDGAVE ? Promise.resolve({ data: [] })
+        : supabase.from("kundeloesning").select("dinero_contact_guid, status"),
+    ]);
     setKunder(data || []);
+    setMedLoesning(new Set((loesninger || []).filter((l) => l.status === "aktiv").map((l) => l.dinero_contact_guid)));
     setHenter(false);
   }
   useEffect(() => { hent(); }, []);
@@ -13217,6 +13657,10 @@ function KunderView({ supabase, currentEmployeeId }) {
                     <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 700, padding: "2px 8px",
                                    borderRadius: 999, background: "#EEF2FF", color: "#4F46E5" }}>Portal</span>
                   )}
+                  {medLoesning.has(k.guid) && (
+                    <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 700, padding: "2px 8px",
+                                   borderRadius: 999, background: "#F0F9FF", color: "#0369A1" }}>Planlægning</span>
+                  )}
                   {k.mangler_dinero && (
                     <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 700, padding: "2px 8px",
                                    borderRadius: 999, background: "#FFFBEB", color: "#B45309" }}>
@@ -13271,6 +13715,7 @@ function KunderView({ supabase, currentEmployeeId }) {
                   <>
                     <KundeFakturaer supabase={supabase} guid={k.guid} />
                     {harModul("kundeportal") && <PortalAfsnit supabase={supabase} kunde={k} currentEmployeeId={currentEmployeeId} onAendret={hent} />}
+                    {!KUNDEUDGAVE && <LoesningAfsnit kunde={k} onAendret={hent} />}
                   </>
                 )}
               </div>
