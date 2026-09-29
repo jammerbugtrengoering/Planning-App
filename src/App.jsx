@@ -6,6 +6,7 @@ import { fakturerbareMinutter, registreredeMinutter, oplaeringsFolk, erUnderOpla
          planlagtFakturerbart, afvigelse, planlagtFor, planlagtIAlt,
          fordelingen, harFordeling } from "./opgavetid.js";
 import { supabase } from "./supabaseClient";
+import { FIRMA, useFirma, brugTitel, opdaterFirma, farveHex } from "./firma";
 import { aftaleKoererPaaDag, DAG_FRA_INDEKS, nyStartdatoHvisPasseret } from "./aftalerytme";
 import { holdOejeMedNyVersion } from "./nyversion";
 import { filtrerUgevalg } from "./ugevalg";
@@ -171,7 +172,7 @@ const ALL_DAYS = [
   { key: "Sun", label: "Søndag" },
 ];
 const TYPE_META = {
-  fixed: { label: "Fast interval", icon: Repeat, color: "#9C1B5D", bg: "#FCE4EF" },
+  fixed: { label: "Fast interval", icon: Repeat, color: "var(--farve-moerk)", bg: "var(--farve-lys)" },
   // Omdøbt fra "Ad hoc" til "Fleksibel" — den gamle "flexible"-type (der oprettede
   // gentagne instanser frem til en udløbsdato) er nedlagt til fordel for denne
   // simplere type: en enkeltstående opgave uden fast dag, der lander i "Ikke
@@ -193,7 +194,7 @@ const CREATABLE_TYPES = ["fixed", "adhoc"];
 // Aarsager til at en aftale ophoerer. Vaerdierne matcher databasens check-constraint.
 const CANCEL_REASONS = [
   { key: "kunde", label: "Opsagt af kunden" },
-  { key: "os", label: "Opsagt af Jammerbugt Rengøring" },
+  { key: "os", label: `Opsagt af ${FIRMA.navn}` },
   { key: "fejl", label: "Fejl" },
 ];
 function cancelReasonLabel(key) {
@@ -307,11 +308,19 @@ function medSolsikke(navn, empId) {
 }
 
 const CONTRACT_TYPES = [
-  { key: "privat",    label: "Privat",   icon: "🏠", color: "#9C1B5D", bg: "#FFF6FA", chart: "#D6247A" },
+  { key: "privat",    label: "Privat",   icon: "🏠", color: "var(--farve-moerk)", bg: "var(--farve-bleg)", chart: "#D6247A" },  // chart: hex, grafen laegger gennemsigtighed paa
   { key: "erhverv",   label: "Erhverv",  icon: "💼", color: "#0F766E", bg: "#F0FDFA", chart: "#0D9488" },
   { key: "nexus",     label: "Nexus",    icon: "🏢", color: "#4F46E5", bg: "#EEF2FF", chart: "#4F46E5" },
   { key: "aeldrelov", label: "Ældrelov", icon: "👴", color: "#C2410C", bg: "#FFF7ED", chart: "#C2410C" },
 ];
+// De kontrakttyper, man kan VAELGE. Nexus og Aeldrelov (kommunefakturering) kraever
+// modulet Nexus (Opsaetning -> Firma). Eksisterende opgaver vises stadig med deres type
+// — det er kun valget ved oprettelse, der styres her.
+function valgbareKontrakttyper() {
+  return FIRMA.modul_nexus === false
+    ? CONTRACT_TYPES.filter((c) => c.key !== "nexus" && c.key !== "aeldrelov")
+    : CONTRACT_TYPES;
+}
 const CONTRACT_META = Object.fromEntries(CONTRACT_TYPES.map((c) => [c.key, c]));
 function contractMeta(key) { return CONTRACT_META[key] || CONTRACT_META.privat; }
 function contractLabel(key) { return contractMeta(key).label; }
@@ -1199,7 +1208,7 @@ function completionInfo(t, employees) {
   return { label: "Udført", byEmployee: true, when: null };
 }
 
-function statusColor(s) { return { planlagt: "#9C1B5D", udført: "#111111", unscheduled: "#94A3B8" }[s]; }
+function statusColor(s) { return { planlagt: "var(--farve-moerk)", udført: "#111111", unscheduled: "#94A3B8" }[s]; }
 
 
 // Besked til medarbejderen om en aendring i hendes dagsplan.
@@ -1219,8 +1228,8 @@ async function notifyEmployeeOfChanges(employeeEmail, employeeName, taskTitle, c
             <h2>Hej ${employeeName},</h2>
             <p>${changeType}</p>
             <p>Opgave: <strong>${taskTitle}</strong></p>
-            <p>Tjek venligst din dagsplan i Rengøringsplan for at se detaljerne.</p>
-            <p>Med venlig hilsen,<br/>Jammerbugt Rengøring</p>
+            <p>Tjek venligst din dagsplan i ${FIRMA.app_navn} for at se detaljerne.</p>
+            <p>Med venlig hilsen,<br/>${FIRMA.navn}</p>
           `,
       },
     });
@@ -1235,7 +1244,21 @@ async function notifyEmployeeOfChanges(employeeEmail, employeeName, taskTitle, c
   }
 }
 
+// Logoet paa login-skaermen. Uden eget logo: forbogstaverne i appens navn, og «RP»
+// for Rengoeringsplan, saa Jammerbugt ser ud som foer.
+function LoginLogo({ firma }) {
+  if (firma.logo_url) {
+    return <img src={firma.logo_url} alt="" style={{ width: 44, height: 44, borderRadius: 12, objectFit: "cover", background: "#000" }} />;
+  }
+  const bogstaver = firma.app_navn === "Rengøringsplan" ? "RP"
+    : (firma.app_navn || "").split(/\s+/).filter(Boolean).map((o) => o[0]).join("").slice(0, 2).toUpperCase() || "•";
+  return <div style={{ width:44,height:44,borderRadius:12,background:"var(--farve)",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:16,color:"#fff" }}>{bogstaver}</div>;
+}
+
 export default function App() {
+  // Firmaets navn, logo og farver (Opsaetning -> Firma). Hentes ogsaa foer login.
+  const firma = useFirma(supabase);
+  useEffect(() => { brugTitel("app_navn"); }, []);
   // ── Auth ──
   const [session, setSession] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
@@ -1300,16 +1323,16 @@ useEffect(() => {
   }
 
   if (authLoading) {
-    return <div style={{ display:"flex",alignItems:"center",justifyContent:"center",height:"100svh",color:"#9C1B5D",fontFamily:"system-ui",fontSize:15 }}>Indlæser…</div>;
+    return <div style={{ display:"flex",alignItems:"center",justifyContent:"center",height:"100svh",color:"var(--farve-moerk)",fontFamily:"system-ui",fontSize:15 }}>Indlæser…</div>;
   }
 
 if (recoveryToken) {
     return (
-          <div style={{ display:"flex",alignItems:"center",justifyContent:"center",minHeight:"100vh",background:"#FFF6FA",fontFamily:"'Inter',system-ui,sans-serif" }}>
+          <div style={{ display:"flex",alignItems:"center",justifyContent:"center",minHeight:"100vh",background:"var(--farve-bleg)",fontFamily:"'Inter',system-ui,sans-serif" }}>
                   <div style={{ background:"#fff",borderRadius:18,padding:32,width:360,boxShadow:"0 8px 32px rgba(0,0,0,0.10)" }}>
                             <div style={{ fontWeight:700,fontSize:17,color:"#111111",marginBottom:6 }}>Nulstil adgangskode</div>
                             <div style={{ fontSize:13,color:"#94A3B8",marginBottom:20 }}>Klik nedenfor for at fortsætte med at nulstille din adgangskode.</div>
-                            <button onClick={confirmRecovery} disabled={recoveryLoading} style={{ width:"100%",padding:"13px 0",borderRadius:10,border:"none",background:"#D6247A",color:"#fff",fontWeight:700,fontSize:15,cursor:"pointer" }}>{recoveryLoading ? "Bekræfter…" : "Fortsæt"}</button>
+                            <button onClick={confirmRecovery} disabled={recoveryLoading} style={{ width:"100%",padding:"13px 0",borderRadius:10,border:"none",background:"var(--farve)",color:"#fff",fontWeight:700,fontSize:15,cursor:"pointer" }}>{recoveryLoading ? "Bekræfter…" : "Fortsæt"}</button>
                   </div>
           </div>
         );
@@ -1320,12 +1343,12 @@ if (passwordRecovery) {
 
     if (!session) {
     return (
-      <div style={{ display:"flex",alignItems:"center",justifyContent:"center",minHeight:"100svh",background:"#FFF6FA",fontFamily:"'Inter',system-ui,sans-serif" }}>
+      <div style={{ display:"flex",alignItems:"center",justifyContent:"center",minHeight:"100svh",background:"var(--farve-bleg)",fontFamily:"'Inter',system-ui,sans-serif" }}>
         <div style={{ background:"#fff",borderRadius:18,padding:32,width:360,boxShadow:"0 8px 32px rgba(0,0,0,0.10)" }}>
           <div style={{ display:"flex",alignItems:"center",gap:12,marginBottom:28 }}>
-            <div style={{ width:44,height:44,borderRadius:12,background:"#D6247A",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:16,color:"#fff" }}>RP</div>
+            <LoginLogo firma={firma} />
             <div>
-              <div style={{ fontWeight:700,fontSize:17,color:"#111111" }}>Rengøringsplan</div>
+              <div style={{ fontWeight:700,fontSize:17,color:"#111111" }}>{firma.app_navn}</div>
               <div style={{ fontSize:12,color:"#94A3B8" }}>Planlægningssystem</div>
             </div>
           </div>
@@ -1347,14 +1370,14 @@ if (passwordRecovery) {
           <button
             disabled={loginLoading || !loginEmail.trim() || !loginPassword}
             onClick={signIn}
-            style={{ width:"100%",padding:"13px 0",borderRadius:10,border:"none",background:"#D6247A",color:"#fff",fontWeight:700,fontSize:15,cursor:"pointer",opacity:(loginLoading||!loginEmail.trim()||!loginPassword)?0.6:1 }}>
+            style={{ width:"100%",padding:"13px 0",borderRadius:10,border:"none",background:"var(--farve)",color:"#fff",fontWeight:700,fontSize:15,cursor:"pointer",opacity:(loginLoading||!loginEmail.trim()||!loginPassword)?0.6:1 }}>
             {loginLoading ? "Logger ind…" : "Log ind"}
           </button>
             <button
               type="button"
               onClick={requestPasswordReset}
               disabled={loginLoading || !loginEmail.trim()}
-              style={{ width:"100%",padding:"10px 0",marginTop:10,border:"none",background:"transparent",color:"#D6247A",fontWeight:600,fontSize:13,cursor:"pointer",textAlign:"center" }}>
+              style={{ width:"100%",padding:"10px 0",marginTop:10,border:"none",background:"transparent",color:"var(--farve)",fontWeight:600,fontSize:13,cursor:"pointer",textAlign:"center" }}>
               Glemt adgangskode?
             </button>
             {resetSent && <div style={{ fontSize:13,color:"#166534",marginTop:8,padding:"8px 10px",background:"#F0FDF4",borderRadius:8 }}>Der er sendt et link til nulstilling af adgangskode til {loginEmail.trim()}, hvis e-mailen findes i systemet.</div>}
@@ -1367,6 +1390,7 @@ if (passwordRecovery) {
 }
 
 function SetNewPasswordScreen({ onDone }) {
+  const firma = useFirma(supabase);
   const [pw1, setPw1] = useState("");
   const [pw2, setPw2] = useState("");
   const [err, setErr] = useState("");
@@ -1384,19 +1408,19 @@ function SetNewPasswordScreen({ onDone }) {
   }
 
   return (
-    <div style={{ display:"flex",alignItems:"center",justifyContent:"center",minHeight:"100svh",background:"#FFF6FA",fontFamily:"'Inter',system-ui,sans-serif" }}>
+    <div style={{ display:"flex",alignItems:"center",justifyContent:"center",minHeight:"100svh",background:"var(--farve-bleg)",fontFamily:"'Inter',system-ui,sans-serif" }}>
       <div style={{ background:"#fff",borderRadius:18,padding:32,width:360,boxShadow:"0 8px 32px rgba(0,0,0,0.10)" }}>
         <div style={{ display:"flex",alignItems:"center",gap:12,marginBottom:28 }}>
-          <div style={{ width:44,height:44,borderRadius:12,background:"#D6247A",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:16,color:"#fff" }}>RP</div>
+          <LoginLogo firma={firma} />
           <div>
-            <div style={{ fontWeight:700,fontSize:17,color:"#111111" }}>Rengøringsplan</div>
+            <div style={{ fontWeight:700,fontSize:17,color:"#111111" }}>{firma.app_navn}</div>
             <div style={{ fontSize:12,color:"#94A3B8" }}>Nulstil adgangskode</div>
           </div>
         </div>
         {done ? (
           <>
             <div style={{ fontSize:13,color:"#166534",marginBottom:16,padding:"8px 10px",background:"#F0FDF4",borderRadius:8 }}>Din adgangskode er opdateret.</div>
-            <button onClick={onDone} style={{ width:"100%",padding:"13px 0",borderRadius:10,border:"none",background:"#D6247A",color:"#fff",fontWeight:700,fontSize:15,cursor:"pointer" }}>Fortsæt</button>
+            <button onClick={onDone} style={{ width:"100%",padding:"13px 0",borderRadius:10,border:"none",background:"var(--farve)",color:"#fff",fontWeight:700,fontSize:15,cursor:"pointer" }}>Fortsæt</button>
           </>
         ) : (
           <>
@@ -1417,7 +1441,7 @@ function SetNewPasswordScreen({ onDone }) {
             <button
               disabled={loading || !pw1 || !pw2}
               onClick={save}
-              style={{ width:"100%",padding:"13px 0",borderRadius:10,border:"none",background:"#D6247A",color:"#fff",fontWeight:700,fontSize:15,cursor:"pointer",opacity:(loading||!pw1||!pw2)?0.6:1 }}>
+              style={{ width:"100%",padding:"13px 0",borderRadius:10,border:"none",background:"var(--farve)",color:"#fff",fontWeight:700,fontSize:15,cursor:"pointer",opacity:(loading||!pw1||!pw2)?0.6:1 }}>
               {loading ? "Gemmer…" : "Gem ny adgangskode"}
             </button>
           </>
@@ -1610,10 +1634,11 @@ const MODULE_HELP = {
 
   firma: { title: "Firma", intro: "Firmaets egne indstillinger: navn, udseende, mails og moduler.", blocks: [
     { h: "Hvad der virker nu", p: [
-        "Navn, undertekst og logo står øverst i menuen, så snart du trykker Gem.",
+        "Navn, undertekst og logo står øverst i menuen, så snart du trykker Gem. Appens navn står på login-skærmen og i fanebladet.",
         "Afsendernavn og «Svar går til» bruges på alle mails fra systemet: påmindelser, invitationer og morgenmailen.",
-        "Hovedfarve og lys/mørk menu gemmes nu og tages i brug i næste trin.",
-        "Modulerne vises her, men kan ikke ændres. Hos Jammerbugt Rengøring er alle altid med; hos en kunde er det de købte moduler, der afgør det."] },
+        "Hovedfarve og lys/mørk menu slår igennem i planlægningen, Worklist og kundeportalen. Systemet regner selv de lyse og mørke nuancer ud.",
+        "Modulerne vises her, men kan ikke ændres. Hos Jammerbugt Rengøring er alle altid med; hos en kunde er det de købte moduler, der afgør det.",
+        "Uden modulet Nexus kan man ikke vælge kontrakttyperne Nexus og Ældrelov, når man opretter opgaver og aftaler."] },
     { h: "Logo", p: [
         "PNG, JPG, SVG eller WEBP på højst 1 MB. Et kvadratisk logo ser bedst ud.",
         "«Brug standardikonet» går tilbage til appens eget ikon. Husk at trykke Gem."] },
@@ -2094,16 +2119,16 @@ function udskrivHjaelp(noegler) {
   w.document.write(
     `<!doctype html><html lang="da"><head><meta charset="utf-8"><title>${esc(titel)}</title><style>` +
     `body{font-family:Inter,-apple-system,system-ui,sans-serif;color:#111;line-height:1.55;max-width:760px;margin:0 auto;padding:28px 26px}` +
-    `h1{color:#9C1B5D;font-size:26px;margin:0 0 4px}` +
+    `h1{color:${farveHex("moerk")};font-size:26px;margin:0 0 4px}` +
     `.dato{color:#94A3B8;font-size:12px;margin:0 0 26px}` +
-    `h2{color:#9C1B5D;font-size:19px;margin:26px 0 4px;page-break-after:avoid}` +
+    `h2{color:${farveHex("moerk")};font-size:19px;margin:26px 0 4px;page-break-after:avoid}` +
     `h3{font-size:14.5px;margin:16px 0 4px;page-break-after:avoid}` +
     `p{font-size:13.5px;margin:4px 0}` +
     `.intro{color:#475569;margin-bottom:8px}` +
     `.warn{background:#FEF3C7;border-left:4px solid #D97706;padding:10px 12px;font-weight:600;border-radius:4px}` +
     `section{page-break-inside:auto}` +
     `@page{margin:16mm}` +
-    `</style></head><body><h1>Rengøringsplan</h1><p class="dato">${esc(titel)} · udskrevet ${esc(idag)}</p>${krop}</body></html>`
+    `</style></head><body><h1>${esc(FIRMA.app_navn)}</h1><p class="dato">${esc(titel)} · udskrevet ${esc(idag)}</p>${krop}</body></html>`
   );
   w.document.close();
   w.focus();
@@ -2237,7 +2262,7 @@ function HelpButton({ onClick }) {
   return (
     <button onClick={onClick} title="Hjælp til dette modul"
       style={{ position:"fixed", right:22, bottom:22, zIndex:150, width:54, height:54, borderRadius:"50%",
-               border:"none", background:"#D6247A", color:"#fff", fontSize:26, fontWeight:800, lineHeight:1,
+               border:"none", background:"var(--farve)", color:"#fff", fontSize:26, fontWeight:800, lineHeight:1,
                cursor:"pointer", boxShadow:"0 4px 16px rgba(214,36,122,0.45)" }}>?</button>
   );
 }
@@ -5280,7 +5305,7 @@ function PlanningApp({ session, onSignOut }) {
 
   if (loading) {
     return (
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100svh", fontFamily: "system-ui, sans-serif", color: "#9C1B5D", fontSize: 15 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100svh", fontFamily: "system-ui, sans-serif", color: "var(--farve-moerk)", fontSize: 15 }}>
         Indlæser data…
       </div>
     );
@@ -5305,7 +5330,7 @@ function PlanningApp({ session, onSignOut }) {
               ? <>Din bruger <strong>{currentEmployeeForAuth.name}</strong> er ikke markeret som planlægger. Brug medarbejder-appen til dine egne opgaver, eller bed en planlægger om at give dig adgang.</>
               : <>Dit login er ikke knyttet til en medarbejder. Kontakt en planlægger for at få det sat op.</>}
           </div>
-          <a href="https://medarbejderapp.netlify.app/" style={{ display: "block", background: "#D6247A", color: "#fff",
+          <a href="https://medarbejderapp.netlify.app/" style={{ display: "block", background: "var(--farve)", color: "#fff",
             borderRadius: 10, padding: "11px 16px", fontWeight: 700, fontSize: 14, textDecoration: "none", marginBottom: 10 }}>
             Åbn medarbejder-appen
           </a>
@@ -5361,7 +5386,7 @@ function PlanningApp({ session, onSignOut }) {
           <KontorKlokke isAdminUser={isAdminUser}
             signal={instances.length + ":" + Object.keys(koerendeTider).length + ":" + (bestillinger?.length || 0)}
             onGaaTil={gaaTilIndbakkeLinje} />
-          <button onClick={onSignOut} style={{ ...styles.navBtn, marginLeft: 4, color: "#E8AFC9", borderLeft: "1px solid #333", paddingLeft:12 }}>{L.signOut}</button>
+          <button onClick={onSignOut} style={{ ...styles.navBtn, marginLeft: 4, color: "var(--menu-sub)", borderLeft: "1px solid var(--menu-kant)", paddingLeft:12 }}>{L.signOut}</button>
         </nav>
       </header>
 
@@ -5924,7 +5949,7 @@ function WeekView({ employees, instances, unplaced, adgangTekst, onUdskrivMedAdg
         <button style={{ ...styles.secondaryBtn, color: "#B91C1C", borderColor: "#FECACA" }} onClick={onOpenAddBlock}><Thermometer size={16} /> Sygdom/Ferie</button>
         <button style={{ ...styles.secondaryBtn, color: "#7C3AED", borderColor: "#DDD6FE" }} onClick={onOpenAddActivity}><Building2 size={16} /> Anden aktivitet</button>
         <button
-          style={{ ...styles.secondaryBtn, ...(showWeekend ? { background: "#FCE4EF", color: "#D6247A", borderColor: "#D6247A" } : {}) }}
+          style={{ ...styles.secondaryBtn, ...(showWeekend ? { background: "var(--farve-lys)", color: "var(--farve)", borderColor: "var(--farve)" } : {}) }}
           onClick={() => setShowWeekend((v) => !v)}
           title="Vis/skjul weekend">
           {showWeekend ? "Man–Søn ✓" : "Man–Fre"}
@@ -5959,7 +5984,7 @@ function WeekView({ employees, instances, unplaced, adgangTekst, onUdskrivMedAdg
           {[["gitter", "Gitter"], ["tid", "Tidslinje"]].map(([k, navn]) => (
             <button key={k} onClick={() => setUgeVisning(k)}
               style={{ padding: "9px 14px", border: "none", cursor: "pointer", fontSize: 13.5, fontWeight: 600,
-                       background: ugeVisning === k ? "#D6247A" : "#fff",
+                       background: ugeVisning === k ? "var(--farve)" : "#fff",
                        color: ugeVisning === k ? "#fff" : "#334155" }}>{navn}</button>
           ))}
         </div>
@@ -6052,7 +6077,7 @@ function WeekView({ employees, instances, unplaced, adgangTekst, onUdskrivMedAdg
                   <span style={{ ...styles.avatar, background: emp.color, width: 24, height: 24, fontSize: 11, flexShrink: 0 }}>{initials(emp.name)}</span>
                   <span style={{ fontSize: 12, color: "#111111", minWidth: 120, fontWeight: 500 }}>{medSolsikke(emp.name, emp.id)}</span>
                   <div style={{ flex: 1, height: 6, background: "#E2E8F0", borderRadius: 99, overflow: "hidden" }}>
-                    <div style={{ height: "100%", borderRadius: 99, background: over ? "#DC2626" : pct > 80 ? "#D97706" : "#D6247A", width: `${Math.min(100, pct)}%`, transition: "width 0.3s" }} />
+                    <div style={{ height: "100%", borderRadius: 99, background: over ? "#DC2626" : pct > 80 ? "#D97706" : "var(--farve)", width: `${Math.min(100, pct)}%`, transition: "width 0.3s" }} />
                   </div>
                   <span style={{ fontSize: 11, fontWeight: 700, color: over ? "#DC2626" : "#64748B", minWidth: 38, textAlign: "right" }}>{pct}%</span>
                   <span style={{ fontSize: 11, color: over ? "#DC2626" : "#16A34A", fontWeight: 600, minWidth: 80, textAlign: "right" }}>
@@ -6113,9 +6138,9 @@ function WeekView({ employees, instances, unplaced, adgangTekst, onUdskrivMedAdg
                 {!liveNoSkill && t.warning === "no_slot" && <span style={styles.warnChip}><AlertTriangle size={12} /> Ingen ledig dag inden fristen</span>}
               {!liveNoSkill && t.warning === "overloaded" && <span style={styles.warnChip}><AlertTriangle size={12} /> Ingen ledig kapacitet</span>}
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 6 }} onClick={(e) => e.stopPropagation()}>
-                  <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: t.includeInAuto ? "#D6247A" : "#94A3B8", cursor: "pointer", fontWeight: t.includeInAuto ? 700 : 400 }}
+                  <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: t.includeInAuto ? "var(--farve)" : "#94A3B8", cursor: "pointer", fontWeight: t.includeInAuto ? 700 : 400 }}
                     onClick={(e) => { e.stopPropagation(); onToggleInclude(t.id); }}>
-                    <span style={{ width: 14, height: 14, borderRadius: 4, border: t.includeInAuto ? "2px solid #D6247A" : "2px solid #CBD5E1", background: t.includeInAuto ? "#D6247A" : "#fff", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                    <span style={{ width: 14, height: 14, borderRadius: 4, border: t.includeInAuto ? "2px solid var(--farve)" : "2px solid #CBD5E1", background: t.includeInAuto ? "var(--farve)" : "#fff", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                       {t.includeInAuto && <Check size={9} color="#fff" strokeWidth={3} />}
                     </span>
                     Auto-planlæg
@@ -6234,7 +6259,7 @@ function WeekView({ employees, instances, unplaced, adgangTekst, onUdskrivMedAdg
                         </div>
                       )}
                       <div style={styles.capBarTrack}>
-                        <div style={{ ...styles.capBarFill, width: `${pct}%`, background: over ? "#DC2626" : pct > 80 ? "#D97706" : "#D6247A" }} />
+                        <div style={{ ...styles.capBarFill, width: `${pct}%`, background: over ? "#DC2626" : pct > 80 ? "#D97706" : "var(--farve)" }} />
                       </div>
                       <div style={{ fontSize: 10, margin: "3px 0 6px", display: "flex", gap: 6, flexWrap: "wrap" }}>
                         <span style={{ color: over ? "#DC2626" : pct > 80 ? "#D97706" : "#64748B", fontWeight: 600 }}>
@@ -6440,7 +6465,7 @@ function WeekView({ employees, instances, unplaced, adgangTekst, onUdskrivMedAdg
                 const schedule = computeDaySchedule(dayTasks, travelSettings, emp).filter((s) => s.type === "task");
                 return (
                   <div key={d.key} style={{ marginBottom: 14 }}>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: "#D6247A", marginBottom: 6 }}>{d.label}</div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: "var(--farve)", marginBottom: 6 }}>{d.label}</div>
                     {schedule.map((seg) => {
                       const t = seg.task;
                       return (
@@ -6668,7 +6693,7 @@ function EmployeesView({ employees, onAdd, onEdit, onDelete, supabase, skills, o
       <div style={styles.toolbar}>
         <button style={styles.primaryBtn} onClick={onAdd}><Plus size={16} /> Ny medarbejder</button>
         <button
-          style={{ ...styles.secondaryBtn, ...(showSkillsPanel ? { background: "#FCE4EF", color: "#D6247A", borderColor: "#D6247A" } : {}) }}
+          style={{ ...styles.secondaryBtn, ...(showSkillsPanel ? { background: "var(--farve-lys)", color: "var(--farve)", borderColor: "var(--farve)" } : {}) }}
           onClick={() => { setShowSkillsPanel((v) => !v); setShowAreasPanel(false); setShowStartStopPanel(false); }}>
           ⭐ Kompetencer
         </button>
@@ -6864,7 +6889,7 @@ function EmployeesView({ employees, onAdd, onEdit, onDelete, supabase, skills, o
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: orderPanel === e.id ? 10 : 0 }}>
                   <span style={{ fontSize: 12, fontWeight: 600, color: "#475569" }}>👕 Udleveringshistorik</span>
                   <button
-                    style={{ fontSize: 11, padding: "3px 10px", borderRadius: 6, border: "1px solid #E2E8F0", background: orderPanel === e.id ? "#FCE4EF" : "#fff", color: orderPanel === e.id ? "#D6247A" : "#475569", cursor: "pointer" }}
+                    style={{ fontSize: 11, padding: "3px 10px", borderRadius: 6, border: "1px solid #E2E8F0", background: orderPanel === e.id ? "var(--farve-lys)" : "#fff", color: orderPanel === e.id ? "var(--farve)" : "#475569", cursor: "pointer" }}
                     onClick={() => orderPanel === e.id ? setOrderPanel(null) : openOrderPanel(e)}>
                     {orderPanel === e.id ? "Luk" : "Se historik"}
                   </button>
@@ -6917,7 +6942,7 @@ function ChecklistsView({ checklistTemplates, onSave, onDelete }) {
         {checklistTemplates.map((c) => (
           <div key={c.id} style={styles.empCard}>
             <div style={styles.empCardTop}>
-              <span style={{ ...styles.avatar, background: "#D6247A", width: 34, height: 34 }}><ListChecks size={16} /></span>
+              <span style={{ ...styles.avatar, background: "var(--farve)", width: 34, height: 34 }}><ListChecks size={16} /></span>
               <div style={{ flex: 1 }}>
                 <div style={styles.empName}>{c.name}</div>
                 <div style={styles.empLoad}>{c.items.length} tasks</div>
@@ -6991,7 +7016,7 @@ function ChecklistModal({ checklist, onClose, onSave }) {
 
       <label style={styles.label}>Tasks ({items.length})</label>
       {items.map((it, i) => (
-        <div key={i} style={i === editIndex ? { ...styles.checklistEditRow, background: "#FCE4EF", borderLeft: "3px solid #D6247A", borderRadius: 4, paddingLeft: 6 } : styles.checklistEditRow}>
+        <div key={i} style={i === editIndex ? { ...styles.checklistEditRow, background: "var(--farve-lys)", borderLeft: "3px solid var(--farve)", borderRadius: 4, paddingLeft: 6 } : styles.checklistEditRow}>
           <div style={{ flex: 1 }}>
             <div style={styles.previewItemText}>{i + 1}. {it.text}</div>
             <div style={styles.itemFlags}>
@@ -7217,7 +7242,7 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
             {years.map((y) => <option key={y} value={y}>{y}</option>)}
           </select>
           <select
-            style={{ ...styles.inputSm, fontSize: 13, fontWeight: 600, color: statusFilter !== "all" ? "#9C1B5D" : "#111111", borderColor: statusFilter !== "all" ? "#D6247A" : "#E2E8F0", background: statusFilter !== "all" ? "#FCE4EF" : "#fff" }}
+            style={{ ...styles.inputSm, fontSize: 13, fontWeight: 600, color: statusFilter !== "all" ? "var(--farve-moerk)" : "#111111", borderColor: statusFilter !== "all" ? "var(--farve)" : "#E2E8F0", background: statusFilter !== "all" ? "var(--farve-lys)" : "#fff" }}
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
             title="Vis kun opgaver med denne status — brug 'Udført' for at se det reelle fakturagrundlag">
@@ -7281,7 +7306,7 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
         <div style={{ background: "#fff", borderRadius: 12, padding: 16, marginBottom: 12, boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
           <div style={{ fontWeight: 700, fontSize: 14, color: "#111111", marginBottom: 12 }}>💰 Timepriser pr. kontrakttype</div>
           <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 12 }}>
-            {CONTRACT_TYPES.map((c) => [c.key, c.icon + " " + c.label]).map(([type, label]) => (
+            {valgbareKontrakttyper().map((c) => [c.key, c.icon + " " + c.label]).map(([type, label]) => (
               <div key={type} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                 <label style={styles.label}>{label}</label>
                 <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
@@ -7365,7 +7390,7 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
               <div style={{ fontSize: 12, color: "#94A3B8", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.address || "—"}</div>
               <div
                 style={{
-                  fontSize: 13, fontWeight: 600, color: isAdminUser ? "#9C1B5D" : "#111111",
+                  fontSize: 13, fontWeight: 600, color: isAdminUser ? "var(--farve-moerk)" : "#111111",
                   overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
                   cursor: isAdminUser ? "pointer" : "default",
                   textDecoration: isAdminUser ? "underline" : "none", textDecorationStyle: "dotted",
@@ -7385,7 +7410,7 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
                   <div style={{ display: "flex", alignItems: "center", gap: 4, justifyContent: "flex-end" }}>
                     <input
                       type="number" min={0} step={1}
-                      style={{ width: 60, padding: "3px 6px", borderRadius: 6, border: "1.5px solid #D6247A", fontSize: 13, textAlign: "right", color: "#111111" }}
+                      style={{ width: 60, padding: "3px 6px", borderRadius: 6, border: "1.5px solid var(--farve)", fontSize: 13, textAlign: "right", color: "#111111" }}
                       value={editMinutes[t.id]}
                       onChange={(e) => setEditMinutes((prev) => ({ ...prev, [t.id]: e.target.value }))}
                       onKeyDown={(e) => { if (e.key === "Enter") saveMinutes(t, editMinutes[t.id]); if (e.key === "Escape") setEditMinutes((prev) => { const n = {...prev}; delete n[t.id]; return n; }); }}
@@ -7508,11 +7533,11 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
         const totalRegisteredKr = Math.round(expectedRevenue);
         const totalDiff = totalRegisteredKr - totalPlannedKr;
         return (
-          <div style={{ display: "grid", gridTemplateColumns: "50px 140px 120px 160px 1fr 70px 80px 100px 100px 100px 90px 70px 28px", gap: 0, padding: "10px 14px", background: "#FCE4EF", borderRadius: 10, marginTop: 8, fontWeight: 700, fontSize: 13 }}>
-            <span /><span style={{ color: "#9C1B5D" }}>I alt</span>
+          <div style={{ display: "grid", gridTemplateColumns: "50px 140px 120px 160px 1fr 70px 80px 100px 100px 100px 90px 70px 28px", gap: 0, padding: "10px 14px", background: "var(--farve-lys)", borderRadius: 10, marginTop: 8, fontWeight: 700, fontSize: 13 }}>
+            <span /><span style={{ color: "var(--farve-moerk)" }}>I alt</span>
             <span /><span /><span /><span />
             <span style={{ textAlign: "right", color: "#111111" }}>{fmtMin(totalPlanned)}</span>
-            <span style={{ textAlign: "right", color: "#D6247A" }}>{fmtMin(totalRegistered)}</span>
+            <span style={{ textAlign: "right", color: "var(--farve)" }}>{fmtMin(totalRegistered)}</span>
             <span style={{ textAlign: "right", color: "#64748B" }}>{totalPlannedKr.toLocaleString("da-DK")} kr</span>
             <span style={{ textAlign: "right", color: "#16A34A" }}>{totalRegisteredKr.toLocaleString("da-DK")} kr</span>
             <span style={{ textAlign: "right", color: totalDiff >= 0 ? "#16A34A" : "#DC2626" }}>{totalDiff > 0 ? "+" : ""}{totalDiff.toLocaleString("da-DK")} kr</span>
@@ -7573,8 +7598,8 @@ function StatKnap({ aktiv, onClick, vaerdi, tekst, farve }) {
   return (
     <button onClick={onClick} title={aktiv ? "Vis alle igen" : `Vis kun: ${tekst.toLowerCase()}`}
       style={{ ...styles.statBlock, borderLeft: `3px solid ${aktiv ? farve : "#E2E8F0"}`,
-               background: aktiv ? "#FFF6FA" : "#fff", cursor: "pointer", textAlign: "left",
-               border: `1px solid ${aktiv ? "#D6247A" : "#E2E8F0"}`,
+               background: aktiv ? "var(--farve-bleg)" : "#fff", cursor: "pointer", textAlign: "left",
+               border: `1px solid ${aktiv ? "var(--farve)" : "#E2E8F0"}`,
                borderLeftWidth: 3, borderLeftColor: aktiv ? farve : "#E2E8F0" }}>
       <div>
         <div style={{ ...styles.statValue, color: farve }}>{vaerdi}</div>
@@ -8813,8 +8838,8 @@ function OverskudRapport({ instances, employees, satsHistorik, kmSatser, kmLog, 
           </div>
         ))}
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 110px 110px 110px 110px 110px 110px 110px", gap: 0, padding: "10px 14px", background: "#FCE4EF", borderRadius: 10, marginTop: 8, fontWeight: 700, fontSize: 13 }}>
-        <span style={{ color: "#9C1B5D" }}>I alt {selectedYear}</span>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 110px 110px 110px 110px 110px 110px 110px", gap: 0, padding: "10px 14px", background: "var(--farve-lys)", borderRadius: 10, marginTop: 8, fontWeight: 700, fontSize: 13 }}>
+        <span style={{ color: "var(--farve-moerk)" }}>I alt {selectedYear}</span>
         <span style={{ textAlign: "right", color: "#111111" }}>{kr(aarTotal.omsaetning)}</span>
         <span style={{ textAlign: "right", color: "#0369A1" }}>{kr(aarTotal.dineroKr)}</span>
         <span />
@@ -9479,7 +9504,7 @@ function ReportsView({ instances, templates, pricing, budgets, onSaveBudget, isA
     { budget: 0, planned: 0, registered: 0 }
   );
   const yearDiff = yearTotals.registered - yearTotals.budget;
-  const areaColor = REPORT_AREA_COLORS[selectedArea] || "#D6247A";
+  const areaColor = REPORT_AREA_COLORS[selectedArea] || "#D6247A";  // hex: der laegges gennemsigtighed paa (${areaColor}66)
   const chartMax = Math.max(1, ...monthRows.map((r) => Math.max(r.budgetKr, r.actualOrForecastKr)));
   const CHART_H = 160;
 
@@ -9538,7 +9563,7 @@ function ReportsView({ instances, templates, pricing, budgets, onSaveBudget, isA
             key={key}
             onClick={() => setSelectedArea(key)}
             style={selectedArea === key
-              ? { ...styles.secondaryBtn, background: "#FCE4EF", color: "#9C1B5D", borderColor: "#D6247A", fontWeight: 700 }
+              ? { ...styles.secondaryBtn, background: "var(--farve-lys)", color: "var(--farve-moerk)", borderColor: "var(--farve)", fontWeight: 700 }
               : styles.secondaryBtn}
           >
             {label}
@@ -9651,8 +9676,8 @@ function ReportsView({ instances, templates, pricing, budgets, onSaveBudget, isA
         ))}
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 110px 110px 110px 110px 110px 80px", gap: 0, padding: "10px 14px", background: "#FCE4EF", borderRadius: 10, marginTop: 8, fontWeight: 700, fontSize: 13 }}>
-        <span style={{ color: "#9C1B5D" }}>I alt {selectedYear}</span>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 110px 110px 110px 110px 110px 80px", gap: 0, padding: "10px 14px", background: "var(--farve-lys)", borderRadius: 10, marginTop: 8, fontWeight: 700, fontSize: 13 }}>
+        <span style={{ color: "var(--farve-moerk)" }}>I alt {selectedYear}</span>
         <span style={{ textAlign: "right", color: "#111111" }}>{Math.round(yearTotals.budget).toLocaleString("da-DK")} kr</span>
         <span style={{ textAlign: "right", color: "#64748B" }}>{Math.round(yearTotals.planned).toLocaleString("da-DK")} kr</span>
         <span style={{ textAlign: "right", color: (yearTotals.planned - yearTotals.budget) >= 0 ? "#16A34A" : "#DC2626" }}>{(yearTotals.planned - yearTotals.budget) > 0 ? "+" : ""}{Math.round(yearTotals.planned - yearTotals.budget).toLocaleString("da-DK")} kr</span>
@@ -9699,7 +9724,7 @@ function PortefoeljeRapport({ templates, instances, pricing }) {
     <div>
       <div style={styles.toolbar}>
         {noegletal.map(([overskrift, vaerdi, under]) => (
-          <div key={overskrift} style={{ ...styles.statBlock, borderLeft: "3px solid #9C1B5D" }}>
+          <div key={overskrift} style={{ ...styles.statBlock, borderLeft: "3px solid var(--farve-moerk)" }}>
             <div>
               <div style={{ ...styles.statValue, color: "#111111" }}>{vaerdi}</div>
               <div style={styles.statLabel}>{overskrift}</div>
@@ -9782,8 +9807,8 @@ function PortefoeljeRapport({ templates, instances, pricing }) {
               </div>
             )}
             <div style={{ display: "grid", gridTemplateColumns: "1.4fr 90px 100px 110px 130px 130px 110px",
-                          padding: "11px 14px", background: "#FCE4EF", fontWeight: 700, fontSize: 13 }}>
-              <span style={{ color: "#9C1B5D" }}>I alt</span>
+                          padding: "11px 14px", background: "var(--farve-lys)", fontWeight: 700, fontSize: 13 }}>
+              <span style={{ color: "var(--farve-moerk)" }}>I alt</span>
               <span style={{ textAlign: "right" }}>{tal.aftaler}</span>
               <span style={{ textAlign: "right" }}>{tal.iAlt.opgaver.toLocaleString("da-DK")}</span>
               <span style={{ textAlign: "right" }}>{timer(tal.iAlt.minutter)}</span>
@@ -10129,17 +10154,17 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
       <div style={{ ...styles.formCol, margin: 0, flex: "1 1 600px", minWidth: 0,
                     order: bredSkaerm ? 1 : 2 }}>
       <div style={{ ...styles.formSection, borderColor: "#EFAFC9" }}>
-        <div style={{ ...styles.formSectionHead, background: "#FCE4EF", borderBottom: "1.5px solid #EFAFC9" }}>
-          <div style={{ ...styles.formSectionTitle, color: "#9C1B5D" }}>Aftale og kunde</div>
+        <div style={{ ...styles.formSectionHead, background: "var(--farve-lys)", borderBottom: "1.5px solid #EFAFC9" }}>
+          <div style={{ ...styles.formSectionTitle, color: "var(--farve-moerk)" }}>Aftale og kunde</div>
           <div style={{ ...styles.formSectionHint, color: "#B4436F" }}>Hvem der faktureres, hvad aftalen hedder, og hvor der arbejdes</div>
         </div>
         <div style={styles.formSectionBody}>
       {/* Kontrakttype */}
       <label style={styles.label}>Kontrakttype</label>
       <div style={styles.typePicker}>
-        {CONTRACT_TYPES.map((c) => [c.key, c.icon + " " + c.label]).map(([k,l]) => (
+        {valgbareKontrakttyper().map((c) => [c.key, c.icon + " " + c.label]).map(([k,l]) => (
           <button key={k} type="button" onClick={() => setContractType(k)}
-            style={contractType === k ? { ...styles.typePickBtn, borderColor:"#D6247A", color:"#D6247A", background:"#FCE4EF" } : styles.typePickBtn}>
+            style={contractType === k ? { ...styles.typePickBtn, borderColor:"var(--farve)", color:"var(--farve)", background:"var(--farve-lys)" } : styles.typePickBtn}>
             {l}
           </button>
         ))}
@@ -10380,7 +10405,7 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
           <div style={styles.typePicker}>
             {[["uge","Hver uge"],["14_dage","Hver 14. dag"],["4_uger","Hver 4. uge"],["6_uger","Hver 6. uge"],["3_maaned","Hver 3. måned"],["konkrete_datoer","Konkrete datoer"]].map(([k,l]) => (
               <button key={k} type="button" onClick={() => setPlanInterval(k)}
-                style={planInterval === k ? { ...styles.typePickBtn, borderColor:"#D6247A", color:"#D6247A", background:"#FCE4EF" } : styles.typePickBtn}>
+                style={planInterval === k ? { ...styles.typePickBtn, borderColor:"var(--farve)", color:"var(--farve)", background:"var(--farve-lys)" } : styles.typePickBtn}>
                 {l}
               </button>
             ))}
@@ -10624,7 +10649,7 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
             enkeltstaaende opgave, ikke en aftale, og har intet at vaere kladde for. */}
         {type === "fixed" && (
           <button
-            style={{ ...styles.secondaryBtn, color: "#9C1B5D", borderColor: "#F4C0D1", opacity: gemmer ? 0.6 : 1 }}
+            style={{ ...styles.secondaryBtn, color: "var(--farve-moerk)", borderColor: "#F4C0D1", opacity: gemmer ? 0.6 : 1 }}
             // En passeret startdato blokerer IKKE en kladde. En kladde danner ingen
             // opgaver, saa datoen kan ikke naa at goere skade — og kunne man ikke
             // gemme, ville planlaeggeren miste det kundenavn, hun lige har skrevet
@@ -10689,7 +10714,7 @@ function TimeOgKmSkema({ emp, dage, instances, ugeLabel }) {
   return (
     <div className="timeskema">
       <div style={{ textAlign: "center", fontSize: 14, fontWeight: 700, marginBottom: 2 }}>
-        Time- og kørselsskema – Jammerbugt Rengøring ApS · CVR 41911387
+        Time- og kørselsskema – {FIRMA.juridisk_navn}{FIRMA.cvr ? ` · CVR ${FIRMA.cvr}` : ""}
       </div>
       <div style={{ borderBottom: "2px solid #7C2D12", marginBottom: 10 }} />
 
@@ -10821,7 +10846,7 @@ function UgeTidslinje({ emp, dage, instances, travelSettings, weekOffset, weekYe
                   <>
                     <div style={{ height: 3, background: "#F1F5F9", borderRadius: 2, margin: "3px 4px 2px" }}>
                       <div style={{ width: `${pct}%`, height: "100%", borderRadius: 2,
-                                    background: over ? "#DC2626" : "#D6247A" }} />
+                                    background: over ? "#DC2626" : "var(--farve)" }} />
                     </div>
                     <div style={{ fontSize: 9.5, color: over ? "#DC2626" : "#94A3B8" }}>
                       {over ? `${fmtMin(brugt - kap)} over`
@@ -11009,7 +11034,7 @@ function DayPills({ days }) {
     <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
       📅
       {days.map((d) => (
-        <span key={d} style={{ background: "#D6247A", color: "#fff", fontWeight: 700, fontSize: 11, borderRadius: 5, padding: "1px 6px" }}>
+        <span key={d} style={{ background: "var(--farve)", color: "#fff", fontWeight: 700, fontSize: 11, borderRadius: 5, padding: "1px 6px" }}>
           {DAY_ABBR[d] || d}
         </span>
       ))}
@@ -11371,7 +11396,7 @@ function ContractsView({ templates: alleTemplates, instances, pricing, employees
   function urgencyColor(days) {
     if (days < 0) return "#DC2626";   // Udløbet
     if (days <= 30) return "#D97706"; // Udløber snart
-    if (days <= 90) return "#D6247A"; // Opmærksomhed
+    if (days <= 90) return "var(--farve)"; // Opmærksomhed
     return "#16A34A";                 // OK
   }
 
@@ -11407,7 +11432,7 @@ function ContractsView({ templates: alleTemplates, instances, pricing, employees
               if (k !== "kladde") { setDubletFilter("alle"); setMedarbFilter("alle"); }
             }}
             style={statusFilter === k
-              ? { ...styles.typePickBtn, flex: "none", borderColor: "#D6247A", color: "#D6247A", background: "#FCE4EF" }
+              ? { ...styles.typePickBtn, flex: "none", borderColor: "var(--farve)", color: "var(--farve)", background: "var(--farve-lys)" }
               : { ...styles.typePickBtn, flex: "none" }}>
             {l}
             {k === "kladde" && alleTemplates.filter((t) => t.status === "kladde").length > 0
@@ -11450,9 +11475,9 @@ function ContractsView({ templates: alleTemplates, instances, pricing, employees
             value={medarbFilter}
             onChange={(e) => setMedarbFilter(e.target.value)}
             style={{ ...styles.inputSm, margin: 0, minWidth: 210, fontSize: 13, fontWeight: 600,
-                     color: medarbFilter !== "alle" ? "#9C1B5D" : "#111111",
-                     borderColor: medarbFilter !== "alle" ? "#D6247A" : "#E2E8F0",
-                     background: medarbFilter !== "alle" ? "#FCE4EF" : "#fff" }}>
+                     color: medarbFilter !== "alle" ? "var(--farve-moerk)" : "#111111",
+                     borderColor: medarbFilter !== "alle" ? "var(--farve)" : "#E2E8F0",
+                     background: medarbFilter !== "alle" ? "var(--farve-lys)" : "#fff" }}>
             <option value="alle">Alle medarbejdere</option>
             {kladdeMedarbejdere.liste.map((m) => (
               <option key={m.id} value={m.id}>{m.navn} ({m.n})</option>
@@ -11463,7 +11488,7 @@ function ContractsView({ templates: alleTemplates, instances, pricing, employees
           </select>
           {(dubletFilter !== "alle" || medarbFilter !== "alle") && (
             <button type="button" onClick={() => { setDubletFilter("alle"); setMedarbFilter("alle"); }}
-              style={{ border: "none", background: "transparent", color: "#D6247A", fontWeight: 700,
+              style={{ border: "none", background: "transparent", color: "var(--farve)", fontWeight: 700,
                        cursor: "pointer", fontSize: 13, fontFamily: "inherit" }}>
               Nulstil
             </button>
@@ -11488,7 +11513,7 @@ function ContractsView({ templates: alleTemplates, instances, pricing, employees
             : { ...styles.typePickBtn, flex: "none" }}>
           Alle kontrakttyper
         </button>
-        {CONTRACT_TYPES.map((ct) => (
+        {valgbareKontrakttyper().map((ct) => (
           <button
             key={ct.key}
             type="button"
@@ -11519,7 +11544,7 @@ function ContractsView({ templates: alleTemplates, instances, pricing, employees
               ? "Ingen aftaler passer på søgningen"
               : templates.length === 1 ? "1 aftale" : `${templates.length} aftaler`}
             <button type="button" onClick={() => setSoeg("")}
-              style={{ marginLeft: 10, border: "none", background: "transparent", color: "#D6247A",
+              style={{ marginLeft: 10, border: "none", background: "transparent", color: "var(--farve)",
                        fontWeight: 700, cursor: "pointer", fontSize: 13, fontFamily: "inherit" }}>
               Ryd
             </button>
@@ -11650,14 +11675,14 @@ function ContractsView({ templates: alleTemplates, instances, pricing, employees
                       </button>
                     )}
                     {t.preferredEmployeeId && (
-                      <span style={{ color: "#9C1B5D", fontWeight: 700 }}>
+                      <span style={{ color: "var(--farve-moerk)", fontWeight: 700 }}>
                         Fast: {((employees || []).find((e) => e.id === t.preferredEmployeeId) || {}).name || "ukendt"}
                       </span>
                     )}
                   <DayPills days={t.days} />
                   {t.start && <span>Fra {t.start.toLocaleDateString("da-DK", { day: "numeric", month: "short", year: "numeric" })}</span>}
                   <span>Til {t.expiry.toLocaleDateString("da-DK", { day: "numeric", month: "short", year: "numeric" })}</span>
-                  <span style={{ fontWeight: 600, color: "#9C1B5D" }}>{contractIconLabel(t.contractType)}</span>
+                  <span style={{ fontWeight: 600, color: "var(--farve-moerk)" }}>{contractIconLabel(t.contractType)}</span>
                 </div>
                 <div style={{ fontSize: 12, color: "#64748B", display: "flex", gap: 14, flexWrap: "wrap", marginTop: 5 }}>
                   <span title={t.wholePeriod ? "Planlagte timer/uge × antal uger i aftaleperioden × timepris" : "Ingen startdato — viser kun én uges værdi"}>
@@ -11762,12 +11787,12 @@ function ContractsView({ templates: alleTemplates, instances, pricing, employees
                       </button>
                     )}
                     {t.preferredEmployeeId && (
-                      <span style={{ color: "#9C1B5D", fontWeight: 700 }}>
+                      <span style={{ color: "var(--farve-moerk)", fontWeight: 700 }}>
                         Fast: {((employees || []).find((e) => e.id === t.preferredEmployeeId) || {}).name || "ukendt"}
                       </span>
                     )}
                     <DayPills days={t.days} />
-                    <span style={{ fontWeight: 600, color: "#9C1B5D" }}>{contractIconLabel(t.contractType)}</span>
+                    <span style={{ fontWeight: 600, color: "var(--farve-moerk)" }}>{contractIconLabel(t.contractType)}</span>
                   </div>
                   <div style={{ fontSize: 12, color: "#64748B", display: "flex", gap: 14, flexWrap: "wrap", marginTop: 5 }}>
                     <span title="Ingen udløbsdato — viser kontraktsum pr. uge">💰 Pr. uge: <strong style={{ color: "#111111" }}>{Math.round(t.weeklyPlannedSum).toLocaleString("da-DK")} kr.</strong></span>
@@ -11857,7 +11882,7 @@ function KontorKlokke({ isAdminUser, signal, onGaaTil }) {
         🔔
         {alle.length > 0 && (
           <span style={{ position: "absolute", top: 0, right: 0, minWidth: 17, height: 17, borderRadius: 9,
-                         background: haster ? "#DC2626" : "#D6247A", color: "#fff", fontSize: 10.5, fontWeight: 800,
+                         background: haster ? "#DC2626" : "var(--farve)", color: "#fff", fontSize: 10.5, fontWeight: 800,
                          display: "flex", alignItems: "center", justifyContent: "center", padding: "0 4px" }}>
             {alle.length}
           </span>
@@ -12178,6 +12203,7 @@ function FirmaView({ isAdminUser, firma, notify, medarbejderId, onGemt }) {
     setGemmer(false);
     if (error || !data) { setFejl(error?.message || "Indstillingerne blev ikke gemt."); return; }
     onGemt(data);
+    opdaterFirma(data);   // farver, titel og navne skifter med det samme
     notify("Firmaindstillingerne er gemt");
   }
 
@@ -12227,7 +12253,7 @@ function FirmaView({ isAdminUser, firma, notify, medarbejderId, onGemt }) {
           </div>
           <label style={styles.label}>Hovedfarve</label>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <input type="color" value={f.hovedfarve || "#D6247A"} onChange={saet("hovedfarve")}
+            <input type="color" value={f.hovedfarve || "var(--farve)"} onChange={saet("hovedfarve")}
               style={{ width: 44, height: 34, padding: 0, border: "1px solid #E2E8F0", borderRadius: 8, background: "none" }} />
             <input style={{ ...styles.input, width: 120, fontFamily: "monospace" }} value={f.hovedfarve || ""} onChange={saet("hovedfarve")} />
           </div>
@@ -12236,7 +12262,7 @@ function FirmaView({ isAdminUser, firma, notify, medarbejderId, onGemt }) {
             <label><input type="radio" checked={f.menu_tema === "lys"} onChange={() => setF({ ...f, menu_tema: "lys" })} /> Lys</label>
             <label><input type="radio" checked={f.menu_tema !== "lys"} onChange={() => setF({ ...f, menu_tema: "moerk" })} /> Mørk</label>
           </div>
-          <div style={styles.hint}>Logoet vises i menuen med det samme. Farve og menu gemmes nu og tages i brug i næste trin.</div>
+          <div style={styles.hint}>Logo, farve og menu skifter med det samme, når du trykker Gem — i planlægningen, Worklist og kundeportalen.</div>
         </div>
 
         <div style={kort}>
@@ -12261,7 +12287,7 @@ function FirmaView({ isAdminUser, firma, notify, medarbejderId, onGemt }) {
               <span style={{ fontSize: 12.5, color: f[k] ? "#16A34A" : "#94A3B8", fontWeight: 600 }}>{f[k] ? "med" : "ikke med"}</span>
             </div>
           ))}
-          <div style={styles.hint}>Modulerne følger abonnementet og kan ikke ændres her. Hos Jammerbugt Rengøring er alle med.</div>
+          <div style={styles.hint}>Modulerne følger abonnementet og kan ikke ændres her.</div>
         </div>
       </div>
       {fejl && <div style={{ color: "#B91C1C", fontSize: 13, marginTop: 10 }}>{fejl}</div>}
@@ -12432,7 +12458,7 @@ function AreasView({ supabase, areas, employees, employeeAreas, onAreasChange, o
                 const assigned = employeeAreas.some((ea) => ea.employee_id === emp.id && ea.area_id === area.id);
                 return (
                   <button key={emp.id}
-                    style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 12px", borderRadius: 99, border: assigned ? "2px solid #D6247A" : "1.5px solid #E2E8F0", background: assigned ? "#FCE4EF" : "#fff", color: assigned ? "#D6247A" : "#64748B", fontWeight: assigned ? 700 : 500, fontSize: 13, cursor: "pointer" }}
+                    style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 12px", borderRadius: 99, border: assigned ? "2px solid var(--farve)" : "1.5px solid #E2E8F0", background: assigned ? "var(--farve-lys)" : "#fff", color: assigned ? "var(--farve)" : "#64748B", fontWeight: assigned ? 700 : 500, fontSize: 13, cursor: "pointer" }}
                     onClick={() => toggleEmpArea(emp.id, area.id)}>
                     <span style={{ ...styles.avatar, background: emp.color, width: 20, height: 20, fontSize: 9 }}>{initials(emp.name)}</span>
                     {emp.name}{assigned && <Check size={12} />}
@@ -12527,7 +12553,7 @@ function SkillsView({ supabase, skills: skillNames, onSkillsChange }) {
     onSkillsChange((prev) => prev.filter((n) => n !== item.name));
   }
 
-  if (loading) return <div style={{ padding: 40, textAlign: "center", color: "#9C1B5D" }}>Indlæser kompetencer…</div>;
+  if (loading) return <div style={{ padding: 40, textAlign: "center", color: "var(--farve-moerk)" }}>Indlæser kompetencer…</div>;
 
   return (
     <div style={styles.page}>
@@ -12563,7 +12589,7 @@ function SkillsView({ supabase, skills: skillNames, onSkillsChange }) {
           )}
           {items.map((item, idx) => (
             <div key={item.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 16px", borderBottom: idx < items.length - 1 ? "1px solid #F1F5F9" : "none" }}>
-              <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#D6247A", flexShrink: 0 }} />
+              <div style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--farve)", flexShrink: 0 }} />
               {editId === item.id ? (
                 <input
                   style={{ ...styles.input, flex: 1, margin: 0 }}
@@ -12852,12 +12878,12 @@ function KundeFakturaer({ supabase, guid }) {
       <button onClick={fold}
         style={{ width: "100%", display: "flex", alignItems: "center", gap: 10,
                  padding: "10px 12px", minHeight: 44, textAlign: "left",
-                 background: aaben ? "#FFF6FA" : "#fff", cursor: "pointer",
+                 background: aaben ? "var(--farve-bleg)" : "#fff", cursor: "pointer",
                  border: "1px solid #E2E8F0", borderRadius: 9 }}>
-        <span style={{ color: "#9C1B5D", fontSize: 12, width: 12, flexShrink: 0 }}>
+        <span style={{ color: "var(--farve-moerk)", fontSize: 12, width: 12, flexShrink: 0 }}>
           {aaben ? "▾" : "▸"}
         </span>
-        <span style={{ fontSize: 13, fontWeight: 700, color: "#9C1B5D", flexShrink: 0 }}>
+        <span style={{ fontSize: 13, fontWeight: 700, color: "var(--farve-moerk)", flexShrink: 0 }}>
           Fakturaer i Dinero
         </span>
         <span style={{ flex: 1 }} />
@@ -13131,14 +13157,14 @@ function KunderView({ supabase, currentEmployeeId }) {
   const samletKr = kunder.reduce((s, k) => s + Number(k.realiseret_kr || 0), 0);
   const medPortal = kunder.filter((k) => k.portal_status === "aktiv").length;
 
-  if (henter) return <div style={{ padding: 40, textAlign: "center", color: "#9C1B5D" }}>Indlæser kunder…</div>;
+  if (henter) return <div style={{ padding: 40, textAlign: "center", color: "var(--farve-moerk)" }}>Indlæser kunder…</div>;
 
   return (
     <div style={styles.page}>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px,1fr))", gap: 8, marginBottom: 16 }}>
         {[
           { label: "Kunder", value: kunder.length, color: "#111111" },
-          { label: "Realiseret i alt", value: Math.round(samletKr).toLocaleString("da-DK") + " kr", color: "#9C1B5D" },
+          { label: "Realiseret i alt", value: Math.round(samletKr).toLocaleString("da-DK") + " kr", color: "var(--farve-moerk)" },
           { label: "Aktive aftaler", value: kunder.reduce((s, k) => s + Number(k.aktive_aftaler || 0), 0), color: "#0F766E" },
           { label: "Med kundeportal", value: medPortal, color: "#4F46E5" },
         ].map((s) => (
@@ -13459,7 +13485,7 @@ function NytKundemoede({ supabase, employees, currentEmployeeId, onOprettet, onL
 
           <label style={styles.label}>Kontrakttype</label>
           <select style={styles.input} value={kontrakt} onChange={(e) => setKontrakt(e.target.value)}>
-            {CONTRACT_TYPES.map((c) => (
+            {valgbareKontrakttyper().map((c) => (
               <option key={c.key} value={c.key}>{c.label}</option>
             ))}
           </select>
@@ -13539,8 +13565,8 @@ function TilbudView({ supabase, checklistTemplates, pricing, currentUserName, em
             return (
               <button key={k} onClick={() => setFilter(k)}
                 style={{ padding: "7px 14px", borderRadius: 999, fontSize: 13, fontWeight: 700, cursor: "pointer",
-                         border: aktiv ? "1px solid #9C1B5D" : "1px solid #E2E8F0",
-                         background: aktiv ? "#9C1B5D" : "#fff", color: aktiv ? "#fff" : "#5B5B60" }}>
+                         border: aktiv ? "1px solid var(--farve-moerk)" : "1px solid #E2E8F0",
+                         background: aktiv ? "var(--farve-moerk)" : "#fff", color: aktiv ? "#fff" : "#5B5B60" }}>
                 {l}{antal > 0 ? ` (${antal})` : ""}
               </button>
             );
@@ -13568,7 +13594,7 @@ function TilbudView({ supabase, checklistTemplates, pricing, currentUserName, em
       )}
 
       {henter ? (
-        <div style={{ padding: 40, textAlign: "center", color: "#9C1B5D" }}>Indlæser tilbud…</div>
+        <div style={{ padding: 40, textAlign: "center", color: "var(--farve-moerk)" }}>Indlæser tilbud…</div>
       ) : vist.length === 0 ? (
         <div style={{ background: "#fff", borderRadius: 10, padding: 28, textAlign: "center", color: "#64748B", fontSize: 14 }}>
           Der er ingen tilbud her endnu. Tryk «Nyt tilbud» efter et kundemøde — du kan
@@ -13821,12 +13847,12 @@ function TilbudEditor({ supabase, checklistTemplates, pricing, currentUserName, 
     const { error: mailFejl } = await supabase.functions.invoke("send-email", {
       body: {
         email: email.trim(), name: kontakt.trim() || kundeNavn.trim(),
-        subject: `Tilbud fra Jammerbugt Rengøring`,
+        subject: `Tilbud fra ${FIRMA.navn}`,
         html: `<p>Hej ${kontakt.trim() || ""}</p>`
           + `<p>Her er vores tilbud på ${titel.trim() || "rengøring"}.</p>`
           + `<p><a href="${link}">Åbn tilbuddet og accepter her</a></p>`
           + (gyldigTil ? `<p>Tilbuddet er gyldigt til og med ${new Date(gyldigTil).toLocaleDateString("da-DK")}.</p>` : "")
-          + `<p>Med venlig hilsen<br/>Jammerbugt Rengøring</p>`,
+          + `<p>Med venlig hilsen<br/>${FIRMA.navn}</p>`,
       },
     });
     setNoegle(n); setStatus("sendt"); setArbejder("");
@@ -13861,8 +13887,8 @@ function TilbudEditor({ supabase, checklistTemplates, pricing, currentUserName, 
 
         {/* Kunde */}
         <div style={{ ...styles.formSection, borderColor: "#EFAFC9" }}>
-          <div style={{ ...styles.formSectionHead, background: "#FCE4EF", borderBottom: "1.5px solid #EFAFC9" }}>
-            <div style={{ ...styles.formSectionTitle, color: "#9C1B5D" }}>Kunde</div>
+          <div style={{ ...styles.formSectionHead, background: "var(--farve-lys)", borderBottom: "1.5px solid #EFAFC9" }}>
+            <div style={{ ...styles.formSectionTitle, color: "var(--farve-moerk)" }}>Kunde</div>
             <div style={{ ...styles.formSectionHint, color: "#B4436F" }}>Hvem tilbuddet gælder, og hvor det skal sendes hen</div>
           </div>
           <div style={styles.formSectionBody}>
@@ -13912,7 +13938,7 @@ function TilbudEditor({ supabase, checklistTemplates, pricing, currentUserName, 
 
             <label style={styles.label}>Kontrakttype</label>
             <select style={styles.input} value={kontrakt} disabled={laast} onChange={(e) => setKontrakt(e.target.value)}>
-              {CONTRACT_TYPES.map((c) => (
+              {valgbareKontrakttyper().map((c) => (
                 <option key={c.key} value={c.key}>{c.label}</option>
               ))}
             </select>
@@ -14009,8 +14035,8 @@ function TilbudEditor({ supabase, checklistTemplates, pricing, currentUserName, 
 
         {/* Referat */}
         <div style={{ ...styles.formSection, borderColor: "#EFAFC9" }}>
-          <div style={{ ...styles.formSectionHead, background: "#FCE4EF", borderBottom: "1.5px solid #EFAFC9" }}>
-            <div style={{ ...styles.formSectionTitle, color: "#9C1B5D" }}>Referat fra mødet</div>
+          <div style={{ ...styles.formSectionHead, background: "var(--farve-lys)", borderBottom: "1.5px solid #EFAFC9" }}>
+            <div style={{ ...styles.formSectionTitle, color: "var(--farve-moerk)" }}>Referat fra mødet</div>
             <div style={{ ...styles.formSectionHint, color: "#B4436F" }}>Diktér det på stedet — ret det bagefter</div>
           </div>
           <div style={styles.formSectionBody}>
@@ -14466,7 +14492,7 @@ function InventoryView({ supabase, employees, currentUserName, onInventoryChange
     return true;
   });
 
-  if (loading) return <div style={{ padding: 40, textAlign: "center", color: "#9C1B5D" }}>Indlæser lager…</div>;
+  if (loading) return <div style={{ padding: 40, textAlign: "center", color: "var(--farve-moerk)" }}>Indlæser lager…</div>;
 
   return (
     <div style={styles.page}>
@@ -14482,8 +14508,8 @@ function InventoryView({ supabase, employees, currentUserName, onInventoryChange
               <button key={c.id} onClick={() => setFilterCat(c.id)}
                 style={{
                   padding: "7px 14px", borderRadius: 999, fontSize: 13, fontWeight: 700, cursor: "pointer",
-                  border: active ? "1px solid #9C1B5D" : "1px solid #E2E8F0",
-                  background: active ? "#9C1B5D" : "#fff",
+                  border: active ? "1px solid var(--farve-moerk)" : "1px solid #E2E8F0",
+                  background: active ? "var(--farve-moerk)" : "#fff",
                   color: active ? "#fff" : "#5B5B60",
                 }}>
                 {c.icon ? c.icon + " " : ""}{c.name}
@@ -14499,7 +14525,7 @@ function InventoryView({ supabase, employees, currentUserName, onInventoryChange
         {[
           { label: "Produkter i alt", value: items.length, color: "#111111" },
           { label: "Under minimumbeholdning", value: items.filter((i) => i.stock <= i.min_stock).length, color: "#DC2626" },
-          { label: "Kundeprodukter", value: items.filter((i) => i.inventory_categories?.type === "kunde").length, color: "#9C1B5D" },
+          { label: "Kundeprodukter", value: items.filter((i) => i.inventory_categories?.type === "kunde").length, color: "var(--farve-moerk)" },
           { label: "Medarbejderprodukter", value: items.filter((i) => i.inventory_categories?.type === "medarbejder").length, color: "#4F46E5" },
         ].map((s) => (
           <div key={s.label} style={{ background: "#fff", borderRadius: 10, padding: "12px 14px", boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
@@ -14551,7 +14577,7 @@ function InventoryView({ supabase, employees, currentUserName, onInventoryChange
           const low = item.stock <= item.min_stock;
           const cat = item.inventory_categories;
           return (
-            <div key={item.id} style={{ background: "#fff", borderRadius: 12, padding: 14, boxShadow: "0 1px 3px rgba(0,0,0,0.06)", borderLeft: `4px solid ${low ? "#DC2626" : cat?.type === "medarbejder" ? "#4F46E5" : "#D6247A"}` }}>
+            <div key={item.id} style={{ background: "#fff", borderRadius: 12, padding: 14, boxShadow: "0 1px 3px rgba(0,0,0,0.06)", borderLeft: `4px solid ${low ? "#DC2626" : cat?.type === "medarbejder" ? "#4F46E5" : "var(--farve)"}` }}>
               <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 8 }}>
                 <div>
                   <div style={{ fontWeight: 700, fontSize: 14, color: "#111111" }}>{item.name}{item.item_number ? ` (${item.item_number})` : ""}</div>
@@ -14568,7 +14594,7 @@ function InventoryView({ supabase, employees, currentUserName, onInventoryChange
               <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                 <div style={{ flex: 1 }}>
                   <div style={{ height: 6, background: "#F1F5F9", borderRadius: 99, overflow: "hidden" }}>
-                    <div style={{ height: "100%", background: low ? "#DC2626" : "#D6247A", borderRadius: 99, width: `${Math.min(100, item.min_stock > 0 ? (item.stock / (item.min_stock * 3)) * 100 : 100)}%` }} />
+                    <div style={{ height: "100%", background: low ? "#DC2626" : "var(--farve)", borderRadius: 99, width: `${Math.min(100, item.min_stock > 0 ? (item.stock / (item.min_stock * 3)) * 100 : 100)}%` }} />
                   </div>
                 </div>
                 <div style={{ fontSize: 15, fontWeight: 800, color: low ? "#DC2626" : "#111111", minWidth: 60, textAlign: "right" }}>
@@ -14702,7 +14728,7 @@ function InventoryView({ supabase, employees, currentUserName, onInventoryChange
           <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
             {[["in","Tilgang ↑"],["out","Afgang ↓"],["adjust","Manuel justering"]].map(([k,l]) => (
               <button key={k} type="button"
-                style={{ flex:1, padding:"8px 0", borderRadius:8, border: adjustType===k ? "2px solid #D6247A" : "1.5px solid #E2E8F0", background: adjustType===k ? "#FCE4EF" : "#fff", color: adjustType===k ? "#D6247A" : "#475569", fontWeight:600, fontSize:13, cursor:"pointer" }}
+                style={{ flex:1, padding:"8px 0", borderRadius:8, border: adjustType===k ? "2px solid var(--farve)" : "1.5px solid #E2E8F0", background: adjustType===k ? "var(--farve-lys)" : "#fff", color: adjustType===k ? "var(--farve)" : "#475569", fontWeight:600, fontSize:13, cursor:"pointer" }}
                 onClick={() => setAdjustType(k)}>{l}</button>
             ))}
           </div>
@@ -14878,11 +14904,11 @@ function ActivityModal({ employees, onClose, onSave }) {
                  padding: "11px 12px", borderRadius: 10, marginTop: 12,
                  cursor: maaTageTilbud ? "pointer" : "default",
                  opacity: maaTageTilbud ? 1 : 0.5,
-                 border: erTilbudsmoede ? "2px solid #9C1B5D" : "1.5px solid #E2E8F0",
-                 background: erTilbudsmoede ? "#FCE4EF" : "#fff" }}>
+                 border: erTilbudsmoede ? "2px solid var(--farve-moerk)" : "1.5px solid #E2E8F0",
+                 background: erTilbudsmoede ? "var(--farve-lys)" : "#fff" }}>
         <span style={{ width: 20, height: 20, borderRadius: 5, flexShrink: 0,
-                       border: erTilbudsmoede ? "2px solid #9C1B5D" : "2px solid #CBD5E1",
-                       background: erTilbudsmoede ? "#9C1B5D" : "#fff",
+                       border: erTilbudsmoede ? "2px solid var(--farve-moerk)" : "2px solid #CBD5E1",
+                       background: erTilbudsmoede ? "var(--farve-moerk)" : "#fff",
                        display: "flex", alignItems: "center", justifyContent: "center" }}>
           {erTilbudsmoede && <Check size={12} color="#fff" strokeWidth={3} />}
         </span>
@@ -14898,7 +14924,7 @@ function ActivityModal({ employees, onClose, onSave }) {
         <>
           <label style={styles.label}>Kontrakttype</label>
           <select style={styles.input} value={kontrakt} onChange={(e) => setKontrakt(e.target.value)}>
-            {CONTRACT_TYPES.map((c) => (
+            {valgbareKontrakttyper().map((c) => (
               <option key={c.key} value={c.key}>{c.label}</option>
             ))}
           </select>
@@ -15142,7 +15168,7 @@ function EmployeeModal({ emp, onClose, onSave, skills: skillList, satsHistorik, 
   // Kompetencer hun ikke har, ligger skjult. Med seks-otte kompetencer var listen
   // over "Ingen / N / OE / E" for hver af dem den laengste del af hele dialogen.
   const [visAlleKompetencer, setVisAlleKompetencer] = useState(false);
-  const colorPool = ["#D6247A", "#111111", "#9C1B5D", "#5B5B60", "#C2487A", "#3A3A3E"];
+  const colorPool = ["#D6247A", "#111111", "#9C1B5D", "#5B5B60", "#C2487A", "#3A3A3E"];  // hex: gemmes paa medarbejderen
   const [color] = useState(emp?.color || colorPool[Math.floor(Math.random() * colorPool.length)]);
 
   function setLevel(skill, level) {
@@ -15172,8 +15198,8 @@ function EmployeeModal({ emp, onClose, onSave, skills: skillList, satsHistorik, 
           hvad hun kan, blaat er tid. Det graa med haengelaas er det som kun
           administratorer kan se — og det skal se anderledes ud af netop den grund. */}
       <div style={styles.empSection}>
-        <div style={{ ...styles.empSectionHead, background: "#FCE4EF" }}>
-          <div style={{ ...styles.empSectionTitle, color: "#9C1B5D" }}>Personen</div>
+        <div style={{ ...styles.empSectionHead, background: "var(--farve-lys)" }}>
+          <div style={{ ...styles.empSectionTitle, color: "var(--farve-moerk)" }}>Personen</div>
           <div style={{ ...styles.empSectionHint, color: "#B4436F" }}>Navn og hvornår dagen begynder</div>
         </div>
         <div style={styles.empSectionBody}>
@@ -15203,7 +15229,7 @@ function EmployeeModal({ emp, onClose, onSave, skills: skillList, satsHistorik, 
           <label style={styles.label}>Tillæg</label>
           <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13.5,
                           color: "#334155", cursor: "pointer", minHeight: 36 }}>
-            <input type="checkbox" style={{ width: 16, height: 16, accentColor: "#D6247A" }}
+            <input type="checkbox" style={{ width: 16, height: 16, accentColor: "var(--farve)" }}
               checked={weekendTillaeg} onChange={(e) => setWeekendTillaeg(e.target.checked)} />
             Weekendtillæg
             {weekendTillaeg && (
@@ -15217,7 +15243,7 @@ function EmployeeModal({ emp, onClose, onSave, skills: skillList, satsHistorik, 
           </label>
           <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13.5,
                           color: "#334155", cursor: "pointer", minHeight: 36 }}>
-            <input type="checkbox" style={{ width: 16, height: 16, accentColor: "#D6247A" }}
+            <input type="checkbox" style={{ width: 16, height: 16, accentColor: "var(--farve)" }}
               checked={shBetaling} onChange={(e) => setShBetaling(e.target.checked)} />
             Søn- og helligdagsbetaling
             {shBetaling && (
@@ -15624,9 +15650,9 @@ function TaskDetailModal({ task, employees, templates, onSetPreferredEmployee, o
               Ellers skulle man lede efter kunden i Tilbud-fanen, og det er den slags
               der faar folk til at lade vaere. */}
           {tilbudPaaOpgaven && (
-            <div style={{ background: "#FCE4EF", border: "1px solid #EFAFC9", borderRadius: 10,
+            <div style={{ background: "var(--farve-lys)", border: "1px solid #EFAFC9", borderRadius: 10,
                           padding: "11px 13px", marginBottom: 14 }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: "#9C1B5D" }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: "var(--farve-moerk)" }}>
                 Tilbud · {TILBUD_STATUS[tilbudPaaOpgaven.status]?.navn || tilbudPaaOpgaven.status}
               </div>
               <div style={{ fontSize: 12.5, color: "#B4436F", marginTop: 3, lineHeight: 1.5 }}>
@@ -15803,7 +15829,7 @@ return (
             style={{ fontSize: 12, fontWeight: 600, padding: "3px 8px", borderRadius: 99, border: "1.5px solid #E2E8F0", background: contractMeta(t.contractType).bg, color: contractMeta(t.contractType).color, cursor: "pointer" }}
             value={t.contractType || "privat"}
             onChange={(e) => onUpdateContractType(t.id, e.target.value)}>
-            {CONTRACT_TYPES.map((c) => (
+            {valgbareKontrakttyper().map((c) => (
               <option key={c.key} value={c.key}>{c.icon} {c.label}</option>
             ))}
           </select>
@@ -15956,7 +15982,7 @@ return (
         </div>
       )}
 
-      </div></div><div style={{ ...styles.formSection, borderColor: "#EFAFC9" }}><div style={{ ...styles.formSectionHead, background: "#FCE4EF", borderBottom: "1.5px solid #EFAFC9" }}><div style={{ ...styles.formSectionTitle, color: "#9C1B5D" }}>Kunde</div><div style={{ ...styles.formSectionHint, color: "#B4436F" }}>Hvem der faktureres, og hvor der arbejdes</div></div><div style={styles.formSectionBody}>{/* Kunde — redigerbar indtil udført */}
+      </div></div><div style={{ ...styles.formSection, borderColor: "#EFAFC9" }}><div style={{ ...styles.formSectionHead, background: "var(--farve-lys)", borderBottom: "1.5px solid #EFAFC9" }}><div style={{ ...styles.formSectionTitle, color: "var(--farve-moerk)" }}>Kunde</div><div style={{ ...styles.formSectionHint, color: "#B4436F" }}>Hvem der faktureres, og hvor der arbejdes</div></div><div style={styles.formSectionBody}>{/* Kunde — redigerbar indtil udført */}
       <div style={{ marginBottom: 12 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
           <label style={styles.label}>Kundeoplysninger</label>
@@ -15965,7 +15991,7 @@ return (
           )}
           {locked && <span style={{ fontSize: 11, color: "#94A3B8" }}>🔒 Låst (opgave udført)</span>}
           {isDone && isAdminUser && (
-            <span style={{ fontSize: 11, color: "#9C1B5D", fontWeight: 600 }}>🔓 Admin-adgang (opgave udført)</span>
+            <span style={{ fontSize: 11, color: "var(--farve-moerk)", fontWeight: 600 }}>🔓 Admin-adgang (opgave udført)</span>
           )}
         </div>
 
@@ -16042,7 +16068,7 @@ return (
                   <div style={styles.cardMeta}>{custAddress}</div>
                   {mapsUrl && (
                     <a href={mapsUrl} target="_blank" rel="noreferrer"
-                      style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12, fontWeight: 700, color: "#D6247A", textDecoration: "none", flexShrink: 0 }}>
+                      style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12, fontWeight: 700, color: "var(--farve)", textDecoration: "none", flexShrink: 0 }}>
                       <Navigation size={12} /> Naviger
                     </a>
                   )}
@@ -16431,7 +16457,7 @@ return (
       </div></div>
 
       <div style={styles.modalActions}>
-        {onCopy && <button style={{ ...styles.secondaryBtn, color: "#9C1B5D", borderColor: "#FCE4EF" }} onClick={() => onCopy(t)}><Copy size={14} /> Kopiér</button>}
+        {onCopy && <button style={{ ...styles.secondaryBtn, color: "var(--farve-moerk)", borderColor: "var(--farve-lys)" }} onClick={() => onCopy(t)}><Copy size={14} /> Kopiér</button>}
         {/* Sletning findes kun paa fleksible/adhoc-opgaver. Faste opgaver kommer fra en
             aftale og skal fjernes ved at markere aftalen som udgaaet, saa planen ikke
             bare genskaber dem. Udfoerte opgaver kan ikke slettes — de kan vaere faktureret. */}
@@ -16475,31 +16501,31 @@ const globalCss = `
 `;
 
 const styles = {
-  app: { fontFamily: "'Inter', -apple-system, system-ui, sans-serif", background: "#FFF6FA", minHeight: "100vh", color: "#111111", display: "flex", flexDirection: "column" },
-  header: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 24px", background: "#111111", color: "#fff", flexWrap: "wrap", gap: 12, position: "sticky", top: 0, zIndex: 100 },
+  app: { fontFamily: "'Inter', -apple-system, system-ui, sans-serif", background: "var(--farve-bleg)", minHeight: "100vh", color: "#111111", display: "flex", flexDirection: "column" },
+  header: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 24px", background: "var(--menu-bg)", color: "var(--menu-tekst)", borderBottom: "1px solid var(--menu-kant)", flexWrap: "wrap", gap: 12, position: "sticky", top: 0, zIndex: 100 },
   brand: { display: "flex", alignItems: "center", gap: 12 },
-  brandMark: { width: 36, height: 36, borderRadius: 10, background: "#D6247A", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 14 },
+  brandMark: { width: 36, height: 36, borderRadius: 10, background: "var(--farve)", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 14 },
   brandTitle: { fontFamily: "'Space Grotesk', sans-serif", fontWeight: 600, fontSize: 16 },
-  brandSub: { fontSize: 12, color: "#E8AFC9" },
+  brandSub: { fontSize: 12, color: "var(--menu-sub)" },
   nav: { display: "flex", gap: 6, flexWrap: "wrap" },
   // Anden raekke klaeber sig fast lige under hovedet, saa baade gruppen og siderne
   // bliver staaende naar man ruller. Toppen er 68 px — hovedets hoejde.
   underNav: { position: "sticky", top: 68, zIndex: 99, display: "flex", gap: 7, flexWrap: "wrap",
-    padding: "10px 24px", background: "#FFF6FA", borderBottom: "1px solid #F4D7E4" },
+    padding: "10px 24px", background: "var(--farve-bleg)", borderBottom: "1px solid #F4D7E4" },
   // Mindst 40 px hoej: skal kunne rammes med en finger paa en iPad.
   underNavBtn: { padding: "9px 15px", borderRadius: 999, border: "1px solid #E2E8F0",
     background: "#fff", color: "#5B5B60", cursor: "pointer", fontSize: 13, fontWeight: 600, minHeight: 40 },
-  underNavAktiv: { padding: "9px 15px", borderRadius: 999, border: "1px solid #9C1B5D",
-    background: "#9C1B5D", color: "#fff", cursor: "pointer", fontSize: 13, fontWeight: 700, minHeight: 40 },
-  navBtn: { padding: "8px 14px", borderRadius: 8, border: "none", background: "transparent", color: "#D9A9C0", cursor: "pointer", fontSize: 13.5, fontWeight: 500 },
-  navBtnActive: { padding: "8px 14px", borderRadius: 8, border: "none", background: "#D6247A", color: "#fff", cursor: "pointer", fontSize: 13.5, fontWeight: 600 },
+  underNavAktiv: { padding: "9px 15px", borderRadius: 999, border: "1px solid var(--farve-moerk)",
+    background: "var(--farve-moerk)", color: "#fff", cursor: "pointer", fontSize: 13, fontWeight: 700, minHeight: 40 },
+  navBtn: { padding: "8px 14px", borderRadius: 8, border: "none", background: "transparent", color: "var(--menu-dim)", cursor: "pointer", fontSize: 13.5, fontWeight: 500 },
+  navBtnActive: { padding: "8px 14px", borderRadius: 8, border: "none", background: "var(--farve)", color: "#fff", cursor: "pointer", fontSize: 13.5, fontWeight: 600 },
   toast: { position: "fixed", top: 16, right: 24, background: "#111111", color: "#fff", padding: "10px 16px", borderRadius: 8, fontSize: 13.5, zIndex: 50, boxShadow: "0 8px 24px rgba(0,0,0,0.2)" },
   page: { padding: "16px 20px 40px", flex: 1 },
   toolbar: { display: "flex", alignItems: "center", gap: 10, marginBottom: 10, flexWrap: "wrap",
-    position: "sticky", top: 68, zIndex: 98, background: "#FFF6FA",
+    position: "sticky", top: 68, zIndex: 98, background: "var(--farve-bleg)",
     paddingTop: 10, paddingBottom: 10, borderBottom: "1px solid #F4D7E4" },
   toolbarSpacer: { flex: 1 },
-  primaryBtn: { display: "flex", alignItems: "center", gap: 6, padding: "9px 14px", borderRadius: 8, border: "none", background: "#D6247A", color: "#fff", fontWeight: 600, fontSize: 13.5, cursor: "pointer" },
+  primaryBtn: { display: "flex", alignItems: "center", gap: 6, padding: "9px 14px", borderRadius: 8, border: "none", background: "var(--farve)", color: "#fff", fontWeight: 600, fontSize: 13.5, cursor: "pointer" },
   secondaryBtn: { display: "flex", alignItems: "center", gap: 6, padding: "9px 14px", borderRadius: 8, border: "1px solid #CBD5E1", background: "#fff", color: "#334155", fontWeight: 500, fontSize: 13.5, cursor: "pointer" },
   legendRow: { marginBottom: 14, fontSize: 12 },
   typeChip: { display: "inline-flex", alignItems: "center", borderRadius: 999, fontWeight: 600, padding: "2px 8px", fontSize: 11 },
@@ -16508,10 +16534,10 @@ const styles = {
   // position:sticky paa den selv ville ikke goere noget — den sidder i en flex-raekke
   // der ikke ruller vandret.
   weekNav: { marginLeft: "auto", flexShrink: 0, display: "flex", alignItems: "center", gap: 8, background: "#fff", padding: "6px 8px", borderRadius: 10, boxShadow: "0 1px 2px rgba(15,42,40,0.08)" },
-  weekNavBtn: { border: "none", background: "#FFF6FA", color: "#111111", borderRadius: 8, padding: 6, cursor: "pointer", display: "flex" },
+  weekNavBtn: { border: "none", background: "var(--farve-bleg)", color: "#111111", borderRadius: 8, padding: 6, cursor: "pointer", display: "flex" },
   weekNavLabel: { fontSize: 13, color: "#334155", minWidth: 190, textAlign: "center" },
   weekNavStrong: { fontWeight: 700, color: "#111111" },
-  weekNowTag: { marginLeft: 8, fontSize: 10.5, fontWeight: 700, color: "#D6247A", background: "#FCE4EF", padding: "1px 6px", borderRadius: 999 },
+  weekNowTag: { marginLeft: 8, fontSize: 10.5, fontWeight: 700, color: "var(--farve)", background: "var(--farve-lys)", padding: "1px 6px", borderRadius: 999 },
   weekLayout: { display: "flex", gap: 16, alignItems: "flex-start", overflow: "hidden" },
   backlog: { background: "#FCE9F1", borderRadius: 12, padding: 12, width: 240, flexShrink: 0, position: "sticky", top: 0, maxHeight: "calc(100vh - 180px)", overflowY: "auto" },
   backlogTitle: { fontWeight: 700, fontSize: 13, marginBottom: 10, color: "#111111" },
@@ -16550,7 +16576,7 @@ const styles = {
   chipTopRow: { display: "flex", alignItems: "center", gap: 4, minWidth: 0 },
   chipSubRow: { display: "flex", alignItems: "center", gap: 6, minWidth: 0 },
   taskChipTitle: { fontSize: 11, fontWeight: 600, flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" },
-  taskChipCustomer: { fontSize: 10, color: "#9C1B5D", fontWeight: 600, flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" },
+  taskChipCustomer: { fontSize: 10, color: "var(--farve-moerk)", fontWeight: 600, flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" },
   taskChipAddress: { fontSize: 10, color: "#64748B", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", marginTop: 1 },
   taskChipDur: { fontSize: 10, color: "#64748B", flexShrink: 0 },
   statusDot: { width: 6, height: 6, borderRadius: 3, flexShrink: 0 },
@@ -16567,8 +16593,8 @@ const styles = {
     padding: "6px 8px", margin: "0 0 4px", fontSize: 11, color: "#92400E", lineHeight: 1.45, width: 230 },
   chipAddMenuItem: { display: "flex", alignItems: "center", gap: 6, width: "100%", border: "none", background: "transparent", padding: "5px 6px", borderRadius: 6, fontSize: 11.5, color: "#334155", cursor: "pointer", textAlign: "left" },
   emptyCol: { textAlign: "center", color: "#94A3B8", fontSize: 12.5, padding: "20px 0" },
-  skillTag: { display: "inline-block", background: "#FCE4EF", color: "#9C1B5D", fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 999 },
-  skillLevelTag: { display: "inline-flex", alignItems: "center", background: "#FCE4EF", color: "#9C1B5D", fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 999 },
+  skillTag: { display: "inline-block", background: "var(--farve-lys)", color: "var(--farve-moerk)", fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 999 },
+  skillLevelTag: { display: "inline-flex", alignItems: "center", background: "var(--farve-lys)", color: "var(--farve-moerk)", fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 999 },
   avatar: { width: 22, height: 22, borderRadius: "50%", color: "#fff", fontSize: 10, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
   iconBtnGhost: { border: "none", background: "transparent", color: "#94A3B8", cursor: "pointer", padding: 4, borderRadius: 6, display: "flex", alignItems: "center", position: "absolute", top: 6, right: 6 },
   iconBtnGhostInline: { border: "none", background: "transparent", color: "#94A3B8", cursor: "pointer", padding: 4, borderRadius: 6, display: "flex", alignItems: "center" },
@@ -16578,7 +16604,7 @@ const styles = {
   empName: { fontWeight: 600, fontSize: 14 },
   empLoad: { fontSize: 12, color: "#64748B" },
   empSkills: { display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 },
-  capRow: { display: "flex", gap: 6, borderTop: "1px solid #FFF6FA", paddingTop: 10 },
+  capRow: { display: "flex", gap: 6, borderTop: "1px solid var(--farve-bleg)", paddingTop: 10 },
   capDayBox: { flex: 1, textAlign: "center" },
   capDayLabel: { fontSize: 10, color: "#94A3B8", fontWeight: 600 },
   capDayValue: { fontSize: 12.5, fontWeight: 700, color: "#111111" },
@@ -16589,12 +16615,12 @@ const styles = {
   timeRow: { display: "flex", alignItems: "center", gap: 12, background: "#fff", padding: "10px 14px", borderRadius: 10, boxShadow: "0 1px 2px rgba(15,42,40,0.08)" },
   timeRowAvatars: { display: "flex", gap: 2 },
   timeRowTitle: { fontWeight: 600, fontSize: 13.5 },
-  timeRowMinutes: { fontSize: 13, fontWeight: 600, color: "#D6247A", width: 100, textAlign: "right" },
+  timeRowMinutes: { fontSize: 13, fontWeight: 600, color: "var(--farve)", width: 100, textAlign: "right" },
   timerBtn: { display: "flex", alignItems: "center", gap: 5, padding: "7px 12px", borderRadius: 8, border: "1px solid #CBD5E1", background: "#fff", color: "#334155", fontSize: 12.5, fontWeight: 600, cursor: "pointer" },
   timerBtnActive: { display: "flex", alignItems: "center", gap: 5, padding: "7px 12px", borderRadius: 8, border: "1px solid #B91C1C", background: "#FEE2E2", color: "#B91C1C", fontSize: 12.5, fontWeight: 600, cursor: "pointer" },
   overlay: { position: "fixed", inset: 0, background: "rgba(15,42,40,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100, padding: 16 },
   modal: { background: "#fff", borderRadius: 14, width: 460, maxWidth: "100%", maxHeight: "90vh", overflowY: "auto", color: "#111111" },
-  modalHeader: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 18px", borderBottom: "1px solid #FFF6FA" },
+  modalHeader: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 18px", borderBottom: "1px solid var(--farve-bleg)" },
   modalTitle: { fontWeight: 700, fontSize: 15, fontFamily: "'Space Grotesk', sans-serif" },
   modalBody: { padding: "16px 18px" }, formCol: { maxWidth: 720, margin: "0 auto", textAlign: "left" }, // Rammen om et formularafsnit tager afsnittets EGEN farve — den saettes med
   // borderColor der hvor afsnittet bruges. En graa 1px-streg paa hvid baggrund
@@ -16613,7 +16639,7 @@ const styles = {
   typePickBtn: { flex: 1, padding: "8px 6px", borderRadius: 8, border: "1px solid #E2E8F0", background: "#F8FAFC", color: "#475569", fontSize: 12, fontWeight: 600, cursor: "pointer" },
   skillPicker: { display: "flex", flexWrap: "wrap", gap: 6 },
   skillPickBtn: { padding: "6px 10px", borderRadius: 999, border: "1px solid #E2E8F0", background: "#F8FAFC", color: "#475569", fontSize: 12, cursor: "pointer" },
-  skillPickBtnActive: { padding: "6px 10px", borderRadius: 999, border: "1px solid #D6247A", background: "#D6247A", color: "#fff", fontSize: 12, fontWeight: 600, cursor: "pointer" },
+  skillPickBtnActive: { padding: "6px 10px", borderRadius: 999, border: "1px solid var(--farve)", background: "var(--farve)", color: "#fff", fontSize: 12, fontWeight: 600, cursor: "pointer" },
   skillReqRow: { display: "flex", gap: 6, marginBottom: 6, alignItems: "center" },
   addSkillBtn: { display: "flex", alignItems: "center", gap: 4, border: "1px dashed #CBD5E1", background: "transparent", color: "#475569", borderRadius: 8, padding: "6px 10px", fontSize: 12, cursor: "pointer", marginTop: 2 },
   skillLevelGrid: { display: "flex", flexDirection: "column", gap: 6 },
@@ -16621,7 +16647,7 @@ const styles = {
   skillLevelName: { fontSize: 12.5, fontWeight: 500, color: "#334155", width: 120 },
   levelSeg: { display: "flex", gap: 3 },
   levelBtn: { padding: "5px 9px", borderRadius: 6, border: "1px solid #E2E8F0", background: "#F8FAFC", color: "#64748B", fontSize: 11, cursor: "pointer" },
-  levelBtnActive: { padding: "5px 9px", borderRadius: 6, border: "1px solid #D6247A", background: "#D6247A", color: "#fff", fontSize: 11, fontWeight: 600, cursor: "pointer" },
+  levelBtnActive: { padding: "5px 9px", borderRadius: 6, border: "1px solid var(--farve)", background: "var(--farve)", color: "#fff", fontSize: 11, fontWeight: 600, cursor: "pointer" },
   levelBtnActiveNone: { padding: "5px 9px", borderRadius: 6, border: "1px solid #94A3B8", background: "#E2E8F0", color: "#334155", fontSize: 11, fontWeight: 600, cursor: "pointer" },
   capEditRow: { display: "flex", gap: 6 },
 
@@ -16630,7 +16656,7 @@ const styles = {
   empListe: { background: "#fff", borderRadius: 12, boxShadow: "0 1px 3px rgba(0,0,0,0.06)", overflow: "hidden" },
   empRaekke: { display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", cursor: "pointer" },
   empMaerker: { display: "flex", gap: 5, flexWrap: "wrap", justifyContent: "flex-end", flexShrink: 0, maxWidth: 300 },
-  empMaerkeRosa: { background: "#FCE4EF", color: "#9C1B5D", borderRadius: 99, padding: "2px 9px", fontSize: 11, fontWeight: 600 },
+  empMaerkeRosa: { background: "var(--farve-lys)", color: "var(--farve-moerk)", borderRadius: 99, padding: "2px 9px", fontSize: 11, fontWeight: 600 },
   empMaerkeGraa: { background: "#F1F5F9", color: "#475569", borderRadius: 99, padding: "2px 9px", fontSize: 11, fontWeight: 600 },
   empMaerkeRoed: { background: "#FEF2F2", color: "#B91C1C", borderRadius: 99, padding: "2px 9px", fontSize: 11, fontWeight: 600 },
   empMaerkeLilla: { background: "#EEF2FF", color: "#4F46E5", borderRadius: 99, padding: "2px 9px", fontSize: 11, fontWeight: 600 },
@@ -16675,8 +16701,8 @@ const styles = {
   detailAssigneeRow: { display: "flex", alignItems: "center", gap: 8, padding: "4px 0" },
   customerBox: { background: "#F8FAFC", border: "1px solid #E2E8F0", borderRadius: 10, padding: 10, marginTop: 8 },
   customerName: { fontSize: 13, fontWeight: 700, color: "#111111", marginBottom: 2 },
-  accessBox: { background: "#FCE4EF", borderRadius: 10, padding: 10, marginTop: 8 },
-  accessTitle: { display: "flex", alignItems: "center", gap: 5, fontSize: 11.5, fontWeight: 700, color: "#9C1B5D", marginBottom: 4 },
+  accessBox: { background: "var(--farve-lys)", borderRadius: 10, padding: 10, marginTop: 8 },
+  accessTitle: { display: "flex", alignItems: "center", gap: 5, fontSize: 11.5, fontWeight: 700, color: "var(--farve-moerk)", marginBottom: 4 },
 
   phoneWrap: { display: "flex", justifyContent: "center" },
   phoneScreen: { width: 380, maxWidth: "100%", background: "#fff", borderRadius: 22, boxShadow: "0 10px 30px rgba(15,42,40,0.15)", padding: 14, border: "1px solid #E2E8F0" },
@@ -16685,26 +16711,26 @@ const styles = {
   phoneSub: { fontSize: 11.5, color: "#94A3B8", margin: "4px 0 10px" },
   phoneDayRow: { display: "flex", gap: 4, marginBottom: 12 },
   phoneDayBtn: { flex: 1, padding: "7px 0", borderRadius: 8, border: "1px solid #E2E8F0", background: "#F8FAFC", color: "#475569", fontSize: 11.5, fontWeight: 600, cursor: "pointer" },
-  phoneDayBtnActive: { flex: 1, padding: "7px 0", borderRadius: 8, border: "1px solid #D6247A", background: "#D6247A", color: "#fff", fontSize: 11.5, fontWeight: 700, cursor: "pointer" },
+  phoneDayBtnActive: { flex: 1, padding: "7px 0", borderRadius: 8, border: "1px solid var(--farve)", background: "var(--farve)", color: "#fff", fontSize: 11.5, fontWeight: 700, cursor: "pointer" },
   phoneList: { display: "flex", flexDirection: "column", gap: 10, maxHeight: 560, overflowY: "auto" },
   phoneCard: { border: "1px solid #E2E8F0", borderRadius: 14, padding: 10, background: "#FFFFFF" },
   phoneTransportCard: { display: "flex", alignItems: "center", gap: 6, fontSize: 11.5, color: "#64748B", background: "#F1EFE7", border: "1px dashed #CBD5E1", borderRadius: 10, padding: "8px 10px" },
   phoneCardTop: { display: "flex", alignItems: "center", gap: 8, cursor: "pointer" },
   phoneAddressRow: { display: "flex", alignItems: "flex-start", gap: 6, background: "#F8FAFC", borderRadius: 8, padding: "6px 8px", marginTop: 6 },
   phoneCustomerName: { fontSize: 11.5, fontWeight: 700, color: "#111111" },
-  navigateBtn: { display: "flex", alignItems: "center", gap: 4, fontSize: 11, fontWeight: 700, color: "#fff", background: "#D6247A", borderRadius: 7, padding: "5px 8px", textDecoration: "none", flexShrink: 0, whiteSpace: "nowrap" },
+  navigateBtn: { display: "flex", alignItems: "center", gap: 4, fontSize: 11, fontWeight: 700, color: "#fff", background: "var(--farve)", borderRadius: 7, padding: "5px 8px", textDecoration: "none", flexShrink: 0, whiteSpace: "nowrap" },
   phoneCardBody: { marginTop: 8, paddingTop: 8, borderTop: "1px dashed #E2E8F0" },
   phoneCardFooter: { display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8, paddingTop: 8, borderTop: "1px dashed #E2E8F0" },
   phoneTimeLogged: { display: "flex", alignItems: "center", gap: 4, fontSize: 11.5, color: "#64748B" },
-  instructionsBox: { background: "#FCE4EF", borderRadius: 10, padding: 10, marginBottom: 8 },
-  instructionsTitle: { display: "flex", alignItems: "center", gap: 5, fontSize: 11.5, fontWeight: 700, color: "#9C1B5D", marginBottom: 4 },
+  instructionsBox: { background: "var(--farve-lys)", borderRadius: 10, padding: 10, marginBottom: 8 },
+  instructionsTitle: { display: "flex", alignItems: "center", gap: 5, fontSize: 11.5, fontWeight: 700, color: "var(--farve-moerk)", marginBottom: 4 },
   instructionsText: { fontSize: 12.5, color: "#111111", whiteSpace: "pre-line", lineHeight: 1.5 },
-  videoBtn: { display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, fontWeight: 600, color: "#111111", background: "#FCE4EF", borderRadius: 8, padding: "8px 10px", textDecoration: "none", width: "fit-content" },
+  videoBtn: { display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, fontWeight: 600, color: "#111111", background: "var(--farve-lys)", borderRadius: 8, padding: "8px 10px", textDecoration: "none", width: "fit-content" },
   doneBtn: { display: "flex", alignItems: "center", gap: 5, padding: "7px 10px", borderRadius: 8, border: "1px solid #CBD5E1", background: "#fff", color: "#334155", fontSize: 11.5, fontWeight: 600, cursor: "pointer" },
   doneBtnActive: { display: "flex", alignItems: "center", gap: 5, padding: "7px 10px", borderRadius: 8, border: "1px solid #111111", background: "#EDEDED", color: "#111111", fontSize: 11.5, fontWeight: 700, cursor: "pointer" },
 
   extraItemRow: { display: "flex", gap: 6, marginTop: 6 },
-  previewBox: { background: "#FCE4EF", borderRadius: 10, padding: 10, marginTop: 10 },
+  previewBox: { background: "var(--farve-lys)", borderRadius: 10, padding: 10, marginTop: 10 },
   previewItemRow: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "3px 0" },
   previewItemText: { fontSize: 12, color: "#111111" },
   checklistPreviewList: { margin: "8px 0 0", paddingLeft: 18 },
@@ -16714,15 +16740,15 @@ const styles = {
   checkboxDone: { width: 17, height: 17, borderRadius: 5, border: "1.5px solid #111111", background: "#111111", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" },
   checklistItemText: { fontSize: 12.5, lineHeight: 1.4 },
 
-  checklistEditRow: { display: "flex", alignItems: "flex-start", gap: 6, padding: "6px 0", borderBottom: "1px solid #FFF6FA" },
+  checklistEditRow: { display: "flex", alignItems: "flex-start", gap: 6, padding: "6px 0", borderBottom: "1px solid var(--farve-bleg)" },
   itemFlags: { display: "flex", gap: 4, marginTop: 2 },
-  itemFlagTag: { display: "inline-flex", alignItems: "center", gap: 2, fontSize: 10, color: "#D6247A", background: "#FCE4EF", borderRadius: 999, padding: "1px 6px" },
+  itemFlagTag: { display: "inline-flex", alignItems: "center", gap: 2, fontSize: 10, color: "var(--farve)", background: "var(--farve-lys)", borderRadius: 999, padding: "1px 6px" },
   itemDraftBox: { background: "#F8FAFC", border: "1px dashed #CBD5E1", borderRadius: 10, padding: 10, marginTop: 10, display: "flex", flexDirection: "column", gap: 6 },
   itemDraftTitle: { fontSize: 11.5, fontWeight: 700, color: "#475569" },
   itemDraftActions: { display: "flex", justifyContent: "flex-end", gap: 6, marginTop: 2 },
-  checklistItemBlock: { borderBottom: "1px solid #FCE4EF", paddingBottom: 4, marginBottom: 2 },
+  checklistItemBlock: { borderBottom: "1px solid var(--farve-lys)", paddingBottom: 4, marginBottom: 2 },
   checklistItemExtra: { marginLeft: 25, marginBottom: 4 },
   checklistItemDescription: { fontSize: 11.5, color: "#64748B", fontStyle: "italic", marginBottom: 4, lineHeight: 1.4 },
-  videoBtnSmall: { display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11, fontWeight: 600, color: "#111111", background: "#FCE4EF", borderRadius: 6, padding: "4px 8px", textDecoration: "none" },
+  videoBtnSmall: { display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11, fontWeight: 600, color: "#111111", background: "var(--farve-lys)", borderRadius: 6, padding: "4px 8px", textDecoration: "none" },
 };
 

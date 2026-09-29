@@ -148,8 +148,12 @@ serve(async (req) => {
 
     if (erPortal) {
       const adresse = `${PORTAL}/${portalSlug}`;
+      // Firmaets navn fra Opsaetning -> Firma (29.9.2026). Kan det ikke laeses, staar
+      // der det gamle navn: en indstilling maa aldrig stoppe en invitation.
+      const { data: firma } = await admin.from("firma").select("navn").eq("id", "default").maybeSingle();
+      const firmanavn = firma?.navn?.trim() || "Jammerbugt Rengøring";
       html = `<p>Hej ${body.navn ?? ""}</p>`
-        + `<p>Du har fået adgang til kundeportalen hos Jammerbugt Rengøring, `
+        + `<p>Du har fået adgang til kundeportalen hos ${firmanavn}, `
         + `hvor du kan se jeres opgaver og fakturaer.</p>`
         + `<p><a href="${adresse}">${adresse}</a></p>`
         + `<p>Skriv din mailadresse på siden, så sender vi dig en kode at logge ind `
