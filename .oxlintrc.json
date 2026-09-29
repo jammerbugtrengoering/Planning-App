@@ -22,7 +22,8 @@
     "dubletter.test.mjs",
     "indlaesning.test.mjs",
     "vindue.test.mjs",
-    "tidsmaaling.test.mjs"
+    "tidsmaaling.test.mjs",
+    "excel.test.mjs"
   ],
   "rules": {
     "no-undef": "error",

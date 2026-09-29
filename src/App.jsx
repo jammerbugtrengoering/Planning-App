@@ -2881,6 +2881,81 @@ function PlanningApp({ session, onSignOut }) {
       custAccessRef.current = custAccess;
 
       // Serviceordre-skabeloner – saml skills op + hent kundedata
+      // Oversaettelsen fra databasens raekke til appens opgave. Lagt i en funktion,
+      // fordi ANDEN RUNDE skal bruge nøjagtig den samme — to naesten-ens
+      // oversaettelser er præcis sådan et felt som poNumber bliver glemt ét af
+      // stederne, og det kostede os 200 skrivninger ved hver opstart.
+      const kortlaegOpgave = (i) => {
+        const cust = customersData?.find((c) => c.id === i.customer_id);
+        return {
+          ...i,
+          templateId: i.template_id ?? null,
+          timeLog: i.time_log ?? [],
+          requiredSkills: i.required_skills ?? [],
+          customerName: (i.customer_name || cust?.name || i.customer_id) ?? "",
+          address: (i.address_text || cust?.address) ?? "",
+          // poNumber og videoUrl SKAL staa her, selvom de ser overfloedige ud.
+          //
+          // De manglede indtil 21.9.2026, og raekken beholdt kun sine snake_case-navne
+          // fra databasen. Resten af appen laeser t.poNumber, saa en nyhentet opgave
+          // havde ingen reference — og saa gik det i ring:
+          //
+          //   1. selvhelbredelsen satte poNumber paa ud fra aftalen
+          //   2. syncHealedAssignments saa tomt mod «Grethe Bach Sørensen»,
+          //      troede opgaven var aendret og skrev den — ét kald pr. opgave
+          //   3. naeste opstart tabte oversaettelsen feltet igen
+          //
+          // Cirka 200 opgaver blev skrevet ved hver eneste opstart, med nøjagtig de
+          // samme vaerdier som stod der i forvejen. Maalt tre gange: 202, 411, 201.
+          // Det kunne aldrig konvergere, for fejlen laa i oversaettelsen og ikke i data.
+          //
+          // Det alvorlige var ikke tiden. poNumber baerer borgerens navn paa
+          // kommunens opgaver og ender som kommentar paa fakturalinjen i Dinero.
+          // Selvhelbredelsen springer opgaver med registreret tid over — altsaa
+          // netop dem der skal faktureres — saa for dem var feltet tomt.
+          poNumber: i.po_number ?? "",
+          videoUrl: i.video_url ?? "",
+          // Samme fejl, fundet af proeven i samme ombaering. Kundens nummer i Dinero
+          // er sluppet med, fordi selvhelbredelsen kun skriver det, naar aftalen HAR
+          // et — og det har alle aftaler i dag. Havde én manglet det, ville
+          // syncInstance have skrevet null oven i opgavens eget nummer, og fakturaen
+          // ville ikke kunne finde kunden.
+          dineroContactGuid: i.dinero_contact_guid ?? "",
+          // Samme fejl-mønster som poNumber/dineroContactGuid ovenfor: mangler disse
+          // her, er de altid tomme på en nyhentet opgave, og selvhelbredelsen ville
+          // skrive dem tilbage ved hver eneste opstart uden at det nogensinde retter sig.
+          telefon: i.telefon ?? "",
+          email: i.email ?? "",
+          kontaktperson: i.kontaktperson ?? "",
+          accessInstructions: instAccess[i.id] || custAccess[i.customer_id] || "",
+          needsKeyPickup: i.needs_key_pickup ?? false,
+          contractType: i.contract_type || "privat",
+          pricingType: i.pricing_type || "hourly",
+          fixedPrice: i.fixed_price,
+          scheduledTime: i.scheduled_time ? i.scheduled_time.slice(0, 5) : null,
+          checklistTemplateIds: i.checklist_template_ids || [],
+          extraItems: i.extra_items || [],
+          invoiceReady: i.invoice_ready ?? false,
+          dineroExported: i.dinero_exported ?? false,
+          startDate: i.start_date || null,
+          expiryDate: i.expiry_date || null,
+          blockGroupId: i.block_group_id || null,
+          dineroSynced: i.dinero_synced ?? false,
+          includeInAuto: i.include_in_auto ?? false,
+          offSchedule: i.off_schedule ?? false, completedBy: i.completed_by ?? null, completedAt: i.completed_at ?? null,
+        nexusConfirmed: i.nexus_confirmed ?? null,
+          onSchedule: i.on_schedule ?? false,
+          // Samme grund som i realtime-kortlaegningen: laeses de ikke ind, skriver
+          // syncInstance null tilbage, og koerslen forsvinder naar nogen roerer
+          // aktiviteten.
+          kmFraAdresse: i.km_fra_adresse || null,
+          kmTurRetur: i.km_tur_retur ?? false,
+          oplaeringMedarbejdere: i.oplaering_medarbejdere ?? [],
+      tidFordeling: i.tid_fordeling ?? {},
+          tidFordeling: i.tid_fordeling ?? {},
+          kmAnslaaet: i.km_anslaaet ?? null,
+        };
+      };
       if (tplData?.length) {
         const mapped = tplData.map((t) => {
           const cust = customersData?.find((c) => c.id === t.customer_id);
@@ -2931,81 +3006,6 @@ function PlanningApp({ session, onSignOut }) {
 
         // Opbyg instanser fra skabeloner + eksisterende instanser
         const { week: currentWeek, year: currentYear } = isoWeekInfo(new Date());
-        // Oversaettelsen fra databasens raekke til appens opgave. Lagt i en funktion,
-        // fordi ANDEN RUNDE skal bruge nøjagtig den samme — to naesten-ens
-        // oversaettelser er præcis sådan et felt som poNumber bliver glemt ét af
-        // stederne, og det kostede os 200 skrivninger ved hver opstart.
-        const kortlaegOpgave = (i) => {
-          const cust = customersData?.find((c) => c.id === i.customer_id);
-          return {
-            ...i,
-            templateId: i.template_id ?? null,
-            timeLog: i.time_log ?? [],
-            requiredSkills: i.required_skills ?? [],
-            customerName: (i.customer_name || cust?.name || i.customer_id) ?? "",
-            address: (i.address_text || cust?.address) ?? "",
-            // poNumber og videoUrl SKAL staa her, selvom de ser overfloedige ud.
-            //
-            // De manglede indtil 21.9.2026, og raekken beholdt kun sine snake_case-navne
-            // fra databasen. Resten af appen laeser t.poNumber, saa en nyhentet opgave
-            // havde ingen reference — og saa gik det i ring:
-            //
-            //   1. selvhelbredelsen satte poNumber paa ud fra aftalen
-            //   2. syncHealedAssignments saa tomt mod «Grethe Bach Sørensen»,
-            //      troede opgaven var aendret og skrev den — ét kald pr. opgave
-            //   3. naeste opstart tabte oversaettelsen feltet igen
-            //
-            // Cirka 200 opgaver blev skrevet ved hver eneste opstart, med nøjagtig de
-            // samme vaerdier som stod der i forvejen. Maalt tre gange: 202, 411, 201.
-            // Det kunne aldrig konvergere, for fejlen laa i oversaettelsen og ikke i data.
-            //
-            // Det alvorlige var ikke tiden. poNumber baerer borgerens navn paa
-            // kommunens opgaver og ender som kommentar paa fakturalinjen i Dinero.
-            // Selvhelbredelsen springer opgaver med registreret tid over — altsaa
-            // netop dem der skal faktureres — saa for dem var feltet tomt.
-            poNumber: i.po_number ?? "",
-            videoUrl: i.video_url ?? "",
-            // Samme fejl, fundet af proeven i samme ombaering. Kundens nummer i Dinero
-            // er sluppet med, fordi selvhelbredelsen kun skriver det, naar aftalen HAR
-            // et — og det har alle aftaler i dag. Havde én manglet det, ville
-            // syncInstance have skrevet null oven i opgavens eget nummer, og fakturaen
-            // ville ikke kunne finde kunden.
-            dineroContactGuid: i.dinero_contact_guid ?? "",
-            // Samme fejl-mønster som poNumber/dineroContactGuid ovenfor: mangler disse
-            // her, er de altid tomme på en nyhentet opgave, og selvhelbredelsen ville
-            // skrive dem tilbage ved hver eneste opstart uden at det nogensinde retter sig.
-            telefon: i.telefon ?? "",
-            email: i.email ?? "",
-            kontaktperson: i.kontaktperson ?? "",
-            accessInstructions: instAccess[i.id] || custAccess[i.customer_id] || "",
-            needsKeyPickup: i.needs_key_pickup ?? false,
-            contractType: i.contract_type || "privat",
-            pricingType: i.pricing_type || "hourly",
-            fixedPrice: i.fixed_price,
-            scheduledTime: i.scheduled_time ? i.scheduled_time.slice(0, 5) : null,
-            checklistTemplateIds: i.checklist_template_ids || [],
-            extraItems: i.extra_items || [],
-            invoiceReady: i.invoice_ready ?? false,
-            dineroExported: i.dinero_exported ?? false,
-            startDate: i.start_date || null,
-            expiryDate: i.expiry_date || null,
-            blockGroupId: i.block_group_id || null,
-            dineroSynced: i.dinero_synced ?? false,
-            includeInAuto: i.include_in_auto ?? false,
-            offSchedule: i.off_schedule ?? false, completedBy: i.completed_by ?? null, completedAt: i.completed_at ?? null,
-          nexusConfirmed: i.nexus_confirmed ?? null,
-            onSchedule: i.on_schedule ?? false,
-            // Samme grund som i realtime-kortlaegningen: laeses de ikke ind, skriver
-            // syncInstance null tilbage, og koerslen forsvinder naar nogen roerer
-            // aktiviteten.
-            kmFraAdresse: i.km_fra_adresse || null,
-            kmTurRetur: i.km_tur_retur ?? false,
-            oplaeringMedarbejdere: i.oplaering_medarbejdere ?? [],
-        tidFordeling: i.tid_fordeling ?? {},
-            tidFordeling: i.tid_fordeling ?? {},
-            kmAnslaaet: i.km_anslaaet ?? null,
-          };
-        };
         const existingInst = (instData || []).map(kortlaegOpgave);
         // Planlaegningshorisont: opgaverne materialiseres altid fire uger frem, saa
         // planen kan overskues en maaned ud, og aftaler med fast medarbejder faar
