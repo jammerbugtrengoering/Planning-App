@@ -10,7 +10,7 @@
 
 import {
   ugeInfo, ugeNoegle, ugerIVinduet, vinduetsGraenser, vinduetsStykker,
-  ugenErHentet, hentedeUgerFra, UGER_BAGUD, UGER_FREM,
+  ugenErHentet, hentedeUgerFra, UGER_BAGUD, UGER_FREM, andenRundesGraense,
 } from "./src/vindue.js";
 
 let fejl = 0, ok = 0;
@@ -105,6 +105,18 @@ sandt("undefined tæller også som alt hentet", ugenErHentet(undefined, 2028, 12
 // skal værnet sige nej til alt — ellers ville en fejlet første hentning give frit
 // slag til horisonten.
 falsk("tomt Set betyder ingenting er hentet", ugenErHentet(new Set(), 2026, 39));
+
+// ── anden runde: alt til og med en uge ───────────────────────────────────────
+const til = { tilOgMed: ugeNoegle(2027, 13) };
+sandt("en uge før grænsen er hentet", ugenErHentet(til, 2026, 40));
+sandt("grænsens egen uge er hentet", ugenErHentet(til, 2027, 13));
+falsk("ugen efter grænsen er ikke", ugenErHentet(til, 2027, 14));
+falsk("et senere år er ikke", ugenErHentet(til, 2028, 1));
+sandt("en uge med ét ciffer før grænsen er hentet", ugenErHentet(til, 2027, 9));
+const ag = andenRundesGraense(new Date(2026, 8, 29));
+er("26 uger frem fra uge 40 2026 er uge 13 2027 (2026 har 53 uger)", ugeNoegle(ag.aar, ag.uge), "2027-13");
+const ag2 = andenRundesGraense(new Date(2026, 5, 1));
+er("inden for samme år", ugeNoegle(ag2.aar, ag2.uge), "2026-49");
 
 // ── nøglen ───────────────────────────────────────────────────────────────────
 er("nøglen har altid to cifre i ugen", ugeNoegle(2026, 7), "2026-07");

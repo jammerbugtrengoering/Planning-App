@@ -110,9 +110,32 @@ export function vinduetsGraenser(idag = new Date(), bagud = UGER_BAGUD, frem = U
 //
 // `hentedeUger` er et Set af ugeNoegle(). Er ALT hentet, sendes null — så er svaret
 // ja til alt, og appen opfører sig som før ombygningen.
+//
+// Efter anden runde (29.9.2026) kan det ogsaa vaere { tilOgMed: "2027-13" }: alt til
+// og med den uge er hentet, hvad der ligger efter, er ikke. Noeglen har altid to cifre
+// i ugen, saa tekst-sammenligningen giver den rigtige raekkefoelge.
 export function ugenErHentet(hentedeUger, aar, uge) {
   if (hentedeUger === null || hentedeUger === undefined) return true;
+  if (typeof hentedeUger.tilOgMed === "string") return ugeNoegle(aar, uge) <= hentedeUger.tilOgMed;
   return hentedeUger.has(ugeNoegle(aar, uge));
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ANDEN OG TREDJE RUNDE (29.9.2026)
+//
+// En aftale danner hele sin loebetid, op til to aar, naar den gemmes. Af 16.600 opgaver
+// laa 13.800 i de kommende aar — 23 MB, der blev hentet ved hver eneste opstart, selvom
+// planlaeggeren sjaeldent kigger mere end et halvt aar frem.
+//
+// Anden runde henter derfor kun op til et halvt aar frem. Resten — tredje runde —
+// hentes foerst, naar noget faktisk har brug for det: en side der regner paa hele
+// bunken, en uge laengere ude, eller en aendring af en hel aftale.
+export const UGER_ANDEN_RUNDE = 26;
+
+export function andenRundesGraense(idag = new Date(), frem = UGER_ANDEN_RUNDE) {
+  const d = mandagIUgen(idag);
+  d.setDate(d.getDate() + frem * 7);
+  return ugeInfo(d);
 }
 
 // Bygger listen ud fra de uger, vinduet dækkede.

@@ -12,7 +12,7 @@ import { holdOejeMedNyVersion } from "./nyversion";
 import { filtrerUgevalg } from "./ugevalg";
 import { portefoeljeTal, aarMedBesoeg } from "./portefoelje";
 import { hentAlleRaekker } from "./hentalle";
-import { vinduetsGraenser, vinduetsStykker, hentedeUgerFra, ugenErHentet } from "./vindue";
+import { vinduetsGraenser, vinduetsStykker, hentedeUgerFra, ugenErHentet, andenRundesGraense, ugeNoegle } from "./vindue";
 import { opsummerMaaling, formatAfstand, stopurStatus, startSlutLinjer } from "./tidsmaaling";
 import { hentXlsx } from "./excel";
 import { findDubletter } from "./dubletter";
@@ -540,6 +540,25 @@ async function hentVinduet() {
 // Skal det goeres billigere en dag, er det her, man begynder.
 function hentResten() {
   return fetchAllRows("instances_let", "*", (q) => q.is("deleted_at", null));
+}
+
+// ANDEN RUNDE (29.9.2026): alt til og med graensen — et halvt aar frem.
+// To kald med almindelige betingelser, af samme grund som i hentVinduet.
+async function hentTilGraense(g) {
+  const [foer, iAar] = await Promise.all([
+    fetchAllRows("instances_let", "*", (q) => q.is("deleted_at", null).lt("year", g.aar)),
+    fetchAllRows("instances_let", "*", (q) => q.is("deleted_at", null).eq("year", g.aar).lte("week", g.uge)),
+  ]);
+  return [...foer, ...iAar];
+}
+
+// TREDJE RUNDE: alt efter graensen. Hentes foerst, naar noget har brug for det.
+async function hentEfterGraense(g) {
+  const [iAar, senere] = await Promise.all([
+    fetchAllRows("instances_let", "*", (q) => q.is("deleted_at", null).eq("year", g.aar).gt("week", g.uge)),
+    fetchAllRows("instances_let", "*", (q) => q.is("deleted_at", null).gt("year", g.aar)),
+  ]);
+  return [...iAar, ...senere];
 }
 
 // ── Kundeopslag (29.9.2026) ──────────────────────────────────────────────────
@@ -1600,7 +1619,7 @@ const MODULE_HELP = {
         "Opgaverne oprettes automatisk ud fra aftalerne, fire uger frem. Det sker når du åbner appen, og alt nyt gemmes med det samme.",
         "Horisonten opretter opgaverne, men fordeler dem ikke. Aftaler med fast medarbejder får hende straks — alt andet ligger i Ikke tildelt indtil du trykker Planlæg.",
         "Bladrer du længere frem end fire uger, oprettes ugen når du åbner den, men den gemmes først når du rører den. Tildel en medarbejder, flyt eller ret noget, ellers er den væk igen når du lukker appen.",
-        "De første par sekunder efter du har åbnet appen, er kun ugerne omkring i dag hentet. Bladrer du langt frem i det tidsrum, siger siden det med rødt — og så skal du vente, før du lægger noget ind. En tom uge betyder dér ikke «ingen opgaver», men «ikke hentet endnu».",
+        "De første par sekunder efter du har åbnet appen, er kun ugerne omkring i dag hentet, og derefter et halvt år frem. Opgaverne længere ude hentes først, når du bladrer derud, åbner en side der regner på det hele (fx Aftaler eller Rapporter), eller retter en hel aftale — så går der et øjeblik ekstra den første gang. Mens en uge ikke er hentet, siger siden det med rødt, og så skal du vente, før du lægger noget ind. En tom uge betyder dér ikke «ingen opgaver», men «ikke hentet endnu».",
         "Rapportering, Aftaler, Fakturering, Kundetimer og Løn data regner på alle opgaver. De siger med gult, at tallene ikke er færdige, indtil resten er hentet. Det tager typisk få sekunder.",
         "Horisonten ruller med dagen, og der kommer aldrig dubletter — systemet tjekker på aftale, uge, år og dag.",
         "Om en opgave overhovedet opstår afhænger af fem ting: dagen skal være valgt på aftalen, intervallet skal ramme, og dagen skal ligge efter startdatoen, før udløbsdatoen og ikke efter en eventuel ophørsdato. Mangler der opgaver, er det næsten altid startdatoen eller intervallet.",
@@ -2513,6 +2532,15 @@ function PlanningApp({ session, onSignOut }) {
   // tal, der bygger paa en femtedel af opgaverne, er ikke «næsten rigtigt» — det er
   // forkert. De siger det hoejt i stedet, indtil resten er inde.
   const [alleOpgaverHentet, setAlleOpgaverHentet] = useState(false);
+  // Tredje runde (29.9.2026). Se hentEfterGraense og sikrAlleOpgaver.
+  const alleHentetRef = useRef(false);
+  const venterPaaAlleRef = useRef([]);
+  const andenRundeRef = useRef(null);
+  const tredjeRundeRef = useRef(null);
+  const oenskerTredjeRef = useRef(false);
+  const graenseRef = useRef(null);
+  const kortlaegRef = useRef(null);
+  const senesteRef = useRef({});
   // Den samme liste som vaernet ved ensureWeekInstances bruger — men som tilstand, saa
   // skaermen kan tegne sig om, naar anden runde lander. Vaernet selv ligger paa
   // modulniveau, fordi det skal gaelde alle kaldesteder; det her er kun til visningen.
@@ -2724,6 +2752,13 @@ function PlanningApp({ session, onSignOut }) {
 
     async function loadAll() {
       setLoading(true);
+      // En genindlaesning erstatter hele opgavelisten med vinduet — saa er resten
+      // heller ikke hentet laengere.
+      alleHentetRef.current = false;
+      tredjeRundeRef.current = null;
+      andenRundeRef.current = null;
+      setAlleOpgaverHentet(false);
+      graenseRef.current = andenRundesGraense(new Date());
       const [samlet, vinduet] = await Promise.all([hentStartdata(), hentVinduet()]);
       const [
         { data: skillsData },
@@ -3011,6 +3046,7 @@ function PlanningApp({ session, onSignOut }) {
           kmAnslaaet: i.km_anslaaet ?? null,
         };
       };
+      kortlaegRef.current = kortlaegOpgave;
       if (tplData?.length) {
         const mapped = tplData.map((t) => {
           const cust = customersData?.find((c) => c.id === t.customer_id);
@@ -3119,32 +3155,31 @@ function PlanningApp({ session, onSignOut }) {
         // vinduet — ugeplanen virker, og rapporterne bliver ved at sige «henter».
         // Det er det rigtige forhold: en tom ugeplan er en arbejdsdag, der gaar i staa,
         // mens en rapport, der er et minut om at komme, er til at leve med.
-        hentResten().then((alle) => {
+        // Kun et halvt aar frem (29.9.2026). Resten er tredje runde.
+        const graense = graenseRef.current;
+        const tilOgMed = { tilOgMed: ugeNoegle(graense.aar, graense.uge) };
+        andenRundeRef.current = hentTilGraense(graense).then((alle) => {
           // Ingen opgaver uden for vinduet er ogsaa et svar (29.9.2026): et nyt firma
           // har kun de faa, foerste runde allerede hentede. Foer blev der returneret
           // her uden at melde faerdig, og banneret «Tallene er ikke færdige endnu»
           // stod saa for evigt. Kun en fejl (catch nedenfor) lader det staa.
-          if (!alle) return;
-          if (!alle.length) {
-            saetHentedeUger(null);
-            setHentedeUgerNu(null);
-            setAlleOpgaverHentet(true);
-            return;
+          if (alle && alle.length) {
+            const kortlagt = alle.map(kortlaegOpgave);
+            setInstances((cur) => {
+              // Vinduets udgave vinder. Den har vaeret gennem selvhelbredelsen og kan
+              // have faaet en medarbejder paa af horisonten — og de aendringer er ikke
+              // noedvendigvis skrevet ned endnu.
+              const efterId = new Map(kortlagt.map((t) => [t.id, t]));
+              cur.forEach((t) => efterId.set(t.id, t));
+              return [...efterId.values()];
+            });
           }
-          const kortlagt = alle.map(kortlaegOpgave);
-          setInstances((cur) => {
-            // Vinduets udgave vinder. Den har vaeret gennem selvhelbredelsen og kan
-            // have faaet en medarbejder paa af horisonten — og de aendringer er ikke
-            // noedvendigvis skrevet ned endnu.
-            const efterId = new Map(kortlagt.map((t) => [t.id, t]));
-            cur.forEach((t) => efterId.set(t.id, t));
-            return [...efterId.values()];
-          });
-          // Nu maa horisonten røre alle uger igen.
-          saetHentedeUger(null);
-          setHentedeUgerNu(null);
-          setAlleOpgaverHentet(true);
-        }).catch((e) => {
+          // Nu maa horisonten roere alle uger til og med graensen.
+          saetHentedeUger(tilOgMed);
+          setHentedeUgerNu(tilOgMed);
+          if (oenskerTredjeRef.current) startTredjeRunde();
+        });
+        andenRundeRef.current.catch((e) => {
           console.error("Anden runde af opgaver fejlede:", e);
         });
       } else {
@@ -3844,6 +3879,66 @@ function PlanningApp({ session, onSignOut }) {
     if (kunArvede.length) gemArvedeFelter(kunArvede);
   }
 
+  // ── Tredje runde (29.9.2026) ──────────────────────────────────────────────
+  // Opgaverne mere end et halvt aar frem hentes foerst, naar noget har brug for
+  // dem: en side, der regner paa hele bunken, en uge derude, eller en aendring af
+  // en hel aftale. Aendringerne venter paa hentningen og koeres saa med de friske
+  // opgaver — ellers ville en ny aftale kun blive dannet et halvt aar frem, og en
+  // rettelse paa aftalen ville ikke naa ud til de fjerne opgaver.
+  useEffect(() => {
+    if (!alleOpgaverHentet) return;
+    alleHentetRef.current = true;
+    venterPaaAlleRef.current.splice(0).forEach((svar) => svar(true));
+  }, [alleOpgaverHentet]);
+
+  function startTredjeRunde() {
+    if (alleHentetRef.current || tredjeRundeRef.current) return;
+    oenskerTredjeRef.current = true;
+    const anden = andenRundeRef.current;
+    if (!anden) return; // anden runde er ikke startet endnu — den starter os bagefter
+    tredjeRundeRef.current = anden
+      .then(() => hentEfterGraense(graenseRef.current))
+      .then((rest) => {
+        const kortlaeg = kortlaegRef.current;
+        if (rest.length && kortlaeg) {
+          const kortlagt = rest.map(kortlaeg);
+          setInstances((cur) => {
+            const efterId = new Map(kortlagt.map((t) => [t.id, t]));
+            cur.forEach((t) => efterId.set(t.id, t));
+            return [...efterId.values()];
+          });
+        }
+        oenskerTredjeRef.current = false;
+        saetHentedeUger(null);
+        setHentedeUgerNu(null);
+        setAlleOpgaverHentet(true);
+      })
+      .catch((e) => {
+        console.error("Tredje runde af opgaver fejlede:", e);
+        tredjeRundeRef.current = null;
+        venterPaaAlleRef.current.splice(0).forEach((svar) => svar(false));
+      });
+  }
+
+  function sikrAlleOpgaver() {
+    if (alleHentetRef.current) return Promise.resolve(true);
+    const p = new Promise((svar) => venterPaaAlleRef.current.push(svar));
+    startTredjeRunde();
+    return p;
+  }
+
+  // Koerer handlingen igen, naar alt er hentet — med den nyeste udgave af funktionen,
+  // saa den ser alle opgaverne og ikke kun dem, der var der, da der blev trykket.
+  async function medAlleOpgaver(navn, args) {
+    notify("Henter de fjerne opgaver først — et øjeblik …");
+    const ok = await sikrAlleOpgaver();
+    if (!ok) {
+      notify("Kunne ikke hente alle opgaverne — prøv igen.");
+      return false;
+    }
+    return senesteRef.current[navn](...args);
+  }
+
   function changeWeek(delta) {
     // Flyt ankerdatoen 7 rigtige kalenderdage ad gangen — det ruller helt naturligt
     // om ved årsskifte (uge 52/53 -> uge 1 i næste år) uden nogensinde at kunne
@@ -3944,6 +4039,7 @@ function PlanningApp({ session, onSignOut }) {
   // medarbejders kompetencer/område lige er blevet opdateret, og der ligger
   // "ikke tildelt"-opgaver markeret til auto-planlægning i andre uger end den viste.
   function runAutoAllWeeks() {
+    if (!alleHentetRef.current) return medAlleOpgaver("runAutoAllWeeks", []);
     setInstances((prev) => {
       const weekKeys = new Set(prev.map((t) => `${t.week}|${t.year}`));
       let result = [...prev];
@@ -3985,6 +4081,7 @@ function PlanningApp({ session, onSignOut }) {
   // Er saveAsDraft sand, gemmes den bare videre som kladde. Er den falsk, er det en
   // godkendelse: status saettes til aktiv, og opgaverne dannes fra startdatoen.
   async function updateTemplate(payload, tplId) {
+    if (!alleHentetRef.current) return medAlleOpgaver("updateTemplate", [payload, tplId]);
     // Godkendes en kladde, der er MÆRKET som dublet, saa spoerg foerst.
     //
     // 21.9.2026 blev en kladde fra Anders' ruteplan godkendt kl. 07.42. Der laa i
@@ -4181,6 +4278,7 @@ function PlanningApp({ session, onSignOut }) {
   }
 
   async function addTask(payload) {
+    if (payload.type === "fixed" && !alleHentetRef.current) return medAlleOpgaver("addTask", [payload]);
     const checklistItemsCombined = [
       ...payload.checklistTemplateIds.flatMap((id) => checklistTemplates.find((c) => c.id === id)?.items || []),
       ...payload.extraItems,
@@ -4426,6 +4524,7 @@ function PlanningApp({ session, onSignOut }) {
   // Matcher primært via templateId, men falder tilbage til titel-match for ældre
   // data hvor koblingen mellem opgave og skabelon mangler.
   function updateContractType(taskId, newType) {
+    if (!alleHentetRef.current) return medAlleOpgaver("updateContractType", [taskId, newType]);
     const task = instances.find((t) => t.id === taskId);
     if (!task) return;
     const tplId = task.templateId || null;
@@ -4471,6 +4570,7 @@ function PlanningApp({ session, onSignOut }) {
   // saa en stavefejl kan rettes et sted og gaelder fremover. Den viste opgave rettes
   // altid, uanset status. Kun administratorer maa kalde denne (haandhaeves i UI'en).
   function renameTask(taskId, newTitle) {
+    if (!alleHentetRef.current) return medAlleOpgaver("renameTask", [taskId, newTitle]);
     const trimmed = (newTitle || "").trim();
     if (!trimmed) return;
     const task = instances.find((t) => t.id === taskId);
@@ -4496,6 +4596,7 @@ function PlanningApp({ session, onSignOut }) {
   // falder tilbage til titel-match for ældre data hvor koblingen mangler (samme
   // strategi som updateContractType ovenfor).
   function updateCustomerInfo(taskId, fields) {
+    if (!alleHentetRef.current) return medAlleOpgaver("updateCustomerInfo", [taskId, fields]);
     const task = instances.find((t) => t.id === taskId);
     if (!task) return;
     const tplId = task.templateId || null;
@@ -4654,6 +4755,7 @@ function PlanningApp({ session, onSignOut }) {
   // fremtidige opgaver foedes med vedkommende, og alle kommende ikke-udfoerte
   // opgaver paa aftalen ombyttes med det samme. Udfoerte opgaver roeres aldrig.
   function setPreferredEmployee(templateId, empId) {
+    if (!alleHentetRef.current) return medAlleOpgaver("setPreferredEmployee", [templateId, empId]);
     if (!templateId || !empId) return;
     const emp = employees.find((e) => e.id === empId);
     const nowInfo = isoWeekInfo(new Date());
@@ -5563,6 +5665,19 @@ function PlanningApp({ session, onSignOut }) {
   const totalLogged = useMemo(
     () => instances.reduce((s, t) => s + fakturerbareMinutter(t), 0), [instances]);
   const wk = weekMeta(weekOffset, weekYear);
+  senesteRef.current = {
+    updateTemplate, addTask, setPreferredEmployee, updateContractType, renameTask,
+    updateCustomerInfo, runAutoAllWeeks,
+  };
+  // Sider der regner paa hele bunken, og uger ud over graensen, henter resten.
+  useEffect(() => {
+    if (alleHentetRef.current) return;
+    const g = graenseRef.current;
+    const udenfor = view === "uge" && g
+      && !ugenErHentet({ tilOgMed: ugeNoegle(g.aar, g.uge) }, wk.year, wk.weekNo);
+    if (SIDER_DER_KRAEVER_ALT.includes(view) || udenfor) startTredjeRunde();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view, wk.year, wk.weekNo]);
 
   if (loading) {
     return (
@@ -5879,8 +5994,8 @@ function PlanningApp({ session, onSignOut }) {
                       display: "flex", alignItems: "center", gap: 10 }}>
           <div style={{ width: 11, height: 11, borderRadius: "50%", background: "#D97706", flexShrink: 0 }} />
           <div>
-            <b>Tallene er ikke færdige endnu.</b> Opgaverne for resten af året og de
-            kommende år hentes stadig. Vent et øjeblik, og åbn siden igen.
+            <b>Tallene er ikke færdige endnu.</b> Opgaverne mere end et halvt år frem
+            hentes nu. Siden opdaterer sig selv om et øjeblik.
           </div>
         </div>
       )}
