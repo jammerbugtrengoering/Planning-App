@@ -1644,7 +1644,7 @@ const MODULE_HELP = {
         "Grunden er, at det ikke ændrer virkeligheden at flytte en opgave ind eller ud af mandag, når det er onsdag — det ændrer kun regnskabet, og så passer timerne ikke med det, medarbejderen faktisk har lavet.",
         "Skal noget rettes bagud, gøres det på selve opgaven under Fakturering, hvor tid og begrundelse hører hjemme."] },
     { h: "Belægning", p: [
-        "«📊 Belægning» ved siden af signaturforklaringen viser, hvor meget hver medarbejder har på i den viste uge, og hvor meget der er tilbage.",
+        "«📊 Belægning» i signaturforklaringen til højre over ugeplanen viser, hvor meget hver medarbejder har på i den viste uge, og hvor meget der er tilbage.",
         "Den er foldet væk som udgangspunkt og folder sig ud over planen. Før lå den nederst på siden, hvor man skulle scrolle forbi den hver gang — den er et opslag man laver, når arbejde skal fordeles, ikke noget der skal stå fremme hele tiden.",
         "Vælger du et område øverst, viser den kun medarbejderne i det område."] },
     { h: "Gitter eller tidslinje", p: [
@@ -6403,22 +6403,6 @@ function WeekView({ employees, instances, unplaced, adgangTekst, onUdskrivMedAdg
           🔑 Tag adgangsoplysninger med
         </label>
 
-        {/* Signaturforklaringen laa foer paa sin egen linje under vaerktoejslinjen og
-            aad en raekke af skaermhoejden. Den staar her nu, hvor der var plads. */}
-        <div style={{ display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
-          {Object.entries(TYPE_META).filter(([k]) => k !== "flexible").map(([k, m]) => (
-            <span key={k} style={{ ...styles.typeChip, color: m.color, background: m.bg }}>{m.label}</span>
-          ))}
-          <button onClick={() => setVisBelaegning((v) => !v)}
-            title="Se hvor meget hver medarbejder har på i denne uge"
-            style={{ ...styles.typeChip, cursor: "pointer", border: "none",
-                     fontFamily: "inherit",
-                     color: visBelaegning ? "#fff" : "#475569",
-                     background: visBelaegning ? "#475569" : "#F1F5F9" }}>
-            📊 Belægning
-          </button>
-        </div>
-
         <div style={styles.toolbarSpacer} />
         <div style={styles.weekNav}>
           <button style={styles.weekNavBtn} onClick={onPrevWeek}><ChevronLeft size={16} /></button>
@@ -6431,8 +6415,23 @@ function WeekView({ employees, instances, unplaced, adgangTekst, onUdskrivMedAdg
         </div>
       </div>
 
-      <div style={styles.legendRow}>
+      <div style={{ ...styles.legendRow, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
         <span style={styles.hint}>Træk en opgave tilbage til "Ikke tildelt" for at frigive den, eller klik + på en opgave for at sætte flere medarbejdere på.</span>
+        {/* Signaturforklaringen staar hoejrestillet paa hint-linjen (29.9.2026, Jonn),
+            saa ugevaelgeren kan staa oppe i linjen med «Print ugeplan». */}
+        <div style={{ display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap", marginLeft: "auto" }}>
+          {Object.entries(TYPE_META).filter(([k]) => k !== "flexible").map(([k, m]) => (
+            <span key={k} style={{ ...styles.typeChip, color: m.color, background: m.bg }}>{m.label}</span>
+          ))}
+          <button onClick={() => setVisBelaegning((v) => !v)}
+            title="Se hvor meget hver medarbejder har på i denne uge"
+            style={{ ...styles.typeChip, cursor: "pointer", border: "none",
+                     fontFamily: "inherit",
+                     color: visBelaegning ? "#fff" : "#475569",
+                     background: visBelaegning ? "#475569" : "#F1F5F9" }}>
+            📊 Belægning
+          </button>
+        </div>
       </div>
 
       {/* Belaegningen laa foer nederst paa siden, under hele ugeplanen. Der
