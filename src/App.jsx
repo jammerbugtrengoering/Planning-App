@@ -1615,6 +1615,7 @@ const MODULE_HELP = {
         "Loggen gemmes i 12 måneder. Den findes fra 29.9.2026 — ældre ændringer kan ikke findes."] },
   ] },
   uge: { title: "Ugeplan", intro: "Her planlægger du ugen. Hver medarbejder har en række, hver dag en kolonne.", blocks: [
+    { h: "Øv dig først", p: ["Knappen «Øv dig på en prøveuge» øverst i hjælpen åbner en opdigtet uge med ti små øvelser: tildele og flytte opgaver, melde en syg, oprette en fast aftale, rydde indbakken og sende ugen til fakturering.", "Intet af det er rigtigt. Den taler ikke med databasen, så du kan ikke ødelægge noget, og den kan tages så mange gange, du vil. Den er også god at vise, når nogen skal se, hvordan planlægningen virker."] },
     { h: "Sådan planlægger systemet", p: [
         "Opgaverne oprettes automatisk ud fra aftalerne, fire uger frem. Det sker når du åbner appen, og alt nyt gemmes med det samme.",
         "Horisonten opretter opgaverne, men fordeler dem ikke. Aftaler med fast medarbejder får hende straks — alt andet ligger i Ikke tildelt indtil du trykker Planlæg.",
@@ -2389,6 +2390,13 @@ function ModuleHelp({ view, onClose }) {
                          color:"#fff", borderRadius:8, padding:"4px 10px", fontSize:11.5, cursor:"pointer" }}>
                 {påPrivatliv ? "← Tilbage" : "Personoplysninger"}
               </button>
+              {/* Oevelsesugen (29.9.2026): samme tanke som «Øv dig på en prøvedag» i
+                  Worklist. Samme fane, saa der kun er én app og én vej tilbage. */}
+              <a href="/proev.html"
+                title="En opdigtet uge med ti små øvelser — intet af det er rigtigt"
+                style={{ border:"1px solid #D6246E", background:"#D6246E", color:"#fff", borderRadius:8, padding:"4px 10px", fontSize:11.5, textDecoration:"none", fontWeight:700 }}>
+                Øv dig på en prøveuge
+              </a>
             </div>
           </div>
           <button onClick={onClose} style={{ border:"none", background:"#333", color:"#fff", borderRadius:8, width:34, height:34, fontSize:17, cursor:"pointer" }}>✕</button>

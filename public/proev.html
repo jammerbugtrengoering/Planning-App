@@ -1,0 +1,591 @@
+<!doctype html>
+<html lang="da">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Prøv planlægningen</title>
+<!--
+  ØVELSESUDGAVEN AF PLANLÆGNINGEN (29.9.2026)
+  ===========================================
+
+  En hel uge man kan planlægge så mange gange man vil, uden at noget af det er
+  rigtigt. Filen taler ikke med databasen, gemmer ingenting og kan ikke komme til
+  at røre en rigtig kunde eller medarbejder. Den kan åbnes fra appen (/proev.html),
+  sendes i en mail eller vises for et rengøringsfirma, der overvejer løsningen.
+
+  Søsteren til Proev-Worklist.html. Samme tanke: der er intet sted i den rigtige
+  app, hvor man kan fejle sikkert — her koster et forkert tryk ingenting.
+
+  ØVELSERNE
+  Ti små opgaver i den rækkefølge, en ny planlægger møder dem:
+    1-3  ugeplanen: læse den, tildele, flytte
+    4-5  sygdom: meld en syg, fordel hendes opgaver
+    6    ny aftale med en ny kunde
+    7-9  indbakken: ønske om ny tid, kundebestilling, afvigelse
+    10   fakturering
+  Man kan hoppe frit rundt — øvelserne krydses af, når det, de beder om, faktisk
+  er sket i ugeplanen, ikke når man trykker «videre».
+
+  FORENKLET MED VILJE
+  Den rigtige app har tidslinje, køretid, kompetencer, områder, tjeklister og
+  meget mere. Her er kun det, der skal til for at forstå tankegangen. Navne,
+  kunder og priser er opdigtede.
+
+  RETTELSER
+  Ugen står i START_OPGAVER, medarbejderne i MEDARBEJDERE og øvelserne i OEVELSER.
+  Teksterne må gerne rettes. Ændres noget i den rigtige app, så ret også her —
+  øvelsen må ikke lære folk noget, appen ikke længere gør.
+-->
+<style>
+  :root {
+    color-scheme: light;
+    --pink: #D6246E; --pink-lys: #FCE7F0; --pink-mork: #9D174D;
+    --sort: #111111; --tekst: #1F2937; --daempet: #64748B; --kant: #E2E8F0;
+    --bag: #FFF7FA; --groen: #16A34A; --groen-lys: #DCFCE7; --blaa: #2563EB; --blaa-lys: #DBEAFE;
+    --gul: #F59E0B; --gul-lys: #FEF3C7; --lilla: #7C3AED; --lilla-lys: #EDE9FE; --roed: #DC2626; --roed-lys: #FEE2E2;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; background: var(--bag); color: var(--tekst);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif; line-height: 1.45; }
+  button { font-family: inherit; cursor: pointer; }
+  .top { background: var(--sort); color: #fff; display: flex; align-items: center; gap: 14px; padding: 12px 20px; flex-wrap: wrap; }
+  .top .navn { font-weight: 800; font-size: 18px; }
+  .top .under { font-size: 12.5px; color: #CBD5E1; }
+  .top .oevelse { background: var(--gul); color: #111; font-weight: 800; font-size: 11.5px; padding: 3px 9px; border-radius: 99px; letter-spacing: .03em; }
+  .nav { margin-left: auto; display: flex; gap: 6px; align-items: center; }
+  .nav button { background: transparent; color: #E5E7EB; border: 0; padding: 8px 14px; border-radius: 9px; font-size: 14.5px; font-weight: 600; position: relative; }
+  .nav button.valgt { background: var(--pink); color: #fff; }
+  .prik { position: absolute; top: 2px; right: 2px; background: var(--roed); color: #fff; font-size: 10.5px; font-weight: 800; border-radius: 99px; min-width: 17px; height: 17px; display: grid; place-items: center; padding: 0 4px; }
+
+  .layout { display: grid; grid-template-columns: 1fr 340px; gap: 18px; padding: 18px 20px 40px; align-items: start; }
+  @media (max-width: 1050px) { .layout { grid-template-columns: 1fr; } .guide { position: static !important; order: -1; } }
+
+  .vaerktoej { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+  .knap { border: 0; border-radius: 10px; padding: 10px 16px; font-size: 14.5px; font-weight: 700; }
+  .knap-pink { background: var(--pink); color: #fff; }
+  .knap-hvid { background: #fff; color: #334155; border: 1.5px solid var(--kant); }
+  .knap-roed { background: #fff; color: var(--roed); border: 1.5px solid #FECACA; }
+  .knap-groen { background: var(--groen); color: #fff; }
+  .knap:disabled { opacity: .45; cursor: default; }
+  .uge { margin-left: auto; background: #fff; border-radius: 10px; padding: 8px 14px; font-weight: 700; box-shadow: 0 1px 2px rgba(0,0,0,.06); }
+  .hint { font-size: 13px; color: var(--daempet); margin: 4px 0 12px; }
+
+  .plan { background: #fff; border-radius: 14px; box-shadow: 0 1px 3px rgba(0,0,0,.06); overflow-x: auto; }
+  table.gitter { border-collapse: collapse; width: 100%; min-width: 820px; table-layout: fixed; }
+  .gitter th { font-size: 13px; color: #475569; font-weight: 800; padding: 10px 8px; border-bottom: 1px solid var(--kant); text-align: left; }
+  .gitter th:first-child, .gitter td:first-child { width: 128px; }
+  .gitter td { vertical-align: top; padding: 6px; border-bottom: 1px solid var(--kant); border-left: 1px solid #F1F5F9; min-height: 90px; height: 96px; }
+  .gitter tr.ikke td { background: #FFFBEB; }
+  .gitter td.celle.maal { background: #FDF2F8; outline: 2px dashed var(--pink); outline-offset: -3px; }
+  .gitter td.celle.blokeret { background: repeating-linear-gradient(45deg, #FEF2F2, #FEF2F2 8px, #FEE2E2 8px, #FEE2E2 16px); }
+  .emp { font-weight: 800; font-size: 14px; }
+  .emp small { display: block; font-weight: 500; color: var(--daempet); font-size: 11.5px; }
+  .belag { font-size: 11px; color: var(--daempet); margin-top: 2px; }
+
+  .kort { background: var(--pink-lys); border-left: 4px solid var(--pink); border-radius: 8px; padding: 6px 8px; margin-bottom: 6px; font-size: 12.5px; cursor: grab; user-select: none; }
+  .kort.erhverv { background: var(--blaa-lys); border-color: var(--blaa); }
+  .kort.nexus { background: var(--lilla-lys); border-color: var(--lilla); }
+  .kort.udfoert { opacity: .6; }
+  .kort.valgt { outline: 3px solid var(--sort); }
+  .kort b { display: block; font-size: 13px; color: #111; }
+  .kort .betaler { font-size: 11px; color: #6B21A8; }
+  .kort .tag { display: inline-block; font-size: 10.5px; font-weight: 800; padding: 1px 6px; border-radius: 99px; margin-top: 3px; }
+  .tag-roed { background: var(--roed-lys); color: var(--roed); }
+  .tag-groen { background: var(--groen-lys); color: #166534; }
+  .blok { background: var(--roed-lys); color: var(--roed); font-weight: 800; font-size: 12.5px; border-radius: 8px; padding: 6px 8px; margin-bottom: 6px; }
+
+  .guide { position: sticky; top: 14px; background: #fff; border-radius: 14px; box-shadow: 0 1px 3px rgba(0,0,0,.08); padding: 16px 16px 18px; }
+  .guide h3 { margin: 0 0 4px; font-size: 16px; }
+  .fremdrift { height: 7px; background: #F1F5F9; border-radius: 99px; overflow: hidden; margin: 8px 0 14px; }
+  .fremdrift > div { height: 100%; background: var(--groen); transition: width .4s; }
+  .nu { background: var(--pink-lys); border-radius: 12px; padding: 12px 14px; margin-bottom: 14px; }
+  .nu .nr { font-size: 11.5px; font-weight: 800; color: var(--pink-mork); letter-spacing: .04em; }
+  .nu .titel { font-weight: 800; font-size: 15.5px; margin: 2px 0 6px; }
+  .nu p { margin: 0 0 6px; font-size: 14px; }
+  .nu .tip { font-size: 12.5px; color: #6B7280; }
+  .liste { list-style: none; margin: 0; padding: 0; }
+  .liste li { display: flex; gap: 9px; align-items: center; padding: 6px 4px; font-size: 13.5px; border-radius: 8px; cursor: pointer; }
+  .liste li:hover { background: #F8FAFC; }
+  .liste .boks { width: 20px; height: 20px; border-radius: 6px; border: 2px solid #CBD5E1; display: grid; place-items: center; font-size: 12px; font-weight: 900; flex-shrink: 0; }
+  .liste li.faerdig .boks { background: var(--groen); border-color: var(--groen); color: #fff; }
+  .liste li.aktuel { background: var(--pink-lys); font-weight: 700; }
+  .afsnit { font-size: 11.5px; font-weight: 800; color: var(--daempet); letter-spacing: .05em; text-transform: uppercase; margin: 12px 0 4px; }
+
+  .slor { position: fixed; inset: 0; background: rgba(17,17,17,.45); display: grid; place-items: center; z-index: 50; padding: 16px; }
+  .vindue { background: #fff; border-radius: 16px; width: min(620px, 100%); max-height: 92vh; overflow: auto; box-shadow: 0 20px 60px rgba(0,0,0,.25); }
+  .vindue header { background: var(--sort); color: #fff; padding: 14px 18px; font-weight: 800; font-size: 16px; display: flex; justify-content: space-between; align-items: center; }
+  .vindue header button { background: #333; color: #fff; border: 0; border-radius: 8px; width: 32px; height: 32px; }
+  .vindue .krop { padding: 16px 18px; }
+  .vindue footer { padding: 12px 18px 16px; display: flex; gap: 10px; justify-content: flex-end; border-top: 1px solid var(--kant); position: sticky; bottom: 0; background: #fff; }
+  .del { border-radius: 12px; padding: 12px 14px; margin-bottom: 12px; }
+  .del h4 { margin: 0 0 8px; font-size: 13px; letter-spacing: .04em; text-transform: uppercase; }
+  .del-kunde { background: var(--pink-lys); } .del-kunde h4 { color: var(--pink-mork); }
+  .del-opgave { background: var(--groen-lys); } .del-opgave h4 { color: #166534; }
+  .del-plan { background: var(--blaa-lys); } .del-plan h4 { color: #1E3A8A; }
+  label.felt { display: block; font-size: 12.5px; font-weight: 700; color: #334155; margin-bottom: 8px; }
+  label.felt input, label.felt select { display: block; width: 100%; margin-top: 3px; padding: 9px 10px; border: 1.5px solid #CBD5E1; border-radius: 9px; font-size: 14.5px; font-family: inherit; background: #fff; }
+  .dage { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
+  .dage label { background: #fff; border: 1.5px solid #CBD5E1; border-radius: 8px; padding: 6px 10px; font-size: 13.5px; font-weight: 600; display: flex; gap: 5px; align-items: center; }
+
+  .indbakke { display: grid; gap: 10px; }
+  .besked { background: #fff; border: 1.5px solid var(--kant); border-left-width: 5px; border-radius: 12px; padding: 12px 14px; }
+  .besked.blaa { border-left-color: var(--blaa); } .besked.roed { border-left-color: var(--roed); } .besked.orange { border-left-color: var(--gul); }
+  .besked .h { font-weight: 800; }
+  .besked .t { font-size: 14px; color: #334155; margin: 3px 0 9px; }
+  .besked.klaret { opacity: .55; }
+  .tom { color: var(--daempet); font-size: 14px; padding: 18px; text-align: center; }
+
+  table.fakt { width: 100%; border-collapse: collapse; background: #fff; border-radius: 14px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+  .fakt th, .fakt td { padding: 10px 12px; border-bottom: 1px solid var(--kant); text-align: left; font-size: 14px; }
+  .fakt th { font-size: 12.5px; color: #475569; background: #F8FAFC; }
+  .fakt td.tal, .fakt th.tal { text-align: right; }
+
+  .skaal { position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%); background: #111; color: #fff; padding: 11px 18px; border-radius: 12px; font-weight: 700; font-size: 14.5px; z-index: 80; box-shadow: 0 10px 30px rgba(0,0,0,.25); max-width: 92vw; }
+  .skaal.godt { background: var(--groen); }
+  .velkomst { max-width: 720px; margin: 40px auto; background: #fff; border-radius: 18px; padding: 28px 30px; box-shadow: 0 4px 20px rgba(0,0,0,.08); }
+  .velkomst h1 { margin: 0 0 8px; font-size: 28px; }
+  .velkomst p { font-size: 16px; color: #334155; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+/* ── Indhold ──────────────────────────────────────────────────────────────── */
+const DAGE = [["man", "Man"], ["tir", "Tir"], ["ons", "Ons"], ["tor", "Tor"], ["fre", "Fre"]];
+const DAGSNAVN = { man: "mandag", tir: "tirsdag", ons: "onsdag", tor: "torsdag", fre: "fredag" };
+const KAPACITET = 7 * 60;
+const TIMEPRIS = 395;
+
+const MEDARBEJDERE = [
+  { id: "anne",  navn: "Anne",  sted: "Aabybro" },
+  { id: "mette", navn: "Mette", sted: "Blokhus" },
+  { id: "jonas", navn: "Jonas", sted: "Pandrup" },
+  { id: "sara",  navn: "Sara",  sted: "Fjerritslev" },
+];
+
+// type: privat (kunden ER stedet), erhverv, nexus (borgeren staar oeverst, kommunen betaler)
+const START_OPGAVER = [
+  { id: "o1",  kunde: "Familien Hansen",     type: "privat",  emp: "anne",  dag: "man", tid: "08:00", min: 120, udfoert: true },
+  { id: "o2",  kunde: "Nordvang Skole",      type: "erhverv", emp: "anne",  dag: "tir", tid: "07:00", min: 180, udfoert: true },
+  { id: "o3",  kunde: "Else Jensen",         type: "nexus",   emp: "anne",  dag: "tor", tid: "08:30", min: 60, betaler: "Jammerbugt Kommune" },
+  { id: "o4",  kunde: "Villa Klitten",       type: "privat",  emp: "anne",  dag: "tor", tid: "10:00", min: 120 },
+  { id: "o5",  kunde: "Kirsten Bak",         type: "privat",  emp: "anne",  dag: "fre", tid: "09:00", min: 90 },
+  { id: "o6",  kunde: "Kontorhuset A/S",     type: "erhverv", emp: "mette", dag: "man", tid: "06:30", min: 120, udfoert: true },
+  { id: "o7",  kunde: "Poul Nielsen",        type: "nexus",   emp: "mette", dag: "ons", tid: "09:00", min: 60, betaler: "Jammerbugt Kommune" },
+  { id: "o8",  kunde: "Blokhus Feriepark",   type: "erhverv", emp: "mette", dag: "tor", tid: "08:00", min: 180 },
+  { id: "o9",  kunde: "Fru Madsen",          type: "privat",  emp: "mette", dag: "fre", tid: "10:00", min: 120 },
+  { id: "o10", kunde: "Tandlæge Riis",       type: "erhverv", emp: "jonas", dag: "man", tid: "16:00", min: 120, udfoert: true, brugt: 145 },
+  { id: "o11", kunde: "Brix Erhverv",        type: "erhverv", emp: "jonas", dag: "ons", tid: "07:00", min: 180 },
+  { id: "o12", kunde: "Hotel Strand",        type: "erhverv", emp: "jonas", dag: "fre", tid: "07:00", min: 240 },
+  { id: "o13", kunde: "Ejendom Vestergade",  type: "erhverv", emp: "sara",  dag: "tir", tid: "08:00", min: 120, udfoert: true },
+  { id: "o14", kunde: "Familien Lund",       type: "privat",  emp: "sara",  dag: "ons", tid: "09:00", min: 120 },
+  { id: "o15", kunde: "Familien Holm",       type: "privat",  emp: null,    dag: "tir", tid: "12:00", min: 120 },
+];
+
+const OEVELSER = [
+  { id: "laes", gruppe: "Ugeplanen", titel: "Læs ugen",
+    tekst: "Én række pr. medarbejder, én kolonne pr. dag. Øverst ligger «Ikke tildelt» — opgaver uden medarbejder. Dem ser ingen i Worklist, så de skal altid have en.",
+    tip: "Farven fortæller typen: rosa er privat, blå er erhverv, lilla er kommunal (Nexus). Tryk «Forstået», når du har set dig omkring.",
+    knap: "Forstået" },
+  { id: "tildel", gruppe: "Ugeplanen", titel: "Giv en opgave en medarbejder",
+    tekst: "«Familien Holm» tirsdag har ingen medarbejder. Giv den til Mette.",
+    tip: "Træk kortet over i Mettes række under tirsdag. På en telefon eller tablet: tryk på kortet, og tryk så på feltet." },
+  { id: "flyt", gruppe: "Ugeplanen", titel: "Flyt en opgave",
+    tekst: "Brix Erhverv har ringet: onsdag passer dårligt, torsdag er bedre. Flyt opgaven til torsdag — stadig hos Jonas.",
+    tip: "Samme greb: træk eller tryk-tryk." },
+  { id: "syg", gruppe: "Sygdom og ferie", titel: "Meld en medarbejder syg",
+    tekst: "Anne har ringet og er syg torsdag. Meld hende syg.",
+    tip: "Knappen «Sygdom/Ferie» øverst. Hendes torsdagsopgaver ryger så ned i «Ikke tildelt» — de forsvinder ikke." },
+  { id: "fordel", gruppe: "Sygdom og ferie", titel: "Fordel hendes opgaver",
+    tekst: "Annes to torsdagsopgaver ligger nu i «Ikke tildelt». Giv dem til nogen, der har tid torsdag.",
+    tip: "Tallet under navnet viser, hvor meget hver har på. Jonas og Sara har luft torsdag." },
+  { id: "aftale", gruppe: "Ny aftale", titel: "Opret en fast aftale",
+    tekst: "En ny kunde, Birgit Sørensen i Aabybro, vil have rengøring hver tirsdag, 2 timer, og gerne med Sara.",
+    tip: "«+ Ny opgave». Rosa er kunden, grøn er opgaven, blå er hvornår og hvem. Aftalen danner selv opgaverne uge for uge." },
+  { id: "nytid", gruppe: "Indbakken", titel: "Ønske om ny tid",
+    tekst: "Klokken har fået beskeder. Mette spørger, om Fru Madsen kan flyttes fra fredag til mandag. Godkend det.",
+    tip: "Tryk på 🔔 i den sorte bjælke." },
+  { id: "bestilling", gruppe: "Indbakken", titel: "Bestilling fra kundeportalen",
+    tekst: "Familien Lund har bestilt en hovedrengøring torsdag i portalen. Godkend den, og giv opgaven en medarbejder.",
+    tip: "Når du godkender, bliver bestillingen til en opgave i «Ikke tildelt». Derfra er det som øvelse 2." },
+  { id: "afvigelse", gruppe: "Indbakken", titel: "Se en afvigelse",
+    tekst: "Tandlæge Riis tog 25 minutter mere end planlagt. Læs Jonas' begrundelse, og kvittér.",
+    tip: "Afvigelser kommer i indbakken af sig selv, når en opgave er meldt færdig. Kvitteringen betyder «set og i orden»." },
+  { id: "faktura", gruppe: "Fakturering", titel: "Send til fakturering",
+    tekst: "Mandag og tirsdag er udført. Markér opgaverne som klar, og send dem til fakturering.",
+    tip: "Menuen «Økonomi». Hos jer går det videre til Dinero eller til en Excel-fil." },
+];
+
+/* ── Tilstand ──────────────────────────────────────────────────────────────
+   Alt i hukommelsen. Lukker man fanen, begynder man forfra — med vilje. */
+let S;
+function nulstil() {
+  S = {
+    skaerm: "velkomst",          // velkomst | uge | okonomi | slut
+    opgaver: START_OPGAVER.map((o) => ({ ...o })),
+    blokke: [],                  // { emp, dag, art }
+    faerdige: new Set(),
+    aktuel: "laes",
+    valgt: null,                 // opgave-id valgt til tryk-tryk
+    vindue: null,                // null | "syg" | "aftale" | "indbakke"
+    beskeder: [
+      { id: "b1", art: "nytid", farve: "blaa", h: "Ønske om ny tid", t: "Mette · Fru Madsen · ønsker mandag i stedet for fredag", klaret: false },
+      { id: "b2", art: "bestilling", farve: "blaa", h: "Bestilling fra kunde", t: "Familien Lund · Hovedrengøring, 4 t · ønsker torsdag", klaret: false },
+      { id: "b3", art: "afvigelse", farve: "orange", h: "Mere tid end planlagt", t: "Tandlæge Riis · +25 min · «Maling i venteværelset, ekstra støvsugning og gulvvask.» — Jonas", klaret: false },
+    ],
+    fakt: {},                    // opgave-id -> klar
+    sendt: false,
+    lundOpgave: null,
+    annesTor: [],
+  };
+}
+nulstil();
+
+const opgave = (id) => S.opgaver.find((o) => o.id === id);
+const emp = (id) => MEDARBEJDERE.find((e) => e.id === id);
+const blokeret = (e, d) => S.blokke.some((b) => b.emp === e && b.dag === d);
+const brugt = (e, d) => S.opgaver.filter((o) => o.emp === e && o.dag === d).reduce((s, o) => s + o.min, 0);
+const t = (m) => { const h = Math.floor(m / 60), r = m % 60; return r ? `${h},${Math.round(r / 6)} t` : `${h} t`; };
+const kr = (n) => n.toLocaleString("da-DK", { maximumFractionDigits: 0 }) + " kr.";
+
+/* ── Kontrol: er øvelsen gjort? ────────────────────────────────────────────── */
+const KONTROL = {
+  tildel: () => { const o = opgave("o15"); return o.emp === "mette" && o.dag === "tir"; },
+  flyt: () => { const o = opgave("o11"); return o.dag === "tor" && o.emp === "jonas"; },
+  syg: () => blokeret("anne", "tor"),
+  fordel: () => S.annesTor.length > 0 && S.annesTor.every((id) => { const o = opgave(id); return o.emp && o.emp !== "anne"; }),
+  aftale: () => S.opgaver.some((o) => o.aftale && /birgit/i.test(o.kunde) && o.dag === "tir" && o.emp === "sara"),
+  nytid: () => opgave("o9").dag === "man" && S.beskeder.find((b) => b.id === "b1").klaret,
+  bestilling: () => S.lundOpgave && !!opgave(S.lundOpgave)?.emp,
+  afvigelse: () => S.beskeder.find((b) => b.id === "b3").klaret,
+  faktura: () => S.sendt,
+};
+
+function tjek() {
+  let ny = null;
+  OEVELSER.forEach((o) => {
+    if (!S.faerdige.has(o.id) && KONTROL[o.id] && KONTROL[o.id]()) { S.faerdige.add(o.id); ny = o; }
+  });
+  if (ny) {
+    skaal("✓ " + ny.titel + " — klaret", true);
+    if (S.aktuel === ny.id || S.faerdige.has(S.aktuel)) naeste();
+  }
+}
+function naeste() {
+  const i = OEVELSER.findIndex((o) => o.id === S.aktuel);
+  const rest = [...OEVELSER.slice(i + 1), ...OEVELSER.slice(0, i + 1)].find((o) => !S.faerdige.has(o.id));
+  if (rest) S.aktuel = rest.id;
+  else setTimeout(() => { S.skaerm = "slut"; S.vindue = null; tegn(); }, 900);
+}
+
+let skaalTimer = null;
+function skaal(tekst, godt) {
+  document.querySelectorAll(".skaal").forEach((x) => x.remove());
+  const d = document.createElement("div");
+  d.className = "skaal" + (godt ? " godt" : "");
+  d.textContent = tekst;
+  document.body.appendChild(d);
+  clearTimeout(skaalTimer);
+  skaalTimer = setTimeout(() => d.remove(), 2600);
+}
+
+/* ── Handlinger ───────────────────────────────────────────────────────────── */
+function flytOpgave(id, empId, dag) {
+  const o = opgave(id);
+  if (!o) return;
+  if (o.udfoert) { skaal("Den er allerede udført — den flyttes ikke."); return; }
+  if (empId && blokeret(empId, dag)) { skaal(`${emp(empId).navn} er syg ${DAGSNAVN[dag]}.`); return; }
+  o.emp = empId; o.dag = dag; o.fraSyg = false;
+  S.valgt = null;
+  if (empId && brugt(empId, dag) > KAPACITET) skaal(`Bemærk: ${emp(empId).navn} har nu mere end 7 timer ${DAGSNAVN[dag]}.`);
+  tjek(); tegn();
+}
+
+function meldSyg(empId, dage, art) {
+  dage.forEach((d) => {
+    if (!blokeret(empId, d)) S.blokke.push({ emp: empId, dag: d, art });
+    S.opgaver.filter((o) => o.emp === empId && o.dag === d && !o.udfoert).forEach((o) => {
+      o.emp = null; o.fraSyg = emp(empId).navn;
+      if (empId === "anne" && d === "tor") S.annesTor.push(o.id);
+    });
+  });
+  S.vindue = null;
+  skaal(`${emp(empId).navn} er meldt ${art === "ferie" ? "på ferie" : "syg"}. Hendes opgaver ligger i «Ikke tildelt».`);
+  tjek(); tegn();
+}
+
+function gemAftale(f) {
+  if (!f.kunde.trim()) { skaal("Skriv kundens navn."); return false; }
+  if (!f.dage.length) { skaal("Vælg mindst én ugedag."); return false; }
+  f.dage.forEach((d, i) => {
+    S.opgaver.push({ id: "a" + Date.now() + i, kunde: f.kunde.trim(), type: f.type, emp: f.emp || null, dag: d,
+      tid: f.tid || null, min: Math.round(Number(f.timer || 2) * 60), aftale: true });
+  });
+  S.vindue = null;
+  skaal("Aftalen er gemt — opgaverne er dannet for alle uger frem til udløb.", true);
+  tjek(); tegn();
+  return true;
+}
+
+function besked(id, svar) {
+  const b = S.beskeder.find((x) => x.id === id);
+  if (b.art === "nytid") {
+    if (svar === "ja") { const o = opgave("o9"); o.dag = "man"; skaal("Godkendt — Fru Madsen er flyttet til mandag, og Mette har fået besked."); }
+    else skaal("Afvist — Mette får besked om, at det bliver fredag.");
+  }
+  if (b.art === "bestilling") {
+    if (svar === "ja") {
+      const id2 = "lund-hr";
+      S.opgaver.push({ id: id2, kunde: "Familien Lund", type: "privat", emp: null, dag: "tor", tid: null, min: 240, ekstra: true });
+      S.lundOpgave = id2;
+      skaal("Godkendt — hovedrengøringen ligger nu i «Ikke tildelt» torsdag. Giv den en medarbejder.");
+    } else skaal("Afvist — kunden får besked i portalen.");
+  }
+  if (b.art === "afvigelse") skaal("Kvitteret — afvigelsen er set og i orden.");
+  b.klaret = true;
+  tjek(); tegn();
+}
+
+/* ── Tegning ──────────────────────────────────────────────────────────────── */
+const app = document.getElementById("app");
+const esc = (x) => String(x ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const aabne = () => S.beskeder.filter((b) => !b.klaret).length;
+const kanVendeTilbage = () => location.protocol === "http:" || location.protocol === "https:";
+
+function topBjaelke() {
+  const menu = S.skaerm === "velkomst" || S.skaerm === "slut" ? "" : `
+    <div class="nav">
+      <button data-nav="uge" class="${S.skaerm === "uge" ? "valgt" : ""}">Ugeplan</button>
+      <button data-nav="okonomi" class="${S.skaerm === "okonomi" ? "valgt" : ""}">Økonomi</button>
+      <button data-vindue="indbakke" title="Indbakke">🔔${aabne() ? `<span class="prik">${aabne()}</span>` : ""}</button>
+    </div>`;
+  return `<div class="top"><div><div class="navn">Rengøringsplan</div><div class="under">Planlægning og fakturering</div></div>
+    <span class="oevelse">ØVELSE — INTET ER RIGTIGT</span>${menu}</div>`;
+}
+
+function kortHtml(o) {
+  const kl = [o.type === "erhverv" ? "erhverv" : o.type === "nexus" ? "nexus" : "", o.udfoert ? "udfoert" : "", S.valgt === o.id ? "valgt" : ""].join(" ");
+  return `<div class="kort ${kl}" draggable="${!o.udfoert}" data-kort="${o.id}">
+    <b>${esc(o.kunde)}</b>
+    ${o.type === "nexus" ? `<div class="betaler">betales af ${esc(o.betaler)}</div>` : ""}
+    <div>${o.tid ? esc(o.tid) + " · " : ""}${t(o.min)}</div>
+    ${o.udfoert ? `<span class="tag tag-groen">✓ udført</span>` : ""}
+    ${o.fraSyg ? `<span class="tag tag-roed">fra ${esc(o.fraSyg)} (syg)</span>` : ""}
+    ${o.ekstra ? `<span class="tag tag-groen">bestilt i portalen</span>` : ""}
+    ${o.aftale ? `<span class="tag tag-groen">ny aftale</span>` : ""}
+  </div>`;
+}
+
+function ugeplan() {
+  const raekker = [{ id: null, navn: "Ikke tildelt", sted: "ingen ser dem" }, ...MEDARBEJDERE];
+  return `
+    <div class="vaerktoej">
+      <button class="knap knap-pink" data-vindue="aftale">+ Ny opgave</button>
+      <button class="knap knap-roed" data-vindue="syg">🌡️ Sygdom/Ferie</button>
+      <div class="uge">Uge 41 · øvelsesuge</div>
+    </div>
+    <div class="hint">${S.valgt ? `«${esc(opgave(S.valgt).kunde)}» er valgt — tryk på det felt, den skal flyttes til. <a href="#" data-fravaelg>Fortryd</a>` : "Træk et kort til et andet felt — eller tryk på kortet og derefter på feltet."}</div>
+    <div class="plan"><table class="gitter">
+      <tr><th></th>${DAGE.map(([, n]) => `<th>${n}</th>`).join("")}</tr>
+      ${raekker.map((r) => `<tr class="${r.id ? "" : "ikke"}">
+        <td><div class="emp">${esc(r.navn)}<small>${esc(r.sted)}</small></div></td>
+        ${DAGE.map(([d]) => {
+          const her = S.opgaver.filter((o) => (o.emp || null) === r.id && o.dag === d);
+          const blok = r.id && blokeret(r.id, d);
+          const b = r.id ? brugt(r.id, d) : 0;
+          return `<td class="celle ${blok ? "blokeret" : ""}" data-celle="${r.id || ""}|${d}">
+            ${blok ? `<div class="blok">🌡️ Syg</div>` : ""}
+            ${her.map(kortHtml).join("")}
+            ${r.id && !blok ? `<div class="belag" style="color:${b > KAPACITET ? "var(--roed)" : ""}">${t(b)} af 7 t</div>` : ""}
+          </td>`;
+        }).join("")}
+      </tr>`).join("")}
+    </table></div>`;
+}
+
+function okonomi() {
+  const udf = S.opgaver.filter((o) => o.udfoert);
+  const alleKlar = udf.every((o) => S.fakt[o.id]);
+  const sum = udf.reduce((s, o) => s + (o.brugt || o.min) / 60 * TIMEPRIS, 0);
+  return `
+    <h2 style="margin:0 0 4px">Fakturering</h2>
+    <div class="hint">Ugens udførte opgaver. Tiden er den, medarbejderen har registreret i Worklist. Opdigtede priser.</div>
+    <table class="fakt">
+      <tr><th><input type="checkbox" data-alle ${alleKlar ? "checked" : ""} ${S.sendt ? "disabled" : ""}></th><th>Kunde</th><th>Dag</th><th>Medarbejder</th><th class="tal">Tid</th><th class="tal">Beløb</th></tr>
+      ${udf.map((o) => `<tr>
+        <td><input type="checkbox" data-klar="${o.id}" ${S.fakt[o.id] ? "checked" : ""} ${S.sendt ? "disabled" : ""}></td>
+        <td>${esc(o.kunde)}${o.brugt ? ` <span class="tag tag-roed" style="font-size:11px;padding:1px 6px;border-radius:99px">+${o.brugt - o.min} min</span>` : ""}</td>
+        <td>${DAGSNAVN[o.dag]}</td><td>${esc(emp(o.emp)?.navn || "")}</td>
+        <td class="tal">${t(o.brugt || o.min)}</td><td class="tal">${kr((o.brugt || o.min) / 60 * TIMEPRIS)}</td></tr>`).join("")}
+      <tr><td></td><td colspan="4"><b>I alt</b></td><td class="tal"><b>${kr(sum)}</b></td></tr>
+    </table>
+    <div style="display:flex;gap:10px;margin-top:14px;align-items:center;flex-wrap:wrap">
+      <button class="knap knap-pink" data-send ${!alleKlar || S.sendt ? "disabled" : ""}>${S.sendt ? "✓ Sendt til fakturering" : "Send til fakturering"}</button>
+      <span class="hint" style="margin:0">${S.sendt ? "I den rigtige app går de nu videre til Dinero eller til en Excel-fil." : "Markér hver linje som klar — eller alle på én gang øverst."}</span>
+    </div>`;
+}
+
+function guide() {
+  const o = OEVELSER.find((x) => x.id === S.aktuel);
+  const nr = OEVELSER.indexOf(o) + 1;
+  let gruppe = "";
+  return `<aside class="guide">
+    <h3>Øvelser</h3>
+    <div style="font-size:13px;color:var(--daempet)">${S.faerdige.size} af ${OEVELSER.length} klaret</div>
+    <div class="fremdrift"><div style="width:${S.faerdige.size / OEVELSER.length * 100}%"></div></div>
+    <div class="nu">
+      <div class="nr">ØVELSE ${nr}${S.faerdige.has(o.id) ? " · KLARET ✓" : ""}</div>
+      <div class="titel">${esc(o.titel)}</div>
+      <p>${esc(o.tekst)}</p>
+      <div class="tip">💡 ${esc(o.tip)}</div>
+      ${o.knap && !S.faerdige.has(o.id) ? `<button class="knap knap-pink" style="margin-top:10px" data-forstaaet>${esc(o.knap)}</button>` : ""}
+    </div>
+    <ul class="liste">
+      ${OEVELSER.map((x, i) => {
+        const g = x.gruppe !== gruppe ? `<div class="afsnit">${esc(x.gruppe)}</div>` : "";
+        gruppe = x.gruppe;
+        return `${g}<li data-oevelse="${x.id}" class="${S.faerdige.has(x.id) ? "faerdig" : ""} ${x.id === S.aktuel ? "aktuel" : ""}">
+          <span class="boks">${S.faerdige.has(x.id) ? "✓" : ""}</span>${i + 1}. ${esc(x.titel)}</li>`;
+      }).join("")}
+    </ul>
+    <div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap">
+      <button class="knap knap-hvid" data-forfra style="font-size:13px;padding:8px 12px">↺ Start forfra</button>
+    </div>
+  </aside>`;
+}
+
+function vindue() {
+  if (S.vindue === "syg") return `<div class="slor" data-luk><div class="vindue" data-stop>
+    <header>Sygdom/Ferie <button data-luk>✕</button></header>
+    <div class="krop">
+      <label class="felt">Medarbejder<select id="sygEmp">${MEDARBEJDERE.map((e) => `<option value="${e.id}">${e.navn}</option>`).join("")}</select></label>
+      <label class="felt">Hvad<select id="sygArt"><option value="sygdom">Sygdom</option><option value="ferie">Ferie</option></select></label>
+      <div class="felt" style="font-size:12.5px;font-weight:700;color:#334155">Hvilke dage
+        <div class="dage">${DAGE.map(([d, n]) => `<label><input type="checkbox" value="${d}" class="sygDag">${n}</label>`).join("")}</div></div>
+      <div class="hint">Medarbejderens opgaver de dage ryger ned i «Ikke tildelt», så du kan fordele dem. De forsvinder ikke.</div>
+    </div>
+    <footer><button class="knap knap-hvid" data-luk>Annuller</button><button class="knap knap-roed" data-gemsyg>Meld</button></footer>
+  </div></div>`;
+
+  if (S.vindue === "aftale") return `<div class="slor" data-luk><div class="vindue" data-stop>
+    <header>Ny opgave <button data-luk>✕</button></header>
+    <div class="krop">
+      <div class="del del-kunde"><h4>Kunden</h4>
+        <label class="felt">Kundens navn<input id="afKunde" placeholder="Fx Birgit Sørensen"></label>
+        <label class="felt">Adresse<input id="afAdr" placeholder="Fx Østergade 4, Aabybro"></label>
+        <label class="felt">Kontrakttype<select id="afType"><option value="privat">Privat</option><option value="erhverv">Erhverv</option><option value="nexus">Kommunal (Nexus)</option></select></label>
+      </div>
+      <div class="del del-opgave"><h4>Opgaven</h4>
+        <label class="felt">Varighed i timer<input id="afTimer" type="number" min="0.5" step="0.5" value="2"></label>
+      </div>
+      <div class="del del-plan"><h4>Planlægning</h4>
+        <label class="felt">Interval<select id="afInterval"><option>Hver uge</option><option>Hver 2. uge</option><option>Hver 4. uge</option></select></label>
+        <div class="felt" style="font-size:12.5px;font-weight:700;color:#334155">Ugedage
+          <div class="dage">${DAGE.map(([d, n]) => `<label><input type="checkbox" value="${d}" class="afDag">${n}</label>`).join("")}</div></div>
+        <label class="felt">Klokkeslæt (valgfrit)<input id="afTid" type="time"></label>
+        <label class="felt">Fast medarbejder<select id="afEmp"><option value="">Ingen — planlæg selv</option>${MEDARBEJDERE.map((e) => `<option value="${e.id}">${e.navn}</option>`).join("")}</select></label>
+      </div>
+    </div>
+    <footer><button class="knap knap-hvid" data-luk>Annuller</button><button class="knap knap-pink" data-gemaftale>Gem og planlæg</button></footer>
+  </div></div>`;
+
+  if (S.vindue === "indbakke") return `<div class="slor" data-luk><div class="vindue" data-stop>
+    <header>🔔 Indbakke <button data-luk>✕</button></header>
+    <div class="krop"><div class="indbakke">
+      ${S.beskeder.map((b) => `<div class="besked ${b.farve} ${b.klaret ? "klaret" : ""}">
+        <div class="h">${esc(b.h)}</div><div class="t">${esc(b.t)}</div>
+        ${b.klaret ? `<span class="tag tag-groen" style="font-size:12px;padding:2px 8px;border-radius:99px">✓ klaret</span>`
+          : b.art === "afvigelse"
+            ? `<button class="knap knap-groen" data-besked="${b.id}|ja">Kvittér — set og i orden</button>`
+            : `<button class="knap knap-groen" data-besked="${b.id}|ja">Godkend</button> <button class="knap knap-hvid" data-besked="${b.id}|nej">Afvis</button>`}
+      </div>`).join("")}
+      ${aabne() ? "" : `<div class="tom">Indbakken er tom. Sådan skal den gerne se ud, når dagen slutter.</div>`}
+    </div></div>
+  </div></div>`;
+  return "";
+}
+
+function velkomst() {
+  return `<div class="velkomst">
+    <h1>Prøv planlægningen</h1>
+    <p>En hel uge med fire medarbejdere og femten opgaver — og intet af det er rigtigt. Du kan ikke komme til at ødelægge noget, og ingen kan se, hvad du trykker på.</p>
+    <p>Til højre står ti små øvelser. De krydses af, når du har gjort det, de beder om. Du må tage dem i den rækkefølge, du vil, og starte forfra så tit, du vil.</p>
+    <p style="font-size:14px;color:var(--daempet)">Den rigtige app kan mere: tidslinje, køretid, kompetencer, områder, tjeklister. Her er kun det, der skal til for at forstå tankegangen. Navne og priser er opdigtede.</p>
+    <button class="knap knap-pink" data-begynd style="font-size:16px;padding:12px 22px;margin-top:6px">Begynd øvelsen</button>
+  </div>`;
+}
+
+function slut() {
+  return `<div class="velkomst">
+    <div style="font-size:54px">🎉</div>
+    <h1>Ti ud af ti</h1>
+    <p>Du har planlagt en hel uge: tildelt og flyttet opgaver, håndteret en sygemelding, oprettet en fast aftale, ryddet indbakken og sendt ugen til fakturering.</p>
+    <div class="afsnit">Det du har prøvet</div>
+    <ul class="liste">${OEVELSER.map((o) => `<li class="faerdig"><span class="boks">✓</span>${esc(o.titel)}</li>`).join("")}</ul>
+    <div class="afsnit" style="margin-top:16px">Den ene ting, du skal huske</div>
+    <div class="nu" style="margin:6px 0 16px"><p>«Ikke tildelt» er ikke et sted, opgaver venter — det er et sted, de bliver glemt. Ingen medarbejder ser dem. Kig der, hver gang nogen melder sig syg, og før du går hjem.</p></div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      ${kanVendeTilbage() ? `<button class="knap knap-groen" data-tilbage>Tilbage til planlægningen</button>` : ""}
+      <button class="knap knap-hvid" data-forfra>Prøv igen</button>
+    </div>
+  </div>`;
+}
+
+function tegn() {
+  let krop;
+  if (S.skaerm === "velkomst") krop = velkomst();
+  else if (S.skaerm === "slut") krop = slut();
+  else krop = `<div class="layout"><main>${S.skaerm === "okonomi" ? okonomi() : ugeplan()}</main>${guide()}</div>`;
+  app.innerHTML = topBjaelke() + krop + vindue();
+}
+
+/* ── Hændelser ────────────────────────────────────────────────────────────── */
+app.addEventListener("click", (e) => {
+  const m = (sel) => e.target.closest(sel);
+  if (m("[data-begynd]")) { S.skaerm = "uge"; tegn(); return; }
+  if (m("[data-forfra]")) { nulstil(); S.skaerm = "uge"; tegn(); skaal("Ugen er sat tilbage til start."); return; }
+  if (m("[data-tilbage]")) { location.href = "/"; return; }
+  if (m("[data-nav]")) { S.skaerm = m("[data-nav]").dataset.nav; S.valgt = null; tegn(); return; }
+  if (m("[data-vindue]")) { S.vindue = m("[data-vindue]").dataset.vindue; tegn(); return; }
+  if (m("[data-luk]") && !m("[data-stop]") || m("header [data-luk]") || m("footer [data-luk]")) { S.vindue = null; tegn(); return; }
+  if (m("[data-forstaaet]")) { S.faerdige.add("laes"); skaal("✓ Læs ugen — klaret", true); naeste(); tegn(); return; }
+  if (m("[data-oevelse]")) { S.aktuel = m("[data-oevelse]").dataset.oevelse; tegn(); return; }
+  if (m("[data-fravaelg]")) { e.preventDefault(); S.valgt = null; tegn(); return; }
+  if (m("[data-gemsyg]")) {
+    const dage = [...document.querySelectorAll(".sygDag:checked")].map((x) => x.value);
+    if (!dage.length) { skaal("Vælg mindst én dag."); return; }
+    meldSyg(document.getElementById("sygEmp").value, dage, document.getElementById("sygArt").value); return;
+  }
+  if (m("[data-gemaftale]")) {
+    gemAftale({ kunde: document.getElementById("afKunde").value, type: document.getElementById("afType").value,
+      timer: document.getElementById("afTimer").value, tid: document.getElementById("afTid").value,
+      emp: document.getElementById("afEmp").value, dage: [...document.querySelectorAll(".afDag:checked")].map((x) => x.value) });
+    return;
+  }
+  if (m("[data-besked]")) { const [id, svar] = m("[data-besked]").dataset.besked.split("|"); besked(id, svar); return; }
+  if (m("[data-send]")) { S.sendt = true; skaal("Sendt til fakturering.", true); tjek(); tegn(); return; }
+  const kort = m("[data-kort]");
+  if (kort) {
+    const o = opgave(kort.dataset.kort);
+    if (o.udfoert) { skaal("Udførte opgaver flyttes ikke — de skal faktureres, som de blev lavet."); return; }
+    S.valgt = S.valgt === o.id ? null : o.id; tegn(); return;
+  }
+  const celle = m("[data-celle]");
+  if (celle && S.valgt) { const [ei, d] = celle.dataset.celle.split("|"); flytOpgave(S.valgt, ei || null, d); }
+});
+app.addEventListener("change", (e) => {
+  if (e.target.matches("[data-klar]")) { S.fakt[e.target.dataset.klar] = e.target.checked; tegn(); }
+  if (e.target.matches("[data-alle]")) { S.opgaver.filter((o) => o.udfoert).forEach((o) => { S.fakt[o.id] = e.target.checked; }); tegn(); }
+});
+// Traek og slip (computer)
+let traekker = null;
+app.addEventListener("dragstart", (e) => { const k = e.target.closest("[data-kort]"); if (!k) return; traekker = k.dataset.kort; e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", traekker); });
+app.addEventListener("dragover", (e) => { const c = e.target.closest("[data-celle]"); if (!c || !traekker) return; e.preventDefault(); document.querySelectorAll(".maal").forEach((x) => x !== c && x.classList.remove("maal")); c.classList.add("maal"); });
+app.addEventListener("dragleave", (e) => { const c = e.target.closest("[data-celle]"); if (c && !c.contains(e.relatedTarget)) c.classList.remove("maal"); });
+app.addEventListener("drop", (e) => { const c = e.target.closest("[data-celle]"); if (!c || !traekker) return; e.preventDefault(); const [ei, d] = c.dataset.celle.split("|"); const id = traekker; traekker = null; flytOpgave(id, ei || null, d); });
+app.addEventListener("dragend", () => { traekker = null; document.querySelectorAll(".maal").forEach((x) => x.classList.remove("maal")); });
+
+tegn();
+</script>
+</body>
+</html>
