@@ -474,7 +474,9 @@ function fetchAllRows(table, columns = "*", filter = null) {
 //     aftalen blev gemt
 // Sorteret paa noeglekolonnerne, saa siderne ikke overlapper; siderne hentes samtidig.
 //
-// Hoejst to sider ad gangen, og hver side proeves op til tre gange (29.9.2026).
+// Hoejst fire sider ad gangen, og hver side proeves op til tre gange (29.9.2026).
+// (Siderne blev langsommere jo laengere inde de laa — 0,3 s til 4 s — fordi
+// is_admin() i politikken koerte for hver raekke. Rettet i databasen samme dag.)
 // Foerst hentede den alle 16 sider paa én gang. Under belastning svarede databasen
 // 500 paa halvdelen, hele adgangslisten blev tom — og selvhelbredelsen gemte saa
 // ~600 opgaver, hvilket belastede databasen endnu mere. En ond cirkel, maalt i
@@ -496,8 +498,8 @@ async function hentAlleSider(tabel, kolonner, sortering) {
     return sidste;
   };
   const svar = [];
-  for (let i = 0; i < sider; i += 2) {
-    svar.push(...await Promise.all([i, i + 1].filter((n) => n < sider).map(hentSide)));
+  for (let i = 0; i < sider; i += 4) {
+    svar.push(...await Promise.all([i, i + 1, i + 2, i + 3].filter((n) => n < sider).map(hentSide)));
   }
   const fejl = svar.find((r) => r.error);
   if (fejl) return { data: null, error: fejl.error };
