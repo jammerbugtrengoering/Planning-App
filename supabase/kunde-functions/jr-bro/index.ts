@@ -13,10 +13,14 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 //   { handling: "moduler", firma_id, moduler }
 //   { handling: "status", firma_id, status: "aktiv" | "lukket" }
 //   { handling: "inviter_igen", firma_id, admin_email }
+//   { handling: "login_link", firma_id, email }   - ét login via kundeportalen (29.9.2026):
+//       engangslink til en planlaegger i firmaet. Sendes aldrig paa mail — kun tilbage
+//       til Jammerbugts aabn-planlaegning, som har tjekket portal-loginnet.
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 const PLANLAEGNING = Deno.env.get("PLANLAEGNING_URL") ?? "https://kunde-planlaegning.netlify.app";
+const JR_PORTAL = Deno.env.get("JR_PORTAL_URL") ?? "https://jammerbugtrengoering-kundeportal.netlify.app";
 const RESERVEREDE = new Set(["opret", "tilbud", "api", "admin", "www", "login", "app", "support", "hjaelp"]);
 const BRANCHER = new Set(["hotel", "haandvaerk", "institution", "andet"]);
 
@@ -42,7 +46,7 @@ function moduler(m: Record<string, unknown> | undefined) {
 }
 
 async function sendVelkomst(admin: ReturnType<typeof createClient>, email: string, navn: string,
-                            firmanavn: string, slug: string, igen: boolean) {
+                            firmanavn: string, slug: string, igen: boolean, portalSlug = "") {
   const maal = `${PLANLAEGNING}/${slug}`;
   const { data: link, error } = await admin.auth.admin.generateLink({ type: "recovery", email, options: { redirectTo: maal } });
   if (error) return { mailSendt: false, fejl: error.message };
@@ -51,8 +55,10 @@ async function sendVelkomst(admin: ReturnType<typeof createClient>, email: strin
     + (igen ? `<p>Her er et nyt link til jeres planlægning.</p>`
             : `<p>Jammerbugt Rengøring har oprettet planlægning og Worklist til ${esc(firmanavn)}. Du er administrator.</p>`)
     + `<p><a href="${link?.properties?.action_link}" style="display:inline-block;background:#2563EB;color:#fff;padding:10px 16px;border-radius:8px;text-decoration:none;font-weight:700">Vælg din adgangskode</a></p>`
-    + `<p>Bagefter logger du ind på <a href="${maal}">${maal}</a> med din mail og den kode, du selv har valgt. `
-    + `En guide viser dig de første trin: firmaoplysninger, medarbejdere og den første opgave.</p>`
+    + `<p>Er du også administrator i kundeportalen hos Jammerbugt Rengøring, behøver du ikke en adgangskode: `
+    + `log ind i portalen som altid og tryk «Planlægning»${portalSlug ? ` (<a href="${JR_PORTAL}/${portalSlug}">${JR_PORTAL}/${portalSlug}</a>)` : ""}. `
+    + `Ellers logger du ind på <a href="${maal}">${maal}</a> med din mail og den kode, du vælger via knappen.</p>`
+    + `<p>En guide viser dig de første trin: firmaoplysninger, medarbejdere og den første opgave.</p>`
     + `<p style="color:#777;font-size:12px">Linket virker én gang. Beder du om et nyt, holder det gamle op med at virke.</p></div>`;
   const { error: mailFejl } = await admin.functions.invoke("send-email", {
     headers: { Authorization: `Bearer ${SERVICE_KEY}` },
@@ -123,7 +129,7 @@ Deno.serve(async (req) => {
         if (nytLogin && brugerId) await admin.auth.admin.deleteUser(brugerId);
         return svar({ error: /slug_optaget/.test(fejl.message) ? "slug_optaget" : "opret_fejl", besked: fejl.message }, 500);
       }
-      const mail = await sendVelkomst(admin, email, adminNavn, navn, slug, false);
+      const mail = await sendVelkomst(admin, email, adminNavn, navn, slug, false, String(b.portal_slug ?? ""));
       return svar({ ok: true, firma_id: firmaId, ...mail });
     }
 
@@ -150,6 +156,20 @@ Deno.serve(async (req) => {
         .eq("firma_id", firmaId).eq("app_email", email).eq("is_admin", true).maybeSingle();
       if (!emp) return svar({ error: "admin_mangler" }, 404);
       return svar({ ok: true, ...(await sendVelkomst(admin, email, emp.name ?? "", firma.navn, firma.slug, true)) });
+    }
+
+    if (handling === "login_link") {
+      const email = String(b.email ?? "").trim().toLowerCase();
+      const { data: firmaStatus } = await admin.from("firma").select("status").eq("id", firmaId).maybeSingle();
+      if (firmaStatus?.status !== "aktiv") return svar({ error: "ikke_aaben" }, 403);
+      const { data: emp } = await admin.from("employees").select("id, auth_user_id")
+        .eq("firma_id", firmaId).eq("app_email", email).eq("is_admin", true).is("fratraadt_dato", null).maybeSingle();
+      if (!emp?.auth_user_id) return svar({ error: "ikke_planlaegger" }, 404);
+      const { data: link, error } = await admin.auth.admin.generateLink({
+        type: "magiclink", email, options: { redirectTo: `${PLANLAEGNING}/${firma.slug}` },
+      });
+      if (error || !link?.properties?.action_link) return svar({ error: "link_fejl", besked: error?.message }, 500);
+      return svar({ ok: true, url: link.properties.action_link });
     }
 
     return svar({ error: "ukendt_handling" }, 400);

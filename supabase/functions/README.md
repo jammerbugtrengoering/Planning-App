@@ -153,3 +153,6 @@ kopiere tilbage — og så er det filen her, der skal opdateres, ikke omvendt.
   hjælp», når bestillingen kom fra kundeløsningen.
 
 Se `../kunde-functions/README.md` for den anden ende af broen.
+- `aabn-planlaegning` — ét login: portalens administrator hos en Premium-kunde trykker
+  «Planlægning» i portalen og får et engangslink (via jr-bro «login_link») til sin egen
+  bruger i kundeplanlægningen. Linket sendes aldrig på mail.

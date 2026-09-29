@@ -1881,7 +1881,9 @@ const MODULE_HELP = {
         "Option er en trappe: Basis < Udvidet < Premium. Hvert trin har alt fra trinnet under. Premium er Udvidet plus kundens egen planlægning og Worklist til sine egne medarbejdere.",
         "Vælg Premium i Option-feltet. Første gang folder felterne ud: administratorens navn og mail, det korte navn i adressen, branchen og tilvalgene. Branchen giver en første tjekliste, så kunden ikke starter på en tom skærm.",
         "Tilvalgene er Start/stop, Lager, Tilbud og Kundeportal (kundens egen portal til sine kunder).",
-        "Har kunden allerede en portal, er administratoren udfyldt med portalens administrator. Portalen og planlægningen er to logins: portalen logger ind med en kode på mail, planlægningen med en adgangskode, hun selv vælger via linket. Samme mail kan bruges begge steder.",
+        "Administratoren er udfyldt med portalens administrator. Så er der ét login: hun logger ind i kundeportalen som altid og trykker på fanen «Planlægning» — planlægningen åbner logget ind, uden adgangskode.",
+        "Kun portalens administratorer ser fanen «Planlægning». Almindelige portalbrugere ser kun portalen. Mailen skal være den samme i portalen og i planlægningen.",
+        "Vælger du en anden mail end portalens administrator, logger den person ind direkte på planlægningens adresse med en adgangskode, hun vælger via linket i mailen.",
         "Portalen, dens brugere og adressen bliver som de er, når kunden går til Premium. Planlægningen får sin egen adresse.",
         "«Opret og send link» opretter planlægningen og skifter kunden til Premium i samme skridt. Administratoren får en mail med et link til at vælge adgangskode. Er mailen gået tabt, tryk «Send link igen».",
         "Planlægningen kan kun oprettes herfra. Der er ingen tilmelding på nettet.",
@@ -13433,7 +13435,7 @@ function PremiumDel({ kunde, kl, priser, foreslaaetSlug, onAnnuller, onGemt }) {
       <div style={{ fontSize: 13, fontWeight: 700 }}>Opret kundens egen planlægning og Worklist</div>
       <div style={{ fontSize: 12.5, color: "#64748B", lineHeight: 1.5, marginTop: 2 }}>
         Kundens data ligger i en database for sig, adskilt fra jeres. Administratoren får en mail med et link.
-        Portalen og planlægningen er to logins; som udgangspunkt er det portalens administrator, og samme mail kan bruges begge steder.
+        Brug portalens administrator: så åbner hun planlægningen fra portalen under «Planlægning» uden et login mere.
       </div>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         <div style={{ flex: 1, minWidth: 170 }}>

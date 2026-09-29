@@ -88,7 +88,7 @@ Deno.serve(async (req) => {
     async function opret(): Promise<Response | null> {
       // Navnet tages fra portalen (Premium kraever en portal). kundeoversigt kan ikke
       // bruges her: den filtrerer paa is_admin(), og service-noeglen er ikke planlaegger.
-      const { data: pa } = await admin.from("portal_abonnement").select("visningsnavn")
+      const { data: pa } = await admin.from("portal_abonnement").select("visningsnavn, portal_slug")
         .eq("dinero_contact_guid", guid).maybeSingle();
       const kunde = { navn: (pa?.visningsnavn || String(b.navn ?? "")).trim() };
       if (!kunde.navn) return svar({ error: "Kunden findes ikke." }, 404);
@@ -97,7 +97,8 @@ Deno.serve(async (req) => {
       const adminNavn = String(b.admin_navn ?? "").trim();
       const email = String(b.admin_email ?? "").trim().toLowerCase();
       const r = await bro({ handling: "opret", guid, navn: kunde.navn, slug, admin_navn: adminNavn,
-                            admin_email: email, branche: b.branche, moduler: m });
+                            admin_email: email, branche: b.branche, moduler: m,
+                            portal_slug: pa?.portal_slug ?? "" });
       if (!r.ok) return fejl(r.d);
       const { error } = await admin.from("kundeloesning").insert({
         dinero_contact_guid: guid, visningsnavn: kunde.navn, firma_id: r.d.firma_id, slug,
