@@ -1760,7 +1760,7 @@ const MODULE_HELP = {
         "Linjerne forsvinder af sig selv, når sagen er klaret det rigtige sted — et ønske besvaret, en bestilling godkendt, en tid afsluttet.",
         "Afvigelser har ikke noget andet sted at blive lukket. Tryk «Set ✓», når du har kigget på den. Så forsvinder den for alle planlæggere.",
         "Alle planlæggere ser den samme liste og får de samme beskeder: push på telefonen, når noget haster (kræver Worklist på telefonen med beskeder slået til), og en mail kl. 7 med alt, der venter."] },
-    { h: "Weekend", p: ["Knappen Man–Fre / Man–Søn bestemmer om lørdag og søndag vises.", "Åbner du en uge hvor der allerede ligger opgaver i weekenden, slås kolonnerne til af sig selv.", "Slår du dem fra igen, står der ved siden af knappen hvor mange weekendopgaver der er skjult — så du ikke overser dem."] }, { h: "Sådan er «Ny opgave» og serviceordren bygget op", p: ["Begge skærme er delt i tre farvede afsnit, så det er tydeligt hvad der hører sammen. Farverne betyder det samme begge steder.", "Rosa er kunden: kontrakttype, prismodel, titel, fakturakunde, adresse, fakturabeskrivelse og adgangsforhold. Det er det der ender på fakturaen.", "Grønt er selve opgaven: krævede kompetencer, varighed, tjeklister og instruktionsvideo.", "Blåt er tid: i «Ny opgave» hedder det Planlægning og rummer fast interval eller fleksibel, ansvarlig medarbejder, start- og udløbsdato, interval og ugedage.", "Klikker du på en opgave i ugeplanen, åbner serviceordren med de samme tre farver. Der hedder det blå afsnit Udførelse og rummer status, medarbejdere på opgaven, tasks og tidsregistrering.", "Under Tidsregistrering står hver registrering for sig: hvem, hvornår, hvor lang tid og medarbejderens begrundelse. Øverst står afvigelsen fra den planlagte tid for hele holdet.", "Har medarbejderen start/stop, står den målte tid der også, og afstanden til adressen ved start og ved slut. Er noget værd at se på — fx «afsluttet 3,4 km fra adressen» — står det med orange.", "I «Ny opgave» bliver Annuller og Gem og planlæg stående nederst, uanset hvor langt du har scrollet."] },
+    { h: "Weekend", p: ["Knappen Man–Fre / Man–Søn bestemmer om lørdag og søndag vises.", "Ugeplanen åbner altid på Man–Fre, så fokus er arbejdsugen. Vil du se weekenden, trykker du på knappen.", "Ligger der opgaver i weekenden, står der ved siden af knappen hvor mange der er skjult — så du ikke overser dem."] }, { h: "Sådan er «Ny opgave» og serviceordren bygget op", p: ["Begge skærme er delt i tre farvede afsnit, så det er tydeligt hvad der hører sammen. Farverne betyder det samme begge steder.", "Rosa er kunden: kontrakttype, prismodel, titel, fakturakunde, adresse, fakturabeskrivelse og adgangsforhold. Det er det der ender på fakturaen.", "Grønt er selve opgaven: krævede kompetencer, varighed, tjeklister og instruktionsvideo.", "Blåt er tid: i «Ny opgave» hedder det Planlægning og rummer fast interval eller fleksibel, ansvarlig medarbejder, start- og udløbsdato, interval og ugedage.", "Klikker du på en opgave i ugeplanen, åbner serviceordren med de samme tre farver. Der hedder det blå afsnit Udførelse og rummer status, medarbejdere på opgaven, tasks og tidsregistrering.", "Under Tidsregistrering står hver registrering for sig: hvem, hvornår, hvor lang tid og medarbejderens begrundelse. Øverst står afvigelsen fra den planlagte tid for hele holdet.", "Har medarbejderen start/stop, står den målte tid der også, og afstanden til adressen ved start og ved slut. Er noget værd at se på — fx «afsluttet 3,4 km fra adressen» — står det med orange.", "I «Ny opgave» bliver Annuller og Gem og planlæg stående nederst, uanset hvor langt du har scrollet."] },
     { h: "Beskeder fra medarbejderne", p: [
         "Øverst i ugeplanen kommer et banner, når en medarbejder har meldt noget ind. Der er to slags.",
         "«Ønske om ny tid» betyder at medarbejderen har aftalt et nyt tidspunkt med kunden. Tryk «Godkend og flyt», så rykkes opgaven — eller «Afvis» og skriv hvorfor, så får hun en mail.",
@@ -6267,20 +6267,11 @@ function WeekView({ employees, instances, unplaced, adgangTekst, onUdskrivMedAdg
   // altid betydet den viste uge, og bladrer man frem til uge 40, ville det vaere
   // underligt, om «foer» saa stadig talte fra i dag.
   const [unassignedFilter, setUnassignedFilter] = useState("current");
-  // Weekendkolonnerne vises automatisk saa snart der ligger en opgave der - ellers
-  // ville en loerdagsopgave vaere usynlig indtil man selv slog weekend til.
-  const hasWeekendTasks = instances.some((t) => t.day === "Sat" || t.day === "Sun");
+  // Ugeplanen aabner altid paa Man–Fre (29.9.2026, Jonn): fokus er arbejdsugen.
+  // Weekenden foldes ud med knappen, og ved siden af den staar, hvor mange opgaver
+  // der ligger i weekenden, saa de ikke bliver overset. Foer slog kolonnerne sig
+  // selv til, saa snart der laa én weekendopgave i ugen.
   const weekendTaskCount = instances.filter((t) => t.day === "Sat" || t.day === "Sun").length;
-
-  // Aabner man en uge hvor der ligger opgaver i weekenden, slaas kolonnerne til af
-  // sig selv. Derefter bestemmer knappen alene.
-  //
-  // showWeekend staar med vilje IKKE i deps: ellers ville et fravalg blive slaaet
-  // til igen ved naeste render, og knappen ville vaere lige saa uvirksom som den var
-  // foer — den skiftede kun sin egen tekst uden at flytte en eneste kolonne.
-  useEffect(() => {
-    setShowWeekend(hasWeekendTasks);
-  }, [weekOffset, weekYear, hasWeekendTasks]);
   const visibleDays = showWeekend ? ALL_DAYS : DAYS;
 
   // Filtrer medarbejdere baseret på valgt område
