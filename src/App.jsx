@@ -247,7 +247,7 @@ const MENU_GRUPPER = [
   // noeglen "drift", og to grupper med samme noegle betyder, at begge to lyser op
   // som den valgte — linjen nedenfor sammenligner netop paa key. Siden inde i
   // gruppen hedder stadig "drift"; det er kun gruppenoeglen, der skulle vaere unik.
-  { key: "system", navn: "Drift", kunAdmin: true, sider: [["drift", "Drift"]] },
+  { key: "system", navn: "Drift", kunAdmin: true, sider: [["drift", "Drift"], ["aendringer", "Ændringer"]] },
 ];
 const WORKLIST_URL = import.meta.env.VITE_WORKLIST_URL || "https://jammerbugtrengoering-service.netlify.app";
 function gruppeFor(view) {
@@ -461,6 +461,30 @@ function dbFail(error, whatFailed) {
 // hvor den kan proeves af uden at aabne appen.
 function fetchAllRows(table, columns = "*", filter = null) {
   return hentAlleRaekker(supabase, table, columns, filter);
+}
+
+// Alle raekker fra en tabel UDEN id-kolonne (29.9.2026).
+//
+// PostgREST giver hoejst 1000 raekker pr. kald. instance_access (15.950 raekker) og
+// service_template_skills (1.037) blev hentet med ét kald, saa resten manglede:
+//   * adgangsteksten var tom paa de fleste opgaver, selvhelbredelsen «rettede» den ud
+//     fra aftalen og gemte opgaven — ved HVER opstart og hvert ugeskift, ~580 opgaver
+//     ad gangen, over 30.000 gemninger paa en dag fra én browser
+//   * kompetencerne paa nogle aftaler manglede i appen og kunne gaa tabt, naar
+//     aftalen blev gemt
+// Sorteret paa noeglekolonnerne, saa siderne ikke overlapper; siderne hentes samtidig.
+async function hentAlleSider(tabel, kolonner, sortering) {
+  const { count, error: tFejl } = await supabase.from(tabel).select("*", { count: "exact", head: true });
+  if (tFejl) return { data: null, error: tFejl };
+  const sider = Math.max(1, Math.ceil((count || 0) / 1000));
+  const svar = await Promise.all(Array.from({ length: sider }, (_, i) => {
+    let q = supabase.from(tabel).select(kolonner);
+    for (const k of sortering) q = q.order(k, { ascending: true });
+    return q.range(i * 1000, i * 1000 + 999);
+  }));
+  const fejl = svar.find((r) => r.error);
+  if (fejl) return { data: null, error: fejl.error };
+  return { data: svar.flatMap((r) => r.data || []) };
 }
 
 // FOERSTE RUNDE: opgaverne i ugerne omkring i dag.
@@ -1532,6 +1556,16 @@ function SetNewPasswordScreen({ onDone }) {
 // Hvert modul har sin egen "?"-knap. Indholdet er det samme som i den trykte
 // brugervejledning, men vises for det modul man faktisk står i.
 const MODULE_HELP = {
+  aendringer: { title: "Ændringer", intro: "Hvem ændrede hvad på aftaler og opgaver — og hvad stod der før.", blocks: [
+    { h: "Sådan læses den", p: [
+        "Vælg en dag og eventuelt en person. Hver linje er én ændring: klokkeslæt, hvem, hvilken aftale eller opgave, og for hvert felt den gamle (overstreget) og den nye værdi.",
+        "«planlægning», «Worklist» og «portal» siger, hvor ændringen blev lavet. «Systemet» er baggrundsjob, fx en automatisk start af tiden.",
+        "Tidsregistrering, tjekliste og afslutninger står kun som «ændret». Selve indholdet ser du på opgaven."] },
+    { h: "Det står der ikke", p: [
+        "Gemninger, der ikke ændrede noget, vises ikke. Nederst står, hvor mange der var — det bruges til at se, om appen gemmer mere end nødvendigt.",
+        "Kompetencer på en aftale og adgangskoder logges ikke her.",
+        "Loggen gemmes i 12 måneder. Den findes fra 29.9.2026 — ældre ændringer kan ikke findes."] },
+  ] },
   uge: { title: "Ugeplan", intro: "Her planlægger du ugen. Hver medarbejder har en række, hver dag en kolonne.", blocks: [
     { h: "Sådan planlægger systemet", p: [
         "Opgaverne oprettes automatisk ud fra aftalerne, fire uger frem. Det sker når du åbner appen, og alt nyt gemmes med det samme.",
@@ -2670,7 +2704,7 @@ function PlanningApp({ session, onSignOut }) {
         supabase.from("checklist_templates").select("*"),
         supabase.from("checklist_template_items").select("*").order("sort_order"),
         supabase.from("service_templates").select("*"),
-        supabase.from("service_template_skills").select("*"),
+        hentAlleSider("service_template_skills", "*", ["template_id", "skill_id"]),
         // Slettemarkerede opgaver (aftalen er sat som udgaaet) hentes aldrig ind.
       // Dermed forsvinder de fra ugeplan, fakturering, rapportering og alt andet
       // paa én gang, uden at hvert modul skal huske at filtrere.
@@ -2707,7 +2741,7 @@ function PlanningApp({ session, onSignOut }) {
       hentMedFornyelse("transportordninger", () => supabase.from("employee_home").select("*")),
       // Adgangsoplysninger ligger i beskyttede tabeller. Planlaeggeren er administrator
       // og kan laese dem direkte; medarbejderne kan kun naa dem gennem hent_adgangsinfo.
-      hentMedFornyelse("adgangsoplysninger", () => supabase.from("instance_access").select("*")),
+      hentMedFornyelse("adgangsoplysninger", () => hentAlleSider("instance_access", "instance_id, adgangstekst", ["instance_id"])),
       hentMedFornyelse("adgangsoplysninger på kunder", () => supabase.from("customer_access").select("*")),
         supabase.from("travel_settings").select("*").eq("id","default").single(),
         supabase.from("travel_overrides").select("*"),
@@ -5867,6 +5901,7 @@ function PlanningApp({ session, onSignOut }) {
       {/* Spærret to steder: fanen vises ikke for andre end administratorer, OG siden
           siger nej, hvis nogen skriver sig frem til den. Databasen afviser i øvrigt
           opslagene uanset hvad — job_koersel er lukket med is_admin(). */}
+      {view === "aendringer" && isAdminUser && <AendringslogView employees={employees} />}
       {view === "drift" && (
         <DriftView isAdminUser={isAdminUser}
           paaSide={(side, status) => { setAftalerStart(status || null); setView(side); }} />
@@ -13173,6 +13208,144 @@ function KundeFakturaer({ supabase, guid }) {
           {raekker.map((f) => (
             <FakturaRaekke key={f.Guid} supabase={supabase} guid={guid} faktura={f} />
           ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Ændringslog (29.9.2026) ──────────────────────────────────────────────────
+// Hvem aendrede hvad paa aftaler og opgaver, og hvad stod der foer. Databasen skriver
+// loggen selv (log_aendring), saa ingen skaerm kan glemme det. Kun planlaeggere.
+const AENDRING_FELTER = {
+  status: "Status", assignees: "Medarbejdere", day: "Dag", week: "Uge", year: "År",
+  scheduled_time: "Tidspunkt", duration: "Varighed (min)", customer_name: "Kunde", title: "Titel",
+  address_text: "Adresse", po_number: "Fakturabeskrivelse", required_skills: "Kompetencer",
+  preferred_employee_id: "Fast medarbejder", days: "Dage", day_times: "Tidspunkter", day_durations: "Varighed pr. dag",
+  plan_interval: "Interval", start_date: "Startdato", expiry_date: "Slutdato", cancel_reason: "Opsigelsesgrund",
+  cancelled_effective_date: "Opsagt fra", cancelled_at: "Opsagt", contract_type: "Kontrakttype",
+  pricing_type: "Prisform", fixed_price: "Fastpris", bemaerkning: "Bemærkning", warning: "Advarsel",
+  deleted_at: "Slettet", invoice_ready: "Fakturagrundlag", dinero_exported: "Sendt til Dinero",
+  time_log: "Tidsregistrering", checklist: "Tjekliste", completed_by_employee: "Afsluttet af",
+  completed_at: "Afsluttet", completed_by: "Afsluttet af", telefon: "Telefon", email: "E-mail",
+  kontaktperson: "Kontaktperson", needs_key_pickup: "Nøgle skal hentes", checklist_template_ids: "Tjeklister",
+  oplaering_medarbejdere: "Oplæring", tid_fordeling: "Tidsfordeling", include_in_auto: "Med i auto",
+  off_schedule: "Uden for plan", on_schedule: "Efter plan", deadline: "Frist", excluded_days: "Undtagne dage",
+  preferred_time: "Foretrukket tid", konkrete_datoer: "Datoer", status_foer_slettes: "Status før sletning",
+  nexus_confirmed: "Kvitteret i Nexus", dinero_contact_guid: "Kunde-id",
+};
+const AENDRING_SKJULT = new Set(["id", "template_id", "customer_id", "video_url", "created_at", "block_group_id", "km_anslaaet"]);
+
+function AendringslogView({ employees }) {
+  const idag = new Date().toISOString().slice(0, 10);
+  const [dato, setDato] = useState(idag);
+  const [hvem, setHvem] = useState("");
+  const [tabel, setTabel] = useState("");
+  const [raekker, setRaekker] = useState(null);
+  const [tomme, setTomme] = useState([]);
+  const [fejl, setFejl] = useState("");
+  const navnFor = (id) => employees.find((e) => e.id === id)?.name || id;
+
+  useEffect(() => {
+    let afbrudt = false;
+    (async () => {
+      setRaekker(null); setFejl("");
+      const fra = new Date(`${dato}T00:00:00`);
+      const til = new Date(fra); til.setDate(til.getDate() + 1);
+      let q = supabase.from("aendringslog").select("*")
+        .gte("tidspunkt", fra.toISOString()).lt("tidspunkt", til.toISOString())
+        .order("tidspunkt", { ascending: false }).limit(1000);
+      if (hvem === "system") q = q.is("hvem_id", null);
+      else if (hvem) q = q.eq("hvem_id", hvem);
+      if (tabel) q = q.eq("tabel", tabel);
+      const [{ data, error }, { data: t }] = await Promise.all([
+        q, supabase.from("aendringslog_tomme").select("*").eq("dato", dato).order("antal", { ascending: false }).limit(20),
+      ]);
+      if (afbrudt) return;
+      if (error) { setFejl(error.message); setRaekker([]); return; }
+      setRaekker(data || []);
+      setTomme(t || []);
+    })();
+    return () => { afbrudt = true; };
+  }, [dato, hvem, tabel]);
+
+  const vis = (felt, v) => {
+    if (v === null || v === undefined || v === "") return "—";
+    if (v === "…") return "…";
+    if (felt === "assignees" || felt === "oplaering_medarbejdere") return (Array.isArray(v) ? v : []).map(navnFor).join(", ") || "ingen";
+    if (felt === "preferred_employee_id") return navnFor(v);
+    if (typeof v === "boolean") return v ? "ja" : "nej";
+    if (felt.endsWith("_at") && typeof v === "string") return new Date(v).toLocaleString("da-DK", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+    if (typeof v === "object") return JSON.stringify(v);
+    return String(v);
+  };
+  const hvemListe = [...new Map((employees || []).filter((e) => e.isAdmin || e.is_admin).map((e) => [e.id, e.name])).entries()];
+  const tomtIAlt = tomme.reduce((sum, r) => sum + r.antal, 0);
+
+  return (
+    <div style={{ ...styles.page, maxWidth: 1000 }}>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end", marginBottom: 12 }}>
+        <div>
+          <label style={styles.label}>Dag</label>
+          <input type="date" style={styles.input} value={dato} max={idag} onChange={(e) => setDato(e.target.value || idag)} />
+        </div>
+        <div style={{ minWidth: 200 }}>
+          <label style={styles.label}>Hvem</label>
+          <select style={styles.input} value={hvem} onChange={(e) => setHvem(e.target.value)}>
+            <option value="">Alle</option>
+            {hvemListe.map(([id, n]) => <option key={id} value={id}>{n}</option>)}
+            <option value="system">Systemet (baggrundsjob)</option>
+          </select>
+        </div>
+        <div style={{ minWidth: 160 }}>
+          <label style={styles.label}>Hvad</label>
+          <select style={styles.input} value={tabel} onChange={(e) => setTabel(e.target.value)}>
+            <option value="">Aftaler og opgaver</option>
+            <option value="service_templates">Kun aftaler</option>
+            <option value="instances">Kun opgaver</option>
+          </select>
+        </div>
+      </div>
+      {fejl && <div style={{ color: "#B91C1C", fontSize: 13, marginBottom: 8 }}>{fejl}</div>}
+      {raekker === null && <div style={styles.hint}>Henter …</div>}
+      {raekker && raekker.length === 0 && <div style={styles.hint}>Ingen ændringer den dag med de valg.</div>}
+      {raekker && raekker.length > 0 && (
+        <div style={{ background: "#fff", borderRadius: 10, boxShadow: "0 1px 3px rgba(0,0,0,0.06)", overflow: "hidden" }}>
+          {raekker.map((r) => {
+            const felter = Object.entries(r.aendringer || {}).filter(([k]) => !AENDRING_SKJULT.has(k));
+            return (
+              <div key={r.id} style={{ padding: "9px 14px", borderBottom: "1px solid #F1F5F9", fontSize: 13 }}>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "baseline" }}>
+                  <span style={{ color: "#64748B", fontVariantNumeric: "tabular-nums" }}>
+                    {new Date(r.tidspunkt).toLocaleTimeString("da-DK", { hour: "2-digit", minute: "2-digit" })}
+                  </span>
+                  <b>{r.hvem_navn || (r.kilde === "system" ? "Systemet" : "Ukendt")}</b>
+                  <span style={{ color: "#64748B" }}>
+                    {r.handling === "oprettet" ? "oprettede" : r.handling === "slettet" ? "slettede" : "ændrede"}{" "}
+                    {r.tabel === "service_templates" ? "aftalen" : "opgaven"}
+                  </span>
+                  <b>{r.titel || "—"}</b>
+                  {r.kilde && <span style={{ fontSize: 11, color: "#94A3B8" }}>· {r.kilde}</span>}
+                </div>
+                {felter.length > 0 && (
+                  <div style={{ marginTop: 3, display: "grid", gap: 2 }}>
+                    {felter.map(([k, [gl, nyv]]) => (
+                      <div key={k} style={{ color: "#334155" }}>
+                        <span style={{ color: "#64748B" }}>{AENDRING_FELTER[k] || k}:</span>{" "}
+                        {gl === "…" ? <span>ændret</span>
+                          : <><span style={{ textDecoration: "line-through", color: "#94A3B8" }}>{vis(k, gl)}</span> → <span>{vis(k, nyv)}</span></>}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+      {tomtIAlt > 0 && (
+        <div style={{ ...styles.hint, marginTop: 12 }}>
+          Derudover {tomtIAlt.toLocaleString("da-DK")} gemninger denne dag, der ikke ændrede noget. De vises ikke som ændringer.
         </div>
       )}
     </div>
