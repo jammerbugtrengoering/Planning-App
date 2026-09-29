@@ -244,6 +244,7 @@ const MENU_GRUPPER = [
   // gruppen hedder stadig "drift"; det er kun gruppenoeglen, der skulle vaere unik.
   { key: "system", navn: "Drift", kunAdmin: true, sider: [["drift", "Drift"]] },
 ];
+const WORKLIST_URL = import.meta.env.VITE_WORKLIST_URL || "https://jammerbugtrengoering-service.netlify.app";
 function gruppeFor(view) {
   return MENU_GRUPPER.find((g) => g.sider.some(([k]) => k === view)) || MENU_GRUPPER[0];
 }
@@ -3215,7 +3216,8 @@ function PlanningApp({ session, onSignOut }) {
   // Genrender, naar firmaets moduler er hentet, saa menuen passer til dem.
   useFirma(null);
   useEffect(() => {
-    supabase.from("firma").select("*").eq("id", "default").maybeSingle()
+    // Uden id: databasen giver kun det firma, man hoerer til (hos Jammerbugt er der ét).
+    supabase.from("firma").select("*").limit(1).maybeSingle()
       .then(({ data }) => { if (data) setFirma(data); });
   }, []);
 
@@ -5339,7 +5341,7 @@ function PlanningApp({ session, onSignOut }) {
               ? <>Din bruger <strong>{currentEmployeeForAuth.name}</strong> er ikke markeret som planlægger. Brug medarbejder-appen til dine egne opgaver, eller bed en planlægger om at give dig adgang.</>
               : <>Dit login er ikke knyttet til en medarbejder. Kontakt en planlægger for at få det sat op.</>}
           </div>
-          <a href="https://medarbejderapp.netlify.app/" style={{ display: "block", background: "var(--farve)", color: "#fff",
+          <a href={WORKLIST_URL} style={{ display: "block", background: "var(--farve)", color: "#fff",
             borderRadius: 10, padding: "11px 16px", fontWeight: 700, fontSize: 14, textDecoration: "none", marginBottom: 10 }}>
             Åbn medarbejder-appen
           </a>
@@ -6647,7 +6649,7 @@ function EmployeesView({ employees, onAdd, onEdit, onDelete, supabase, skills, o
         type: "medarbejder",
         email,
         empId: emp.id,
-        redirectTo: "https://jammerbugtrengoering-service.netlify.app",
+        redirectTo: WORKLIST_URL,
       },
     });
 
@@ -12210,7 +12212,7 @@ function FirmaView({ isAdminUser, firma, notify, medarbejderId, onGemt }) {
       logo_url: f.logo_url || null, aendret_af: medarbejderId,
       // Modulerne sendes ikke: de kan ikke aendres herfra (se kommentaren ved MODUL_TEKST).
     };
-    const { data, error } = await supabase.from("firma").update(felter).eq("id", "default").select().maybeSingle();
+    const { data, error } = await supabase.from("firma").update(felter).eq("id", f.id).select().maybeSingle();
     setGemmer(false);
     if (error || !data) { setFejl(error?.message || "Indstillingerne blev ikke gemt."); return; }
     onGemt(data);
@@ -12226,7 +12228,8 @@ function FirmaView({ isAdminUser, firma, notify, medarbejderId, onGemt }) {
     setUploader(true);
     const endelse = (fil.name.split(".").pop() || "png").toLowerCase();
     // Nyt filnavn hver gang: saa henter ingen browser det gamle logo fra sin cache.
-    const sti = `logo-${Date.now()}.${endelse}`;
+    // Under firmaets id: i kundedatabasen maa et firma kun skrive i sin egen mappe.
+    const sti = `${f.id}/logo-${Date.now()}.${endelse}`;
     const { error } = await supabase.storage.from("firma").upload(sti, fil, { contentType: fil.type, upsert: false });
     setUploader(false);
     if (error) { setFejl(error.message); return; }
@@ -13421,7 +13424,9 @@ const TILBUD_STATUS = {
   udloebet:   { navn: "Udløbet",    bg: "#FFFBEB", tekst: "#B45309" },
 };
 
-const PORTAL_URL = "https://jammerbugtrengoering-kundeportal.netlify.app";
+// Adresserne paa de andre apps. Kundeudgaven saetter sine egne i Netlify; uden variablerne
+// er det Jammerbugt Rengoerings.
+const PORTAL_URL = import.meta.env.VITE_PORTAL_URL || "https://jammerbugtrengoering-kundeportal.netlify.app";
 
 // Booker et kundemoede. Moedet er en RIGTIG opgave i ugeplanen — hendes kalender skal
 // vise at hun er ude, og kollegerne paa kontoret skal kunne se det.
