@@ -13346,7 +13346,7 @@ function PremiumDel({ kunde, kl, priser, foreslaaetSlug, onAnnuller, onGemt }) {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(adminEmail.trim())) { setFejl("Skriv administratorens mail."); return; }
     if (!window.confirm(`Sæt ${kunde.navn} på Premium? Kundens egen planlægning og Worklist oprettes, og ${adminEmail.trim()} får en mail med et link.`)) return;
     setArbejder("opretter");
-    const d = await kaldKundeloesning({ guid: kunde.guid, handling: "niveau", niveau: "premium",
+    const d = await kaldKundeloesning({ guid: kunde.guid, handling: "niveau", niveau: "premium", navn: kunde.navn,
       slug: s, admin_navn: adminNavn.trim(), admin_email: adminEmail.trim(), branche, moduler: valgt });
     setArbejder("");
     if (d.fejl) { setFejl(d.fejl); return; }

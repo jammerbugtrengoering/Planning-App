@@ -86,8 +86,12 @@ Deno.serve(async (req) => {
     // Opretter firmaet i kundedatabasen og gemmer koblingen. Bruges af "aktiver" og af
     // "niveau", naar kunden foerste gang saettes til Premium.
     async function opret(): Promise<Response | null> {
-      const { data: kunde } = await admin.from("kundeoversigt").select("navn").eq("guid", guid).maybeSingle();
-      if (!kunde?.navn) return svar({ error: "Kunden findes ikke." }, 404);
+      // Navnet tages fra portalen (Premium kraever en portal). kundeoversigt kan ikke
+      // bruges her: den filtrerer paa is_admin(), og service-noeglen er ikke planlaegger.
+      const { data: pa } = await admin.from("portal_abonnement").select("visningsnavn")
+        .eq("dinero_contact_guid", guid).maybeSingle();
+      const kunde = { navn: (pa?.visningsnavn || String(b.navn ?? "")).trim() };
+      if (!kunde.navn) return svar({ error: "Kunden findes ikke." }, 404);
       const m = moduler(b.moduler);
       const slug = String(b.slug ?? "").trim().toLowerCase();
       const adminNavn = String(b.admin_navn ?? "").trim();
