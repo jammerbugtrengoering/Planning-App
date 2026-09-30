@@ -17,12 +17,19 @@
   app, hvor man kan fejle sikkert — her koster et forkert tryk ingenting.
 
   ØVELSERNE
-  Elleve små opgaver i den rækkefølge, en ny planlægger møder dem:
-    1-4  ugeplanen: læse den, tildele, flytte, sætte en ekstra på (plusset, 30.9.2026)
-    5-6  sygdom: meld en syg, fordel hendes opgaver
-    7    ny aftale med en ny kunde
-    8-10 indbakken: ønske om ny tid, kundebestilling, afvigelse
-    11   fakturering
+  Tretten små opgaver i den rækkefølge, en ny planlægger møder dem:
+    1-4   ugeplanen: læse den, tildele, flytte, sætte en ekstra på (plusset)
+    5-6   tiden: fordele den på én opgave, rette den på hele aftalen (30.9.2026)
+    7-8   sygdom: meld en syg, fordel hendes opgaver
+    9     ny aftale med en ny kunde
+    10-12 indbakken: ønske om ny tid, kundebestilling, afvigelse
+    13    fakturering
+
+  TIDEN — DET VIGTIGSTE AT FORSTÅ (Jonn 30.9.2026)
+  Varigheden er PR. PERSON. To på en opgave på 4 timer er 8 timers arbejde. Skal to
+  dele fire timer, fordeles tiden i opgaven (serviceordren): 2 t til hver. Gælder
+  ændringen HVER uge, rettes varigheden på aftalen i stedet — ikke på den enkelte
+  opgave.
   Man kan hoppe frit rundt — øvelserne krydses af, når det, de beder om, faktisk
   er sket i ugeplanen, ikke når man trykker «videre».
 
@@ -100,6 +107,11 @@
   .valg { display: grid; gap: 8px; }
   .valg button { display: flex; gap: 10px; align-items: center; background: #fff; border: 1.5px solid var(--kant); border-radius: 10px; padding: 10px 12px; font-size: 14.5px; font-weight: 600; text-align: left; }
   .valg button:hover { border-color: var(--pink); }
+  .aabn { border: 0; background: rgba(255,255,255,.7); border-radius: 6px; font-size: 11px; font-weight: 800; padding: 2px 6px; color: #334155; margin-left: auto; }
+  .aabn:hover { background: #fff; }
+  .person { display: flex; gap: 10px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--kant); }
+  .person input { width: 80px; padding: 7px 8px; border: 1.5px solid #CBD5E1; border-radius: 8px; font-size: 14.5px; text-align: right; }
+  .sum { background: var(--blaa-lys); border-radius: 10px; padding: 10px 12px; font-size: 14px; margin: 12px 0; }
   .blok { background: var(--roed-lys); color: var(--roed); font-weight: 800; font-size: 12.5px; border-radius: 8px; padding: 6px 8px; margin-bottom: 6px; }
 
   .guide { position: sticky; top: 14px; background: #fff; border-radius: 14px; box-shadow: 0 1px 3px rgba(0,0,0,.08); padding: 16px 16px 18px; }
@@ -204,6 +216,12 @@ const OEVELSER = [
   { id: "ekstra", gruppe: "Ugeplanen", titel: "Sæt en ekstra på",
     tekst: "Hotel Strand fredag er fire timers arbejde, og Jonas skal have Sara med. Sæt Sara på opgaven — Jonas bliver på.",
     tip: "Tryk på ＋ nederst på kortet og vælg Sara. Varigheden gælder pr. person: to på fire timer er otte timers samlet arbejde. Kortet står nu hos dem begge." },
+  { id: "tidfordel", gruppe: "Tiden", titel: "Fordel tiden på en opgave",
+    tekst: "Hotel Strand er fire timers arbejde i alt — ikke fire timer hver. Nu står der 2 × 4 t = 8 t. Åbn opgaven og fordel tiden: 2 t til Jonas og 2 t til Sara.",
+    tip: "Tryk «Åbn» på kortet (i appen: klik på kortet). Under «Medarbejdere på opgaven» skriver du minutter pr. person: 120 og 120. Det er de tal, der tæller for belægning og faktura." },
+  { id: "aftaletid", gruppe: "Tiden", titel: "Ret varigheden på aftalen",
+    tekst: "Familien Lund har fået et værelse mere. Rengøringen tager nu 2½ time — hver uge. Ret det på aftalen, så alle kommende opgaver følger med.",
+    tip: "Åbn opgaven og tryk «Åbn aftalen». Ret du kun den enkelte opgave, er det glemt igen i næste uge. Udførte opgaver røres ikke." },
   { id: "syg", gruppe: "Sygdom og ferie", titel: "Meld en medarbejder syg",
     tekst: "Anne har ringet og er syg torsdag. Meld hende syg.",
     tip: "Knappen «Sygdom/Ferie» øverst. Hendes torsdagsopgaver ryger så ned i «Ikke tildelt» — de forsvinder ikke." },
@@ -233,7 +251,9 @@ let S;
 function nulstil() {
   S = {
     skaerm: "velkomst",          // velkomst | uge | okonomi | slut
-    opgaver: START_OPGAVER.map((o) => ({ ...o, hjaelpere: [] })),
+    opgaver: START_OPGAVER.map((o) => ({ ...o, hjaelpere: [], fordeling: {}, aftaleId: "af-" + o.id })),
+    aabenId: null,               // opgave, hvis serviceordre er aaben
+    aftaleVarighed: {},          // aftaleId -> timer (til «alle uger»-beskeden)
     plusId: null,                // opgave-id, der er ved at faa en ekstra paa
     blokke: [],                  // { emp, dag, art }
     faerdige: new Set(),
@@ -260,7 +280,11 @@ const blokeret = (e, d) => S.blokke.some((b) => b.emp === e && b.dag === d);
 // i den rigtige app. Varigheden gaelder pr. person, saa den taeller hos dem alle.
 const paa = (o, e) => o.emp === e || (o.hjaelpere || []).includes(e);
 const folkPaa = (o) => [o.emp, ...(o.hjaelpere || [])].filter(Boolean);
-const brugt = (e, d) => S.opgaver.filter((o) => paa(o, e) && o.dag === d).reduce((s, o) => s + o.min, 0);
+// Som planlagtFor/planlagtIAlt i den rigtige app: er tiden fordelt, gaelder hendes
+// andel; ellers opgavens varighed, som er PR. PERSON.
+const planlagtFor = (o, e) => (o.fordeling && o.fordeling[e] > 0 ? o.fordeling[e] : o.min);
+const samlet = (o) => { const f = folkPaa(o); return f.length ? f.reduce((s, e) => s + planlagtFor(o, e), 0) : o.min; };
+const brugt = (e, d) => S.opgaver.filter((o) => paa(o, e) && o.dag === d).reduce((s, o) => s + planlagtFor(o, e), 0);
 const t = (m) => { const h = Math.floor(m / 60), r = m % 60; return r ? `${h},${Math.round(r / 6)} t` : `${h} t`; };
 const kr = (n) => n.toLocaleString("da-DK", { maximumFractionDigits: 0 }) + " kr.";
 
@@ -269,6 +293,8 @@ const KONTROL = {
   tildel: () => { const o = opgave("o15"); return o.emp === "mette" && o.dag === "tir"; },
   flyt: () => { const o = opgave("o11"); return o.dag === "tor" && o.emp === "jonas"; },
   ekstra: () => { const o = opgave("o12"); return o.emp === "jonas" && o.hjaelpere.includes("sara") && o.dag === "fre"; },
+  tidfordel: () => { const o = opgave("o12"); return paa(o, "jonas") && paa(o, "sara") && o.fordeling.jonas === 120 && o.fordeling.sara === 120; },
+  aftaletid: () => opgave("o14").min === 150,
   syg: () => blokeret("anne", "tor"),
   fordel: () => S.annesTor.length > 0 && S.annesTor.every((id) => { const o = opgave(id); return o.emp && o.emp !== "anne"; }),
   aftale: () => S.opgaver.some((o) => o.aftale && /birgit/i.test(o.kunde) && o.dag === "tir" && o.emp === "sara"),
@@ -331,6 +357,26 @@ function tilfoejEkstra(id, empId) {
   tjek(); tegn();
 }
 
+function gemFordeling(id, vaerdier) {
+  const o = opgave(id);
+  const f = {};
+  for (const [e, v] of Object.entries(vaerdier)) { const n = Math.round(Number(String(v).replace(",", "."))); if (n > 0) f[e] = n; }
+  o.fordeling = f;
+  S.vindue = null; S.aabenId = null;
+  skaal(`Gemt — «${o.kunde}» er nu ${t(samlet(o))} samlet arbejde.`);
+  tjek(); tegn();
+}
+
+function gemAftaleTid(aftaleId, timer) {
+  const min = Math.round(Number(String(timer).replace(",", ".")) * 60);
+  if (!(min > 0)) { skaal("Skriv varigheden i timer, fx 2,5."); return; }
+  const rammer = S.opgaver.filter((o) => o.aftaleId === aftaleId && !o.udfoert);
+  rammer.forEach((o) => { o.min = min; });
+  S.vindue = null; S.aabenId = null;
+  skaal(`Aftalen er rettet til ${t(min)} pr. person — det gælder alle kommende uger. Udførte opgaver er ikke rørt.`, true);
+  tjek(); tegn();
+}
+
 function meldSyg(empId, dage, art) {
   dage.forEach((d) => {
     if (!blokeret(empId, d)) S.blokke.push({ emp: empId, dag: d, art });
@@ -349,8 +395,9 @@ function meldSyg(empId, dage, art) {
 function gemAftale(f) {
   if (!f.kunde.trim()) { skaal("Skriv kundens navn."); return false; }
   if (!f.dage.length) { skaal("Vælg mindst én ugedag."); return false; }
+  const aftaleId = "af-ny-" + Date.now();
   f.dage.forEach((d, i) => {
-    S.opgaver.push({ id: "a" + Date.now() + i, kunde: f.kunde.trim(), type: f.type, emp: f.emp || null, dag: d,
+    S.opgaver.push({ id: "a" + Date.now() + i, aftaleId, hjaelpere: [], fordeling: {}, kunde: f.kunde.trim(), type: f.type, emp: f.emp || null, dag: d,
       tid: f.tid || null, min: Math.round(Number(f.timer || 2) * 60), aftale: true });
   });
   S.vindue = null;
@@ -368,7 +415,7 @@ function besked(id, svar) {
   if (b.art === "bestilling") {
     if (svar === "ja") {
       const id2 = "lund-hr";
-      S.opgaver.push({ id: id2, kunde: "Familien Lund", type: "privat", emp: null, dag: "tor", tid: null, min: 240, ekstra: true });
+      S.opgaver.push({ id: id2, kunde: "Familien Lund", type: "privat", emp: null, dag: "tor", tid: null, min: 240, ekstra: true, hjaelpere: [], fordeling: {} });
       S.lundOpgave = id2;
       skaal("Godkendt — hovedrengøringen ligger nu i «Ikke tildelt» torsdag. Giv den en medarbejder.");
     } else skaal("Afvist — kunden får besked i portalen.");
@@ -398,9 +445,9 @@ function topBjaelke() {
 function kortHtml(o, radEmp) {
   const kl = [o.type === "erhverv" ? "erhverv" : o.type === "nexus" ? "nexus" : "", o.udfoert ? "udfoert" : "", S.valgt === o.id ? "valgt" : ""].join(" ");
   return `<div class="kort ${kl}" draggable="${!o.udfoert}" data-kort="${o.id}">
-    <b>${esc(o.kunde)}</b>
+    <div style="display:flex;gap:4px;align-items:flex-start"><b>${esc(o.kunde)}</b><button class="aabn" data-aabn="${o.id}" title="Åbn opgaven (serviceordren)">Åbn</button></div>
     ${o.type === "nexus" ? `<div class="betaler">betales af ${esc(o.betaler)}</div>` : ""}
-    <div>${o.tid ? esc(o.tid) + " · " : ""}${t(o.min)}</div>
+    <div>${o.tid ? esc(o.tid) + " · " : ""}${radEmp && folkPaa(o).length > 1 ? `${t(planlagtFor(o, radEmp))} (i alt ${t(samlet(o))})` : t(o.min)}</div>
     ${o.udfoert ? `<span class="tag tag-groen">✓ udført</span>` : ""}
     ${o.fraSyg ? `<span class="tag tag-roed">fra ${esc(o.fraSyg)} (syg)</span>` : ""}
     ${o.ekstra ? `<span class="tag tag-groen">bestilt i portalen</span>` : ""}
@@ -532,13 +579,50 @@ function vindue() {
     return `<div class="slor" data-luk><div class="vindue" data-stop style="width:min(440px,100%)">
     <header>Sæt flere på «${esc(o.kunde)}» <button data-luk>✕</button></header>
     <div class="krop">
-      <div class="advarsel">Varigheden er <b>pr. person</b>. Med én mere bliver det ${n + 1} × ${t(o.min)} = <b>${t(o.min * (n + 1))}</b> samlet arbejde. Skal de dele timerne ulige, fordeler man dem inde i opgaven i den rigtige app.</div>
+      <div class="advarsel">Varigheden er <b>pr. person</b>. Nu er det ${t(samlet(o))}; med én mere bliver det <b>${t(samlet(o) + o.min)}</b> samlet arbejde. Skal de dele tiden, så åbn opgaven bagefter og fordel minutterne.</div>
       <div class="valg">${kan.map((e) => {
         const b = brugt(e.id, o.dag), syg = blokeret(e.id, o.dag);
         return `<button data-ekstra="${e.id}" ${syg ? "disabled style=\"opacity:.5\"" : ""}><span class="av">${esc(e.navn.slice(0, 2).toUpperCase())}</span>${esc(e.navn)}
           <span style="margin-left:auto;font-size:12.5px;color:var(--daempet);font-weight:500">${syg ? "syg" : `${t(b)} af 7 t ${DAGSNAVN[o.dag]}`}</span></button>`;
       }).join("")}</div>
     </div></div></div>`;
+  }
+
+  if (S.vindue === "ordre" && S.aabenId) {
+    const o = opgave(S.aabenId);
+    const folk = folkPaa(o);
+    return `<div class="slor" data-luk><div class="vindue" data-stop>
+    <header>Serviceordre · ${esc(o.kunde)} <button data-luk>✕</button></header>
+    <div class="krop">
+      <div class="del del-kunde"><h4>Kunden</h4><div style="font-size:14.5px;font-weight:700">${esc(o.kunde)}</div>
+        ${o.aftaleId && !o.ekstra ? `<button class="knap knap-hvid" data-aftale="${o.aftaleId}" style="margin-top:8px;font-size:13px;padding:7px 12px">📄 Åbn aftalen</button>
+        <div class="hint" style="margin:6px 0 0">Aftalen styrer varigheden for alle uger.</div>` : ""}</div>
+      <div class="del del-opgave"><h4>Opgaven</h4><div style="font-size:14px">${DAGSNAVN[o.dag]}${o.tid ? " kl. " + esc(o.tid) : ""} · varighed ${t(o.min)} <b>pr. person</b></div></div>
+      <div class="del del-plan"><h4>Medarbejdere på opgaven</h4>
+        ${folk.length ? folk.map((e) => `<div class="person"><span class="av">${esc(emp(e).navn.slice(0, 2).toUpperCase())}</span>
+          <span style="flex:1;font-weight:600">${esc(emp(e).navn)}</span>
+          <input class="andel" data-emp="${e}" inputmode="numeric" placeholder="${o.min}" value="${o.fordeling[e] ?? ""}"> <span style="font-size:13px;color:var(--daempet)">min</span></div>`).join("")
+          : `<div class="hint">Ingen på opgaven endnu.</div>`}
+        <div class="sum" id="ordreSum">Samlet arbejde: <b>${t(samlet(o))}</b>${folk.length > 1 ? ` (${folk.length} personer)` : ""}. Tomt felt = opgavens varighed, ${t(o.min)}.</div>
+      </div>
+    </div>
+    <footer><button class="knap knap-hvid" data-luk>Luk</button>${folk.length ? `<button class="knap knap-pink" data-gemfordeling>Gem fordeling</button>` : ""}</footer>
+  </div></div>`;
+  }
+
+  if (S.vindue === "aftaleTid" && S.aabenId) {
+    const o = opgave(S.aabenId);
+    const antal = S.opgaver.filter((x) => x.aftaleId === o.aftaleId && !x.udfoert).length;
+    return `<div class="slor" data-luk><div class="vindue" data-stop style="width:min(460px,100%)">
+    <header>Aftale · ${esc(o.kunde)} <button data-luk>✕</button></header>
+    <div class="krop">
+      <div class="del del-plan"><h4>Planlægning</h4>
+        <label class="felt">Varighed pr. person, i timer<input id="aftaleTimer" inputmode="decimal" value="${String(o.min / 60).replace(".", ",")}"></label>
+        <div class="hint" style="margin:0">Rettelsen gælder alle kommende opgaver på aftalen — her ${antal} i den viste uge, og alle uger frem. Udførte opgaver røres ikke.</div>
+      </div>
+    </div>
+    <footer><button class="knap knap-hvid" data-luk>Annuller</button><button class="knap knap-pink" data-gemaftaletid="${o.aftaleId}">Gem aftalen</button></footer>
+  </div></div>`;
   }
 
   if (S.vindue === "indbakke") return `<div class="slor" data-luk><div class="vindue" data-stop>
@@ -561,7 +645,7 @@ function velkomst() {
   return `<div class="velkomst">
     <h1>Prøv planlægningen</h1>
     <p>En hel uge med fire medarbejdere og femten opgaver — og intet af det er rigtigt. Du kan ikke komme til at ødelægge noget, og ingen kan se, hvad du trykker på.</p>
-    <p>Til højre står elleve små øvelser. De krydses af, når du har gjort det, de beder om. Du må tage dem i den rækkefølge, du vil, og starte forfra så tit, du vil.</p>
+    <p>Til højre står tretten små øvelser. De krydses af, når du har gjort det, de beder om. Du må tage dem i den rækkefølge, du vil, og starte forfra så tit, du vil.</p>
     <p style="font-size:14px;color:var(--daempet)">Den rigtige app kan mere: tidslinje, køretid, kompetencer, områder, tjeklister. Her er kun det, der skal til for at forstå tankegangen. Navne og priser er opdigtede.</p>
     <button class="knap knap-pink" data-begynd style="font-size:16px;padding:12px 22px;margin-top:6px">Begynd øvelsen</button>
   </div>`;
@@ -570,12 +654,13 @@ function velkomst() {
 function slut() {
   return `<div class="velkomst">
     <div style="font-size:54px">🎉</div>
-    <h1>Elleve ud af elleve</h1>
-    <p>Du har planlagt en hel uge: tildelt og flyttet opgaver, sat en ekstra på, håndteret en sygemelding, oprettet en fast aftale, ryddet indbakken og sendt ugen til fakturering.</p>
+    <h1>Tretten ud af tretten</h1>
+    <p>Du har planlagt en hel uge: tildelt og flyttet opgaver, sat en ekstra på, fordelt tiden og rettet en aftale, håndteret en sygemelding, oprettet en fast aftale, ryddet indbakken og sendt ugen til fakturering.</p>
     <div class="afsnit">Det du har prøvet</div>
     <ul class="liste">${OEVELSER.map((o) => `<li class="faerdig"><span class="boks">✓</span>${esc(o.titel)}</li>`).join("")}</ul>
-    <div class="afsnit" style="margin-top:16px">Den ene ting, du skal huske</div>
-    <div class="nu" style="margin:6px 0 16px"><p>«Ikke tildelt» er ikke et sted, opgaver venter — det er et sted, de bliver glemt. Ingen medarbejder ser dem. Kig der, hver gang nogen melder sig syg, og før du går hjem.</p></div>
+    <div class="afsnit" style="margin-top:16px">De to ting, du skal huske</div>
+    <div class="nu" style="margin:6px 0 10px"><p>«Ikke tildelt» er ikke et sted, opgaver venter — det er et sted, de bliver glemt. Ingen medarbejder ser dem. Kig der, hver gang nogen melder sig syg, og før du går hjem.</p></div>
+    <div class="nu" style="margin:0 0 16px"><p>Varigheden er <b>pr. person</b>. Sætter du en ekstra på, fordobles arbejdet — skal de dele tiden, så fordel minutterne i opgaven. Gælder en ny tid hver uge, så ret den på <b>aftalen</b>, ikke på den enkelte opgave.</p></div>
     <div style="display:flex;gap:10px;flex-wrap:wrap">
       ${kanVendeTilbage() ? `<button class="knap knap-groen" data-tilbage>Tilbage til planlægningen</button>` : ""}
       <button class="knap knap-hvid" data-forfra>Prøv igen</button>
@@ -616,6 +701,13 @@ app.addEventListener("click", (e) => {
   }
   if (m("[data-besked]")) { const [id, svar] = m("[data-besked]").dataset.besked.split("|"); besked(id, svar); return; }
   if (m("[data-send]")) { S.sendt = true; skaal("Sendt til fakturering.", true); tjek(); tegn(); return; }
+  if (m("[data-aabn]")) { S.aabenId = m("[data-aabn]").dataset.aabn; S.vindue = "ordre"; S.valgt = null; tegn(); return; }
+  if (m("[data-aftale]")) { S.vindue = "aftaleTid"; tegn(); return; }
+  if (m("[data-gemfordeling]")) {
+    const v = {}; document.querySelectorAll(".andel").forEach((i) => { v[i.dataset.emp] = i.value; });
+    gemFordeling(S.aabenId, v); return;
+  }
+  if (m("[data-gemaftaletid]")) { gemAftaleTid(m("[data-gemaftaletid]").dataset.gemaftaletid, document.getElementById("aftaleTimer").value); return; }
   if (m("[data-plus]")) { S.plusId = m("[data-plus]").dataset.plus; S.vindue = "plus"; S.valgt = null; tegn(); return; }
   if (m("[data-ekstra]")) { tilfoejEkstra(S.plusId, m("[data-ekstra]").dataset.ekstra); return; }
   const kort = m("[data-kort]");
@@ -626,6 +718,13 @@ app.addEventListener("click", (e) => {
   }
   const celle = m("[data-celle]");
   if (celle && S.valgt) { const [ei, d] = celle.dataset.celle.split("|"); flytOpgave(S.valgt, ei || null, d); }
+});
+app.addEventListener("input", (e) => {
+  if (!e.target.matches(".andel") || !S.aabenId) return;
+  const o = opgave(S.aabenId);
+  let sum = 0; document.querySelectorAll(".andel").forEach((i) => { const n = Math.round(Number(i.value.replace(",", "."))); sum += n > 0 ? n : o.min; });
+  const el = document.getElementById("ordreSum");
+  if (el) el.innerHTML = `Samlet arbejde: <b>${t(sum)}</b> (ikke gemt endnu). Tomt felt = opgavens varighed, ${t(o.min)}.`;
 });
 app.addEventListener("change", (e) => {
   if (e.target.matches("[data-klar]")) { S.fakt[e.target.dataset.klar] = e.target.checked; tegn(); }
