@@ -28,7 +28,11 @@
 // }]
 // medarbejdere: [{ id, moede (min), kap: { [dag]: min }, sats (kr/km) }]
 // afstand(a, b) -> { km, min }   kørsel mellem to adresser
-// valg: { tilstand: "fast"|"fri", tolerance: 0|15|30|60, balance: 0-100, standardSats }
+// valg: { tilstand: "fast"|"fri", tolerance: 0|15|30|60, balance: 0-100, kontinuitet: 0-100, standardSats }
+//
+// kontinuitet (Jonn 30.9.2026): hvor meget det koster, at en kunde får en anden
+// medarbejder end i dag. 0 = ligegyldigt, 100 = kun hvis det sparer meget. Den første
+// kørsel på uge 41 uden den flyttede 159 af 181 pladser.
 //
 // standardSats: bruges for medarbejdere UDEN kilometersats. Uden den ville deres kørsel
 // koste 0 kr., og motoren ville lægge al kørsel over på dem — det skete i den første
@@ -38,6 +42,7 @@ const STRAF_SENT = 20;          // kr. pr. minut for sent (låste opgaver kan gi
 const STRAF_UDENFOR = 40;       // kr. pr. opgave uden for området
 const STRAF_FLYT_PR_MIN = 1.5;  // kr. pr. minut et klokkeslæt foreslås flyttet
 const BALANCE_FAKTOR = 3;       // kr. pr. (time²) ved balance = 100
+const KONTINUITET_KR = 150;     // kr. pr. plads med ny medarbejder ved kontinuitet = 100
 
 function tilSaet(x) { return x instanceof Set ? x : new Set(x || []); }
 
@@ -87,7 +92,9 @@ function dagPris(liste, emp, afstand, balance, udenforAntal, standardSats) {
 
 // Én dag. Returnerer { pladser: { [opgaveId]: [{ emp, min, start, flyttet }] }, ikkePlaceret: [...] }
 export function simulerDag(opgaver, medarbejdere, afstand, valg = {}) {
-  const { tilstand = "fri", tolerance = 0, balance = 40, standardSats = 3.94 } = valg;
+  const { tilstand = "fri", tolerance = 0, balance = 40, kontinuitet = 0, standardSats = 3.94 } = valg;
+  // Prisen for at give en plads til en anden end den, der har den i dag.
+  const skift = (foer, nyEmp) => (foer && foer !== nyEmp ? (kontinuitet / 100) * KONTINUITET_KR : 0);
   const dag = opgaver[0]?.dag;
   const emp = new Map(medarbejdere.map((e) => [e.id, e]));
   const dagens = Object.fromEntries(medarbejdere.map((e) => [e.id, []]));   // id -> [{opgId, adresse, start, min}]
@@ -118,9 +125,9 @@ export function simulerDag(opgaver, medarbejdere, afstand, valg = {}) {
   for (const f of frie) {
     const optaget = new Set(resultat[f.o.id].map((r) => r.emp));
     let bedst = null;
-    const skift = [0];
-    for (let d = 15; d <= tolerance; d += 15) skift.push(d, -d);
-    for (const d of skift) {
+    const forskydninger = [0];
+    for (let d = 15; d <= tolerance; d += 15) forskydninger.push(d, -d);
+    for (const d of forskydninger) {
       for (const e of medarbejdere) {
         if (!f.kand.has(e.id) || optaget.has(e.id)) continue;
         const ny = { opgId: f.o.id, adresse: f.o.adresse, start: f.o.start + d, min: f.min, udenfor: f.udenfor.has(e.id) };
@@ -129,7 +136,7 @@ export function simulerDag(opgaver, medarbejdere, afstand, valg = {}) {
         dagens[e.id].push(ny);
         const efter = pris(e.id);
         dagens[e.id].pop();
-        const p = efter - foer + Math.abs(d) * STRAF_FLYT_PR_MIN;
+        const p = efter - foer + Math.abs(d) * STRAF_FLYT_PR_MIN + skift(f.foer, e.id);
         if (!bedst || p < bedst.p - 1e-9) bedst = { e: e.id, ny, p, d };
       }
       if (bedst && d === 0) break;   // flyt kun klokkeslættet, når det aftalte ikke kan lade sig gøre
@@ -167,7 +174,7 @@ export function simulerDag(opgaver, medarbejdere, afstand, valg = {}) {
         dagens[e.id].push(ny);
         const efter = pris(e.id);
         dagens[e.id].pop();
-        const delta = (efter - foer) + (gevinstFra - nuFra);
+        const delta = (efter - foer) + (gevinstFra - nuFra) + skift(r.foer, e.id) - skift(r.foer, fra);
         if (delta < -0.5 && (!bedst || delta < bedst.delta)) bedst = { e: e.id, ny, delta };
       }
       if (bedst) {
@@ -201,7 +208,8 @@ export function simulerDag(opgaver, medarbejdere, afstand, valg = {}) {
         if (!passer(restB, nyB, afstand, emp.get(eb).moede, kap(eb))) continue;
         const gemA = dagens[ea], gemB = dagens[eb];
         dagens[ea] = [...restA, nyA]; dagens[eb] = [...restB, nyB];
-        const efter = pris(ea) + pris(eb);
+        const efter = pris(ea) + pris(eb)
+          + skift(rA.foer, eb) + skift(rB.foer, ea) - skift(rA.foer, ea) - skift(rB.foer, eb);
         if (efter < foer - 0.5) {
           resultat[A.opgId][A.i] = { ...rA, emp: eb };
           resultat[B.opgId][B.i] = { ...rB, emp: ea };

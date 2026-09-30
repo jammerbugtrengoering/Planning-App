@@ -16,6 +16,7 @@ import { vinduetsGraenser, vinduetsStykker, hentedeUgerFra, ugenErHentet, andenR
 import { opsummerMaaling, formatAfstand, stopurStatus, startSlutLinjer } from "./tidsmaaling";
 import { hentXlsx } from "./excel";
 import { findDubletter } from "./dubletter";
+import { simulerUge, noegletal as simNoegletal, nuvaerendePlan, dagensTal as simDagensTal, satsFor as simSatsFor } from "./simulering";
 import {
   Plus, Download, X, Clock, AlertTriangle,
   Trash2, Pencil, Repeat, Zap, CalendarClock, Wand2, Star, ChevronLeft, ChevronRight, ChevronUp, ChevronDown,
@@ -1615,6 +1616,14 @@ const MODULE_HELP = {
         "Loggen gemmes i 12 måneder. Den findes fra 29.9.2026 — ældre ændringer kan ikke findes."] },
   ] },
   uge: { title: "Ugeplan", intro: "Her planlægger du ugen. Hver medarbejder har en række, hver dag en kolonne.", blocks: [
+    { h: "Simulér uge", p: [
+        "«🔀 Simulér uge» (kun planlæggere) viser en bedre fordeling af den uge, du står i — ud fra kompetencer, område, mødetid, dagstimer og kørsel. Intet gemmes i ugeplanen.",
+        "Dagen flyttes aldrig, og aftalte klokkeslæt bliver, som de er. Tillader du forslag (±15/30/60 min), flytter simuleringen kun et klokkeslæt, når det aftalte ikke kan lade sig gøre, og markerer det orange.",
+        "«Fast medarbejder» lader den faste medarbejder på aftalen blive. «Fri medarbejder» fordeler alt frit. Skyderen «Kunden beholder sin medarbejder» bestemmer, hvor meget det skal spare, før en kunde får en ny.",
+        "Kørslen regnes kun mellem opgaverne — ikke hjemmefra og hjem — i kroner med hver medarbejders egen kilometersats. Har en medarbejder ingen sats, bruges 3,94 kr./km, så hun ikke får al kørslen, bare fordi den ser gratis ud.",
+        "Øverst står sammenligningen med den nuværende plan: kroner og km, minutter for sent, dage over dagstimerne, nye medarbejdere og opgaver, der ikke kan placeres. Blå kort har fået en ny medarbejder («før: …»). Under hver dag står «før:» med de gamle tal.",
+        "Første gang for en uge hentes køretiderne mellem ugens adresser. De gemmes, så det kun sker én gang. Godkendelse af simuleringen kommer i næste trin.",
+      ] },
     { h: "Øv dig først", p: ["Knappen «Øv dig på en prøveuge» øverst i hjælpen åbner en opdigtet uge med tretten små øvelser: tildele og flytte opgaver, sætte flere medarbejdere på en opgave, fordele tiden og rette varigheden på en aftale, melde en syg, oprette en fast aftale, rydde indbakken og sende ugen til fakturering.", "Intet af det er rigtigt. Den taler ikke med databasen, så du kan ikke ødelægge noget, og den kan tages så mange gange, du vil. Den er også god at vise, når nogen skal se, hvordan planlægningen virker."] },
     { h: "Sådan planlægger systemet", p: [
         "Opgaverne oprettes automatisk ud fra aftalerne, fire uger frem. Det sker når du åbner appen, og alt nyt gemmes med det samme.",
@@ -2551,6 +2560,7 @@ function PlanningApp({ session, onSignOut }) {
   // tal, der bygger paa en femtedel af opgaverne, er ikke «næsten rigtigt» — det er
   // forkert. De siger det hoejt i stedet, indtil resten er inde.
   const [alleOpgaverHentet, setAlleOpgaverHentet] = useState(false);
+  const [visSimulering, setVisSimulering] = useState(false);
   // Tredje runde (29.9.2026). Se hentEfterGraense og sikrAlleOpgaver.
   const alleHentetRef = useRef(false);
   const venterPaaAlleRef = useRef([]);
@@ -6027,6 +6037,11 @@ function PlanningApp({ session, onSignOut }) {
             if (error) notify("Udskriften blev IKKE skrevet i adgangsloggen: " + error.message);
           }}
           onAdd={() => setShowAddTask(true)} onAuto={runAuto} onScheduleWeek={runScheduleWeek} onAutoAllWeeks={runAutoAllWeeks}
+          onSimuler={isAdminUser ? () => {
+            // Ugen skal være hentet helt. Ligger den ud over anden runde, hentes resten først.
+            if (ugenErHentet(hentedeUgerNu, weekYear, weekOffset)) setVisSimulering(true);
+            else sikrAlleOpgaver().then((ok) => ok && setVisSimulering(true));
+          } : null}
           onPlace={manualPlace} onUnplace={unplace} onRemoveAssignee={removeAssignee} onDelete={deleteTask}
           onToggleInclude={(taskId) => updateInstance(taskId, (t) => ({ ...t, includeInAuto: !t.includeInAuto }))}
           onEditEmp={(emp) => { setEditEmp(emp); setShowAddEmp(true); }}
@@ -6168,6 +6183,11 @@ function PlanningApp({ session, onSignOut }) {
       )}
 
       {showAddTask && <TaskModal onClose={() => { setShowAddTask(false); setCopyPayload(null); setEditTplId(null); }} onSave={(p, editId) => (editId ? updateTemplate(p, editId) : addTask(p))} editId={editTplId} checklistTemplates={checklistTemplates} skills={skills} copyFrom={copyPayload} employees={aktiveEmployees} templates={templates} />}
+      {visSimulering && (
+        <SimuleringView weekNo={weekOffset} weekYear={weekYear} instances={instances} employees={employees}
+          templates={templates} areas={areas} employeeAreas={employeeAreas} kmSatser={kmSatser}
+          travelSettings={travelSettings} onClose={() => setVisSimulering(false)} />
+      )}
       {showAddEmp && <EmployeeModal emp={editEmp} onClose={() => { setShowAddEmp(false); setEditEmp(null); }} onSave={saveEmployee} skills={skills} satsHistorik={editEmp ? satsHistorik[editEmp.id] : null} kmSatser={editEmp ? kmSatser[editEmp.id] : null} />}
       {showAddBlock && <BlockModal employees={aktiveEmployees} onClose={() => setShowAddBlock(false)} onSave={addBlock} />}
       {showAddActivity && <ActivityModal employees={aktiveEmployees} onClose={() => setShowAddActivity(false)} onSave={addActivity} />}
@@ -6321,7 +6341,7 @@ function todayKeyGuess() {
 // ---------- Week view ----------
 // Send email notification to employee about day changes
 
-function WeekView({ employees, instances, unplaced, adgangTekst, onUdskrivMedAdgang, onHentTjeklisterTilPrint, onAdd, onAuto, onScheduleWeek, onAutoAllWeeks, onPlace, onUnplace, onRemoveAssignee, onDelete, onOpenTask, onToggleInclude, onEditEmp, dragId, setDragId, weekLabel, weekNo, weekOffset, weekYear, onPrevWeek, onNextWeek, onTodayWeek, travelSettings, currentIsoWeek, areas, employeeAreas, onOpenAddBlock, onOpenAddActivity, opgaveNoter, koerendeTider = {}, stopurNu = Date.now() }) {
+function WeekView({ employees, instances, unplaced, adgangTekst, onUdskrivMedAdgang, onHentTjeklisterTilPrint, onAdd, onAuto, onScheduleWeek, onAutoAllWeeks, onSimuler, onPlace, onUnplace, onRemoveAssignee, onDelete, onOpenTask, onToggleInclude, onEditEmp, dragId, setDragId, weekLabel, weekNo, weekOffset, weekYear, onPrevWeek, onNextWeek, onTodayWeek, travelSettings, currentIsoWeek, areas, employeeAreas, onOpenAddBlock, onOpenAddActivity, opgaveNoter, koerendeTider = {}, stopurNu = Date.now() }) {
   const [addMenuTaskId, setAddMenuTaskId] = useState(null);
   const [showWeekend, setShowWeekend] = useState(false);
   // Belaegningen er foldet vaek som udgangspunkt. Se kommentaren ved selve blokken.
@@ -6397,6 +6417,7 @@ function WeekView({ employees, instances, unplaced, adgangTekst, onUdskrivMedAdg
       <div style={styles.toolbar}>
         <button style={styles.primaryBtn} onClick={onAdd}><Plus size={16} /> Ny opgave</button>
         <button style={styles.secondaryBtn} onClick={onScheduleWeek}><Wand2 size={16} /> Planlæg</button>
+        {onSimuler && <button style={styles.secondaryBtn} onClick={onSimuler} title="Se en bedre fordeling af ugen — intet gemmes">🔀 Simulér uge</button>}
         <button style={{ ...styles.secondaryBtn, color: "#B91C1C", borderColor: "#FECACA" }} onClick={onOpenAddBlock}><Thermometer size={16} /> Sygdom/Ferie</button>
         <button style={{ ...styles.secondaryBtn, color: "#7C3AED", borderColor: "#DDD6FE" }} onClick={onOpenAddActivity}><Building2 size={16} /> Anden aktivitet</button>
         <button
@@ -11511,6 +11532,273 @@ function TimeOgKmSkema({ emp, dage, instances, ugeLabel }) {
 }
 
 const TL_PX_PR_MIN = 1.6;
+
+// ── Simulér uge (fase 3, 30.9.2026) ─────────────────────────────────────────
+// Se overdragelse/PLAN-simulering.md. Visningen bygger en KOPI af ugens opgaver,
+// henter køretider (edge-funktionen koeretabel) og kører motoren i src/simulering.js.
+// Intet skrives i ugeplanen — godkendelse er fase 4.
+//
+// Reglerne for hvem der MÅ tage en opgave, er appens egne: candidatesFor (kompetencer
+// og område), canWorkOn (weekend), sygdom/ferie og dagstimerne på medarbejderkortet.
+const SIM_STANDARD_SATS = 3.94;
+function SimuleringView({ weekNo, weekYear, instances, employees, templates, areas, employeeAreas, kmSatser, travelSettings, onClose }) {
+  const [valg, setValg] = useState({ tilstand: "fri", tolerance: 0, balance: 40, kontinuitet: 50 });
+  const [status, setStatus] = useState("klar");   // klar | henter | faerdig | fejl
+  const [fejl, setFejl] = useState("");
+  const [data, setData] = useState(null);          // { opgaver, med, afstand, kilder }
+  const [res, setRes] = useState(null);            // { sim, nu, nt }
+  const [visning, setVisning] = useState("sim");
+  const [kunAendr, setKunAendr] = useState(false);
+
+  const ugensOpgaver = useMemo(() => instances.filter((t) => t.week === weekNo && t.year === weekYear), [instances, weekNo, weekYear]);
+  const mandag = mondayOfWeek(weekNo, weekYear);
+  const mandagIso = mandag ? new Date(mandag.getTime() - mandag.getTimezoneOffset() * 60000).toISOString().slice(0, 10) : null;
+
+  async function hentOgByg() {
+    setStatus("henter"); setFejl("");
+    try {
+      const opg = ugensOpgaver.filter((t) => !BLOCK_TYPES.includes(t.type) && t.day);
+      // Køretider pr. dag — ét kald hver, gemt i databasen til næste gang.
+      const tabel = new Map();
+      const nk = (a, b) => (a < b ? a + "|" + b : b + "|" + a);
+      for (const dag of [...new Set(opg.map((t) => t.day))]) {
+        const adresser = [...new Set(opg.filter((t) => t.day === dag).map((t) => (t.address || "").trim()).filter(Boolean))];
+        if (adresser.length < 2) continue;
+        const { data: d, error } = await supabase.functions.invoke("koeretabel", { body: { adresser } });
+        if (error || d?.error) throw new Error(d?.error || error.message);
+        for (const [k, v] of Object.entries(d.tabel || {})) tabel.set(k, v);
+      }
+      const skoennede = new Set();
+      const afstand = (a, b) => {
+        if (!a || !b || a === b) return { km: 0, min: 0 };
+        const t = tabel.get(nk(a, b));
+        if (t) return t;
+        skoennede.add(nk(a, b));
+        return { km: 8, min: 10 };   // adresse uden kortpunkt — skøn, vises i sammenligningen
+      };
+      const blokeret = new Set();
+      ugensOpgaver.filter((t) => BLOCK_TYPES.includes(t.type)).forEach((t) => (t.assignees || []).forEach((a) => blokeret.add(a + "|" + t.day)));
+      const med = employees.filter((e) => !e.fratraadtDato).map((e) => ({
+        id: e.id, navn: e.name, farve: e.color,
+        moede: parseTimeToMinutes(e.startTime || travelSettings?.dayStart || "07:00"),
+        kap: e.capacity || {},
+        sats: kmSatsPaaDato(kmSatser, e.id, mandagIso),
+      }));
+      const opgaver = opg.map((t) => {
+        const base = employees.filter((e) => !e.fratraadtDato && !blokeret.has(e.id + "|" + t.day) && canWorkOn(e, t.day) && ((e.capacity || {})[t.day] || 0) > 0);
+        const { candidates, outsideArea } = candidatesFor(t, base, areas, employeeAreas);
+        const folk = t.assignees || [];
+        return {
+          id: t.id, dag: t.day, adresse: (t.address || "").trim(),
+          start: t.scheduledTime ? parseTimeToMinutes(t.scheduledTime) : parseTimeToMinutes(travelSettings?.dayStart || "07:00"),
+          pladser: folk.length ? folk.map((a) => ({ emp: a, min: planlagtFor(t, a) })) : [{ emp: null, min: Number(t.duration) || 0 }],
+          kandidater: candidates.map((e) => e.id),
+          udenfor: outsideArea ? candidates.map((e) => e.id) : [],
+          fast: templates.find((tp) => tp.id === t.templateId)?.preferredEmployeeId || null,
+          laast: t.status === "udført" || registreredeMinutter(t) > 0 || t.type === "aktivitet" || dagErOverstaaet(t.day, weekNo, weekYear),
+          kunde: opgaveIdentitet(t).primaer || t.title, tid: t.scheduledTime || null,
+        };
+      });
+      const d = { opgaver, med, afstand, skoen: () => skoennede.size };
+      setData(d);
+      regn(d, valg);
+      setStatus("faerdig");
+    } catch (e) {
+      setFejl(String(e?.message || e)); setStatus("fejl");
+    }
+  }
+
+  function regn(d, v) {
+    const opt = { ...v, standardSats: SIM_STANDARD_SATS };
+    const sim = simulerUge(d.opgaver, d.med, d.afstand, opt);
+    const nu = simNoegletal(d.opgaver, d.med, d.afstand, nuvaerendePlan(d.opgaver), SIM_STANDARD_SATS);
+    const nt = simNoegletal(d.opgaver, d.med, d.afstand, sim.pladser, SIM_STANDARD_SATS);
+    setRes({ sim, nu, nt });
+  }
+  function saet(k, v) {
+    const ny = { ...valg, [k]: v };
+    setValg(ny);
+    if (data) regn(data, ny);
+  }
+
+  const knap = (aktiv) => ({ border: "1.5px solid #E2E8F0", background: aktiv ? "var(--farve)" : "#fff", color: aktiv ? "#fff" : "#334155",
+    padding: "6px 12px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" });
+  const seg = (k, muligheder) => (
+    <div style={{ display: "inline-flex", borderRadius: 10, overflow: "hidden" }}>
+      {muligheder.map(([v, t]) => <button key={String(v)} type="button" style={knap(valg[k] === v)} onClick={() => saet(k, v)}>{t}</button>)}
+    </div>
+  );
+  const kr = (x) => `${Math.round(x).toLocaleString("da-DK")} kr.`;
+  const DAGE = ALL_DAYS.filter((d) => !isWeekendDay(d.key) || ugensOpgaver.some((t) => t.day === d.key && !BLOCK_TYPES.includes(t.type)));
+
+  // Pr. medarbejder og dag i en plan: [{ opg, r }]
+  function perCelle(pladser) {
+    const m = {};
+    if (!data) return m;
+    for (const o of data.opgaver) for (const r of pladser[o.id] || []) (m[`${r.emp}|${o.dag}`] ||= []).push({ o, r });
+    Object.values(m).forEach((l) => l.sort((a, b) => a.r.start - b.r.start));
+    return m;
+  }
+  const nuPlan = data ? nuvaerendePlan(data.opgaver) : {};
+  const cNu = perCelle(nuPlan), cSim = res ? perCelle(res.sim.pladser) : {};
+  const celler = visning === "nu" ? cNu : cSim;
+
+  const Kort = ({ label, a, b, fmt, lavereErBedre = true, ekstra }) => {
+    const bedre = lavereErBedre ? b < a : b > a, ens = a === b;
+    return (
+      <div style={{ background: "#fff", borderRadius: 12, padding: "10px 14px", boxShadow: "0 1px 3px rgba(0,0,0,.06)" }}>
+        <div style={{ fontSize: 12, color: "#64748B", fontWeight: 700 }}>{label}</div>
+        <div style={{ fontSize: 20, fontWeight: 900, color: ens ? "#111" : bedre ? "#16A34A" : "#DC2626" }}>{fmt(b)}</div>
+        <div style={{ fontSize: 12, color: "#64748B" }}>nu {fmt(a)}{ekstra ? <> · {ekstra}</> : null}</div>
+      </div>
+    );
+  };
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "#FFF7FA", zIndex: 150, overflow: "auto" }}>
+      <div style={{ background: "#111", color: "#fff", padding: "12px 20px", display: "flex", alignItems: "center", gap: 12, position: "sticky", top: 0, zIndex: 2 }}>
+        <b style={{ fontSize: 17 }}>🔀 Simulér uge {weekNo}</b>
+        <span style={{ fontSize: 13, color: "#CBD5E1" }}>Intet gemmes i ugeplanen</span>
+        <button type="button" onClick={onClose} style={{ marginLeft: "auto", border: 0, background: "#333", color: "#fff", borderRadius: 8, padding: "7px 14px", fontWeight: 700, cursor: "pointer" }}>Luk</button>
+      </div>
+      <div style={{ padding: "16px 20px 60px", maxWidth: 1500, margin: "0 auto" }}>
+        <div style={{ background: "#fff", borderRadius: 14, padding: "14px 16px", marginBottom: 14, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: 14 }}>
+          <div><div style={styles.label}>Medarbejdere</div>{seg("tilstand", [["fast", "Fast medarbejder"], ["fri", "Fri medarbejder"]])}
+            <div style={{ fontSize: 12, color: "#64748B", marginTop: 4 }}>Fast: den faste medarbejder på aftalen bliver på opgaven.</div></div>
+          <div><div style={styles.label}>Må klokkeslæt foreslås flyttet?</div>{seg("tolerance", [[0, "Nej"], [15, "±15"], [30, "±30"], [60, "±60"]])}
+            <div style={{ fontSize: 12, color: "#64748B", marginTop: 4 }}>Dagen flyttes aldrig. Et flyttet klokkeslæt markeres.</div></div>
+          <div><div style={styles.label}>Laveste kørselsudgift ↔ jævn fordeling</div>
+            <input type="range" min={0} max={100} value={valg.balance} onChange={(e) => setValg({ ...valg, balance: Number(e.target.value) })}
+              onMouseUp={(e) => saet("balance", Number(e.target.value))} onTouchEnd={(e) => saet("balance", Number(e.target.value))} style={{ width: "100%", accentColor: "var(--farve)" }} /></div>
+          <div><div style={styles.label}>Kunden beholder sin medarbejder: ligegyldigt ↔ vigtigt</div>
+            <input type="range" min={0} max={100} value={valg.kontinuitet} onChange={(e) => setValg({ ...valg, kontinuitet: Number(e.target.value) })}
+              onMouseUp={(e) => saet("kontinuitet", Number(e.target.value))} onTouchEnd={(e) => saet("kontinuitet", Number(e.target.value))} style={{ width: "100%", accentColor: "var(--farve)" }} /></div>
+          <div style={{ display: "flex", alignItems: "flex-end" }}>
+            <button type="button" style={styles.primaryBtn} disabled={status === "henter"} onClick={() => (data ? regn(data, valg) : hentOgByg())}>
+              {status === "henter" ? "Henter køretider …" : data ? "▶ Beregn igen" : "▶ Beregn simulering"}</button>
+          </div>
+        </div>
+        <div style={{ fontSize: 12.5, color: "#475569", marginBottom: 14 }}>
+          Regler der aldrig brydes: dag · kompetencer og område · sygdom/ferie · mødetid · dagstimer · udførte og overståede opgaver røres ikke.
+          Kun kørsel mellem opgaverne tæller, i kroner med hver medarbejders kilometersats (uden sats: {String(SIM_STANDARD_SATS).replace(".", ",")} kr./km).
+        </div>
+        {status === "fejl" && <div style={{ color: "#B91C1C", marginBottom: 12 }}>Kunne ikke beregne: {fejl}</div>}
+        {!res && status !== "henter" && <div style={{ color: "#64748B" }}>Vælg og tryk «Beregn simulering». Første gang hentes køretider for ugens adresser.</div>}
+
+        {res && (() => {
+          const a = res.nu, b = res.nt;
+          const sparet = a.kr - b.kr;
+          return (
+            <>
+              <div style={{ background: "repeating-linear-gradient(45deg,#FEF3C7,#FEF3C7 12px,#FDE68A 12px,#FDE68A 24px)", border: "2px solid #F59E0B", borderRadius: 12,
+                            padding: "10px 16px", fontWeight: 800, color: "#78350F", marginBottom: 12, display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+                ⚠ SIMULERING — intet er gemt i ugeplanen
+                <span style={{ marginLeft: "auto", fontWeight: 600, fontSize: 13 }}>Godkendelse (hele ugen, dag, medarbejder, klokkeslæt) kommer i næste trin.</span>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10, marginBottom: 12 }}>
+                <div style={{ gridColumn: "span 2", background: "#fff", borderRadius: 12, padding: "10px 14px", border: `2px solid ${sparet > 0 ? "#16A34A" : "#E2E8F0"}` }}>
+                  <div style={{ fontSize: 12, color: "#64748B", fontWeight: 700 }}>Kørselsgodtgørelse mellem opgaver</div>
+                  <div style={{ fontSize: 22, fontWeight: 900, color: sparet > 0 ? "#16A34A" : "#111" }}>{kr(b.kr)} <span style={{ fontSize: 14, color: "#64748B" }}>· {b.km} km</span></div>
+                  <div style={{ fontSize: 12.5, color: "#64748B" }}>nu {kr(a.kr)} · {a.km} km{sparet > 0 ? <> · <b style={{ color: "#16A34A" }}>sparer {kr(sparet)} om ugen</b> — ca. {kr(sparet * 46)} om året, hvis hver uge var som denne</> : null}</div>
+                </div>
+                <Kort label="For sent ift. aftalt tid" a={a.sent} b={b.sent} fmt={fmtMin} />
+                <Kort label="Dage over dagstimerne" a={a.overKap} b={b.overKap} fmt={(x) => x} />
+                <Kort label="Opgaver før mødetid" a={a.foerMoede} b={b.foerMoede} fmt={(x) => x} />
+                <Kort label="Pladser med ny medarbejder" a={0} b={b.nye} fmt={(x) => x} ekstra={`af ${data.opgaver.reduce((s2, o) => s2 + o.pladser.length, 0)}`} />
+                <Kort label="Foreslåede nye klokkeslæt" a={0} b={b.flyttet} fmt={(x) => x} />
+                <Kort label="Kan ikke placeres" a={0} b={res.sim.ikkePlaceret.length} fmt={(x) => x} />
+              </div>
+              {data.skoen() > 0 && <div style={{ fontSize: 12.5, color: "#92400E", marginBottom: 8 }}>Obs: {data.skoen()} køreture er skønnet (8 km), fordi en adresse ikke kunne slås op.</div>}
+              {res.sim.ikkePlaceret.length > 0 && (
+                <div style={{ background: "#FEF2F2", borderRadius: 10, padding: "8px 12px", fontSize: 13, color: "#991B1B", marginBottom: 10 }}>
+                  <b>Kan ikke placeres</b> — ingen ledig medarbejder med de rette kompetencer og timer:{" "}
+                  {res.sim.ikkePlaceret.map((x) => { const o = data.opgaver.find((z) => z.id === x.opgave); return `${ALL_DAYS.find((d) => d.key === o.dag)?.label} ${o.tid || ""} ${o.kunde}`; }).join(" · ")}
+                </div>
+              )}
+              <div style={{ display: "flex", gap: 8, alignItems: "center", margin: "10px 0" }}>
+                <button type="button" style={knap(visning === "sim")} onClick={() => setVisning("sim")}>Simuleret plan</button>
+                <button type="button" style={knap(visning === "nu")} onClick={() => setVisning("nu")}>Nuværende plan</button>
+                <label style={{ fontSize: 13, display: "flex", gap: 6, alignItems: "center", marginLeft: 8 }}>
+                  <input type="checkbox" checked={kunAendr} onChange={(e) => setKunAendr(e.target.checked)} /> Vis kun ændringer</label>
+              </div>
+              <div style={{ background: "#fff", borderRadius: 14, overflowX: "auto" }}>
+                <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 1000, tableLayout: "fixed" }}>
+                  <thead><tr>
+                    <th style={{ width: 170, textAlign: "left", padding: 8, fontSize: 12.5, color: "#475569" }}></th>
+                    {DAGE.map((d) => <th key={d.key} style={{ textAlign: "left", padding: 8, fontSize: 12.5, color: "#475569" }}>{d.label}</th>)}
+                  </tr></thead>
+                  <tbody>
+                    {data.med.filter((e) => DAGE.some((d) => (cNu[`${e.id}|${d.key}`] || []).length || (cSim[`${e.id}|${d.key}`] || []).length)).map((e) => {
+                      const fu = a.pr[e.id] || {}, nu2 = b.pr[e.id] || {};
+                      return (
+                        <tr key={e.id} style={{ borderTop: "1px solid #E2E8F0", verticalAlign: "top" }}>
+                          <td style={{ padding: 8, fontSize: 12 }}>
+                            <div style={{ fontWeight: 800, fontSize: 13.5 }}>{e.navn}</div>
+                            <div style={{ color: "#64748B" }}>møder {fmtClock(e.moede)} · {String(simSatsFor(e, SIM_STANDARD_SATS)).replace(".", ",")} kr./km{Number(e.sats) > 0 ? "" : " (standard)"}</div>
+                            {visning === "sim" && (
+                              <div style={{ marginTop: 6, background: "#F8FAFC", borderRadius: 8, padding: "5px 7px", lineHeight: 1.5 }}>
+                                <div style={{ fontWeight: 800, color: "#475569" }}>Ugen før → efter</div>
+                                <div>{fmtMin(fu.arbejde || 0)} → <b>{fmtMin(nu2.arbejde || 0)}</b></div>
+                                <div>{fu.km || 0} km → <b>{nu2.km || 0} km</b></div>
+                                <div>{kr(fu.kr || 0)} → <b>{kr(nu2.kr || 0)}</b></div>
+                              </div>
+                            )}
+                          </td>
+                          {DAGE.map((d) => {
+                            const liste = celler[`${e.id}|${d.key}`] || [];
+                            const kap = (e.kap || {})[d.key] || 0;
+                            const t = simDagensTal(liste.map(({ o, r }) => ({ adresse: o.adresse, start: r.start, min: r.min })), data.afstand, e.moede);
+                            const tFoer = simDagensTal((cNu[`${e.id}|${d.key}`] || []).map(({ o, r }) => ({ adresse: o.adresse, start: r.start, min: r.min })), data.afstand, e.moede);
+                            const sats = simSatsFor(e, SIM_STANDARD_SATS);
+                            let forrige = null;
+                            return (
+                              <td key={d.key} style={{ padding: 6, borderLeft: "1px solid #F1F5F9",
+                                background: kap ? "transparent" : "repeating-linear-gradient(45deg,#F8FAFC,#F8FAFC 6px,#F1F5F9 6px,#F1F5F9 12px)" }}>
+                                <div style={{ fontSize: 11, color: "#64748B", marginBottom: 4 }}>{kap ? `${fmtMin(kap)}` : "fri"}</div>
+                                {liste.map(({ o, r }) => {
+                                  const ny = visning === "sim" && r.foer !== undefined && r.foer !== r.emp && !r.laast;
+                                  const flyt = visning === "sim" && r.flyttet;
+                                  const km = forrige ? data.afstand(forrige.adresse, o.adresse).km : null;
+                                  forrige = o;
+                                  const dim = kunAendr && visning === "sim" && !ny && !flyt;
+                                  return (
+                                    <React.Fragment key={o.id}>
+                                      {km != null && km > 0 && <div style={{ fontSize: 10.5, color: "#4F46E5", margin: "1px 0 3px 3px" }}>🚗 {String(km).replace(".", ",")} km</div>}
+                                      <div style={{ borderRadius: 7, padding: "4px 6px", marginBottom: 4, fontSize: 11.5, opacity: dim ? 0.25 : 1,
+                                        background: ny ? "#EFF6FF" : "var(--farve-lys)", borderLeft: `4px solid ${ny ? "#2563EB" : "var(--farve)"}`,
+                                        outline: flyt ? "2px solid #D97706" : "none" }}>
+                                        <b style={{ display: "block", fontSize: 12 }}>{fmtClock(r.start)} {o.kunde}</b>
+                                        {fmtMin(r.min)}{r.laast ? " · 🔒" : ""}
+                                        {flyt && <div style={{ fontSize: 10.5, fontWeight: 800, color: "#92400E" }}>🕐 foreslået {fmtClock(r.start)} (aftalt {o.tid})</div>}
+                                        {ny && <div style={{ fontSize: 10.5, fontWeight: 800, color: "#1E40AF" }}>før: {r.foer ? data.med.find((m) => m.id === r.foer)?.navn.split(" ")[0] || "?" : "ikke tildelt"}</div>}
+                                      </div>
+                                    </React.Fragment>
+                                  );
+                                })}
+                                {(liste.length > 0 || kap > 0) && (
+                                  <div style={{ fontSize: 11, color: t.arbejde > kap || t.sent ? "#DC2626" : "#64748B", fontWeight: t.arbejde > kap || t.sent ? 800 : 400 }}>
+                                    {fmtMin(t.arbejde)} af {fmtMin(kap)}{t.km ? ` · ${String(t.km).replace(".", ",")} km = ${kr(t.km * sats)}` : ""}{t.sent ? ` · ⏱ ${fmtMin(t.sent)} for sent` : ""}
+                                  </div>
+                                )}
+                                {visning === "sim" && (tFoer.arbejde !== t.arbejde || tFoer.km !== t.km) && (
+                                  <div style={{ fontSize: 11, color: "#94A3B8" }}>før: {fmtMin(tFoer.arbejde)}{tFoer.km ? ` · ${String(tFoer.km).replace(".", ",")} km = ${kr(tFoer.km * sats)}` : ""}</div>
+                                )}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          );
+        })()}
+      </div>
+    </div>
+  );
+}
 
 function UgeTidslinje({ emp, dage, instances, travelSettings, weekOffset, weekYear,
                         onOpenTask, dragId, setDragId, onPlace, alleMedarbejdere, adgangTekst,

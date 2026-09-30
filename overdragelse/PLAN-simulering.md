@@ -12,7 +12,11 @@ Besluttet med Jonn 30.9.2026. Skal kunne tages op i Claude Code.
   159 af 181 pladser skifter medarbejder — kontinuitet er ikke vægtet endnu.
   3 opgaver har ingen lovlig kandidat (kompetencer/dagstimer) og står som «ikke placeret».
   Medarbejdere uden kilometersats (Charlotte, Lea, Karen) regnes med standardsatsen 3,94.
-- Mangler: fase 3 (visning), 4 (godkendelse), 5 (hjælp/øvelse).
+- Kontinuitet (Jonn 30.9): skyderen «Kunden beholder sin medarbejder» — op til 150 kr. pr.
+  plads, der får ny medarbejder (`kontinuitet` i motoren, med test).
+- Fase 3 bygget: `SimuleringView` i App.jsx, knappen «🔀 Simulér uge» i ugeplanen (kun
+  planlæggere), hjælpeteksten «Simulér uge» under Ugeplan. Ikke afprøvet i browseren endnu.
+- Mangler: fase 4 (godkendelse, fortryd, besked), fase 5 (øvelse i prøveugen).
 
 ## Formålet
 

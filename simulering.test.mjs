@@ -121,6 +121,20 @@ const O = (id, adresse, start, min, pladser, extra = {}) => ({
   sandt("aldrig dyrere end nu, når nu er lovlig", sim.kr <= nu.kr || nu.sent > 0 || nu.foerMoede > 0);
 }
 
+// ── Kontinuitet: høj vægt holder kunden hos den samme ───────────────────────
+{
+  const med = [M("x", 3), M("y", 3)];
+  // y kører lidt for at tage 2 — med høj kontinuitet skal det blive sådan.
+  const opg = [O("1", "A", kl(8), 60, [{ emp: "x", min: 60 }]), O("2", "B", kl(10), 60, [{ emp: "y", min: 60 }]),
+               O("3", "A2", kl(12), 60, [{ emp: "y", min: 60 }])];
+  const lav = simulerDag(opg, med, afstand, { kontinuitet: 0, balance: 0 });
+  const hoej = simulerDag(opg, med, afstand, { kontinuitet: 100, balance: 0 });
+  const nyeLav = Object.values(lav.pladser).flat().filter((r) => r.foer && r.foer !== r.emp).length;
+  const nyeHoej = Object.values(hoej.pladser).flat().filter((r) => r.foer && r.foer !== r.emp).length;
+  sandt("høj kontinuitet giver færre nye medarbejdere", nyeHoej <= nyeLav);
+  er("høj kontinuitet: ingen skifter for småbeløb", nyeHoej, 0);
+}
+
 // ── Uden kilometersats: standardsatsen bruges, så hun ikke får al kørslen ────
 {
   const med = [{ id: "uden", sats: 0, moede: kl(7), kap: { Mon: 420 } }, M("med", 3.94)];
