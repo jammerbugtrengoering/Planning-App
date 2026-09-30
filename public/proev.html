@@ -17,12 +17,12 @@
   app, hvor man kan fejle sikkert — her koster et forkert tryk ingenting.
 
   ØVELSERNE
-  Ti små opgaver i den rækkefølge, en ny planlægger møder dem:
-    1-3  ugeplanen: læse den, tildele, flytte
-    4-5  sygdom: meld en syg, fordel hendes opgaver
-    6    ny aftale med en ny kunde
-    7-9  indbakken: ønske om ny tid, kundebestilling, afvigelse
-    10   fakturering
+  Elleve små opgaver i den rækkefølge, en ny planlægger møder dem:
+    1-4  ugeplanen: læse den, tildele, flytte, sætte en ekstra på (plusset, 30.9.2026)
+    5-6  sygdom: meld en syg, fordel hendes opgaver
+    7    ny aftale med en ny kunde
+    8-10 indbakken: ønske om ny tid, kundebestilling, afvigelse
+    11   fakturering
   Man kan hoppe frit rundt — øvelserne krydses af, når det, de beder om, faktisk
   er sket i ugeplanen, ikke når man trykker «videre».
 
@@ -92,6 +92,14 @@
   .kort .tag { display: inline-block; font-size: 10.5px; font-weight: 800; padding: 1px 6px; border-radius: 99px; margin-top: 3px; }
   .tag-roed { background: var(--roed-lys); color: var(--roed); }
   .tag-groen { background: var(--groen-lys); color: #166534; }
+  .folk { display: flex; gap: 4px; align-items: center; margin-top: 4px; }
+  .av { width: 20px; height: 20px; border-radius: 50%; background: #475569; color: #fff; font-size: 9.5px; font-weight: 800; display: grid; place-items: center; }
+  .plus { width: 20px; height: 20px; border-radius: 50%; border: 1.5px dashed #94A3B8; background: #fff; color: #475569; font-weight: 800; font-size: 13px; line-height: 1; display: grid; place-items: center; padding: 0; }
+  .plus:hover { border-color: var(--pink); color: var(--pink); }
+  .advarsel { background: var(--gul-lys); border: 1px solid #FDE68A; border-radius: 10px; padding: 10px 12px; font-size: 13.5px; margin-bottom: 12px; }
+  .valg { display: grid; gap: 8px; }
+  .valg button { display: flex; gap: 10px; align-items: center; background: #fff; border: 1.5px solid var(--kant); border-radius: 10px; padding: 10px 12px; font-size: 14.5px; font-weight: 600; text-align: left; }
+  .valg button:hover { border-color: var(--pink); }
   .blok { background: var(--roed-lys); color: var(--roed); font-weight: 800; font-size: 12.5px; border-radius: 8px; padding: 6px 8px; margin-bottom: 6px; }
 
   .guide { position: sticky; top: 14px; background: #fff; border-radius: 14px; box-shadow: 0 1px 3px rgba(0,0,0,.08); padding: 16px 16px 18px; }
@@ -193,6 +201,9 @@ const OEVELSER = [
   { id: "flyt", gruppe: "Ugeplanen", titel: "Flyt en opgave",
     tekst: "Brix Erhverv har ringet: onsdag passer dårligt, torsdag er bedre. Flyt opgaven til torsdag — stadig hos Jonas.",
     tip: "Samme greb: træk eller tryk-tryk." },
+  { id: "ekstra", gruppe: "Ugeplanen", titel: "Sæt en ekstra på",
+    tekst: "Hotel Strand fredag er fire timers arbejde, og Jonas skal have Sara med. Sæt Sara på opgaven — Jonas bliver på.",
+    tip: "Tryk på ＋ nederst på kortet og vælg Sara. Varigheden gælder pr. person: to på fire timer er otte timers samlet arbejde. Kortet står nu hos dem begge." },
   { id: "syg", gruppe: "Sygdom og ferie", titel: "Meld en medarbejder syg",
     tekst: "Anne har ringet og er syg torsdag. Meld hende syg.",
     tip: "Knappen «Sygdom/Ferie» øverst. Hendes torsdagsopgaver ryger så ned i «Ikke tildelt» — de forsvinder ikke." },
@@ -222,7 +233,8 @@ let S;
 function nulstil() {
   S = {
     skaerm: "velkomst",          // velkomst | uge | okonomi | slut
-    opgaver: START_OPGAVER.map((o) => ({ ...o })),
+    opgaver: START_OPGAVER.map((o) => ({ ...o, hjaelpere: [] })),
+    plusId: null,                // opgave-id, der er ved at faa en ekstra paa
     blokke: [],                  // { emp, dag, art }
     faerdige: new Set(),
     aktuel: "laes",
@@ -244,7 +256,11 @@ nulstil();
 const opgave = (id) => S.opgaver.find((o) => o.id === id);
 const emp = (id) => MEDARBEJDERE.find((e) => e.id === id);
 const blokeret = (e, d) => S.blokke.some((b) => b.emp === e && b.dag === d);
-const brugt = (e, d) => S.opgaver.filter((o) => o.emp === e && o.dag === d).reduce((s, o) => s + o.min, 0);
+// Hvem er paa opgaven? Den foerste (emp) og de ekstra (hjaelpere) — ligesom assignees
+// i den rigtige app. Varigheden gaelder pr. person, saa den taeller hos dem alle.
+const paa = (o, e) => o.emp === e || (o.hjaelpere || []).includes(e);
+const folkPaa = (o) => [o.emp, ...(o.hjaelpere || [])].filter(Boolean);
+const brugt = (e, d) => S.opgaver.filter((o) => paa(o, e) && o.dag === d).reduce((s, o) => s + o.min, 0);
 const t = (m) => { const h = Math.floor(m / 60), r = m % 60; return r ? `${h},${Math.round(r / 6)} t` : `${h} t`; };
 const kr = (n) => n.toLocaleString("da-DK", { maximumFractionDigits: 0 }) + " kr.";
 
@@ -252,6 +268,7 @@ const kr = (n) => n.toLocaleString("da-DK", { maximumFractionDigits: 0 }) + " kr
 const KONTROL = {
   tildel: () => { const o = opgave("o15"); return o.emp === "mette" && o.dag === "tir"; },
   flyt: () => { const o = opgave("o11"); return o.dag === "tor" && o.emp === "jonas"; },
+  ekstra: () => { const o = opgave("o12"); return o.emp === "jonas" && o.hjaelpere.includes("sara") && o.dag === "fre"; },
   syg: () => blokeret("anne", "tor"),
   fordel: () => S.annesTor.length > 0 && S.annesTor.every((id) => { const o = opgave(id); return o.emp && o.emp !== "anne"; }),
   aftale: () => S.opgaver.some((o) => o.aftale && /birgit/i.test(o.kunde) && o.dag === "tir" && o.emp === "sara"),
@@ -295,15 +312,30 @@ function flytOpgave(id, empId, dag) {
   if (!o) return;
   if (o.udfoert) { skaal("Den er allerede udført — den flyttes ikke."); return; }
   if (empId && blokeret(empId, dag)) { skaal(`${emp(empId).navn} er syg ${DAGSNAVN[dag]}.`); return; }
+  if (empId) o.hjaelpere = (o.hjaelpere || []).filter((x) => x !== empId);
   o.emp = empId; o.dag = dag; o.fraSyg = false;
+  if (!empId) o.hjaelpere = [];
   S.valgt = null;
   if (empId && brugt(empId, dag) > KAPACITET) skaal(`Bemærk: ${emp(empId).navn} har nu mere end 7 timer ${DAGSNAVN[dag]}.`);
+  tjek(); tegn();
+}
+
+function tilfoejEkstra(id, empId) {
+  const o = opgave(id);
+  if (!o || paa(o, empId)) return;
+  if (blokeret(empId, o.dag)) { skaal(`${emp(empId).navn} er syg ${DAGSNAVN[o.dag]}.`); return; }
+  o.hjaelpere.push(empId);
+  S.vindue = null; S.plusId = null;
+  const n = folkPaa(o).length;
+  skaal(`${emp(empId).navn} er sat på «${o.kunde}» — ${n} × ${t(o.min)} = ${t(o.min * n)} samlet arbejde.`);
   tjek(); tegn();
 }
 
 function meldSyg(empId, dage, art) {
   dage.forEach((d) => {
     if (!blokeret(empId, d)) S.blokke.push({ emp: empId, dag: d, art });
+    S.opgaver.filter((o) => o.dag === d && !o.udfoert && (o.hjaelpere || []).includes(empId))
+      .forEach((o) => { o.hjaelpere = o.hjaelpere.filter((x) => x !== empId); });
     S.opgaver.filter((o) => o.emp === empId && o.dag === d && !o.udfoert).forEach((o) => {
       o.emp = null; o.fraSyg = emp(empId).navn;
       if (empId === "anne" && d === "tor") S.annesTor.push(o.id);
@@ -363,7 +395,7 @@ function topBjaelke() {
     <span class="oevelse">ØVELSE — INTET ER RIGTIGT</span>${menu}</div>`;
 }
 
-function kortHtml(o) {
+function kortHtml(o, radEmp) {
   const kl = [o.type === "erhverv" ? "erhverv" : o.type === "nexus" ? "nexus" : "", o.udfoert ? "udfoert" : "", S.valgt === o.id ? "valgt" : ""].join(" ");
   return `<div class="kort ${kl}" draggable="${!o.udfoert}" data-kort="${o.id}">
     <b>${esc(o.kunde)}</b>
@@ -373,6 +405,10 @@ function kortHtml(o) {
     ${o.fraSyg ? `<span class="tag tag-roed">fra ${esc(o.fraSyg)} (syg)</span>` : ""}
     ${o.ekstra ? `<span class="tag tag-groen">bestilt i portalen</span>` : ""}
     ${o.aftale ? `<span class="tag tag-groen">ny aftale</span>` : ""}
+    ${o.emp ? `<div class="folk">
+      ${folkPaa(o).map((e) => `<span class="av" title="${esc(emp(e).navn)}${e === radEmp ? " (denne række)" : ""}" style="${e === radEmp ? "background:#111" : ""}">${esc(emp(e).navn.slice(0, 2).toUpperCase())}</span>`).join("")}
+      ${!o.udfoert && MEDARBEJDERE.some((e) => !paa(o, e.id)) ? `<button class="plus" data-plus="${o.id}" title="Sæt flere medarbejdere på opgaven">+</button>` : ""}
+    </div>` : ""}
   </div>`;
 }
 
@@ -390,12 +426,12 @@ function ugeplan() {
       ${raekker.map((r) => `<tr class="${r.id ? "" : "ikke"}">
         <td><div class="emp">${esc(r.navn)}<small>${esc(r.sted)}</small></div></td>
         ${DAGE.map(([d]) => {
-          const her = S.opgaver.filter((o) => (o.emp || null) === r.id && o.dag === d);
+          const her = S.opgaver.filter((o) => o.dag === d && (r.id ? paa(o, r.id) : !o.emp));
           const blok = r.id && blokeret(r.id, d);
           const b = r.id ? brugt(r.id, d) : 0;
           return `<td class="celle ${blok ? "blokeret" : ""}" data-celle="${r.id || ""}|${d}">
             ${blok ? `<div class="blok">🌡️ Syg</div>` : ""}
-            ${her.map(kortHtml).join("")}
+            ${her.map((o) => kortHtml(o, r.id)).join("")}
             ${r.id && !blok ? `<div class="belag" style="color:${b > KAPACITET ? "var(--roed)" : ""}">${t(b)} af 7 t</div>` : ""}
           </td>`;
         }).join("")}
@@ -489,6 +525,22 @@ function vindue() {
     <footer><button class="knap knap-hvid" data-luk>Annuller</button><button class="knap knap-pink" data-gemaftale>Gem og planlæg</button></footer>
   </div></div>`;
 
+  if (S.vindue === "plus" && S.plusId) {
+    const o = opgave(S.plusId);
+    const n = folkPaa(o).length;
+    const kan = MEDARBEJDERE.filter((e) => !paa(o, e.id));
+    return `<div class="slor" data-luk><div class="vindue" data-stop style="width:min(440px,100%)">
+    <header>Sæt flere på «${esc(o.kunde)}» <button data-luk>✕</button></header>
+    <div class="krop">
+      <div class="advarsel">Varigheden er <b>pr. person</b>. Med én mere bliver det ${n + 1} × ${t(o.min)} = <b>${t(o.min * (n + 1))}</b> samlet arbejde. Skal de dele timerne ulige, fordeler man dem inde i opgaven i den rigtige app.</div>
+      <div class="valg">${kan.map((e) => {
+        const b = brugt(e.id, o.dag), syg = blokeret(e.id, o.dag);
+        return `<button data-ekstra="${e.id}" ${syg ? "disabled style=\"opacity:.5\"" : ""}><span class="av">${esc(e.navn.slice(0, 2).toUpperCase())}</span>${esc(e.navn)}
+          <span style="margin-left:auto;font-size:12.5px;color:var(--daempet);font-weight:500">${syg ? "syg" : `${t(b)} af 7 t ${DAGSNAVN[o.dag]}`}</span></button>`;
+      }).join("")}</div>
+    </div></div></div>`;
+  }
+
   if (S.vindue === "indbakke") return `<div class="slor" data-luk><div class="vindue" data-stop>
     <header>🔔 Indbakke <button data-luk>✕</button></header>
     <div class="krop"><div class="indbakke">
@@ -509,7 +561,7 @@ function velkomst() {
   return `<div class="velkomst">
     <h1>Prøv planlægningen</h1>
     <p>En hel uge med fire medarbejdere og femten opgaver — og intet af det er rigtigt. Du kan ikke komme til at ødelægge noget, og ingen kan se, hvad du trykker på.</p>
-    <p>Til højre står ti små øvelser. De krydses af, når du har gjort det, de beder om. Du må tage dem i den rækkefølge, du vil, og starte forfra så tit, du vil.</p>
+    <p>Til højre står elleve små øvelser. De krydses af, når du har gjort det, de beder om. Du må tage dem i den rækkefølge, du vil, og starte forfra så tit, du vil.</p>
     <p style="font-size:14px;color:var(--daempet)">Den rigtige app kan mere: tidslinje, køretid, kompetencer, områder, tjeklister. Her er kun det, der skal til for at forstå tankegangen. Navne og priser er opdigtede.</p>
     <button class="knap knap-pink" data-begynd style="font-size:16px;padding:12px 22px;margin-top:6px">Begynd øvelsen</button>
   </div>`;
@@ -518,8 +570,8 @@ function velkomst() {
 function slut() {
   return `<div class="velkomst">
     <div style="font-size:54px">🎉</div>
-    <h1>Ti ud af ti</h1>
-    <p>Du har planlagt en hel uge: tildelt og flyttet opgaver, håndteret en sygemelding, oprettet en fast aftale, ryddet indbakken og sendt ugen til fakturering.</p>
+    <h1>Elleve ud af elleve</h1>
+    <p>Du har planlagt en hel uge: tildelt og flyttet opgaver, sat en ekstra på, håndteret en sygemelding, oprettet en fast aftale, ryddet indbakken og sendt ugen til fakturering.</p>
     <div class="afsnit">Det du har prøvet</div>
     <ul class="liste">${OEVELSER.map((o) => `<li class="faerdig"><span class="boks">✓</span>${esc(o.titel)}</li>`).join("")}</ul>
     <div class="afsnit" style="margin-top:16px">Den ene ting, du skal huske</div>
@@ -564,6 +616,8 @@ app.addEventListener("click", (e) => {
   }
   if (m("[data-besked]")) { const [id, svar] = m("[data-besked]").dataset.besked.split("|"); besked(id, svar); return; }
   if (m("[data-send]")) { S.sendt = true; skaal("Sendt til fakturering.", true); tjek(); tegn(); return; }
+  if (m("[data-plus]")) { S.plusId = m("[data-plus]").dataset.plus; S.vindue = "plus"; S.valgt = null; tegn(); return; }
+  if (m("[data-ekstra]")) { tilfoejEkstra(S.plusId, m("[data-ekstra]").dataset.ekstra); return; }
   const kort = m("[data-kort]");
   if (kort) {
     const o = opgave(kort.dataset.kort);
