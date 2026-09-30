@@ -23,7 +23,8 @@
     "indlaesning.test.mjs",
     "vindue.test.mjs",
     "tidsmaaling.test.mjs",
-    "excel.test.mjs"
+    "excel.test.mjs",
+    "simulering.test.mjs"
   ],
   "rules": {
     "no-undef": "error",

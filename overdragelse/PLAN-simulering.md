@@ -1,6 +1,18 @@
 # Plan: Simulér uge — fri planlægning
 
-Besluttet med Jonn 30.9.2026. Ikke bygget endnu. Skal kunne tages op i Claude Code.
+Besluttet med Jonn 30.9.2026. Skal kunne tages op i Claude Code.
+
+**Status 30.9.2026:** fase 1 og 2 er bygget.
+- Motoren: `src/simulering.js` + `simulering.test.mjs` (24 kontroller, køres af `npm run build`).
+- Køretabel: edge-funktionen `koeretabel` (deployet) + tabellerne `koeretabel` og `adresse_punkt`.
+  Uge 41 er hentet: 5 matrix-kald, alle par for hver dag.
+- Prøvekørsel på uge 41 (181 opgaver, 18 medarbejdere, «Fri medarbejder», balance 40):
+  nu 934 km / 3.222 kr. / 60,7 t for sent / 8 dage over dagstimerne →
+  simuleret 652 km / 2.129 kr. / 0 / 0. Sparer ca. 1.100 kr. og 280 km på ugen.
+  159 af 181 pladser skifter medarbejder — kontinuitet er ikke vægtet endnu.
+  3 opgaver har ingen lovlig kandidat (kompetencer/dagstimer) og står som «ikke placeret».
+  Medarbejdere uden kilometersats (Charlotte, Lea, Karen) regnes med standardsatsen 3,94.
+- Mangler: fase 3 (visning), 4 (godkendelse), 5 (hjælp/øvelse).
 
 ## Formålet
 
@@ -38,7 +50,7 @@ sekunder.
 3. **Sammenligning** med den nuværende plan:
    - km og køretid mellem opgaver (i alt og pr. dag)
    - opgaver der kommer for sent i forhold til aftalt tid
-   - overbookede dage, opgaver uden for område
+   - dage over dagstimerne eller på fridage, opgaver før mødetid, opgaver uden for område
    - belægning pr. medarbejder
    - hvor mange kunder der får en ny medarbejder
    - hvor mange klokkeslæt der foreslås flyttet
@@ -56,8 +68,11 @@ sekunder.
 
 **Brydes aldrig**
 - Kompetencer (krævede skills og niveau)
-- Sygdom/ferie og medarbejderens arbejdstider/kapacitet pr. dag (hård grænse, evt.
-  med lille tolerance, der vises som overbooking)
+- Sygdom/ferie
+- **Mødetid** (emp.startTime): ingen opgave begynder før hun møder (Jonn 30.9)
+- **Dagstimer** pr. ugedag (emp.capacity): hendes arbejde på dagen må ikke overstige
+  dem, og 0 timer = fri den dag (Jonn 30.9). Kørsel tæller ikke med i dagstimerne,
+  ligesom i resten af appen.
 - Weekend kun for dem, der må
 - Opgavens dag
 - Aftalt klokkeslæt — medmindre planlæggeren har tilladt forslag, og så kun inden for
@@ -69,7 +84,12 @@ sekunder.
 - Sygdom/ferie-blokke og «anden aktivitet» flyttes ikke
 
 **Optimeres (vægtet sum, lavest vinder)**
-- Køretid/km **mellem** opgaverne samme dag (ikke hjemmefra/hjem)
+- **Kørselsgodtgørelse i kroner** mellem opgaverne samme dag (ikke hjemmefra/hjem):
+  km × medarbejderens egen kilometersats fra `km_sats_historik`, gyldig på dagen
+  (Jonn 30.9). Sammenligningen viser kroner og km, besparelsen pr. uge og et groft
+  årstal (× 46 arbejdsuger, tydeligt markeret som «hvis hver uge var som denne»).
+  OBS: med kroner som mål får medarbejdere med lav sats lidt mere af kørslen —
+  jævn-fordelingsskyderen modvirker det.
 - For sent i forhold til aftalt tid (stor straf)
 - Opgaver uden for medarbejderens område (straf)
 - Ujævn belægning (straf efter skyderen)
