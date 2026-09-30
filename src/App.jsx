@@ -2164,8 +2164,15 @@ const MODULE_HELP = {
         "Er listen tom, vises den ikke."] },
   ], warn: "Siden er kun for administratorer. Den er også spærret i databasen — job_koersel kan kun læses af en administrator, så en planlægger, der skriver sig frem til siden, får ingen tal at se." },
 
-  reports: { title: "Rapportering", intro: "Tre rapporter: budget mod faktisk omsætning, hvad aftalerne er værd, og overskuddet.", blocks: [
-    { h: "De tre faner", p: [
+  reports: { title: "Rapportering", intro: "Rapporter: budget mod faktisk omsætning, hvad aftalerne er værd, overskuddet og hvordan start/stop bliver brugt.", blocks: [
+    { h: "Start/stop pr. medarbejder", p: [
+        "Fanen «⏱ Start/stop» viser, hvordan tiden bliver startet og afsluttet: af medarbejderen selv, automatisk ved ankomst, af systemet eller slet ikke — og hvor langt fra adressen den blev afsluttet.",
+        "Kun opgaver, hvor start/stop gælder, er med: hendes egen tid på opgaven er mindst grænsen under Opsætning → Tidsregistrering. Rettes grænsen dér, følger rapporten med. Er tiden fordelt, er det hendes andel, der tæller.",
+        "Øverst står en linje pr. medarbejder med de vigtigste tal. Tryk på en, så kommer hendes opgaver dag for dag, med en vurdering i ord af, hvad I skal tale med hende om. Tryk på en opgave for hele forløbet: påmindelse, systemstart, «Fortryd start», afslutning og afstand.",
+        "«Ved adressen» betyder højst 150 m fra adressen — samme grænse som indbakken og stopuret i ugeplanen.",
+        "«Fortryd start» bliver husket fra 30. september 2026. Før den dato er det et skøn: en systemstart før afslutningen, der ikke står i registreringen.",
+      ] },
+    { h: "Fanerne", p: [
         "«Budget og omsætning» svarer på, hvad der er kommet ind måned for måned i år.",
         "«Aftaleportefølje» svarer på, hvad der er aftalt — hvad de aftaler, I har, er værd, og hvordan de fordeler sig.",
         "Det andet kan ikke læses ud af det første. En aftale, du skriver under i dag, fylder næsten ingenting i budgettet i år og kan alligevel være en halv million værd over sin løbetid.", "«Overskud» viser overskuddet måned for måned. Kun administratorer kan se den."] }, { h: "Overskud", p: ["Overskuddet regnes som omsætning minus lønsum, kørsel og frie omkostninger, måned for måned.", "Er en måned allerede godkendt til løn og «låst», ændrer senere rettelser i lønnen ikke det overskud, der allerede er opgjort for den måned.", ...(KUNDEUDGAVE ? [] : ["«Oms. (Dinero)» er betalte fakturaer hentet fra Dinero natten før — kun til sammenligning, den tæller ikke med i selve overskuddet."])] },
@@ -9915,6 +9922,240 @@ function DriftTjeneste({ navn, maerkat, slags, children }) {
   );
 }
 
+// ── Start/stop pr. medarbejder (30.9.2026) ──────────────────────────────────
+// Hvordan tiden bliver startet og afsluttet: af hende selv, ved ankomst, af systemet
+// eller slet ikke — og hvor langt fra adressen. Data fra startstop_rapport() i
+// databasen, som kun tager opgaver med, hvor start/stop gaelder (egen tid mindst
+// graensen fra Opsaetning -> Tidsregistrering). Rettes graensen, foelger rapporten med.
+// Mockuppen, den blev bygget efter, ligger i planapp/Mockup-startstop-rapport.html.
+const SS_VED_ADRESSEN = 150; // m — samme graense som indbakken og stopuret
+function ssKm(m) { return m >= 1000 ? `${(m / 1000).toFixed(1).replace(".", ",")} km` : `${m} m`; }
+function ssStart(o) {
+  if (o.koerer) return { tekst: `▶ kører · ${o.koerer}`, farve: "blaa", slags: "koerer" };
+  if (o.auto) return { tekst: `▶ ved ankomst${o.start ? " " + o.start : ""}`, farve: "groen", slags: "god" };
+  if (o.system) return { tekst: `▶ systemet ${o.start || ""}`, farve: "blaa", slags: "system" };
+  if (o.start_stop && !o.uden && o.start) return { tekst: `▶ selv ${o.start}`, farve: "groen", slags: "god" };
+  // Fortrudt: sporet fra fortryd_start, eller (aeldre data) en systemstart foer afslutningen.
+  if (o.fortrudt || (o.uden && o.sys && o.slut && o.sys < o.slut)) return { tekst: "systemstart fjernet", farve: "orange", slags: "fjernet" };
+  if (o.uden) return { tekst: "▶ ingen start", farve: "roed", slags: "ingen" };
+  if (o.min) return { tekst: "tid skrevet", farve: "graa", slags: "skrevet" };
+  if (o.sys) return { tekst: "systemstart fjernet", farve: "orange", slags: "fjernet" };
+  return { tekst: "ikke registreret", farve: "graa", slags: "mangler" };
+}
+const SS_FARVER = { groen: ["#DCFCE7", "#166534"], roed: ["#FEE2E2", "#B91C1C"], orange: ["#FEF3C7", "#92400E"],
+                    blaa: ["#DBEAFE", "#1E40AF"], graa: ["#F1F5F9", "#475569"] };
+function SsMaerke({ farve, children }) {
+  const [bg, fg] = SS_FARVER[farve] || SS_FARVER.graa;
+  return <span style={{ display: "inline-block", fontSize: 12, fontWeight: 800, padding: "2px 8px", borderRadius: 99,
+                        background: bg, color: fg, whiteSpace: "nowrap" }}>{children}</span>;
+}
+function ssTal(raekker) {
+  const reg = raekker.filter((o) => o.slut || o.min);
+  const s = raekker.map(ssStart);
+  const med = raekker.filter((o) => o.slut && o.a_slut != null);
+  const pct = (a, b) => (b ? Math.round((a / b) * 100) : null);
+  return {
+    i_alt: raekker.length, reg: reg.length,
+    pStart: pct(s.filter((x) => x.slags === "god").length, reg.length),
+    pAdr: pct(med.filter((o) => o.a_slut <= SS_VED_ADRESSEN).length, med.length),
+    uden: s.filter((x) => x.slags === "ingen" || x.slags === "fjernet").length,
+    fortrudt: s.filter((x) => x.slags === "fjernet").length,
+    system: s.filter((x) => x.slags === "system").length,
+    paam: raekker.filter((o) => o.paam).length,
+  };
+}
+function ssIsoDato(d) { return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10); }
+
+function StartStopRapport() {
+  const idag = new Date();
+  const [fra, setFra] = useState(() => { const d = new Date(); d.setDate(d.getDate() - 6); return ssIsoDato(d); });
+  const [til, setTil] = useState(() => ssIsoDato(idag));
+  const [data, setData] = useState(null);
+  const [fejl, setFejl] = useState("");
+  const [valgt, setValgt] = useState(null);
+  const [aaben, setAaben] = useState(null);
+
+  useEffect(() => {
+    let afbrudt = false;
+    setData(null); setFejl("");
+    supabase.rpc("startstop_rapport", { p_fra: fra, p_til: til }).then(({ data: d, error }) => {
+      if (afbrudt) return;
+      if (error) { setFejl(error.message); return; }
+      setData(d);
+    });
+    return () => { afbrudt = true; };
+  }, [fra, til]);
+
+  function periode(slags) {
+    const d = new Date(), f = new Date();
+    if (slags === "7") f.setDate(d.getDate() - 6);
+    if (slags === "14") f.setDate(d.getDate() - 13);
+    if (slags === "uge") { const n = (d.getDay() + 6) % 7; f.setDate(d.getDate() - n); }
+    if (slags === "maaned") f.setDate(1);
+    setFra(ssIsoDato(f)); setTil(ssIsoDato(d)); setAaben(null);
+  }
+
+  const raekker = data?.raekker || [];
+  const navne = [...new Set(raekker.map((r) => r.navn))];
+  const aktiv = valgt && navne.includes(valgt) ? valgt : null;
+  const mine = aktiv ? raekker.filter((r) => r.navn === aktiv) : [];
+  const knap = { border: "1.5px solid #E2E8F0", background: "#fff", borderRadius: 99, padding: "6px 14px",
+                 fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" };
+  const pctFarve = (p) => (p == null ? "#475569" : p >= 80 ? "#16A34A" : p >= 40 ? "#D97706" : "#DC2626");
+
+  function vurdering(navn, t) {
+    const f = navn.split(" ")[0];
+    if (!t.reg) return { farve: "#94A3B8", h: `${f} har ikke registreret noget i perioden`, p: "Enten er hun ikke kommet i gang med Worklist, eller også skrives tiden et andet sted. Tal med hende om, hvordan det skal foregå." };
+    if ((t.pStart ?? 0) >= 80 && (t.pAdr ?? 100) >= 80) return { farve: "#16A34A", h: `${f} bruger start/stop, som det er tænkt`, p: "Hun starter selv og afslutter ved adressen. Tiden er målt, ikke skønnet." };
+    if (t.uden >= t.reg / 2 && (t.pAdr ?? 0) < 50) return { farve: "#DC2626", h: `${f} trykker ikke Start og afslutter, efter hun er kørt`, p: "Tiden bliver meldt bagefter — ofte i bilen på vej til næste sted. Vis hende rytmen: åbn Worklist ved ankomst, tryk ▶ Start, og tryk Afslut, før du kører. Tjek også, at notifikationer er slået til på hendes telefon." };
+    return { farve: "#D97706", h: `${f} er delvist med`, p: "Nogle opgaver er startet og afsluttet rigtigt, andre ikke. Se de røde markeringer herunder." };
+  }
+
+  return (
+    <div>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 8 }}>
+        {[["7", "Sidste 7 dage"], ["uge", "Denne uge"], ["14", "Sidste 14 dage"], ["maaned", "Denne måned"]].map(([k, l]) => (
+          <button key={k} type="button" style={knap} onClick={() => periode(k)}>{l}</button>
+        ))}
+        <input type="date" value={fra} max={til} onChange={(e) => setFra(e.target.value)} style={{ ...styles.input, width: 150 }} />
+        <span>–</span>
+        <input type="date" value={til} min={fra} onChange={(e) => setTil(e.target.value)} style={{ ...styles.input, width: 150 }} />
+      </div>
+      {data && (
+        <div style={{ fontSize: 12.5, color: "#64748B", marginBottom: 14 }}>
+          Kun opgaver, hvor start/stop gælder: mindst {fmtMin(data.graense)} egen tid. Grænsen sættes under Opsætning → Tidsregistrering, og rapporten følger med.
+          {data.udenfor > 0 ? ` ${data.udenfor} kortere opgave${data.udenfor === 1 ? "" : "r"} i perioden er ikke med.` : ""}
+        </div>
+      )}
+      {fejl && <div style={{ color: "#B91C1C", fontSize: 14 }}>Kunne ikke hente rapporten: {fejl}</div>}
+      {!data && !fejl && <div style={{ color: "#64748B", fontSize: 14 }}>Henter …</div>}
+
+      {data && navne.length === 0 && (
+        <div style={{ color: "#64748B", fontSize: 14 }}>Ingen opgaver med start/stop i perioden.</div>
+      )}
+
+      {data && navne.length > 0 && (
+        <table style={{ width: "100%", borderCollapse: "collapse", background: "#fff", borderRadius: 12, overflow: "hidden", marginBottom: 18 }}>
+          <thead><tr style={{ background: "#F8FAFC", fontSize: 12, color: "#475569", textAlign: "left" }}>
+            {["Medarbejder", "Registreret", "Startet selv / ved ankomst", "Afsluttet ved adressen", "Uden start", "Startet af systemet", "Påmindelser"].map((h) => (
+              <th key={h} style={{ padding: "9px 10px" }}>{h}</th>))}
+          </tr></thead>
+          <tbody>
+            {navne.map((n) => {
+              const t = ssTal(raekker.filter((r) => r.navn === n));
+              return (
+                <tr key={n} onClick={() => { setValgt(n); setAaben(null); }}
+                  style={{ cursor: "pointer", borderTop: "1px solid #E2E8F0", background: n === aktiv ? "#FDF2F8" : "#fff" }}>
+                  <td style={{ padding: "9px 10px", fontWeight: 700 }}>{medSolsikke(n, raekker.find((r) => r.navn === n)?.emp_id)}</td>
+                  <td style={{ padding: "9px 10px" }}>{t.reg} af {t.i_alt}</td>
+                  <td style={{ padding: "9px 10px", fontWeight: 800, color: pctFarve(t.pStart) }}>{t.pStart == null ? "—" : `${t.pStart}%`}</td>
+                  <td style={{ padding: "9px 10px", fontWeight: 800, color: pctFarve(t.pAdr) }}>{t.pAdr == null ? "—" : `${t.pAdr}%`}</td>
+                  <td style={{ padding: "9px 10px", color: t.uden ? "#B91C1C" : "#475569" }}>{t.uden}{t.fortrudt ? ` (${t.fortrudt} fortrudt)` : ""}</td>
+                  <td style={{ padding: "9px 10px" }}>{t.system}</td>
+                  <td style={{ padding: "9px 10px" }}>{t.paam}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      )}
+
+      {data && navne.length > 0 && !aktiv && (
+        <div style={{ color: "#64748B", fontSize: 14 }}>Tryk på en medarbejder for at se hendes opgaver.</div>
+      )}
+
+      {aktiv && (() => {
+        const t = ssTal(mine);
+        const v = vurdering(aktiv, t);
+        const dage = [...new Set(mine.map((o) => o.dato))];
+        return (
+          <div>
+            <div style={{ background: "#fff", borderLeft: `5px solid ${v.farve}`, borderRadius: 12, padding: "12px 16px", marginBottom: 12 }}>
+              <div style={{ fontWeight: 800, fontSize: 15 }}>{v.h}</div>
+              <div style={{ fontSize: 14, color: "#334155", marginTop: 3 }}>{v.p}</div>
+            </div>
+            {dage.map((d) => (
+              <div key={d} style={{ marginBottom: 14 }}>
+                <div style={{ fontWeight: 800, fontSize: 13.5, color: "#475569", margin: "10px 0 6px", textTransform: "capitalize" }}>
+                  {new Date(d + "T12:00").toLocaleDateString("da-DK", { weekday: "long", day: "numeric", month: "long" })}
+                </div>
+                <table style={{ width: "100%", borderCollapse: "collapse", background: "#fff", borderRadius: 12, overflow: "hidden" }}>
+                  <thead><tr style={{ background: "#F8FAFC", fontSize: 12, color: "#475569", textAlign: "left" }}>
+                    {["Planlagt", "Opgave", "Påmindelse / systemstart", "Start", "Afslut", "Registreret"].map((h) => (
+                      <th key={h} style={{ padding: "8px 10px" }}>{h}</th>))}
+                  </tr></thead>
+                  <tbody>
+                    {mine.filter((o) => o.dato === d).map((o, i) => {
+                      const noegle = `${d}-${i}`;
+                      const st = ssStart(o);
+                      const vedAdr = o.a_slut != null && o.a_slut <= SS_VED_ADRESSEN;
+                      const afv = o.min != null ? o.min - o.plan : null;
+                      return (
+                        <React.Fragment key={noegle}>
+                          <tr onClick={() => setAaben(aaben === noegle ? null : noegle)} style={{ cursor: "pointer", borderTop: "1px solid #E2E8F0", fontSize: 13.5 }}>
+                            <td style={{ padding: "9px 10px" }}>{o.kl || "—"}<div style={{ fontSize: 11.5, color: "#64748B" }}>{fmtMin(o.plan)}</div></td>
+                            <td style={{ padding: "9px 10px", fontWeight: 700 }}>{o.kunde}</td>
+                            <td style={{ padding: "9px 10px" }}>
+                              {o.paam ? `🔔 ${o.paam}` : <span style={{ color: "#94A3B8" }}>—</span>}
+                              {o.sys && <div style={{ fontSize: 11.5, color: "#64748B" }}>⚙️ systemstart {o.sys}</div>}
+                            </td>
+                            <td style={{ padding: "9px 10px" }}><SsMaerke farve={st.farve}>{st.tekst}</SsMaerke></td>
+                            <td style={{ padding: "9px 10px" }}>
+                              {o.slut
+                                ? <SsMaerke farve={o.a_slut == null ? "graa" : vedAdr ? "groen" : "roed"}>
+                                    ■ {o.slut}{o.a_slut == null ? "" : vedAdr ? " · ved adressen" : ` · ${ssKm(o.a_slut)} væk`}
+                                  </SsMaerke>
+                                : <span style={{ color: "#94A3B8" }}>—</span>}
+                            </td>
+                            <td style={{ padding: "9px 10px" }}>
+                              {o.min != null ? fmtMin(o.min) : <span style={{ color: "#94A3B8" }}>—</span>}
+                              {afv ? <> <SsMaerke farve={afv > 0 ? "orange" : "graa"}>{afv > 0 ? "+" : ""}{afv}m</SsMaerke></> : null}
+                            </td>
+                          </tr>
+                          {aaben === noegle && (
+                            <tr style={{ background: "#FAFAFA", fontSize: 13, color: "#334155" }}>
+                              <td />
+                              <td colSpan={5} style={{ padding: "8px 10px", lineHeight: 1.6 }}>
+                                {o.paam && <div>🔔 Påmindelse sendt kl. {o.paam}.</div>}
+                                {o.sys && <div>⚙️ Systemet startede tiden kl. {o.sys}.
+                                  {st.slags === "fjernet" ? ` Starten blev fjernet igen${o.fortrudt ? ` kl. ${o.fortrudt} med «Fortryd start»` : " — typisk med «Fortryd start»"}.` : ""}
+                                  {o.slut && o.sys > o.slut ? " Det var efter, hun allerede havde afsluttet, så det talte ikke." : ""}</div>}
+                                {!o.sys && o.fortrudt && <div>↩ Hun fortrød sin start kl. {o.fortrudt}.</div>}
+                                {st.slags === "system" && o.start && <div>▶ Tiden løb fra {o.start} — et skøn sat af systemet, ikke en måling.</div>}
+                                {st.slags === "god" && o.a_start != null && <div>▶ Startet {ssKm(o.a_start)} fra adressen.</div>}
+                                {o.uden && <div>▶ Ingen start: hun trykkede Afslut uden at have startet.</div>}
+                                {o.slut && <div>■ Afsluttet kl. {o.slut}{o.a_slut != null ? `, ${ssKm(o.a_slut)} fra adressen` : ""}.
+                                  {o.kl && o.slut < o.kl ? <b> Før det planlagte tidspunkt.</b> : null}</div>}
+                                {o.maalt != null && <div>⏱ Målt {fmtMin(o.maalt)}, registreret {fmtMin(o.min)}.</div>}
+                                {o.note && <div>💬 «{o.note}»</div>}
+                                {o.koerer && <div>▶ Tiden kører stadig (startet {o.koerer}).</div>}
+                                {!o.slut && !o.min && !o.koerer && <div>Intet registreret endnu.</div>}
+                              </td>
+                            </tr>
+                          )}
+                        </React.Fragment>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            ))}
+          </div>
+        );
+      })()}
+
+      <div style={{ marginTop: 18, background: "#fff", borderRadius: 12, padding: "12px 16px", fontSize: 13, color: "#334155", lineHeight: 1.7 }}>
+        <div style={{ fontWeight: 800, marginBottom: 4 }}>Sådan læses rapporten</div>
+        <div><SsMaerke farve="groen">▶ selv</SsMaerke> hun trykkede Start. <SsMaerke farve="groen">▶ ved ankomst</SsMaerke> Worklist startede, da hun kom frem (kræver at appen er åben).</div>
+        <div><SsMaerke farve="blaa">▶ systemet</SsMaerke> hun startede ikke selv; systemet startede 10 min efter planlagt tid. Tiden er et skøn.</div>
+        <div><SsMaerke farve="roed">▶ ingen start</SsMaerke> hun trykkede Afslut uden at have startet. <SsMaerke farve="orange">systemstart fjernet</SsMaerke> starten blev fjernet igen med «Fortryd start».</div>
+        <div><SsMaerke farve="groen">■ ved adressen</SsMaerke> afsluttet højst {SS_VED_ADRESSEN} m fra adressen. <SsMaerke farve="roed">■ 8,1 km væk</SsMaerke> afsluttet et andet sted — oftest i bilen bagefter.</div>
+        <div><SsMaerke farve="graa">tid skrevet</SsMaerke> tiden er skrevet ind uden start/stop. <SsMaerke farve="graa">ikke registreret</SsMaerke> intet registreret endnu.</div>
+      </div>
+    </div>
+  );
+}
+
 function ReportsView({ instances, templates, pricing, budgets, onSaveBudget, isAdminUser,
                         employees, satsHistorik, kmSatser, kmLog, omkostninger,
                         onSaveOmkostning, onDeleteOmkostning,
@@ -10008,6 +10249,7 @@ function ReportsView({ instances, templates, pricing, budgets, onSaveBudget, isA
     ["budget", "📊 Budget og omsætning"],
     ["portefoelje", "📁 Aftaleportefølje"],
     ...(isAdminUser ? [["overskud", "💰 Overskud"]] : []),
+    ...(isAdminUser && harModul("start_stop") ? [["startstop", "⏱ Start/stop"]] : []),
   ];
 
   return (
@@ -10023,7 +10265,9 @@ function ReportsView({ instances, templates, pricing, budgets, onSaveBudget, isA
         ))}
       </div>
 
-      {rapport === "portefoelje" ? (
+      {rapport === "startstop" ? (
+        <StartStopRapport />
+      ) : rapport === "portefoelje" ? (
         <PortefoeljeRapport templates={templates} instances={instances} pricing={pricing} />
       ) : rapport === "overskud" ? (
         <OverskudRapport instances={instances} employees={employees} satsHistorik={satsHistorik}
