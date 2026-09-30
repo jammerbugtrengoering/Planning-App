@@ -17318,11 +17318,25 @@ return (
           <div style={{ fontWeight: 700, marginBottom: 3 }}>
             Du er ved at sætte {bekraeftTilfoej.name} på som nummer {assignedEmps.length + 1}
           </div>
-          <div>
-            Varigheden er tiden <strong>pr. person</strong>. Med {assignedEmps.length + 1} bliver det{" "}
-            {assignedEmps.length + 1} × {fmtMin(t.duration)} = <strong>{fmtMin(t.duration * (assignedEmps.length + 1))} samlet arbejde</strong>{" "}
-            — mod {fmtMin(t.duration * assignedEmps.length)} nu.
-          </div>
+          {/* Regnes med de enkeltes andele (30.9.2026). Foer stod der «2 × varigheden»,
+              ogsaa naar tiden var fordelt — Charlotte havde 18 min, og beskeden sagde
+              stadig 9. Den nye faar opgavens varighed, indtil tiden fordeles. */}
+          {harFordeling(t) ? (
+            <div>
+              Tiden er <strong>fordelt</strong>: {assignedEmps.map((a) => `${a.name.split(" ")[0]} ${fmtMin(planlagtFor(t, a.id))}`).join(", ")}
+              {" "}= {fmtMin(planlagtIAlt(t))} nu.{" "}
+              {fordelingen(t)[bekraeftTilfoej.id] != null
+                ? <>{bekraeftTilfoej.name.split(" ")[0]} har allerede en andel på {fmtMin(planlagtFor(t, bekraeftTilfoej.id))}</>
+                : <>{bekraeftTilfoej.name.split(" ")[0]} får opgavens varighed, {fmtMin(t.duration)}, indtil du fordeler</>}
+              {" "}— så bliver det <strong>{fmtMin(planlagtIAlt(t) + planlagtFor(t, bekraeftTilfoej.id))} samlet arbejde</strong>.
+            </div>
+          ) : (
+            <div>
+              Varigheden er tiden <strong>pr. person</strong>. Med {assignedEmps.length + 1} bliver det{" "}
+              {assignedEmps.length + 1} × {fmtMin(t.duration)} = <strong>{fmtMin(t.duration * (assignedEmps.length + 1))} samlet arbejde</strong>{" "}
+              — mod {fmtMin(planlagtIAlt(t))} nu.
+            </div>
+          )}
           <div style={{ marginTop: 4 }}>
             Skal opgaven laves hurtigere af to, og ikke tage dobbelt så mange timer, så sæt
             varigheden ned bagefter. Ellers får medarbejderne besked om en overskridelse der ikke findes.
