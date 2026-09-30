@@ -135,6 +135,19 @@ const O = (id, adresse, start, min, pladser, extra = {}) => ({
   er("høj kontinuitet: ingen skifter for småbeløb", nyeHoej, 0);
 }
 
+// ── Udeladte (ejerne): beholder deres egne, får ingen nye ──────────────────────
+{
+  const med = [M("ejer", 1), M("x", 5)];
+  const k = { kandidater: ["ejer", "x"] };
+  const opg = [O("1", "A", kl(8), 60, [{ emp: "ejer", min: 60 }], k), O("2", "A2", kl(10), 60, [{ emp: "x", min: 60 }], k),
+               O("3", "C", kl(12), 60, [{ emp: null, min: 60 }], k)];
+  const sim = simulerDag(opg, med, afstand, { udeladte: ["ejer"] });
+  er("ejeren beholder sin egen", sim.pladser["1"][0].emp, "ejer");
+  sandt("ejeren får ingen nye", sim.pladser["2"][0].emp === "x" && sim.pladser["3"][0].emp === "x");
+  const medEjer = simulerDag(opg, med, afstand, { udeladte: [] });
+  sandt("uden udeladelse må den billige ejer godt bruges", Object.values(medEjer.pladser).flat().some((r) => r.emp === "ejer"));
+}
+
 // ── Uden kilometersats: standardsatsen bruges, så hun ikke får al kørslen ────
 {
   const med = [{ id: "uden", sats: 0, moede: kl(7), kap: { Mon: 420 } }, M("med", 3.94)];

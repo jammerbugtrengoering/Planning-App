@@ -16,7 +16,17 @@ Besluttet med Jonn 30.9.2026. Skal kunne tages op i Claude Code.
   plads, der får ny medarbejder (`kontinuitet` i motoren, med test).
 - Fase 3 bygget: `SimuleringView` i App.jsx, knappen «🔀 Simulér uge» i ugeplanen (kun
   planlæggere), hjælpeteksten «Simulér uge» under Ugeplan. Ikke afprøvet i browseren endnu.
-- Mangler: fase 4 (godkendelse, fortryd, besked), fase 5 (øvelse i prøveugen).
+- Planlæggerne (is_admin med dagstimer — Charlotte og Karen) er udeladt som standard
+  (Jonn 30.9): de beholder deres opgaver og får ingen nye. «Medtag …» tager dem med.
+  (`udeladte` i motoren, med test.)
+- Fase 4 bygget: godkend hele ugen / dag / medarbejder / klokkeslæt for sig; opgaver med
+  en uplaceret plads røres ikke; opgaver ændret siden simuleringen springes over.
+  Øjebliksbillede i tabellen `plan_simulering` (begge databaser) → «Rul tilbage».
+  Besked til medarbejdere via den eksisterende push_plan_koe-trigger.
+- Hjælp: Ugeplan → «Simulér uge» (planlægningsappen) og en linje i Worklist.
+- Kundeudgaven: knappen er skjult, fordi kundedatabasen ikke har koeretabel-funktionen
+  endnu (tabellerne koeretabel/adresse_punkt og ORS-nøgle mangler dér).
+- Mangler: øvelse i prøveugen (valgfri).
 
 ## Formålet
 

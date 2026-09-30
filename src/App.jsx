@@ -1622,7 +1622,10 @@ const MODULE_HELP = {
         "«Fast medarbejder» lader den faste medarbejder på aftalen blive. «Fri medarbejder» fordeler alt frit. Skyderen «Kunden beholder sin medarbejder» bestemmer, hvor meget det skal spare, før en kunde får en ny.",
         "Kørslen regnes kun mellem opgaverne — ikke hjemmefra og hjem — i kroner med hver medarbejders egen kilometersats. Har en medarbejder ingen sats, bruges 3,94 kr./km, så hun ikke får al kørslen, bare fordi den ser gratis ud.",
         "Øverst står sammenligningen med den nuværende plan: kroner og km, minutter for sent, dage over dagstimerne, nye medarbejdere og opgaver, der ikke kan placeres. Blå kort har fået en ny medarbejder («før: …»). Under hver dag står «før:» med de gamle tal.",
-        "Første gang for en uge hentes køretiderne mellem ugens adresser. De gemmes, så det kun sker én gang. Godkendelse af simuleringen kommer i næste trin.",
+        "Planlæggerne (Charlotte og Karen) indgår som udgangspunkt ikke: de beholder deres egne opgaver og får ingen nye, fordi de tager opgaver, når der skal fyldes huller. Sæt flueben ved «Medtag …» for at tage dem med.",
+        "Første gang for en uge hentes køretiderne mellem ugens adresser. De gemmes, så det kun sker én gang.",
+        "Godkend hele ugen, én dag (knappen ved dagens navn) eller én medarbejder (knappen under navnet). Foreslåede nye klokkeslæt godkendes for sig med «🕐 Godkend klokkeslæt» — husk at give kunderne besked. Opgaver, der ikke kan placeres, røres ikke.",
+        "Ved godkendelsen gemmes, hvordan opgaverne så ud før, så den kan rulles tilbage nederst under «Godkendte simuleringer». Opgaver, der er udført, har registreret tid eller er ændret siden, bliver stående. Medarbejderne får besked om ændringer i deres dag, som ved enhver anden ændring i planen.",
       ] },
     { h: "Øv dig først", p: ["Knappen «Øv dig på en prøveuge» øverst i hjælpen åbner en opdigtet uge med tretten små øvelser: tildele og flytte opgaver, sætte flere medarbejdere på en opgave, fordele tiden og rette varigheden på en aftale, melde en syg, oprette en fast aftale, rydde indbakken og sende ugen til fakturering.", "Intet af det er rigtigt. Den taler ikke med databasen, så du kan ikke ødelægge noget, og den kan tages så mange gange, du vil. Den er også god at vise, når nogen skal se, hvordan planlægningen virker."] },
     { h: "Sådan planlægger systemet", p: [
@@ -4027,6 +4030,56 @@ function PlanningApp({ session, onSignOut }) {
     return senesteRef.current[navn](...args);
   }
 
+  // ── Simulér uge: godkend og rul tilbage (fase 4, 30.9.2026) ──
+  // Et øjebliksbillede af opgaverne gemmes i plan_simulering FØR noget ændres, så
+  // godkendelsen kan rulles tilbage. Ændringerne skrives med syncInstance, så
+  // ændringsloggen og beskederne til medarbejderne sker som ved enhver anden ændring.
+  // En opgave, der er ændret siden simuleringen (ikke længere de samme medarbejdere),
+  // springes over — ellers kunne en godkendelse overskrive noget, en kollega lige har gjort.
+  async function anvendSimulering({ aendringer, omfang, valg, noegletal, uge, aar }) {
+    const nuvaerende = new Map(instances.map((t) => [t.id, t]));
+    const gyldige = [], sprunget = [];
+    for (const a of aendringer) {
+      const t = nuvaerende.get(a.id);
+      if (!t || [...(t.assignees || [])].sort().join(",") !== [...a.gamle].sort().join(",")
+          || t.status === "udført" || registreredeMinutter(t) > 0) { sprunget.push(a.id); continue; }
+      gyldige.push({ a, t });
+    }
+    if (!gyldige.length) return { ok: true, antal: 0, sprunget: sprunget.length };
+    const foer = gyldige.map(({ t }) => ({ id: t.id, assignees: t.assignees || [], tid_fordeling: t.tidFordeling || {}, scheduled_time: t.scheduledTime || null, status: t.status }));
+    const efter = gyldige.map(({ a }) => ({ id: a.id, assignees: a.assignees, tid_fordeling: a.tidFordeling, scheduled_time: a.scheduledTime }));
+    const { error } = await supabase.from("plan_simulering").insert({ aar, uge, omfang, valg, noegletal, foer, efter });
+    if (error) return { ok: false, fejl: error.message };
+    let fejl = 0;
+    for (const { a, t } of gyldige) {
+      const ny = { ...t, assignees: a.assignees, tidFordeling: a.tidFordeling, scheduledTime: a.scheduledTime,
+        status: a.assignees.length ? (t.status === "unscheduled" ? "planlagt" : t.status) : "unscheduled" };
+      setInstances((prev) => prev.map((i) => (i.id === ny.id ? ny : i)));
+      const r = await syncInstance(ny);
+      if (!r?.ok) fejl++;
+    }
+    return { ok: true, antal: gyldige.length - fejl, fejl, sprunget: sprunget.length };
+  }
+
+  async function rulSimuleringTilbage(raekke) {
+    const nuvaerende = new Map(instances.map((t) => [t.id, t]));
+    const efterAf = new Map((raekke.efter || []).map((e) => [e.id, e]));
+    let antal = 0, sprunget = 0;
+    for (const f of raekke.foer || []) {
+      const t = nuvaerende.get(f.id), e = efterAf.get(f.id);
+      // Kun hvis opgaven stadig står, som godkendelsen efterlod den.
+      if (!t || !e || t.status === "udført" || registreredeMinutter(t) > 0
+          || [...(t.assignees || [])].sort().join(",") !== [...(e.assignees || [])].sort().join(",")) { sprunget++; continue; }
+      const ny = { ...t, assignees: f.assignees || [], tidFordeling: f.tid_fordeling || {}, scheduledTime: f.scheduled_time || null, status: f.status || t.status };
+      setInstances((prev) => prev.map((i) => (i.id === ny.id ? ny : i)));
+      const r = await syncInstance(ny);
+      if (r?.ok) antal++; else sprunget++;
+    }
+    const { error } = await supabase.from("plan_simulering").update({ status: "rullet_tilbage", rullet_tilbage: new Date().toISOString() }).eq("id", raekke.id);
+    if (error) return { ok: false, fejl: error.message };
+    return { ok: true, antal, sprunget };
+  }
+
   function changeWeek(delta) {
     // Flyt ankerdatoen 7 rigtige kalenderdage ad gangen — det ruller helt naturligt
     // om ved årsskifte (uge 52/53 -> uge 1 i næste år) uden nogensinde at kunne
@@ -6037,7 +6090,7 @@ function PlanningApp({ session, onSignOut }) {
             if (error) notify("Udskriften blev IKKE skrevet i adgangsloggen: " + error.message);
           }}
           onAdd={() => setShowAddTask(true)} onAuto={runAuto} onScheduleWeek={runScheduleWeek} onAutoAllWeeks={runAutoAllWeeks}
-          onSimuler={isAdminUser ? () => {
+          onSimuler={isAdminUser && !KUNDEUDGAVE ? () => {
             // Ugen skal være hentet helt. Ligger den ud over anden runde, hentes resten først.
             if (ugenErHentet(hentedeUgerNu, weekYear, weekOffset)) setVisSimulering(true);
             else sikrAlleOpgaver().then((ok) => ok && setVisSimulering(true));
@@ -6186,7 +6239,8 @@ function PlanningApp({ session, onSignOut }) {
       {visSimulering && (
         <SimuleringView weekNo={weekOffset} weekYear={weekYear} instances={instances} employees={employees}
           templates={templates} areas={areas} employeeAreas={employeeAreas} kmSatser={kmSatser}
-          travelSettings={travelSettings} onClose={() => setVisSimulering(false)} />
+          travelSettings={travelSettings} onClose={() => setVisSimulering(false)}
+          onAnvend={anvendSimulering} onRulTilbage={rulSimuleringTilbage} />
       )}
       {showAddEmp && <EmployeeModal emp={editEmp} onClose={() => { setShowAddEmp(false); setEditEmp(null); }} onSave={saveEmployee} skills={skills} satsHistorik={editEmp ? satsHistorik[editEmp.id] : null} kmSatser={editEmp ? kmSatser[editEmp.id] : null} />}
       {showAddBlock && <BlockModal employees={aktiveEmployees} onClose={() => setShowAddBlock(false)} onSave={addBlock} />}
@@ -11541,8 +11595,12 @@ const TL_PX_PR_MIN = 1.6;
 // Reglerne for hvem der MÅ tage en opgave, er appens egne: candidatesFor (kompetencer
 // og område), canWorkOn (weekend), sygdom/ferie og dagstimerne på medarbejderkortet.
 const SIM_STANDARD_SATS = 3.94;
-function SimuleringView({ weekNo, weekYear, instances, employees, templates, areas, employeeAreas, kmSatser, travelSettings, onClose }) {
-  const [valg, setValg] = useState({ tilstand: "fri", tolerance: 0, balance: 40, kontinuitet: 50 });
+function SimuleringView({ weekNo, weekYear, instances, employees, templates, areas, employeeAreas, kmSatser, travelSettings, onClose, onAnvend, onRulTilbage }) {
+  const [valg, setValg] = useState({ tilstand: "fri", tolerance: 0, balance: 40, kontinuitet: 50, medEjere: false });
+  const [arbejder, setArbejder] = useState(false);
+  const [godkendt, setGodkendt] = useState([]);     // tidligere godkendelser for ugen
+  const [besked, setBesked] = useState("");
+  const tabelRef = useRef(null);                     // køretider, hentet én gang pr. åbning
   const [status, setStatus] = useState("klar");   // klar | henter | faerdig | fejl
   const [fejl, setFejl] = useState("");
   const [data, setData] = useState(null);          // { opgaver, med, afstand, kilder }
@@ -11560,7 +11618,6 @@ function SimuleringView({ weekNo, weekYear, instances, employees, templates, are
       const opg = ugensOpgaver.filter((t) => !BLOCK_TYPES.includes(t.type) && t.day);
       // Køretider pr. dag — ét kald hver, gemt i databasen til næste gang.
       const tabel = new Map();
-      const nk = (a, b) => (a < b ? a + "|" + b : b + "|" + a);
       for (const dag of [...new Set(opg.map((t) => t.day))]) {
         const adresser = [...new Set(opg.filter((t) => t.day === dag).map((t) => (t.address || "").trim()).filter(Boolean))];
         if (adresser.length < 2) continue;
@@ -11568,6 +11625,23 @@ function SimuleringView({ weekNo, weekYear, instances, employees, templates, are
         if (error || d?.error) throw new Error(d?.error || error.message);
         for (const [k, v] of Object.entries(d.tabel || {})) tabel.set(k, v);
       }
+      tabelRef.current = tabel;
+      const d = byg();
+      regn(d, valg);
+      setStatus("faerdig");
+    } catch (e) {
+      setFejl(String(e?.message || e)); setStatus("fejl");
+    }
+  }
+
+  // Bygger motorens input ud fra ugeplanen, som den ser ud LIGE NU. Kaldes igen, når
+  // opgaverne ændrer sig (fx efter en godkendelse), så simuleringen altid regner fra
+  // den aktuelle plan.
+  function byg() {
+    const tabel = tabelRef.current || new Map();
+    const nk = (a, b) => (a < b ? a + "|" + b : b + "|" + a);
+    const opg = ugensOpgaver.filter((t) => !BLOCK_TYPES.includes(t.type) && t.day);
+    {
       const skoennede = new Set();
       const afstand = (a, b) => {
         if (!a || !b || a === b) return { km: 0, min: 0 };
@@ -11601,15 +11675,32 @@ function SimuleringView({ weekNo, weekYear, instances, employees, templates, are
       });
       const d = { opgaver, med, afstand, skoen: () => skoennede.size };
       setData(d);
-      regn(d, valg);
-      setStatus("faerdig");
-    } catch (e) {
-      setFejl(String(e?.message || e)); setStatus("fejl");
+      return d;
     }
   }
 
+  // Ugeplanen har ændret sig (godkendelse, realtime): byg og regn igen.
+  useEffect(() => {
+    if (!tabelRef.current) return;
+    const d = byg();
+    regn(d, valg);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ugensOpgaver]);
+
+  // Tidligere godkendelser for ugen — til «Rul tilbage».
+  async function hentGodkendte() {
+    const { data: r } = await supabase.from("plan_simulering").select("id, omfang, oprettet, status, efter, foer, noegletal")
+      .eq("aar", weekYear).eq("uge", weekNo).order("oprettet", { ascending: false }).limit(20);
+    setGodkendt(r || []);
+  }
+  useEffect(() => { hentGodkendte(); // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [weekNo, weekYear]);
+
+  // Ejerne/planlæggerne (Charlotte og Karen) tager opgaver, når der skal fyldes huller.
+  // Som udgangspunkt indgår de ikke: deres egne opgaver bliver hos dem, og de får ingen nye.
+  const ejere = employees.filter((e) => !e.fratraadtDato && e.isAdmin && Object.values(e.capacity || {}).some((m) => m > 0));
   function regn(d, v) {
-    const opt = { ...v, standardSats: SIM_STANDARD_SATS };
+    const opt = { ...v, standardSats: SIM_STANDARD_SATS, udeladte: v.medEjere ? [] : ejere.map((e) => e.id) };
     const sim = simulerUge(d.opgaver, d.med, d.afstand, opt);
     const nu = simNoegletal(d.opgaver, d.med, d.afstand, nuvaerendePlan(d.opgaver), SIM_STANDARD_SATS);
     const nt = simNoegletal(d.opgaver, d.med, d.afstand, sim.pladser, SIM_STANDARD_SATS);
@@ -11643,6 +11734,61 @@ function SimuleringView({ weekNo, weekYear, instances, employees, templates, are
   const cNu = perCelle(nuPlan), cSim = res ? perCelle(res.sim.pladser) : {};
   const celler = visning === "nu" ? cNu : cSim;
 
+  // ── Godkendelse (fase 4) ──
+  // Ændringerne i et omfang: 'uge' | 'dag:Mon' | 'emp:<id>' | 'tider'.
+  // Opgaver med foreslået nyt klokkeslæt godkendes KUN under 'tider' (Jonn: de skal
+  // godkendes for sig, kunden skal typisk spørges). Opgaver, hvor en plads ikke kunne
+  // placeres, røres slet ikke — hellere den nuværende medarbejder end ingen.
+  function aendringer(omfang) {
+    if (!res || !data) return [];
+    const ikke = new Set(res.sim.ikkePlaceret.map((x) => x.opgave));
+    const ud = [];
+    for (const o of data.opgaver) {
+      if (o.laast || ikke.has(o.id)) continue;
+      const rk = res.sim.pladser[o.id] || [];
+      const nye = rk.map((r) => r.emp), gamle = o.pladser.map((p) => p.emp).filter(Boolean);
+      const empAendret = [...nye].sort().join(",") !== [...gamle].sort().join(",");
+      const tidAendret = rk.some((r) => r.flyttet);
+      if (!empAendret && !tidAendret) continue;
+      if (omfang === "tider" ? !tidAendret : tidAendret) continue;
+      if (omfang.startsWith("dag:") && o.dag !== omfang.slice(4)) continue;
+      if (omfang.startsWith("emp:") && !nye.includes(omfang.slice(4)) && !gamle.includes(omfang.slice(4))) continue;
+      const t = ugensOpgaver.find((x) => x.id === o.id);
+      const fordelt = harFordeling(t) || rk.some((r) => r.min !== (Number(t?.duration) || 0));
+      ud.push({
+        id: o.id, gamle,
+        assignees: nye,
+        tidFordeling: fordelt ? Object.fromEntries(rk.map((r) => [r.emp, r.min])) : {},
+        scheduledTime: tidAendret ? fmtClock(rk[0].start) : (t?.scheduledTime || null),
+      });
+    }
+    return ud;
+  }
+  async function godkend(omfang, tekst) {
+    const liste = aendringer(omfang);
+    if (!liste.length) return;
+    if (!window.confirm(`${tekst}\n\n${liste.length} opgave${liste.length === 1 ? "" : "r"} får ny medarbejder${omfang === "tider" ? " og/eller nyt klokkeslæt" : ""}. `
+      + "Medarbejderne får besked som ved enhver anden ændring i planen. Godkendelsen kan rulles tilbage.")) return;
+    setArbejder(true); setBesked("");
+    const r = await onAnvend({ aendringer: liste, omfang, valg, uge: weekNo, aar: weekYear,
+      noegletal: { nu: { km: res.nu.km, kr: res.nu.kr, sent: res.nu.sent }, sim: { km: res.nt.km, kr: res.nt.kr, sent: res.nt.sent } } });
+    setArbejder(false);
+    if (r?.ok) {
+      setBesked(`✓ ${r.antal} opgave${r.antal === 1 ? "" : "r"} er ændret i ugeplanen.${r.sprunget ? ` ${r.sprunget} blev sprunget over, fordi de er ændret siden simuleringen.` : ""}${r.fejl ? ` ${r.fejl} kunne ikke gemmes.` : ""}`);
+      hentGodkendte();
+    } else setBesked("Godkendelsen blev ikke gemt: " + (r?.fejl || "ukendt fejl"));
+  }
+  async function rulTilbage(raekke) {
+    if (!window.confirm("Sæt opgaverne tilbage, som de var før denne godkendelse? Opgaver, der er udført, har registreret tid eller er ændret siden, bliver stående.")) return;
+    setArbejder(true);
+    const r = await onRulTilbage(raekke);
+    setArbejder(false);
+    setBesked(r?.ok ? `↩ ${r.antal} opgave${r.antal === 1 ? "" : "r"} er sat tilbage.${r.sprunget ? ` ${r.sprunget} blev stående.` : ""}` : "Kunne ikke rulle tilbage: " + (r?.fejl || "ukendt fejl"));
+    hentGodkendte();
+  }
+  const omfangTekst = (o) => o === "uge" ? "hele ugen" : o === "tider" ? "klokkeslæt" : o.startsWith("dag:") ? (ALL_DAYS.find((d) => d.key === o.slice(4))?.label || o).toLowerCase()
+    : (employees.find((e) => e.id === o.slice(4))?.name || "medarbejder");
+
   const Kort = ({ label, a, b, fmt, lavereErBedre = true, ekstra }) => {
     const bedre = lavereErBedre ? b < a : b > a, ens = a === b;
     return (
@@ -11673,6 +11819,13 @@ function SimuleringView({ weekNo, weekYear, instances, employees, templates, are
           <div><div style={styles.label}>Kunden beholder sin medarbejder: ligegyldigt ↔ vigtigt</div>
             <input type="range" min={0} max={100} value={valg.kontinuitet} onChange={(e) => setValg({ ...valg, kontinuitet: Number(e.target.value) })}
               onMouseUp={(e) => saet("kontinuitet", Number(e.target.value))} onTouchEnd={(e) => saet("kontinuitet", Number(e.target.value))} style={{ width: "100%", accentColor: "var(--farve)" }} /></div>
+          {ejere.length > 0 && (
+            <div><div style={styles.label}>Planlæggerne</div>
+              <label style={{ fontSize: 13.5, display: "flex", gap: 8, alignItems: "center", cursor: "pointer" }}>
+                <input type="checkbox" checked={valg.medEjere} onChange={(e) => saet("medEjere", e.target.checked)} />
+                Medtag {ejere.map((e) => e.name.split(" ")[0]).join(" og ")}</label>
+              <div style={{ fontSize: 12, color: "#64748B", marginTop: 4 }}>Uden flueben beholder de deres egne opgaver og får ingen nye.</div></div>
+          )}
           <div style={{ display: "flex", alignItems: "flex-end" }}>
             <button type="button" style={styles.primaryBtn} disabled={status === "henter"} onClick={() => (data ? regn(data, valg) : hentOgByg())}>
               {status === "henter" ? "Henter køretider …" : data ? "▶ Beregn igen" : "▶ Beregn simulering"}</button>
@@ -11692,9 +11845,17 @@ function SimuleringView({ weekNo, weekYear, instances, employees, templates, are
             <>
               <div style={{ background: "repeating-linear-gradient(45deg,#FEF3C7,#FEF3C7 12px,#FDE68A 12px,#FDE68A 24px)", border: "2px solid #F59E0B", borderRadius: 12,
                             padding: "10px 16px", fontWeight: 800, color: "#78350F", marginBottom: 12, display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
-                ⚠ SIMULERING — intet er gemt i ugeplanen
-                <span style={{ marginLeft: "auto", fontWeight: 600, fontSize: 13 }}>Godkendelse (hele ugen, dag, medarbejder, klokkeslæt) kommer i næste trin.</span>
+                ⚠ SIMULERING — intet er gemt, før du godkender
+                <span style={{ marginLeft: "auto", display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <button type="button" style={{ ...styles.primaryBtn, background: "#16A34A" }} disabled={arbejder || !aendringer("uge").length}
+                    onClick={() => godkend("uge", "Godkend hele ugen?")}>✓ Godkend hele ugen ({aendringer("uge").length})</button>
+                  {aendringer("tider").length > 0 && (
+                    <button type="button" style={styles.secondaryBtn} disabled={arbejder}
+                      onClick={() => godkend("tider", "Godkend de foreslåede klokkeslæt? Husk at give kunderne besked.")}>🕐 Godkend klokkeslæt ({aendringer("tider").length})</button>
+                  )}
+                </span>
               </div>
+              {besked && <div style={{ background: "#F0FDF4", border: "1px solid #BBF7D0", borderRadius: 10, padding: "8px 12px", fontSize: 13.5, marginBottom: 10 }}>{besked}</div>}
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10, marginBottom: 12 }}>
                 <div style={{ gridColumn: "span 2", background: "#fff", borderRadius: 12, padding: "10px 14px", border: `2px solid ${sparet > 0 ? "#16A34A" : "#E2E8F0"}` }}>
                   <div style={{ fontSize: 12, color: "#64748B", fontWeight: 700 }}>Kørselsgodtgørelse mellem opgaver</div>
@@ -11725,7 +11886,19 @@ function SimuleringView({ weekNo, weekYear, instances, employees, templates, are
                 <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 1000, tableLayout: "fixed" }}>
                   <thead><tr>
                     <th style={{ width: 170, textAlign: "left", padding: 8, fontSize: 12.5, color: "#475569" }}></th>
-                    {DAGE.map((d) => <th key={d.key} style={{ textAlign: "left", padding: 8, fontSize: 12.5, color: "#475569" }}>{d.label}</th>)}
+                    {DAGE.map((d) => {
+                      const n = aendringer("dag:" + d.key).length;
+                      return (
+                        <th key={d.key} style={{ textAlign: "left", padding: 8, fontSize: 12.5, color: "#475569" }}>
+                          {d.label}
+                          {visning === "sim" && n > 0 && (
+                            <button type="button" disabled={arbejder} onClick={() => godkend("dag:" + d.key, `Godkend ${d.label.toLowerCase()}?`)}
+                              style={{ marginLeft: 8, border: "1px solid #BBF7D0", background: "#F0FDF4", color: "#166534", borderRadius: 7, padding: "2px 8px", fontSize: 11.5, fontWeight: 700, cursor: "pointer" }}>
+                              ✓ Godkend ({n})</button>
+                          )}
+                        </th>
+                      );
+                    })}
                   </tr></thead>
                   <tbody>
                     {data.med.filter((e) => DAGE.some((d) => (cNu[`${e.id}|${d.key}`] || []).length || (cSim[`${e.id}|${d.key}`] || []).length)).map((e) => {
@@ -11742,6 +11915,11 @@ function SimuleringView({ weekNo, weekYear, instances, employees, templates, are
                                 <div>{fu.km || 0} km → <b>{nu2.km || 0} km</b></div>
                                 <div>{kr(fu.kr || 0)} → <b>{kr(nu2.kr || 0)}</b></div>
                               </div>
+                            )}
+                            {visning === "sim" && aendringer("emp:" + e.id).length > 0 && (
+                              <button type="button" disabled={arbejder} onClick={() => godkend("emp:" + e.id, `Godkend ${e.navn}s uge?`)}
+                                style={{ marginTop: 6, border: "1px solid #BBF7D0", background: "#F0FDF4", color: "#166534", borderRadius: 7, padding: "3px 8px", fontSize: 11.5, fontWeight: 700, cursor: "pointer" }}>
+                                ✓ Godkend {e.navn.split(" ")[0]} ({aendringer("emp:" + e.id).length})</button>
                             )}
                           </td>
                           {DAGE.map((d) => {
@@ -11795,6 +11973,22 @@ function SimuleringView({ weekNo, weekYear, instances, employees, templates, are
             </>
           );
         })()}
+
+        {godkendt.length > 0 && (
+          <div style={{ background: "#fff", borderRadius: 14, padding: "12px 16px", marginTop: 16 }}>
+            <div style={{ fontWeight: 800, marginBottom: 6 }}>Godkendte simuleringer for uge {weekNo}</div>
+            {godkendt.map((g) => (
+              <div key={g.id} style={{ display: "flex", gap: 10, alignItems: "center", fontSize: 13.5, padding: "6px 0", borderTop: "1px solid #F1F5F9" }}>
+                <span style={{ minWidth: 140 }}>{new Date(g.oprettet).toLocaleString("da-DK", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</span>
+                <span style={{ flex: 1 }}>{omfangTekst(g.omfang)} · {(g.efter || []).length} opgaver
+                  {g.noegletal?.nu && g.noegletal?.sim ? ` · ${Math.round(g.noegletal.nu.kr)} → ${Math.round(g.noegletal.sim.kr)} kr.` : ""}</span>
+                {g.status === "godkendt"
+                  ? <button type="button" disabled={arbejder} style={styles.secondaryBtn} onClick={() => rulTilbage(g)}>↩ Rul tilbage</button>
+                  : <span style={{ color: "#64748B" }}>rullet tilbage</span>}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

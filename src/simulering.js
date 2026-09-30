@@ -30,6 +30,10 @@
 // afstand(a, b) -> { km, min }   kørsel mellem to adresser
 // valg: { tilstand: "fast"|"fri", tolerance: 0|15|30|60, balance: 0-100, kontinuitet: 0-100, standardSats }
 //
+// udeladte (Jonn 30.9.2026): medarbejdere, der ikke indgår i fordelingen — ejerne
+// Charlotte og Karen, der tager opgaver, når der skal fyldes huller. Deres egne opgaver
+// bliver hos dem, og de får ingen nye.
+//
 // kontinuitet (Jonn 30.9.2026): hvor meget det koster, at en kunde får en anden
 // medarbejder end i dag. 0 = ligegyldigt, 100 = kun hvis det sparer meget. Den første
 // kørsel på uge 41 uden den flyttede 159 af 181 pladser.
@@ -93,6 +97,7 @@ function dagPris(liste, emp, afstand, balance, udenforAntal, standardSats) {
 // Én dag. Returnerer { pladser: { [opgaveId]: [{ emp, min, start, flyttet }] }, ikkePlaceret: [...] }
 export function simulerDag(opgaver, medarbejdere, afstand, valg = {}) {
   const { tilstand = "fri", tolerance = 0, balance = 40, kontinuitet = 0, standardSats = 3.94 } = valg;
+  const udeladte = tilSaet(valg.udeladte);
   // Prisen for at give en plads til en anden end den, der har den i dag.
   const skift = (foer, nyEmp) => (foer && foer !== nyEmp ? (kontinuitet / 100) * KONTINUITET_KR : 0);
   const dag = opgaver[0]?.dag;
@@ -108,9 +113,9 @@ export function simulerDag(opgaver, medarbejdere, afstand, valg = {}) {
   const frie = [];
   for (const o of [...opgaver].sort((a, b) => a.start - b.start || String(a.id).localeCompare(String(b.id)))) {
     resultat[o.id] = [];
-    const kand = tilSaet(o.kandidater), udenfor = tilSaet(o.udenfor);
+    const kand = new Set([...tilSaet(o.kandidater)].filter((id) => !udeladte.has(id))), udenfor = tilSaet(o.udenfor);
     o.pladser.forEach((p, nr) => {
-      const laastHer = o.laast || (tilstand === "fast" && o.fast && p.emp === o.fast);
+      const laastHer = o.laast || (tilstand === "fast" && o.fast && p.emp === o.fast) || udeladte.has(p.emp);
       if (laastHer && p.emp && emp.has(p.emp)) {
         const x = { opgId: o.id, adresse: o.adresse, start: o.start, min: p.min, udenfor: udenfor.has(p.emp) };
         dagens[p.emp].push(x);
@@ -155,7 +160,8 @@ export function simulerDag(opgaver, medarbejdere, afstand, valg = {}) {
     let forbedret = false;
     // Flyt
     for (const { opgId, i, r } of flytbare()) {
-      const o = opgaveAf.get(opgId), kand = tilSaet(o.kandidater), udenfor = tilSaet(o.udenfor);
+      const o = opgaveAf.get(opgId), udenfor = tilSaet(o.udenfor);
+      const kand = new Set([...tilSaet(o.kandidater)].filter((id) => !udeladte.has(id)));
       const fra = r.emp;
       const idx = dagens[fra].findIndex((x) => x.opgId === opgId && x.start === r.start && x.min === r.min);
       if (idx < 0) continue;
@@ -193,7 +199,7 @@ export function simulerDag(opgaver, medarbejdere, afstand, valg = {}) {
         const ea = resultat[A.opgId][A.i].emp, eb = resultat[B.opgId][B.i].emp;
         if (ea === eb) continue;
         const oA = opgaveAf.get(A.opgId), oB = opgaveAf.get(B.opgId);
-        if (!tilSaet(oA.kandidater).has(eb) || !tilSaet(oB.kandidater).has(ea)) continue;
+        if (!tilSaet(oA.kandidater).has(eb) || !tilSaet(oB.kandidater).has(ea) || udeladte.has(ea) || udeladte.has(eb)) continue;
         if (resultat[A.opgId].some((z, k) => k !== A.i && z.emp === eb)) continue;
         if (resultat[B.opgId].some((z, k) => k !== B.i && z.emp === ea)) continue;
         const rA = resultat[A.opgId][A.i], rB = resultat[B.opgId][B.i];
