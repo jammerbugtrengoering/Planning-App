@@ -1653,6 +1653,8 @@ const MODULE_HELP = {
         "Tidslinjen er den du detailplanlægger i. Vælg én medarbejder i listen, så står hendes uge alene.",
         "Du kan trække en opgave fra «Ikke tildelt» ned på et klokkeslæt i tidslinjen. Tidspunktet rundes til nærmeste kvarter og sættes som aftalt tid — der kommer aldrig til at stå 09:47 på en aftale.",
         "Opgaver kan også trækkes rundt inde i tidslinjen. Overståede dage er skraveret og tager ikke imod.",
+        "Tiderne står ens i begge visninger: først det tidspunkt, hun reelt kan være der, og 🎯 med den aftalte tid ved siden af, når de ikke passer sammen.",
+        "Plusset på et kort sætter flere medarbejdere på opgaven — i tidslinjen såvel som i gitteret. De andre, der er på, vises med deres forbogstaver på kortet.",
         "Fuldt optrukket kant betyder aftalt klokkeslæt. Stiplet betyder, at tiden er regnet ud fra hvornår dagen begynder — skrider dagen, skrider den med. Der står også «ikke aftalt tid» på blokken, når der er plads.",
         "Blokken viser det samme som brikken i gitteret: klokkeslæt, navn, adresse, opgavens art, varighed, tjeklistepunkter og hvem der har udført den hvornår. Korte opgaver viser kun det, der kan være — en afklippet adresse er værre end ingen. Hold musen over for at få det hele.",
         "En udført opgave bliver grøn med «Udført af …» og tidspunktet, ligesom i gitteret.",
@@ -11210,6 +11212,10 @@ const TL_PX_PR_MIN = 1.6;
 function UgeTidslinje({ emp, dage, instances, travelSettings, weekOffset, weekYear,
                         onOpenTask, dragId, setDragId, onPlace, alleMedarbejdere, adgangTekst,
                         koerendeTider = {}, stopurNu = Date.now() }) {
+  // Plusset paa kortet (30.9.2026, Jonn): flere medarbejdere paa en opgave, ligesom i
+  // gitteret. Menuen tegnes med position: fixed ud fra plussets placering — kortene
+  // i tidslinjen klipper alt, der stikker ud, saa en menu inde i kortet ville forsvinde.
+  const [tilfoejMenu, setTilfoejMenu] = useState(null); // { task, dag, x, y }
   const perDag = dage.map((d) => {
     const dayTasks = instances.filter(
       (t) => t.day === d.key && (t.assignees || []).includes(emp.id)
@@ -11366,7 +11372,8 @@ function UgeTidslinje({ emp, dage, instances, travelSettings, weekOffset, weekYe
                   const urFarve = ur && { groen: ["#DCFCE7", "#166534", "#22C55E"], orange: ["#FEF3C7", "#92400E", "#F59E0B"],
                                           roed: ["#FEE2E2", "#B91C1C", "#DC2626"] }[ur.farve];
                   return (
-                    <button key={t.id} onClick={() => onOpenTask(t.id)}
+                    <div key={t.id} role="button" tabIndex={0} onClick={() => onOpenTask(t.id)}
+                      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpenTask(t.id); } }}
                       draggable={!laast}
                       onDragStart={(e) => { if (laast) return; e.stopPropagation(); setDragId?.(t.id); }}
                       title={[id.primaer || t.title, id.sekundaer, t.title, fmtMin(t.duration),
@@ -11390,10 +11397,14 @@ function UgeTidslinje({ emp, dage, instances, travelSettings, weekOffset, weekYe
                           blokken er hoej nok — en afklippet adresse er vaerre end ingen. */}
                       <div style={{ ...enLinje, fontWeight: 700, display: "flex", alignItems: "center", gap: 3 }}>
                         <Ikon size={9} style={{ flexShrink: 0 }} />
-                        <span>{aftalt ? t.scheduledTime : fmtClock(sg.start)}</span>
-                        {/* 🎯 naar den aftalte tid IKKE er den hun reelt kan naa frem. */}
+                        {/* Samme som gitteret (30.9.2026): det tidspunkt hun reelt kan vaere
+                            der, og den aftalte tid med 🎯 ved siden af, naar de ikke er ens.
+                            Foer stod den aftalte tid her og den beregnede i gitteret, og
+                            saa saa de to visninger ud til at vise forskellige data. */}
+                        <span>{fmtClock(sg.start)}</span>
                         {aftalt && fmtClock(sg.start) !== t.scheduledTime && (
-                          <span title={`Aftalt ${t.scheduledTime}, kan tidligst ${fmtClock(sg.start)}`}>🎯</span>
+                          <span title={`Aftalt kl. ${t.scheduledTime}, kan tidligst være der ${fmtClock(sg.start)}`}
+                            style={{ color: "#D97706", fontWeight: 700 }}>🎯{t.scheduledTime}</span>
                         )}
                         <span style={{ ...enLinje, flex: 1 }}>{id.primaer || t.title}</span>
                         {t.offSchedule && <span title="Uden for aftalen">⚠️</span>}
@@ -11404,6 +11415,30 @@ function UgeTidslinje({ emp, dage, instances, travelSettings, weekOffset, weekYe
                             style={{ flexShrink: 0, fontSize: 9.5, fontWeight: 800, color: urFarve[1],
                                      background: urFarve[0], borderRadius: 4, padding: "0 4px" }}>
                             ⏱ {ur.kort}
+                          </span>
+                        )}
+                        {/* De andre paa opgaven og plusset. Hun selv staar ikke her —
+                            det er hendes tidslinje. */}
+                        {(t.assignees || []).filter((a) => a !== emp.id).map((a) => {
+                          const m2 = (alleMedarbejdere || []).find((e) => e.id === a);
+                          return m2 ? (
+                            <span key={a} title={`Også på opgaven: ${m2.name}`}
+                              style={{ flexShrink: 0, width: 15, height: 15, borderRadius: "50%", background: m2.color || "#64748B",
+                                       color: "#fff", fontSize: 7.5, fontWeight: 800, display: "grid", placeItems: "center" }}>
+                              {initials(m2.name)}
+                            </span>
+                          ) : null;
+                        })}
+                        {!laast && (alleMedarbejdere || []).some((e) => !(t.assignees || []).includes(e.id) && !e.fratraadtDato) && (
+                          <span role="button" tabIndex={0} title="Sæt flere medarbejdere på opgaven"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const r = e.currentTarget.getBoundingClientRect();
+                              setTilfoejMenu((cur) => (cur?.task.id === t.id ? null
+                                : { task: t, dag: dag.key, x: Math.min(r.left, window.innerWidth - 240), y: r.bottom + 4 }));
+                            }}
+                            style={{ ...styles.chipAddBtn, flexShrink: 0, width: 15, height: 15 }}>
+                            <Plus size={9} />
                           </span>
                         )}
                       </div>
@@ -11441,7 +11476,7 @@ function UgeTidslinje({ emp, dage, instances, travelSettings, weekOffset, weekYe
                           🔑 {adgangTekst[t.id]}
                         </div>
                       )}
-                    </button>
+                    </div>
                   );
                 })}
               </div>
@@ -11449,6 +11484,40 @@ function UgeTidslinje({ emp, dage, instances, travelSettings, weekOffset, weekYe
           })}
         </div>
       </div>
+
+      {tilfoejMenu && (() => {
+        const t = tilfoejMenu.task;
+        const paa = (t.assignees || []).map((id) => (alleMedarbejdere || []).find((e) => e.id === id)).filter(Boolean);
+        const kan = (alleMedarbejdere || []).filter((e) => !(t.assignees || []).includes(e.id) && !e.fratraadtDato);
+        return (
+          <>
+            <div onClick={() => setTilfoejMenu(null)} style={{ position: "fixed", inset: 0, zIndex: 60 }} />
+            <div style={{ ...styles.chipAddMenu, position: "fixed", top: tilfoejMenu.y, left: tilfoejMenu.x,
+                          zIndex: 61, maxHeight: 320, overflowY: "auto", minWidth: 220 }}>
+              {/* Samme advarsel som plusset i gitteret: varigheden er pr. person. */}
+              {paa.length >= 1 && (
+                <div style={styles.chipAddAdvarsel}>
+                  {harFordeling(t) ? (
+                    <>Timerne på opgaven er <strong>fordelt</strong> ({fmtMin(planlagtIAlt(t))} i alt).
+                      En ny får ikke automatisk en andel — <strong>åbn opgaven og fordel tiden</strong> bagefter.</>
+                  ) : (
+                    <>Varigheden er <strong>pr. person</strong>. Med én mere bliver det{" "}
+                      {paa.length + 1} × {fmtMin(t.duration)} ={" "}
+                      <strong>{fmtMin(t.duration * (paa.length + 1))}</strong> samlet arbejde.
+                      Skal de dele timerne ulige, så åbn opgaven og fordel dem.</>
+                  )}
+                </div>
+              )}
+              {kan.map((e) => (
+                <button key={e.id} type="button" style={styles.chipAddMenuItem}
+                  onClick={() => { onPlace?.(t.id, tilfoejMenu.dag, e.id); setTilfoejMenu(null); }}>
+                  <span style={{ ...styles.chipAvatar, background: e.color }}>{initials(e.name)}</span> {medSolsikke(e.name, e.id)}
+                </button>
+              ))}
+            </div>
+          </>
+        );
+      })()}
     </div>
   );
 }
