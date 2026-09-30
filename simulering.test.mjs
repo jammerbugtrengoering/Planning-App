@@ -107,6 +107,18 @@ const O = (id, adresse, start, min, pladser, extra = {}) => ({
   er("og den er markeret", med30.pladser["2"][0].flyttet, true);
 }
 
+// ── To på én opgave med foreslået nyt klokkeslæt: begge får det samme ──────
+{
+  const med = [M("x", 3), M("y", 3)];
+  const k = { kandidater: ["x", "y"] };
+  const opg = [O("1", "A", kl(8), 60, [{ emp: "x", min: 60 }], k), O("2", "C", kl(8), 60, [{ emp: "y", min: 60 }], k),
+               O("3", "B", kl(9), 60, [{ emp: null, min: 60 }, { emp: null, min: 60 }], k)];
+  const sim = simulerDag(opg, med, afstand, { tolerance: 30 });
+  const rk = sim.pladser["3"];
+  er("to pladser placeret", rk.length, 2);
+  er("samme klokkeslæt for begge", rk[0].start, rk[1].start);
+}
+
 // ── Samme input giver samme svar ─────────────────────────────────────────────
 {
   const med = [M("x", 2.28), M("y", 3.94), M("z", 3.1)];

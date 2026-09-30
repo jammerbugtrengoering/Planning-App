@@ -130,8 +130,11 @@ export function simulerDag(opgaver, medarbejdere, afstand, valg = {}) {
   for (const f of frie) {
     const optaget = new Set(resultat[f.o.id].map((r) => r.emp));
     let bedst = null;
-    const forskydninger = [0];
-    for (let d = 15; d <= tolerance; d += 15) forskydninger.push(d, -d);
+    // Flere på samme opgave møder samtidig: er en anden plads allerede lagt, skal denne
+    // have SAMME klokkeslæt — også når det er et foreslået nyt.
+    const allerede = resultat[f.o.id][0];
+    const forskydninger = allerede ? [allerede.start - f.o.start] : [0];
+    if (!allerede) for (let d = 15; d <= tolerance; d += 15) forskydninger.push(d, -d);
     for (const d of forskydninger) {
       for (const e of medarbejdere) {
         if (!f.kand.has(e.id) || optaget.has(e.id)) continue;
@@ -144,7 +147,7 @@ export function simulerDag(opgaver, medarbejdere, afstand, valg = {}) {
         const p = efter - foer + Math.abs(d) * STRAF_FLYT_PR_MIN + skift(f.foer, e.id);
         if (!bedst || p < bedst.p - 1e-9) bedst = { e: e.id, ny, p, d };
       }
-      if (bedst && d === 0) break;   // flyt kun klokkeslættet, når det aftalte ikke kan lade sig gøre
+      if (bedst && d === forskydninger[0]) break;   // flyt kun, når det første ikke kan lade sig gøre
     }
     if (!bedst) { ikkePlaceret.push({ opgave: f.o.id, foer: f.foer, grund: "ingen ledig medarbejder med de rette kompetencer" }); continue; }
     dagens[bedst.e].push(bedst.ny);

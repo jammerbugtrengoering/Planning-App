@@ -26,6 +26,9 @@ Besluttet med Jonn 30.9.2026. Skal kunne tages op i Claude Code.
 - Hjælp: Ugeplan → «Simulér uge» (planlægningsappen) og en linje i Worklist.
 - Kundeudgaven: knappen er skjult, fordi kundedatabasen ikke har koeretabel-funktionen
   endnu (tabellerne koeretabel/adresse_punkt og ORS-nøgle mangler dér).
+- Flere på én opgave: hver person er en «plads» med sine minutter (tid_fordeling). Pladserne
+  fordeles hver for sig, aldrig to pladser til samme person, og antallet ændres ikke. Er et
+  klokkeslæt foreslået flyttet, får alle pladser samme nye tid (test i simulering.test.mjs).
 - Mangler: øvelse i prøveugen (valgfri).
 
 ## Formålet
