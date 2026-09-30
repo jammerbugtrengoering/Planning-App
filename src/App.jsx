@@ -3458,9 +3458,51 @@ function PlanningApp({ session, onSignOut }) {
           return next;
         });
       })
-      .subscribe();
+      .subscribe((status) => {
+        // Genforbundet (30.9.2026): realtime leverer kun det, der sker, MENS
+        // forbindelsen er oppe. Sov computeren, eller var fanen i baggrunden, gik
+        // aendringerne imens tabt — Charlottes afsluttede opgave stod saa som
+        // «i gang» i ugeplanen, indtil nogen genindlaeste. Nu hentes vinduet igen.
+        if (status === "SUBSCRIBED") { if (harVaeretForbundet) genopfrisk(); harVaeretForbundet = true; }
+      });
 
-    return () => { supabase.removeChannel(channel); };
+    let harVaeretForbundet = false;
+    let skjultSiden = null;
+    let igang = false;
+    async function genopfrisk() {
+      const kortlaeg = kortlaegRef.current;
+      if (!kortlaeg || igang) return;
+      igang = true;
+      try {
+        const friske = (await hentVinduet()).map(kortlaeg);
+        if (!friske.length) return;
+        const efterId = new Map(friske.map((t) => [t.id, t]));
+        setInstances((prev) => {
+          const kendte = new Set(prev.map((t) => t.id));
+          const next = prev.map((t) => (efterId.has(t.id) ? { ...t, ...efterId.get(t.id) } : t));
+          friske.forEach((t) => { if (!kendte.has(t.id)) next.push(t); });
+          return next;
+        });
+      } catch (e) {
+        console.warn("Kunne ikke genopfriske opgaverne:", e);
+      } finally { igang = false; }
+    }
+    // Fanen kommer frem igen efter mere end et halvt minut i baggrunden, eller
+    // nettet kommer tilbage: hent det, der kan vaere gaaet tabt.
+    const synlig = () => {
+      if (document.visibilityState === "hidden") { skjultSiden = Date.now(); return; }
+      if (skjultSiden && Date.now() - skjultSiden > 30000) genopfrisk();
+      skjultSiden = null;
+    };
+    const online = () => genopfrisk();
+    document.addEventListener("visibilitychange", synlig);
+    window.addEventListener("online", online);
+
+    return () => {
+      supabase.removeChannel(channel);
+      document.removeEventListener("visibilitychange", synlig);
+      window.removeEventListener("online", online);
+    };
   }, []);
 
   // ── Koerende tider (start/stop) til stopuret i ugeplanen ──
@@ -3480,9 +3522,20 @@ function PlanningApp({ session, onSignOut }) {
       for (const r of raekker || []) (kort[r.instance_id] ||= []).push({ employee_id: r.employee_id, startet: r.startet, kilde: r.kilde });
       return kort;
     };
-    supabase.from("tidsstart").select("instance_id, employee_id, startet, kilde").then(({ data }) => {
+    const hentTider = () => supabase.from("tidsstart").select("instance_id, employee_id, startet, kilde").then(({ data }) => {
       if (!afbrudt && data) setKoerendeTider(saml(data));
     });
+    hentTider();
+    // Samme vaern som for opgaverne: efter en afbrudt forbindelse hentes listen
+    // forfra, ellers ville en afsluttet tid blive ved med at koere paa stopuret.
+    let tidligere = false, skjult = null;
+    const synligT = () => {
+      if (document.visibilityState === "hidden") { skjult = Date.now(); return; }
+      if (skjult && Date.now() - skjult > 30000) hentTider();
+      skjult = null;
+    };
+    document.addEventListener("visibilitychange", synligT);
+    window.addEventListener("online", hentTider);
     const kanal = supabase
       .channel("tidsstart-sync")
       .on("postgres_changes", { event: "*", schema: "public", table: "tidsstart" }, (payload) => {
@@ -3501,8 +3554,14 @@ function PlanningApp({ session, onSignOut }) {
           return next;
         });
       })
-      .subscribe();
-    return () => { afbrudt = true; supabase.removeChannel(kanal); };
+      .subscribe((status) => {
+        if (status === "SUBSCRIBED") { if (tidligere) hentTider(); tidligere = true; }
+      });
+    return () => {
+      afbrudt = true; supabase.removeChannel(kanal);
+      document.removeEventListener("visibilitychange", synligT);
+      window.removeEventListener("online", hentTider);
+    };
   }, []);
 
   // ── Firma-indstillinger (Opsaetning -> Firma, 28.9.2026) ──
