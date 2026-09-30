@@ -1754,6 +1754,7 @@ const MODULE_HELP = {
         "Har en medarbejder med start/stop ikke startet tiden 5 minutter efter det planlagte tidspunkt, får hun en besked på telefonen: «Husk at trykke Start».",
         "Er tiden stadig ikke startet efter 10 minutter, starter systemet den fra det planlagte tidspunkt (eller fra hendes sidste afslutning, hvis den ligger senere). Så står der «(system)» ved starten.",
         "En tid startet af systemet er et skøn, ikke en måling. Medarbejderen skal ikke forklare det, hvis hun retter tiden ved Afslut.",
+        "Har hun en tidligere opgave samme dag, som hun ikke har meldt færdig, kommer der hverken påmindelse eller systemstart på den næste. Så er hun ikke kommet videre endnu.",
         "Påmindelsen og systemstarten gælder kun medarbejdere, der har et login til Worklist. Er start/stop slået til for alle, sker der ingenting for dem, der endnu ikke er på telefonen — de kan jo hverken se påmindelsen eller trykke Afslut.",
         "Der sker intet, mens hun har en anden tid kørende, eller hvis opgaven ikke har et fast tidspunkt."] },
     { h: "Klokken — til kontoret 🔔", p: [
