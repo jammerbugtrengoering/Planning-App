@@ -222,3 +222,10 @@ sin egen terminal, så du kan altid se, om der faktisk mangler noget.
 `START-PROMPT.md`, `WINDOWS-OPSAETNING.md`, sikkerhedsgennemgangen og
 persondatafortegnelserne. `overdragelse/CLAUDE.md` har baggrunden for reglerne ovenfor og
 detaljerne om privatlivsteksten og `persondata_register`.
+
+## Status og beslutninger fra september 2026
+
+Den samtale, hvor meget af systemet blev bygget, lukkede 6.10.2026. Det, der kun stod
+dér — beslutninger, hvad der er lært om ydelse, åbne punkter — er samlet i
+`Planning-App/overdragelse/STATUS-2026-09-30.md`. Læs den, før du begynder på noget
+større.
