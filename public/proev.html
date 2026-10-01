@@ -112,6 +112,19 @@
   .person { display: flex; gap: 10px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--kant); }
   .person input { width: 80px; padding: 7px 8px; border: 1.5px solid #CBD5E1; border-radius: 8px; font-size: 14.5px; text-align: right; }
   .sum { background: var(--blaa-lys); border-radius: 10px; padding: 10px 12px; font-size: 14px; margin: 12px 0; }
+  .sim-banner { background: var(--gul-lys); border: 1.5px solid #FDE68A; border-radius: 12px; padding: 10px 14px; font-weight: 700; font-size: 14px; margin-bottom: 12px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .sim-tal { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 14px; }
+  .sim-tal > div { background: #fff; border-radius: 12px; padding: 10px 12px; box-shadow: 0 1px 2px rgba(0,0,0,.06); font-size: 12.5px; color: var(--daempet); }
+  .sim-tal b { display: block; font-size: 18px; color: #111; }
+  .sim-tal .bedre { color: var(--groen); font-weight: 800; }
+  .sim-dag { background: #fff; border-radius: 12px; box-shadow: 0 1px 2px rgba(0,0,0,.06); padding: 10px 14px; margin-bottom: 10px; }
+  .sim-dag h4 { margin: 0 0 6px; display: flex; gap: 10px; align-items: center; font-size: 14.5px; }
+  .sim-dag table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .sim-dag td { padding: 4px 6px; border-top: 1px solid #F1F5F9; }
+  .sim-dag tr.skift td { background: #FFFBEB; }
+  .skifter { display: inline-flex; gap: 4px; border: 1.5px solid var(--kant); border-radius: 10px; padding: 3px; background: #fff; }
+  .skifter button { border: 0; background: transparent; border-radius: 7px; padding: 6px 12px; font-weight: 700; font-size: 13.5px; color: #475569; }
+  .skifter button.valgt { background: var(--sort); color: #fff; }
   .blok { background: var(--roed-lys); color: var(--roed); font-weight: 800; font-size: 12.5px; border-radius: 8px; padding: 6px 8px; margin-bottom: 6px; }
 
   .guide { position: sticky; top: 14px; background: #fff; border-radius: 14px; box-shadow: 0 1px 3px rgba(0,0,0,.08); padding: 16px 16px 18px; }
@@ -185,22 +198,32 @@ const MEDARBEJDERE = [
 
 // type: privat (kunden ER stedet), erhverv, nexus (borgeren staar oeverst, kommunen betaler)
 const START_OPGAVER = [
-  { id: "o1",  kunde: "Familien Hansen",     type: "privat",  emp: "anne",  dag: "man", tid: "08:00", min: 120, udfoert: true },
-  { id: "o2",  kunde: "Nordvang Skole",      type: "erhverv", emp: "anne",  dag: "tir", tid: "07:00", min: 180, udfoert: true },
-  { id: "o3",  kunde: "Else Jensen",         type: "nexus",   emp: "anne",  dag: "tor", tid: "08:30", min: 60, betaler: "Jammerbugt Kommune" },
-  { id: "o4",  kunde: "Villa Klitten",       type: "privat",  emp: "anne",  dag: "tor", tid: "10:00", min: 120 },
-  { id: "o5",  kunde: "Kirsten Bak",         type: "privat",  emp: "anne",  dag: "fre", tid: "09:00", min: 90 },
-  { id: "o6",  kunde: "Kontorhuset A/S",     type: "erhverv", emp: "mette", dag: "man", tid: "06:30", min: 120, udfoert: true },
-  { id: "o7",  kunde: "Poul Nielsen",        type: "nexus",   emp: "mette", dag: "ons", tid: "09:00", min: 60, betaler: "Jammerbugt Kommune" },
-  { id: "o8",  kunde: "Blokhus Feriepark",   type: "erhverv", emp: "mette", dag: "tor", tid: "08:00", min: 180 },
-  { id: "o9",  kunde: "Fru Madsen",          type: "privat",  emp: "mette", dag: "fre", tid: "10:00", min: 120 },
-  { id: "o10", kunde: "Tandlæge Riis",       type: "erhverv", emp: "jonas", dag: "man", tid: "16:00", min: 120, udfoert: true, brugt: 145 },
-  { id: "o11", kunde: "Brix Erhverv",        type: "erhverv", emp: "jonas", dag: "ons", tid: "07:00", min: 180 },
-  { id: "o12", kunde: "Hotel Strand",        type: "erhverv", emp: "jonas", dag: "fre", tid: "07:00", min: 240 },
-  { id: "o13", kunde: "Ejendom Vestergade",  type: "erhverv", emp: "sara",  dag: "tir", tid: "08:00", min: 120, udfoert: true },
-  { id: "o14", kunde: "Familien Lund",       type: "privat",  emp: "sara",  dag: "ons", tid: "09:00", min: 120 },
-  { id: "o15", kunde: "Familien Holm",       type: "privat",  emp: null,    dag: "tir", tid: "12:00", min: 120 },
+  { id: "o1",  kunde: "Familien Hansen",     type: "privat",  emp: "anne",  dag: "man", tid: "08:00", min: 120, udfoert: true, by: "Aabybro" },
+  { id: "o2",  kunde: "Nordvang Skole",      type: "erhverv", emp: "anne",  dag: "tir", tid: "07:00", min: 180, udfoert: true, by: "Pandrup" },
+  { id: "o3",  kunde: "Else Jensen",         type: "nexus",   emp: "anne",  dag: "tor", tid: "08:30", min: 60, betaler: "Jammerbugt Kommune", by: "Aabybro", fast: true },
+  { id: "o4",  kunde: "Villa Klitten",       type: "privat",  emp: "anne",  dag: "tor", tid: "10:00", min: 120, by: "Blokhus" },
+  { id: "o5",  kunde: "Kirsten Bak",         type: "privat",  emp: "anne",  dag: "fre", tid: "09:00", min: 90, by: "Aabybro", fast: true },
+  { id: "o6",  kunde: "Kontorhuset A/S",     type: "erhverv", emp: "mette", dag: "man", tid: "06:30", min: 120, udfoert: true, by: "Aabybro" },
+  { id: "o7",  kunde: "Poul Nielsen",        type: "nexus",   emp: "mette", dag: "ons", tid: "09:00", min: 60, betaler: "Jammerbugt Kommune", by: "Blokhus", fast: true },
+  { id: "o8",  kunde: "Blokhus Feriepark",   type: "erhverv", emp: "mette", dag: "tor", tid: "08:00", min: 180, by: "Blokhus" },
+  { id: "o9",  kunde: "Fru Madsen",          type: "privat",  emp: "mette", dag: "fre", tid: "10:00", min: 120, by: "Blokhus" },
+  { id: "o10", kunde: "Tandlæge Riis",       type: "erhverv", emp: "jonas", dag: "man", tid: "16:00", min: 120, udfoert: true, brugt: 145, by: "Pandrup" },
+  { id: "o11", kunde: "Brix Erhverv",        type: "erhverv", emp: "jonas", dag: "ons", tid: "07:00", min: 180, by: "Pandrup" },
+  { id: "o12", kunde: "Hotel Strand",        type: "erhverv", emp: "jonas", dag: "fre", tid: "07:00", min: 240, by: "Blokhus" },
+  { id: "o13", kunde: "Ejendom Vestergade",  type: "erhverv", emp: "sara",  dag: "tir", tid: "08:00", min: 120, udfoert: true, by: "Fjerritslev" },
+  { id: "o14", kunde: "Familien Lund",       type: "privat",  emp: "sara",  dag: "ons", tid: "09:00", min: 120, by: "Fjerritslev", fast: true },
+  { id: "o15", kunde: "Familien Holm",       type: "privat",  emp: null,    dag: "tir", tid: "12:00", min: 120, by: "Aabybro" },
+  // Onsdag kører de på kryds og tværs — det er den, simuleringen skal rydde op i.
+  { id: "o16", kunde: "Lægehuset Aabybro",   type: "erhverv", emp: "anne",  dag: "ons", tid: "07:30", min: 120, by: "Aabybro" },
+  { id: "o17", kunde: "Familien Krogh",      type: "privat",  emp: "anne",  dag: "ons", tid: "12:00", min: 90,  by: "Fjerritslev" },
+  { id: "o18", kunde: "Aabybro Kro",         type: "erhverv", emp: "mette", dag: "ons", tid: "12:00", min: 120, by: "Aabybro" },
+  { id: "o19", kunde: "Rødhus Sommerhuse",   type: "erhverv", emp: "jonas", dag: "ons", tid: "12:00", min: 120, by: "Blokhus" },
+  { id: "o20", kunde: "Klitgården",          type: "privat",  emp: "sara",  dag: "ons", tid: "13:00", min: 90,  by: "Aabybro" },
 ];
+
+// Kilometer mellem byerne (opdigtede, men i den rigtige størrelse). Køretid ≈ 1,2 min pr. km.
+const KM = { "Aabybro|Blokhus": 22, "Aabybro|Pandrup": 17, "Aabybro|Fjerritslev": 30, "Blokhus|Pandrup": 10, "Blokhus|Fjerritslev": 30, "Fjerritslev|Pandrup": 25 };
+const KM_SATS = 3.94;
 
 const OEVELSER = [
   { id: "laes", gruppe: "Ugeplanen", titel: "Læs ugen",
@@ -243,6 +266,12 @@ const OEVELSER = [
   { id: "faktura", gruppe: "Fakturering", titel: "Send til fakturering",
     tekst: "Mandag og tirsdag er udført. Markér opgaverne som klar, og send dem til fakturering.",
     tip: "Menuen «Økonomi». Hos jer går det videre til Dinero eller til en Excel-fil." },
+  { id: "simuler", gruppe: "Simulér uge", titel: "Simulér ugen",
+    tekst: "Onsdag kører de fire på kryds og tværs mellem Aabybro og Fjerritslev. Tryk «🔀 Simulér uge», vælg «Fri medarbejder», og se, hvor mange kilometer og kroner der kan spares.",
+    tip: "Simuleringen ændrer intet, før du godkender. Dage og aftalte klokkeslæt bliver, udførte opgaver røres ikke, og kun kørsel mellem opgaverne tæller — ikke hjemmefra. «Fast medarbejder» lader de faste aftaler beholde deres medarbejder." },
+  { id: "simgodkend", gruppe: "Simulér uge", titel: "Godkend onsdag — og rul tilbage",
+    tekst: "Godkend kun onsdag, og se i ugeplanen, at opgaverne har fået nye medarbejdere. Rul derefter tilbage, så onsdag er som før.",
+    tip: "«Godkend onsdag» står over dagen i simuleringen. «↩ Rul tilbage» står i ugeplanen, når du har godkendt. I den rigtige app får medarbejderne besked om ændringer i deres dag, og du kan også godkende én medarbejder ad gangen." },
 ];
 
 /* ── Tilstand ──────────────────────────────────────────────────────────────
@@ -269,6 +298,11 @@ function nulstil() {
     sendt: false,
     lundOpgave: null,
     annesTor: [],
+    sim: null,                   // { tilstand, dage: {dag: {pladser, foer, efter}} } — kun i hukommelsen
+    simTilstand: "fri",
+    simSnapshot: null,           // gammel fordeling for de godkendte opgaver (til «Rul tilbage»)
+    simGodkendt: new Set(),      // dage, der er godkendt
+    simRullet: false,
   };
 }
 nulstil();
@@ -302,6 +336,8 @@ const KONTROL = {
   bestilling: () => S.lundOpgave && !!opgave(S.lundOpgave)?.emp,
   afvigelse: () => S.beskeder.find((b) => b.id === "b3").klaret,
   faktura: () => S.sendt,
+  simuler: () => !!S.sim && S.sim.tilstand === "fri",
+  simgodkend: () => S.simGodkendt.has("ons") && S.simRullet,
 };
 
 function tjek() {
@@ -406,6 +442,142 @@ function gemAftale(f) {
   return true;
 }
 
+/* ── Simulér uge (en lille udgave af src/simulering.js) ─────────────────────
+   Hver person på en opgave er en «plads» med sine minutter. Pladserne fordeles på de
+   medarbejdere, der ikke er syge, så kørslen MELLEM opgaverne bliver mindst mulig —
+   uden at nogen får mere end 7 timer eller to opgaver, der overlapper (med køretid).
+   Dag og klokkeslæt flyttes aldrig. Udførte opgaver og opgaver uden klokkeslæt bliver,
+   hvor de er; i «Fast medarbejder» også de faste aftaler. */
+const kmMellem = (a, b) => (!a || !b || a === b ? 0 : KM[a < b ? a + "|" + b : b + "|" + a] ?? 25);
+const tilMin = (hhmm) => { const [h, m] = String(hhmm).split(":").map(Number); return h * 60 + m; };
+
+function dagsTal(pladser, d) {
+  // pladser: [{ o, emp, min }] → km og kr. pr. medarbejder og i alt, dage over 7 t
+  let km = 0, over = 0;
+  MEDARBEJDERE.forEach((e) => {
+    const mine = pladser.filter((p) => p.emp === e.id && p.o.tid).sort((a, b) => tilMin(a.o.tid) - tilMin(b.o.tid));
+    for (let i = 1; i < mine.length; i++) km += kmMellem(mine[i - 1].o.by, mine[i].o.by);
+    if (pladser.filter((p) => p.emp === e.id).reduce((s, p) => s + p.min, 0) > KAPACITET) over++;
+  });
+  return { km, kr: km * KM_SATS, over };
+}
+
+function passer(pladser, empId, ny, d) {
+  if (blokeret(empId, d)) return false;
+  const mine = pladser.filter((p) => p.emp === empId);
+  if (mine.some((p) => p.o.id === ny.o.id)) return false;                 // aldrig to pladser på samme opgave
+  if (mine.reduce((s, p) => s + p.min, 0) + ny.min > KAPACITET) return false;
+  if (!ny.o.tid) return true;
+  const a0 = tilMin(ny.o.tid), a1 = a0 + ny.min;
+  return mine.filter((p) => p.o.tid).every((p) => {
+    const b0 = tilMin(p.o.tid), b1 = b0 + p.min, koer = Math.round(kmMellem(p.o.by, ny.o.by) * 1.2);
+    return a1 + koer <= b0 || b1 + koer <= a0;
+  });
+}
+
+function simulerDag(d, tilstand) {
+  const dagens = S.opgaver.filter((o) => o.dag === d);
+  const foer = [], laast = [], frie = [];
+  dagens.forEach((o) => {
+    const folk = folkPaa(o);
+    const saeder = folk.length ? folk.map((e) => ({ o, foerEmp: e, min: planlagtFor(o, e) })) : [{ o, foerEmp: null, min: o.min }];
+    saeder.forEach((p) => {
+      if (p.foerEmp) foer.push({ o, emp: p.foerEmp, min: p.min });
+      const bliver = o.udfoert || !o.tid || (tilstand === "fast" && o.fast && p.foerEmp);
+      if (bliver && p.foerEmp) laast.push({ o, emp: p.foerEmp, min: p.min, foerEmp: p.foerEmp, laast: true });
+      else frie.push(p);
+    });
+  });
+  const pris = (pl) => { const t2 = dagsTal(pl, d); return t2.km + pl.filter((p) => !p.laast && p.emp !== p.foerEmp).length * 0.5; };
+  // 1. Billigste indsættelse i klokkeslætsorden
+  const pladser = [...laast];
+  const ikke = [];
+  frie.sort((a, b) => tilMin(a.o.tid || "23:59") - tilMin(b.o.tid || "23:59") || b.min - a.min).forEach((p) => {
+    let bedst = null;
+    MEDARBEJDERE.forEach((e) => {
+      if (!passer(pladser, e.id, p, d)) return;
+      const c = pris([...pladser, { ...p, emp: e.id }]);
+      if (!bedst || c < bedst.c) bedst = { c, emp: e.id };
+    });
+    if (bedst) pladser.push({ ...p, emp: bedst.emp }); else ikke.push(p);
+  });
+  // 2. Forbedring: flyt én plads eller byt to, så længe det bliver billigere
+  for (let runde = 0; runde < 20; runde++) {
+    let bedre = false;
+    for (let i = 0; i < pladser.length; i++) {
+      if (pladser[i].laast) continue;
+      const nu = pris(pladser);
+      for (const e of MEDARBEJDERE) {
+        if (e.id === pladser[i].emp) continue;
+        const uden = pladser.filter((_, j) => j !== i);
+        if (!passer(uden, e.id, pladser[i], d)) continue;
+        const proev = [...uden, { ...pladser[i], emp: e.id }];
+        if (pris(proev) < nu - 0.01) { pladser.splice(0, pladser.length, ...proev); bedre = true; break; }
+      }
+    }
+    for (let i = 0; i < pladser.length && !bedre; i++) for (let j = i + 1; j < pladser.length && !bedre; j++) {
+      const a = pladser[i], b = pladser[j];
+      if (a.laast || b.laast || a.emp === b.emp) continue;
+      const rest = pladser.filter((_, k) => k !== i && k !== j);
+      if (!passer(rest, b.emp, a, d)) continue;
+      const medA = [...rest, { ...a, emp: b.emp }];
+      if (!passer(medA, a.emp, b, d)) continue;
+      const proev = [...medA, { ...b, emp: a.emp }];
+      if (pris(proev) < pris(pladser) - 0.01) { pladser.splice(0, pladser.length, ...proev); bedre = true; }
+    }
+    if (!bedre) break;
+  }
+  return { pladser, ikke, foer: dagsTal(foer, d), efter: dagsTal(pladser, d),
+    skift: pladser.filter((p) => !p.laast && p.emp !== p.foerEmp) };
+}
+
+function simuler(tilstand) {
+  const dage = {};
+  DAGE.forEach(([d]) => { dage[d] = simulerDag(d, tilstand); });
+  S.sim = { tilstand, dage };
+  S.simTilstand = tilstand;
+  S.skaerm = "sim";
+  tjek(); tegn();
+}
+
+function godkendSim(dage) {
+  if (!S.sim) return;
+  const snap = S.simSnapshot || {};
+  let n = 0;
+  dage.forEach((d) => {
+    const r = S.sim.dage[d];
+    const opg = [...new Set(r.skift.map((p) => p.o.id))];
+    opg.forEach((id) => {
+      const o = opgave(id);
+      if (!o || o.udfoert) return;
+      if (r.ikke.some((p) => p.o.id === id)) return;       // en plads uden medarbejder: hele opgaven bliver
+      if (!snap[id]) snap[id] = { emp: o.emp, hjaelpere: [...(o.hjaelpere || [])], fordeling: { ...(o.fordeling || {}) } };
+      const mine = r.pladser.filter((p) => p.o.id === id);
+      const hadFordeling = Object.keys(o.fordeling || {}).length > 0;
+      o.emp = mine[0].emp;
+      o.hjaelpere = mine.slice(1).map((p) => p.emp);
+      o.fordeling = {};
+      if (hadFordeling) mine.forEach((p) => { o.fordeling[p.emp] = p.min; });
+      o.fraSyg = false;
+      n++;
+    });
+    S.simGodkendt.add(d);
+  });
+  S.simSnapshot = snap;
+  S.simRullet = false;
+  S.sim = null; S.skaerm = "uge";
+  skaal(n ? `Godkendt — ${n} opgave${n === 1 ? "" : "r"} har fået ny medarbejder. Medarbejderne får besked.` : "Der var intet at ændre.", true);
+  tjek(); tegn();
+}
+
+function rulTilbage() {
+  if (!S.simSnapshot) return;
+  Object.entries(S.simSnapshot).forEach(([id, g]) => { const o = opgave(id); if (o && !o.udfoert) Object.assign(o, g); });
+  S.simSnapshot = null; S.simRullet = true;
+  skaal("Rullet tilbage — opgaverne har deres gamle medarbejdere igen.", true);
+  tjek(); tegn();
+}
+
 function besked(id, svar) {
   const b = S.beskeder.find((x) => x.id === id);
   if (b.art === "nytid") {
@@ -434,7 +606,7 @@ const kanVendeTilbage = () => location.protocol === "http:" || location.protocol
 function topBjaelke() {
   const menu = S.skaerm === "velkomst" || S.skaerm === "slut" ? "" : `
     <div class="nav">
-      <button data-nav="uge" class="${S.skaerm === "uge" ? "valgt" : ""}">Ugeplan</button>
+      <button data-nav="uge" class="${S.skaerm === "uge" || S.skaerm === "sim" ? "valgt" : ""}">Ugeplan</button>
       <button data-nav="okonomi" class="${S.skaerm === "okonomi" ? "valgt" : ""}">Økonomi</button>
       <button data-vindue="indbakke" title="Indbakke">🔔${aabne() ? `<span class="prik">${aabne()}</span>` : ""}</button>
     </div>`;
@@ -465,6 +637,8 @@ function ugeplan() {
     <div class="vaerktoej">
       <button class="knap knap-pink" data-vindue="aftale">+ Ny opgave</button>
       <button class="knap knap-roed" data-vindue="syg">🌡️ Sygdom/Ferie</button>
+      <button class="knap knap-hvid" data-simuler>🔀 Simulér uge</button>
+      ${S.simSnapshot ? `<button class="knap knap-hvid" data-rultilbage title="Sæt de godkendte ændringer tilbage">↩ Rul tilbage</button>` : ""}
       <div class="uge">Uge 41 · øvelsesuge</div>
     </div>
     <div class="hint">${S.valgt ? `«${esc(opgave(S.valgt).kunde)}» er valgt — tryk på det felt, den skal flyttes til. <a href="#" data-fravaelg>Fortryd</a>` : "Træk et kort til et andet felt — eller tryk på kortet og derefter på feltet."}</div>
@@ -484,6 +658,51 @@ function ugeplan() {
         }).join("")}
       </tr>`).join("")}
     </table></div>`;
+}
+
+function simVisning() {
+  const r = S.sim;
+  const sum = (k, hvad) => DAGE.reduce((s, [d]) => s + r.dage[d][k][hvad], 0);
+  const kmF = sum("foer", "km"), kmE = sum("efter", "km"), krF = sum("foer", "kr"), krE = sum("efter", "kr");
+  const overF = sum("foer", "over"), overE = sum("efter", "over");
+  const skift = DAGE.reduce((s, [d]) => s + r.dage[d].skift.length, 0);
+  const ikke = DAGE.reduce((s, [d]) => s + r.dage[d].ikke.length, 0);
+  const navn = (id) => (id ? emp(id).navn : "Ikke tildelt");
+  return `
+    <div class="sim-banner">🔀 SIMULERING — intet er gemt, før du godkender
+      <span style="margin-left:auto" class="skifter">
+        <button data-simtilstand="fast" class="${r.tilstand === "fast" ? "valgt" : ""}">Fast medarbejder</button>
+        <button data-simtilstand="fri" class="${r.tilstand === "fri" ? "valgt" : ""}">Fri medarbejder</button>
+      </span></div>
+    <div class="sim-tal">
+      <div>Kørsel mellem opgaver<b>${kmF} → ${kmE} km</b>${kmE < kmF ? `<span class="bedre">−${kmF - kmE} km</span>` : "ingen besparelse"}</div>
+      <div>Kørselsgodtgørelse (${String(KM_SATS).replace(".", ",")} kr./km)<b>${kr(krF)} → ${kr(krE)}</b>${krE < krF ? `<span class="bedre">−${kr(krF - krE)} på ugen</span>` : ""}</div>
+      <div>Dage over 7 timer<b>${overF} → ${overE}</b></div>
+      <div>Pladser med ny medarbejder<b>${skift}</b>${ikke ? `<span style="color:var(--roed);font-weight:800">${ikke} kan ikke placeres</span>` : "kunderne mærker det"}</div>
+    </div>
+    <div style="display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+      <button class="knap knap-groen" data-simgodkend="alle" ${skift ? "" : "disabled"}>Godkend hele ugen</button>
+      <button class="knap knap-hvid" data-simluk>Luk uden at gemme</button>
+    </div>
+    ${DAGE.map(([d, n]) => {
+      const x = r.dage[d];
+      const raekker = [...new Set([...x.pladser, ...x.ikke].map((p) => p.o.id))].map((id) => opgave(id))
+        .sort((a, b) => tilMin(a.tid || "23:59") - tilMin(b.tid || "23:59"));
+      return `<div class="sim-dag">
+        <h4>${n} <span style="font-weight:600;color:var(--daempet);font-size:13px">${x.foer.km} → ${x.efter.km} km</span>
+          ${S.simGodkendt.has(d) && !S.simRullet ? `<span class="tag tag-groen" style="font-size:11px;padding:2px 8px;border-radius:99px">godkendt</span>` : ""}
+          <button class="knap knap-hvid" style="margin-left:auto;padding:6px 12px;font-size:13px" data-simgodkend="${d}" ${x.skift.length ? "" : "disabled"}>Godkend ${DAGSNAVN[d]}</button></h4>
+        <table>${raekker.map((o) => {
+          const efter = x.pladser.filter((p) => p.o.id === o.id);
+          const uden = x.ikke.filter((p) => p.o.id === o.id);
+          const foer = folkPaa(o);
+          const skiftet = efter.some((p) => !p.laast && p.emp !== p.foerEmp) || uden.length;
+          return `<tr class="${skiftet ? "skift" : ""}"><td style="width:52px">${esc(o.tid || "—")}</td><td><b>${esc(o.kunde)}</b> <span style="color:var(--daempet)">${esc(o.by || "")}</span></td>
+            <td>${foer.length ? foer.map(navn).join(" + ") : "Ikke tildelt"}</td>
+            <td>${skiftet ? "→ <b>" + [...efter.map((p) => navn(p.emp)), ...uden.map(() => "ikke placeret")].join(" + ") + "</b>" : o.udfoert ? "udført — bliver" : efter.some((p) => p.laast) ? "bliver" : "samme"}</td></tr>`;
+        }).join("")}</table></div>`;
+    }).join("")}
+    <div class="hint">Kun kørsel mellem opgaverne samme dag tæller — ikke turen hjemmefra. To på én opgave er to pladser: de får hver sin medarbejder, samme klokkeslæt og hver deres minutter.</div>`;
 }
 
 function okonomi() {
@@ -644,8 +863,8 @@ function vindue() {
 function velkomst() {
   return `<div class="velkomst">
     <h1>Prøv planlægningen</h1>
-    <p>En hel uge med fire medarbejdere og femten opgaver — og intet af det er rigtigt. Du kan ikke komme til at ødelægge noget, og ingen kan se, hvad du trykker på.</p>
-    <p>Til højre står tretten små øvelser. De krydses af, når du har gjort det, de beder om. Du må tage dem i den rækkefølge, du vil, og starte forfra så tit, du vil.</p>
+    <p>En hel uge med fire medarbejdere og tyve opgaver — og intet af det er rigtigt. Du kan ikke komme til at ødelægge noget, og ingen kan se, hvad du trykker på.</p>
+    <p>Til højre står femten små øvelser. De krydses af, når du har gjort det, de beder om. Du må tage dem i den rækkefølge, du vil, og starte forfra så tit, du vil.</p>
     <p style="font-size:14px;color:var(--daempet)">Den rigtige app kan mere: tidslinje, køretid, kompetencer, områder, tjeklister. Her er kun det, der skal til for at forstå tankegangen. Navne og priser er opdigtede.</p>
     <button class="knap knap-pink" data-begynd style="font-size:16px;padding:12px 22px;margin-top:6px">Begynd øvelsen</button>
   </div>`;
@@ -654,8 +873,8 @@ function velkomst() {
 function slut() {
   return `<div class="velkomst">
     <div style="font-size:54px">🎉</div>
-    <h1>Tretten ud af tretten</h1>
-    <p>Du har planlagt en hel uge: tildelt og flyttet opgaver, sat en ekstra på, fordelt tiden og rettet en aftale, håndteret en sygemelding, oprettet en fast aftale, ryddet indbakken og sendt ugen til fakturering.</p>
+    <h1>Femten ud af femten</h1>
+    <p>Du har planlagt en hel uge: tildelt og flyttet opgaver, sat en ekstra på, fordelt tiden og rettet en aftale, håndteret en sygemelding, oprettet en fast aftale, ryddet indbakken, sendt ugen til fakturering og simuleret en uge med mindre kørsel.</p>
     <div class="afsnit">Det du har prøvet</div>
     <ul class="liste">${OEVELSER.map((o) => `<li class="faerdig"><span class="boks">✓</span>${esc(o.titel)}</li>`).join("")}</ul>
     <div class="afsnit" style="margin-top:16px">De to ting, du skal huske</div>
@@ -672,7 +891,7 @@ function tegn() {
   let krop;
   if (S.skaerm === "velkomst") krop = velkomst();
   else if (S.skaerm === "slut") krop = slut();
-  else krop = `<div class="layout"><main>${S.skaerm === "okonomi" ? okonomi() : ugeplan()}</main>${guide()}</div>`;
+  else krop = `<div class="layout"><main>${S.skaerm === "okonomi" ? okonomi() : S.skaerm === "sim" && S.sim ? simVisning() : ugeplan()}</main>${guide()}</div>`;
   app.innerHTML = topBjaelke() + krop + vindue();
 }
 
@@ -708,6 +927,11 @@ app.addEventListener("click", (e) => {
     gemFordeling(S.aabenId, v); return;
   }
   if (m("[data-gemaftaletid]")) { gemAftaleTid(m("[data-gemaftaletid]").dataset.gemaftaletid, document.getElementById("aftaleTimer").value); return; }
+  if (m("[data-simuler]")) { simuler(S.simTilstand); return; }
+  if (m("[data-simtilstand]")) { simuler(m("[data-simtilstand]").dataset.simtilstand); return; }
+  if (m("[data-simgodkend]")) { const v = m("[data-simgodkend]").dataset.simgodkend; godkendSim(v === "alle" ? DAGE.map(([d]) => d) : [v]); return; }
+  if (m("[data-simluk]")) { S.sim = null; S.skaerm = "uge"; tegn(); return; }
+  if (m("[data-rultilbage]")) { rulTilbage(); return; }
   if (m("[data-plus]")) { S.plusId = m("[data-plus]").dataset.plus; S.vindue = "plus"; S.valgt = null; tegn(); return; }
   if (m("[data-ekstra]")) { tilfoejEkstra(S.plusId, m("[data-ekstra]").dataset.ekstra); return; }
   const kort = m("[data-kort]");
