@@ -194,6 +194,18 @@ async function autoslut(admin: ReturnType<typeof createClient>) {
       if (ok) sendt++;
     }
 
+    // Lukninger, der ikke kom fra autoslut_behandl — fx naar kontoret lukker en opgave,
+    // hvor tiden stadig koerer (Jonn 1.10.2026). Hver faar én besked.
+    const { data: lb, error: lbFejl } = await admin.rpc("lukke_beskeder_behandl");
+    if (lbFejl) await livstegn(admin, false, "lukkebeskeder fejlede: " + lbFejl.message, true);
+    for (const r of (lb ?? []) as { employee_id: string; instance_id: string; titel: string; minutter: number }[]) {
+      const t = Math.floor(r.minutter / 60), m = r.minutter % 60;
+      const tid = t && m ? `${t} t ${m} min` : t ? `${t} t` : `${m} min`;
+      if (await push(admin, r.employee_id, "Opgaven er lukket med planlagt tid",
+        `${r.titel}: tiden kørte stadig, så opgaven er lukket med den planlagte tid (${tid}). Har du brugt mere, så ret tiden i Worklist under «Min tid» før lønperioden lukker.`,
+        "slut-" + r.instance_id)) sendt++;
+    }
+
     const { data: lv, error: lvFejl } = await admin.rpc("loen_varsel_behandl");
     if (lvFejl) await livstegn(admin, false, "loenvarsel fejlede: " + lvFejl.message, true);
     for (const r of (lv ?? []) as { employee_id: string; antal: number; lukkedag: string }[]) {
@@ -204,10 +216,10 @@ async function autoslut(admin: ReturnType<typeof createClient>) {
     }
 
     const lukket = raekker.filter((r) => r.slags === "autoslut").length;
-    if (raekker.length || (lv ?? []).length) {
-      await livstegn(admin, true, `auto-slut: ${lukket} lukket, ${raekker.length - lukket} varsel, ${(lv ?? []).length} loenvarsel, ${sendt} push`, true);
+    if (raekker.length || (lv ?? []).length || (lb ?? []).length) {
+      await livstegn(admin, true, `auto-slut: ${lukket} lukket, ${raekker.length - lukket} varsel, ${(lb ?? []).length} lukket af kontoret, ${(lv ?? []).length} loenvarsel, ${sendt} push`, true);
     }
-    return { lukket, varsler: raekker.length - lukket, loenvarsler: (lv ?? []).length };
+    return { lukket, varsler: raekker.length - lukket, lukketAfKontoret: (lb ?? []).length, loenvarsler: (lv ?? []).length };
   } catch (e) {
     console.error("autoslut:", String((e as Error)?.message ?? e));
     return { error: String((e as Error)?.message ?? e) };

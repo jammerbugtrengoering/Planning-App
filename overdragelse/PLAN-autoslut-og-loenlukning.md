@@ -34,6 +34,9 @@ nu») og skal ryddes op i hånden.
   `begrund_efter_loenluk` → tabel `loenluk_anmodning`). Linjen mærkes `efterLoenluk` + `periodeSlut` og tæller i
   den åbne periode. Klokken: «Registreret efter lønlukning» → `behandl_efter_loenluk` (afvist = løn 0,
   fakturaMinutes bevares). SQL: `overdragelse/sql/efter-loenluk-med-begrundelse-2026-10-01.sql`.
+- Besked ved ALLE lukninger (Jonn 1.10, migration autoslut_h, plan-beskeder v10): en raekke i start_paamindelse med
+  slags 'autoslut' og besked_sendt = null giver push «Opgaven er lukket med planlagt tid» (lukke_beskeder_behandl).
+  Lukker kontoret en opgave i haanden, skal den raekke indsaettes. Karen og Nadine fik besked 1.10 kl. 21.15.
 
 ## Beslutningerne
 
