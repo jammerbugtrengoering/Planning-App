@@ -1663,7 +1663,7 @@ const MODULE_HELP = {
         "Den er foldet væk som udgangspunkt og folder sig ud over planen. Før lå den nederst på siden, hvor man skulle scrolle forbi den hver gang — den er et opslag man laver, når arbejde skal fordeles, ikke noget der skal stå fremme hele tiden.",
         "Vælger du et område øverst, viser den kun medarbejderne i det område."] },
     { h: "Gitter eller tidslinje", p: [
-        "Øverst kan du skifte mellem Gitter og Tidslinje. Gitteret viser HVAD der ligger på hver dag; tidslinjen viser HVORNÅR og hvor der er luft.",
+        "Lige over ugeplanen, yderst til venstre, skifter du mellem Gitter og Tidslinje. Gitteret viser HVAD der ligger på hver dag; tidslinjen viser HVORNÅR og hvor der er luft.",
         "Tidslinjen er den du detailplanlægger i. Vælg én medarbejder i listen, så står hendes uge alene.",
         "Du kan trække en opgave fra «Ikke tildelt» ned på et klokkeslæt i tidslinjen. Tidspunktet rundes til nærmeste kvarter og sættes som aftalt tid — der kommer aldrig til at stå 09:47 på en aftale.",
         "Opgaver kan også trækkes rundt inde i tidslinjen. Overståede dage er skraveret og tager ikke imod.",
@@ -6506,16 +6506,6 @@ function WeekView({ employees, instances, unplaced, adgangTekst, onUdskrivMedAdg
           <option value="all">🖨️ Alle medarbejdere</option>
           {employees.map((e) => <option key={e.id} value={e.id}>🖨️ {e.name}</option>)}
         </select>
-        {/* Gitteret viser HVAD der ligger paa hver dag. Tidslinjen viser HVORNAAR og
-            hvor der er luft — det er den man detailplanlaegger i. */}
-        <div style={{ display: "flex", gap: 0, border: "1px solid #E2E8F0", borderRadius: 8, overflow: "hidden" }}>
-          {[["gitter", "Gitter"], ["tid", "Tidslinje"]].map(([k, navn]) => (
-            <button key={k} onClick={() => setUgeVisning(k)}
-              style={{ padding: "9px 14px", border: "none", cursor: "pointer", fontSize: 13.5, fontWeight: 600,
-                       background: ugeVisning === k ? "var(--farve)" : "#fff",
-                       color: ugeVisning === k ? "#fff" : "#334155" }}>{navn}</button>
-          ))}
-        </div>
         {/* Det fortrolige baand laa her og blev aldrig printet: alt uden for
             #print-week-plan er «visibility: hidden» paa papiret. Baandet staar nu
             samme sted som resten af udskriften. */}
@@ -6567,6 +6557,17 @@ function WeekView({ employees, instances, unplaced, adgangTekst, onUdskrivMedAdg
       </div>
 
       <div style={{ ...styles.legendRow, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+        {/* Gitteret viser HVAD der ligger paa hver dag. Tidslinjen viser HVORNAAR og
+            hvor der er luft — det er den man detailplanlaegger i. Staar foerst paa
+            hint-linjen (1.10.2026, Jonn). */}
+        <div style={{ display: "flex", gap: 0, flexShrink: 0, border: "1px solid #E2E8F0", borderRadius: 8, overflow: "hidden" }}>
+          {[["gitter", "Gitter"], ["tid", "Tidslinje"]].map(([k, navn]) => (
+            <button key={k} onClick={() => setUgeVisning(k)}
+              style={{ padding: "9px 14px", border: "none", cursor: "pointer", fontSize: 13.5, fontWeight: 600,
+                       background: ugeVisning === k ? "var(--farve)" : "#fff",
+                       color: ugeVisning === k ? "#fff" : "#334155" }}>{navn}</button>
+          ))}
+        </div>
         <span style={styles.hint}>Træk en opgave tilbage til "Ikke tildelt" for at frigive den, eller klik + på en opgave for at sætte flere medarbejdere på.</span>
         {/* Signaturforklaringen staar hoejrestillet paa hint-linjen (29.9.2026, Jonn),
             saa ugevaelgeren kan staa oppe i linjen med «Print ugeplan». */}
