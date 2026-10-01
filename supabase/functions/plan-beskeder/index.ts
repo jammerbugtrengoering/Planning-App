@@ -12,6 +12,8 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 //                             5 min efter planlagt start, og systemet starter tiden
 //                             efter 10 min. Databasen udvaelger og markerer
 //                             (start_mangler_behandl), saa hver ting sker én gang.
+//                             Koerer ogsaa auto-slut og varsel foer loenlukning
+//                             (autoslut_behandl, loen_varsel_behandl, 1.10.2026).
 //
 // HVORFOR SAMLET OG IKKE STRAKS. En planlaegger der rydder op i ugeplanen roerer
 // tyve opgaver paa fem minutter. Én besked pr. rettelse ville give medarbejderen
@@ -168,6 +170,50 @@ async function startPaamindelser(admin: ReturnType<typeof createClient>) {
   return { paamindelser: raekker.length - starter, systemstarter: starter, sendt };
 }
 
+// Auto-slut og loenlukning (Jonn og Charlotte 1.10.2026). Koeres sammen med glemt
+// Start hvert 5. minut. Databasen udvaelger, lukker og markerer i samme skridt
+// (autoslut_behandl / loen_varsel_behandl), saa hver besked kun sendes én gang.
+// Alt er slaaet fra, til autoslut_aktiv saettes i Opsaetning -> Tidsregistrering.
+async function autoslut(admin: ReturnType<typeof createClient>) {
+  try {
+    const { data, error } = await admin.rpc("autoslut_behandl");
+    if (error) {
+      await livstegn(admin, false, "auto-slut fejlede: " + error.message, true);
+      return { error: error.message };
+    }
+    const raekker = (data ?? []) as { employee_id: string; instance_id: string; titel: string; slags: string; kl: string }[];
+    let sendt = 0;
+    for (const r of raekker) {
+      const ok = r.slags === "autoslut"
+        ? await push(admin, r.employee_id, "Opgaven er lukket af systemet",
+            `${r.titel}: du fik ikke afsluttet, så den er lukket med den planlagte tid. Har du brugt mere, så ret tiden i Worklist under «Min tid» før lønperioden lukker.`,
+            "slut-" + r.instance_id)
+        : await push(admin, r.employee_id, "Husk at afslutte",
+            `${r.titel} lukkes automatisk kl. ${r.kl} med den planlagte tid. Afslut selv i Worklist, hvis du har brugt mere tid.`,
+            "slut-" + r.instance_id);
+      if (ok) sendt++;
+    }
+
+    const { data: lv, error: lvFejl } = await admin.rpc("loen_varsel_behandl");
+    if (lvFejl) await livstegn(admin, false, "loenvarsel fejlede: " + lvFejl.message, true);
+    for (const r of (lv ?? []) as { employee_id: string; antal: number; lukkedag: string }[]) {
+      const dag = new Date(r.lukkedag + "T12:00:00").toLocaleDateString("da-DK", { day: "numeric", month: "long" });
+      if (await push(admin, r.employee_id, "Lønperioden lukker snart",
+        `Lønperioden lukker den ${dag} kl. 23.59. Du har ${r.antal} ${r.antal === 1 ? "opgave" : "opgaver"} lukket af systemet. Har du brugt mere tid, så ret det under «Min tid» nu.`,
+        "loenvarsel")) sendt++;
+    }
+
+    const lukket = raekker.filter((r) => r.slags === "autoslut").length;
+    if (raekker.length || (lv ?? []).length) {
+      await livstegn(admin, true, `auto-slut: ${lukket} lukket, ${raekker.length - lukket} varsel, ${(lv ?? []).length} loenvarsel, ${sendt} push`, true);
+    }
+    return { lukket, varsler: raekker.length - lukket, loenvarsler: (lv ?? []).length };
+  } catch (e) {
+    console.error("autoslut:", String((e as Error)?.message ?? e));
+    return { error: String((e as Error)?.message ?? e) };
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
 
@@ -177,7 +223,11 @@ Deno.serve(async (req) => {
     const body = await req.json().catch(() => ({}));
     job = body.job === "i_morgen" ? "i_morgen" : body.job === "start" ? "start" : "aendringer";
 
-    if (job === "start") return svar({ ok: true, ...(await startPaamindelser(admin)) });
+    if (job === "start") {
+      const start = await startPaamindelser(admin);
+      const slut = await autoslut(admin);
+      return svar({ ok: true, ...start, autoslut: slut });
+    }
 
     // ── Samlede planaendringer ──────────────────────────────────────
     if (job === "aendringer") {

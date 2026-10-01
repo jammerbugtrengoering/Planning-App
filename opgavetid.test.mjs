@@ -195,6 +195,21 @@ er("fremmed i fordelingen ignoreres", planlagtIAlt({
   duration: 60, assignees: ["e2"], tidFordeling: { e2: 90, e99: 500 } }), 90);
 
 // ── Resultat ────────────────────────────────────────────────────────────────
+// ── Auto-slut (1.10.2026): fakturaMinutes ──────────────────────────────────
+{
+  const sys = { duration: 120, assignees: ["a"], time_log: [
+    { empId: "a", minutes: 150, fakturaMinutes: 120, systemlukket: true, rettet: { fra: 120 } }] };
+  er("systemlukket og rettet op: løn 150", registreredeMinutter(sys), 150);
+  er("systemlukket og rettet op: faktura stadig 120", fakturerbareMinutter(sys), 120);
+  const efter = { duration: 60, assignees: ["a"], time_log: [
+    { empId: "a", minutes: 60 }, { empId: "a", minutes: 30, fakturaMinutes: 0, efterregulering: true }] };
+  er("efterregulering tæller i løn", registreredeMinutter(efter), 90);
+  er("efterregulering rører ikke fakturaen", fakturerbareMinutter(efter), 60);
+  const elev = { duration: 60, assignees: ["a", "e"], oplaeringMedarbejdere: ["e"], time_log: [
+    { empId: "a", minutes: 60, fakturaMinutes: 60 }, { empId: "e", minutes: 60, fakturaMinutes: 60 }] };
+  er("elev med fakturaMinutes faktureres stadig ikke", fakturerbareMinutter(elev), 60);
+}
+
 if (fejl > 0) {
   console.error(`\n  ${fejl} af ${kørt} kontroller fejlede i opgavetiden.\n`);
   process.exit(1);

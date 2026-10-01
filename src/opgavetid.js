@@ -57,12 +57,23 @@ export function minutterFor(opgave, empId) {
 // (empId "planner") tæller MED: de bruges til forgæves besøg, hvor kontoret har
 // besluttet, at kunden skal betale alligevel, og det er stadig en beslutning om
 // fakturering.
+//
+// fakturaMinutes (1.10.2026, auto-slut): en linje kan bære sit eget fakturatal.
+//   - En opgave, systemet har lukket, faktureres med den planlagte tid, også hvis
+//     medarbejderen bagefter retter sin tid op. Rettelsen er hendes løn, ikke
+//     kundens regning.
+//   - En efterregulering af lønnen har fakturaMinutes 0: den rører ikke fakturaen.
+// Uden feltet gælder minutes, præcis som før.
+export function fakturaMinutterForLinje(l) {
+  if (l && l.fakturaMinutes != null && Number.isFinite(Number(l.fakturaMinutes))) return Number(l.fakturaMinutes);
+  return Number(l?.minutes) || 0;
+}
+
 export function fakturerbareMinutter(opgave) {
   const elever = oplaeringsFolk(opgave);
-  if (elever.length === 0) return registreredeMinutter(opgave);
   return loggen(opgave)
-    .filter((l) => !elever.includes(l?.empId))
-    .reduce((sum, l) => sum + (Number(l?.minutes) || 0), 0);
+    .filter((l) => elever.length === 0 || !elever.includes(l?.empId))
+    .reduce((sum, l) => sum + fakturaMinutterForLinje(l), 0);
 }
 
 // Den tid der gik med oplæring. Forskellen mellem de to tal ovenfor.

@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { samletForMedarbejder, danloenLinjer, danloenCsv } from "./loenberegning.js";
+import { loenPeriode, periodeFor, periodeTekst, erLaast as loenErLaast, isoDag } from "./loenperiode.js";
 // Fakturerbar tid er ikke det samme som registreret tid, saa snart nogen er med paa
 // en opgave for at laere. Reglen ligger i opgavetid.js og afproeves ved hvert build.
 import { fakturerbareMinutter, registreredeMinutter, oplaeringsFolk, erUnderOplaering,
@@ -1783,6 +1784,7 @@ const MODULE_HELP = {
         "Tallet er rødt, når noget haster. Tryk «Åbn» for at komme derhen, hvor sagen klares.",
         "Linjerne forsvinder af sig selv, når sagen er klaret det rigtige sted — et ønske besvaret, en bestilling godkendt, en tid afsluttet.",
         "Afvigelser har ikke noget andet sted at blive lukket. Tryk «Set ✓», når du har kigget på den. Så forsvinder den for alle planlæggere.",
+        "Auto-slut: «Rettelse af tid» er en medarbejder, der vil rette en systemlukket opgave til mindre end planlagt. «Godkend» — hendes løn følger rettelsen; «Afvis» — den planlagte tid står. Fakturaen røres ikke. «Glemmer at afslutte» betyder, at hun har mange systemlukninger i lønperioden.",
         "Alle planlæggere ser den samme liste og får de samme beskeder: push på telefonen, når noget haster (kræver Worklist på telefonen med beskeder slået til), og en mail kl. 7 med alt, der venter."] },
     { h: "Weekend", p: ["Knappen Man–Fre / Man–Søn bestemmer om lørdag og søndag vises.", "Ugeplanen åbner altid på Man–Fre, så fokus er arbejdsugen. Vil du se weekenden, trykker du på knappen.", "Ligger der opgaver i weekenden, står der ved siden af knappen hvor mange der er skjult — så du ikke overser dem."] }, { h: "Sådan er «Ny opgave» og serviceordren bygget op", p: ["Begge skærme er delt i tre farvede afsnit, så det er tydeligt hvad der hører sammen. Farverne betyder det samme begge steder.", "Rosa er kunden: kontrakttype, prismodel, titel, fakturakunde, adresse, fakturabeskrivelse og adgangsforhold. Det er det der ender på fakturaen.", "Grønt er selve opgaven: krævede kompetencer, varighed, tjeklister og instruktionsvideo.", "Blåt er tid: i «Ny opgave» hedder det Planlægning og rummer fast interval eller fleksibel, ansvarlig medarbejder, start- og udløbsdato, interval og ugedage.", "Klikker du på en opgave i ugeplanen, åbner serviceordren med de samme tre farver. Der hedder det blå afsnit Udførelse og rummer status, medarbejdere på opgaven, tasks og tidsregistrering.", "Under Tidsregistrering står hver registrering for sig: hvem, hvornår, hvor lang tid og medarbejderens begrundelse. Øverst står afvigelsen fra den planlagte tid for hele holdet.", "Har medarbejderen start/stop, står den målte tid der også, og afstanden til adressen ved start og ved slut. Er noget værd at se på — fx «afsluttet 3,4 km fra adressen» — står det med orange.", "I «Ny opgave» bliver Annuller og Gem og planlæg stående nederst, uanset hvor langt du har scrollet."] },
     { h: "Beskeder fra medarbejderne", p: [
@@ -1884,6 +1886,17 @@ const MODULE_HELP = {
         "Opgaver under grænsen, og alle medarbejdere uden start/stop, registrerer præcis som hidtil: minutter og afvigelsesbegrundelse.",
         "Slås til på det enkelte kort under «Løn og transport», eller for alle på én gang i panelet. Det er slået fra fra start.",
         "Start/stop er en kontrolforanstaltning. Medarbejderne skal varsles, før det slås til — typisk 6 uger. Slå det ikke til, før varslingen er givet."] },
+    { h: "Auto-slut og lønlukning", p: [
+        "Knappen «🔒 Auto-slut og lønlukning» øverst. Besluttet af Jonn og Charlotte 1.10.2026. Det er slået fra, indtil I slår det til.",
+        "En opgave, medarbejderen ikke har afsluttet, lukkes af systemet 2 timer efter planlagt slut (kan ændres). Den bliver udført med den planlagte tid, så kunden altid kan faktureres. Uden klokkeslæt regnes slut som kl. 17.",
+        "Medarbejderen får en besked en time før, og en besked når den er lukket. Det gælder alle med Worklist — ikke kun dem med start/stop. Elever på opgaven lukkes ikke.",
+        "Kunden faktureres altid den planlagte tid på en systemlukket opgave. Medarbejderens løn er den planlagte tid, medmindre hun selv retter.",
+        "Hun kan rette sin tid i Worklist under «Min tid», indtil lønperioden lukker. Mere tid gælder med det samme og kræver en begrundelse. Mindre tid skal I godkende — den kommer i klokken 🔔 som «Rettelse af tid».",
+        "Lønperioden går fra lukkedagen til dagen før i næste måned (standard 20.–19.) og lukker på lukkedagen kl. 23.59. Medarbejderen får en besked 3 dage og 1 dag før, hvis hun har systemlukkede opgaver, hun ikke har rettet.",
+        "Efter lukningen kan medarbejderen hverken registrere, rette eller melde færdig i perioden. Kun planlæggerne kan rette: på opgaven står «Efterreguler tid», og rettelsen lægges som en ny linje (+ eller −) i den åbne periode. En udbetalt løn ændres aldrig.",
+        "Har en medarbejder 3 eller flere systemlukninger i samme periode (kan ændres), står det i klokken som «Glemmer at afslutte». Tag en snak, og tryk «Set ✓».",
+        "Slås det til, gælder det kun opgaver fra det øjeblik. Gamle, glemte opgaver røres ikke.",
+        "Det er en ændring i medarbejdernes vilkår for tidsregistrering. Varsl det, før det slås til, og tjek reglerne med overenskomsten eller arbejdsgiverforeningen."] },
     { h: "Hvem kan se lønnen", p: [
         "Timelønnen ligger i sin egen tabel, som kun administratorer har adgang til. Det er håndhævet i databasen, ikke kun i skærmbilledet.",
         "Er du ikke administrator, står feltet tomt, og lønkolonnerne under Løn data vises slet ikke — heller ikke i CSV-filen.",
@@ -2252,7 +2265,10 @@ const MODULE_HELP = {
         "Samme sted står, hvem der mangler et Danløn-nummer. En medarbejder uden nummer kommer ikke med i løneksporten, og nummeret sættes på hendes stamkort under Medarbejdere.",
         "Fluebenet foran hver linje betyder «godkendt til løn». Kun linjer med flueben kommer med i Danløn-filen — hverken timer eller kilometer sendes automatisk.",
         "Det er med vilje. Timerne i systemet er registreret tid fra marken; løn er betalt tid. Et besøg med dobbelt tidsforbrug og en begrundelse på tre bogstaver skal ses af et menneske, før det bliver til penge.",
-        "«Godkend alle viste» sætter flueben på alt i den valgte måned. Fortryder du, skifter knappen til at fjerne dem igen.",
+        "«Godkend alle viste» sætter flueben på alt i den valgte lønperiode. Fortryder du, skifter knappen til at fjerne dem igen.",
+        "Lønopgørelsen følger lønperioden (1.10.2026): «Oktober» er 20. sep – 19. okt ved lukkedag 20. Perioden og om den er lukket, står ved vælgeren. Kørsel følger samme periode. Lukkedagen sættes under Medarbejdere → «🔒 Auto-slut og lønlukning» (1 = kalendermåned).",
+        "«systemlukket» på en linje betyder, at opgaven blev lukket af systemet med den planlagte tid. «rettelse venter» betyder, at medarbejderen vil rette til mindre — godkend eller afvis i klokken 🔔.",
+        "Efterreguleringer står som egne lilla linjer «↩ Efterregulering» i den periode, de blev lagt i, og godkendes for sig.",
         "En linje uden registreret tid kan ikke godkendes — der er ingenting at udbetale. Det samme gælder en kørselstur, hvor ruten ikke kunne beregnes; den skal rettes i stedet.",
         "«Godkendt lønsum» øverst er det beløb, der faktisk bliver udbetalt. «Registreret lønsum» er alt, uanset om det er godkendt.",
         "Danløn-filen har op til fire linjer pr. medarbejder: timer med beløb, weekendtillæg, kilometer og søn- og helligdagsbetaling. Kun de linjer der er noget at sende på.",
@@ -3608,7 +3624,7 @@ function PlanningApp({ session, onSignOut }) {
   // Fra klokken til det sted, sagen klares. Opgaver aabnes direkte, hvis de er hentet;
   // ellers vises den side, hvor sagen staar.
   function gaaTilIndbakkeLinje(l) {
-    if (l.instance_id && (l.art === "afvigelse" || l.art === "over_tiden")) {
+    if (l.instance_id && (l.art === "afvigelse" || l.art === "over_tiden" || l.art === "tidsrettelse")) {
       if (instances.some((t) => t.id === l.instance_id)) { setOpenTaskId(l.instance_id); return; }
       setView("kundetimer");
       notify("Opgaven ligger uden for de hentede uger — den står på Kundetimer");
@@ -3616,6 +3632,7 @@ function PlanningApp({ session, onSignOut }) {
     }
     if (l.art === "produktbestilling" || l.art === "udlevering") { setView("inventory"); return; }
     if (l.art === "drift") { setView("drift"); return; }
+    if (l.art === "systemlukninger") { setView("reports"); return; }
     setView("uge");
   }
 
@@ -6416,6 +6433,7 @@ function PlanningApp({ session, onSignOut }) {
             setCopyPayload(task);
           }}
           tilbudPaaOpgaven={tilbudPerOpgave[openTaskId] || null}
+          onTidLogOpdateret={(id, log) => setInstances((prev) => prev.map((i) => (i.id === id ? { ...i, timeLog: log, time_log: log } : i)))}
           onAabnTilbud={(t) => { setOpenTaskId(null); setAabnTilbudId(t.id); setView("tilbud"); }}
         />
       )}
@@ -7176,6 +7194,7 @@ function EmployeesView({ employees, onAdd, onEdit, onDelete, supabase, skills, o
   const [showSkillsPanel, setShowSkillsPanel] = useState(false);
   const [showAreasPanel, setShowAreasPanel] = useState(false);
   const [showStartStopPanel, setShowStartStopPanel] = useState(false);
+  const [showAutoslutPanel, setShowAutoslutPanel] = useState(false);
   const [inviteEmail, setInviteEmail] = useState({});
   const [inviteStatus, setInviteStatus] = useState({});
   const [orderPanel, setOrderPanel] = useState(null); // emp.id
@@ -7288,6 +7307,11 @@ function EmployeesView({ employees, onAdd, onEdit, onDelete, supabase, skills, o
           ⏱ Start/stop
         </button>
         )}
+        <button
+          style={{ ...styles.secondaryBtn, ...(showAutoslutPanel ? { background: "#FFFBEB", color: "#B45309", borderColor: "#FDE68A" } : {}) }}
+          onClick={() => { setShowAutoslutPanel((v) => !v); setShowSkillsPanel(false); setShowAreasPanel(false); setShowStartStopPanel(false); }}>
+          🔒 Auto-slut og lønlukning
+        </button>
       </div>
 
       {showSkillsPanel && (
@@ -7303,6 +7327,7 @@ function EmployeesView({ employees, onAdd, onEdit, onDelete, supabase, skills, o
       {showStartStopPanel && (
         <StartStopPanel supabase={supabase} employees={aktive} onStartStopAlle={onStartStopAlle} />
       )}
+      {showAutoslutPanel && <AutoslutPanel supabase={supabase} />}
       {/* Vaerktoejslinje. Fandtes ikke foer: "hvem kan vinduespolering og har tid" betoed
           at laese tyve kort igennem. */}
       <div style={styles.empVaerktoej}>
@@ -8502,8 +8527,27 @@ function CustomerHoursView({ instances }) {
 
 function EmployeeExportView({ instances, employees, satsHistorik }) {
   const now = new Date();
-  const [filterMonth, setFilterMonth] = useState(now.getMonth());
-  const [filterYear, setFilterYear] = useState(now.getFullYear());
+  // Lønperioden (1.10.2026): måneden i vælgeren er den måned, perioden SLUTTER i.
+  // «Oktober» = 20. sep – 19. okt ved lukkedag 20. Lukkedagen hentes fra Opsætning →
+  // Tidsregistrering; 1 betyder kalendermåned. Vælgeren starter i den åbne periode.
+  const [lukkedag, setLukkedag] = useState(20);
+  const startPeriode = periodeFor(isoDag(now), 20);
+  const [filterMonth, setFilterMonth] = useState(startPeriode.maaned - 1);
+  const [filterYear, setFilterYear] = useState(startPeriode.aar);
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase.from("tidsregistrering_indstillinger")
+        .select("loen_lukkedag").eq("id", "default").maybeSingle();
+      const l = Number(data?.loen_lukkedag) || 20;
+      if (l !== 20) {
+        setLukkedag(l);
+        const p = periodeFor(isoDag(new Date()), l);
+        setFilterMonth(p.maaned - 1); setFilterYear(p.aar);
+      }
+    })();
+  }, []);
+  const periode = loenPeriode(filterYear, filterMonth + 1, lukkedag);
+  const periodeLaast = loenErLaast(periode.til, lukkedag);
   const [exportTab, setExportTab] = useState("hours");
 
   // Godkendelser. Holdes som et Set af "empId|reference", saa opslaget pr. linje er
@@ -8633,14 +8677,10 @@ function EmployeeExportView({ instances, employees, satsHistorik }) {
         });
       });
 
-      // Kilometer fra de godkendte ture i samme maaned.
-      const start = `${filterYear}-${String(filterMonth + 1).padStart(2, "0")}-01`;
-      const slutM = filterMonth === 11 ? 0 : filterMonth + 1;
-      const slutAar = filterMonth === 11 ? filterYear + 1 : filterYear;
-      const slut = `${slutAar}-${String(slutM + 1).padStart(2, "0")}-01`;
+      // Kilometer fra de godkendte ture i samme loenperiode.
       const { data: kmRaekker, error: kFejl } = await supabase
         .from("km_log").select("id, employee_id, km")
-        .gte("work_date", start).lt("work_date", slut);
+        .gte("work_date", periode.fra).lte("work_date", periode.til);
       if (kFejl) throw new Error(kFejl.message);
       (kmRaekker || []).forEach((r) => {
         if (r.km == null) return;
@@ -8685,13 +8725,14 @@ function EmployeeExportView({ instances, employees, satsHistorik }) {
     .filter((t) => !BLOCK_TYPES.includes(t.type))
     .filter((t) => (t.assignees || []).length > 0)
     .forEach((t) => {
-      const { month, year } = instanceMonthYear(t, filterYear);
-      if (month !== filterMonth || year !== filterYear) return;
+      const d = instanceDateString(t);
+      if (!d || d < periode.fra || d > periode.til) return;
       const tl = t.timeLog || t.time_log || [];
       (t.assignees || []).forEach((empId) => {
         const emp = employees.find((e) => e.id === empId);
         if (!emp) return;
-        const myLogs = tl.filter((l) => l.empId === empId);
+        // Efterreguleringer tæller i den periode, de blev lagt i — ikke i opgavens.
+        const myLogs = tl.filter((l) => l.empId === empId && !l.efterregulering);
         const registered = myLogs.reduce((s, l) => s + (l.minutes || 0), 0);
         // Satsen slaas op paa den dag opgaven blev udfoert, ikke paa dagens sats.
         // Ellers ville en loenstigning aendre alle tidligere maaneder — ogsaa dem der
@@ -8720,9 +8761,33 @@ function EmployeeExportView({ instances, employees, satsHistorik }) {
           plannedWage: wage == null ? null : (t.duration / 60) * wage,
           registeredWage: wage == null ? null : (registered / 60) * wage,
           deviationText,
+          systemlukket: myLogs.some((l) => l.systemlukket),
+          rettelseAfventer: myLogs.some((l) => l.rettelseAfventer),
         });
       });
     });
+
+  // Efterreguleringer lagt i perioden (1.10.2026). Hver er sin egen linje med sin egen
+  // godkendelse — referencen er «opgave:er:tidspunkt», samme som i Worklist.
+  instances.forEach((t) => {
+    (t.timeLog || t.time_log || []).forEach((l) => {
+      if (!l.efterregulering || l.periodeSlut !== periode.til) return;
+      const emp = employees.find((e) => e.id === l.empId);
+      if (!emp) return;
+      const wage = satsPaaDato(satsHistorik, l.empId, instanceDateString(t));
+      const minutter = Number(l.minutes) || 0;
+      rows.push({
+        empId: l.empId, instanceId: `${t.id}:er:${l.ts}`, danloenNr: emp.danloenNr || null, empName: emp.name,
+        week: t.week, day: t.day,
+        dayLabel: ALL_DAYS.find((x) => x.key === t.day)?.label || t.day || "—",
+        isWeekend: isWeekendDay(t.day),
+        title: `↩ Efterregulering · ${t.title} (${instanceDateString(t).split("-").reverse().join(".")})`,
+        planned: 0, registered: minutter, hourlyWage: wage, plannedWage: wage == null ? null : 0,
+        registeredWage: wage == null ? null : (minutter / 60) * wage,
+        deviationText: l.note || "", efterregulering: true,
+      });
+    });
+  });
 
   rows.sort((a, b) => {
     if (a.empName !== b.empName) return a.empName.localeCompare(b.empName, "da");
@@ -8803,9 +8868,9 @@ function EmployeeExportView({ instances, employees, satsHistorik }) {
       </div>
       {exportTab === "loenarter" ? (
         <LoenarterSection employees={employees} onEksporter={eksporterDanloen}
-          arbejder={danloenArbejder} fejl={danloenFejl} maaned={`${MONTHS[filterMonth]} ${filterYear}`} />
+          arbejder={danloenArbejder} fejl={danloenFejl} maaned={`${MONTHS[filterMonth]} ${filterYear} (${periodeTekst(periode)})`} />
       ) : exportTab === "km" ? (
-        <KmExportSection employees={employees} filterMonth={filterMonth} filterYear={filterYear} setFilterMonth={setFilterMonth} setFilterYear={setFilterYear} years={years} MONTHS={MONTHS} erGodkendt={erGodkendt} saetGodkendt={saetGodkendt} saetGodkendtFlere={saetGodkendtFlere} />
+        <KmExportSection employees={employees} periode={periode} filterMonth={filterMonth} filterYear={filterYear} setFilterMonth={setFilterMonth} setFilterYear={setFilterYear} years={years} MONTHS={MONTHS} erGodkendt={erGodkendt} saetGodkendt={saetGodkendt} saetGodkendtFlere={saetGodkendtFlere} />
       ) : (
       <>
       <div style={styles.toolbar}>
@@ -8834,6 +8899,10 @@ function EmployeeExportView({ instances, employees, satsHistorik }) {
           <select style={{ ...styles.inputSm, fontSize: 13, fontWeight: 600 }} value={filterYear} onChange={(e) => setFilterYear(Number(e.target.value))}>
             {years.map((y) => <option key={y} value={y}>{y}</option>)}
           </select>
+          <span style={{ fontSize: 12, color: periodeLaast ? "#475569" : "#166534", fontWeight: 600 }}
+            title="Lønperioden. Lukkedagen sættes under Opsætning → Tidsregistrering.">
+            {periodeTekst(periode)} · {periodeLaast ? "🔒 lukket" : `åben til ${periode.lukkedag.split("-").reverse().slice(0, 2).join(".")} kl. 23.59`}
+          </span>
         </div>
         <div style={styles.toolbarSpacer} />
         {/* Hvor langt er man. Uden det tal ved man foerst at noget mangler, naar
@@ -8897,7 +8966,12 @@ function EmployeeExportView({ instances, employees, satsHistorik }) {
             <span style={{ fontSize: 13, fontWeight: 600, color: "#111111" }}>{r.empName}</span>
             <span style={{ fontSize: 12, color: "#94A3B8" }}>{r.week}</span>
             <span style={{ fontSize: 12, color: "#64748B" }}>{r.dayLabel}</span>
-            <span style={{ fontSize: 13, color: "#111111", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.title}</span>
+            <span style={{ fontSize: 13, color: r.efterregulering ? "#6D28D9" : "#111111", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+              title={r.systemlukket ? "Lukket af systemet med den planlagte tid" : undefined}>
+              {r.title}
+              {r.systemlukket && <span style={{ marginLeft: 6, fontSize: 10.5, fontWeight: 800, color: "#B45309", background: "#FEF3C7", borderRadius: 99, padding: "1px 6px" }}>systemlukket</span>}
+              {r.rettelseAfventer && <span style={{ marginLeft: 6, fontSize: 10.5, fontWeight: 800, color: "#B91C1C", background: "#FEE2E2", borderRadius: 99, padding: "1px 6px" }}>rettelse venter</span>}
+            </span>
             <span style={{ fontSize: 13, fontWeight: 500, color: "#111111", textAlign: "right" }}>{fmtMin(r.planned)}</span>
             {harLoen && (
               <span style={{ fontSize: 13, color: "#64748B", textAlign: "right" }} title={r.hourlyWage != null ? `${r.hourlyWage} kr/time` : ""}>
@@ -8913,7 +8987,7 @@ function EmployeeExportView({ instances, employees, satsHistorik }) {
             <span style={{ fontSize: 12, textAlign: "right", color: r.deviationText ? "#D97706" : "#CBD5E1" }}>{r.deviationText || "—"}</span>
           </div>
         ))}
-        {rows.length === 0 && <div style={{ ...styles.emptyCol, padding: 40 }}>Ingen registreringer for denne maaned</div>}
+        {rows.length === 0 && <div style={{ ...styles.emptyCol, padding: 40 }}>Ingen registreringer i lønperioden {periodeTekst(periode)}</div>}
       </div>
       </>
       )}
@@ -9045,7 +9119,7 @@ function LoenarterSection({ employees, onEksporter, arbejder, fejl: eksportFejl,
   );
 }
 
-function KmExportSection({ employees, filterMonth, filterYear, setFilterMonth, setFilterYear, years, MONTHS, erGodkendt, saetGodkendt, saetGodkendtFlere }) {
+function KmExportSection({ employees, periode, filterMonth, filterYear, setFilterMonth, setFilterYear, years, MONTHS, erGodkendt, saetGodkendt, saetGodkendtFlere }) {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -9058,15 +9132,12 @@ function KmExportSection({ employees, filterMonth, filterYear, setFilterMonth, s
     async function load() {
       setLoading(true);
       setError(null);
-      const startDate = `${filterYear}-${String(filterMonth + 1).padStart(2, "0")}-01`;
-      const endMonth = filterMonth === 11 ? 0 : filterMonth + 1;
-      const endYear = filterMonth === 11 ? filterYear + 1 : filterYear;
-      const endDate = `${endYear}-${String(endMonth + 1).padStart(2, "0")}-01`;
+      // Loenperioden (fx 20. sep – 19. okt), samme som timerne.
       const { data, error } = await supabase
         .from("km_log")
         .select("id, employee_id, work_date, leg_order, from_address, to_address, km, minutes")
-        .gte("work_date", startDate)
-        .lt("work_date", endDate)
+        .gte("work_date", periode.fra)
+        .lte("work_date", periode.til)
         .order("employee_id", { ascending: true })
         .order("work_date", { ascending: true })
         .order("leg_order", { ascending: true });
@@ -9077,7 +9148,7 @@ function KmExportSection({ employees, filterMonth, filterYear, setFilterMonth, s
     }
     load();
     return () => { cancelled = true; };
-  }, [filterMonth, filterYear, refreshKey]);
+  }, [periode.fra, periode.til, refreshKey]);
 
   const empName = (id) => (employees.find((e) => e.id === id) || {}).name || id;
 
@@ -9088,14 +9159,13 @@ function KmExportSection({ employees, filterMonth, filterYear, setFilterMonth, s
   const grandTotal = Object.values(totalsByEmp).reduce((s, v) => s + v, 0);
 
   async function recomputeMonth() {
-    const monthLabel = `${MONTHS[filterMonth]} ${filterYear}`;
+    const monthLabel = `lønperioden ${periodeTekst(periode)}`;
     if (!window.confirm(`Genberegn km for alle dage i ${monthLabel}? Dette genberegner ogsaa dage med fejlede adresser/urealistisk lange ruter. Kan tage et minut.`)) return;
     setRecomputing(true);
-    const numDays = new Date(filterYear, filterMonth + 1, 0).getDate();
-    const todayStr = new Date().toISOString().slice(0, 10);
+    const todayStr = isoDag(new Date());
     const dates = [];
-    for (let d = 1; d <= numDays; d++) {
-      const dateStr = `${filterYear}-${String(filterMonth + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+    for (let d = new Date(periode.fra + "T12:00:00"); isoDag(d) <= periode.til; d.setDate(d.getDate() + 1)) {
+      const dateStr = isoDag(d);
       if (dateStr >= todayStr) break;
       dates.push(dateStr);
     }
@@ -13295,6 +13365,18 @@ function KontorKlokke({ isAdminUser, signal, onGaaTil }) {
     if (error) { setFejl(error.message); hent(); }
   }
 
+  // Auto-slut (1.10.2026): en medarbejder har rettet en systemlukket opgave til MINDRE
+  // end planlagt. Godkendt: hendes løn følger rettelsen (efter lønlukning som
+  // efterregulering). Afvist: den planlagte tid står. Fakturaen røres ikke.
+  async function tidsrettelse(l, godkend) {
+    const emp = l.ref.slice(l.ref.lastIndexOf(":") + 1);
+    setLinjer((prev) => (prev || []).filter((x) => !(x.art === l.art && x.ref === l.ref)));
+    const { error } = await supabase.rpc("behandl_tidsrettelse",
+      { p_instance_id: l.instance_id, p_emp: emp, p_godkend: godkend });
+    if (error) setFejl(error.message);
+    hent();
+  }
+
   return (
     <div ref={boks} style={{ position: "relative" }}>
       <button onClick={() => { setAaben((v) => !v); if (!aaben) hent(); }}
@@ -13340,6 +13422,12 @@ function KontorKlokke({ isAdminUser, signal, onGaaTil }) {
                   <button style={{ ...styles.secondaryBtn, padding: "4px 10px", fontSize: 12, color: "#166534", borderColor: "#BBF7D0" }}
                     title="Markér som set. Den forsvinder for alle planlæggere." onClick={() => kvitter(l)}>Set ✓</button>
                 )}
+                {l.art === "tidsrettelse" && (<>
+                  <button style={{ ...styles.secondaryBtn, padding: "4px 10px", fontSize: 12, color: "#166534", borderColor: "#BBF7D0" }}
+                    title="Hendes løn følger rettelsen. Fakturaen er uændret." onClick={() => tidsrettelse(l, true)}>Godkend</button>
+                  <button style={{ ...styles.secondaryBtn, padding: "4px 10px", fontSize: 12, color: "#B91C1C", borderColor: "#FECACA" }}
+                    title="Den planlagte tid står." onClick={() => tidsrettelse(l, false)}>Afvis</button>
+                </>)}
               </div>
             </div>
           ))}
@@ -13834,6 +13922,106 @@ function StartStopPanel({ supabase, employees, onStartStopAlle }) {
       </div>
       <div style={{ ...styles.hint, marginTop: 10 }}>
         Den enkelte medarbejder slås til og fra i hendes eget vindue under «Løn og transport».
+      </div>
+    </div>
+  );
+}
+
+// Auto-slut og lønlukning (besluttet af Jonn og Charlotte 1.10.2026, se
+// overdragelse/PLAN-autoslut-og-loenlukning.md). Alt ligger i
+// tidsregistrering_indstillinger; selve arbejdet gør autoslut_behandl og
+// loen_varsel_behandl i databasen, kaldt af plan-beskeder hvert 5. minut.
+function AutoslutPanel({ supabase }) {
+  const [v, setV] = useState(null);
+  const [gemmer, setGemmer] = useState(false);
+  const [fejl, setFejl] = useState("");
+  useEffect(() => {
+    let afbrudt = false;
+    supabase.from("tidsregistrering_indstillinger")
+      .select("autoslut_aktiv, autoslut_efter_min, autoslut_fra, loen_lukkedag, loen_varsel_dage, systemluk_besked_antal")
+      .eq("id", "default").maybeSingle()
+      .then(({ data, error }) => {
+        if (afbrudt) return;
+        if (error) { setFejl(error.message); return; }
+        setV({
+          aktiv: !!data?.autoslut_aktiv, fra: data?.autoslut_fra || null,
+          efterTimer: String(((data?.autoslut_efter_min ?? 120) / 60)).replace(".", ","),
+          lukkedag: String(data?.loen_lukkedag ?? 20),
+          varsel: (data?.loen_varsel_dage || [3, 1]).join(", "),
+          antal: String(data?.systemluk_besked_antal ?? 3),
+        });
+      });
+    return () => { afbrudt = true; };
+  }, [supabase]);
+
+  if (fejl && !v) return <div style={{ ...styles.hint, color: "#B91C1C" }}>Kunne ikke hente indstillingerne: {fejl}</div>;
+  if (!v) return null;
+  const efterMin = Math.round(Number(String(v.efterTimer).replace(",", ".")) * 60);
+  const lukkedag = Number(v.lukkedag);
+  const antal = Number(v.antal);
+  const varsel = String(v.varsel).split(/[\s,]+/).map(Number).filter((n) => Number.isInteger(n) && n >= 1 && n <= 14);
+  const gyldig = efterMin >= 30 && efterMin <= 720 && Number.isInteger(lukkedag) && lukkedag >= 1 && lukkedag <= 28
+    && Number.isInteger(antal) && antal >= 1 && antal <= 50;
+  const p = loenPeriode(new Date().getFullYear(), new Date().getMonth() + 1, gyldig ? lukkedag : 20);
+
+  async function gem(aktivNu) {
+    if (!gyldig) return;
+    if (aktivNu && !v.aktiv && !window.confirm(
+      "Slå auto-slut til?\n\n"
+      + `Opgaver, medarbejderen ikke har afsluttet, lukkes ${v.efterTimer} time(r) efter planlagt slut med den planlagte tid. `
+      + "Kunden faktureres den planlagte tid. Medarbejderen kan rette sin tid op til lønlukningen; retter hun ned, skal I godkende.\n\n"
+      + "Det gælder kun opgaver fra nu af — gamle, glemte opgaver røres ikke.\n\n"
+      + "Er det varslet til medarbejderne?")) return;
+    setGemmer(true); setFejl("");
+    const { data, error } = await supabase.from("tidsregistrering_indstillinger").update({
+      autoslut_aktiv: aktivNu, autoslut_efter_min: efterMin, loen_lukkedag: lukkedag,
+      loen_varsel_dage: varsel.length ? varsel : [3, 1], systemluk_besked_antal: antal,
+      aendret: new Date().toISOString(),
+    }).eq("id", "default").select("autoslut_fra").maybeSingle();
+    setGemmer(false);
+    if (error) { setFejl(error.message); return; }
+    setV((x) => ({ ...x, aktiv: aktivNu, fra: data?.autoslut_fra || null }));
+  }
+
+  const felt = (navn, noegle, enhed, bredde = 80) => (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+      <span style={{ width: 260, fontSize: 13.5, color: "#334155" }}>{navn}</span>
+      <input value={v[noegle]} onChange={(e) => setV((x) => ({ ...x, [noegle]: e.target.value }))}
+        style={{ ...styles.input, width: bredde, marginBottom: 0 }} />
+      <span style={{ fontSize: 13, color: "#64748B" }}>{enhed}</span>
+    </div>
+  );
+
+  return (
+    <div style={{ background: "#fff", border: "1px solid #FDE68A", borderRadius: 14, padding: "16px 18px", marginBottom: 16 }}>
+      <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>🔒 Auto-slut og lønlukning</div>
+      <div style={{ fontSize: 13, color: "#64748B", lineHeight: 1.55, marginBottom: 12 }}>
+        En opgave, medarbejderen ikke har afsluttet, lukkes af systemet med den planlagte tid, så kunden altid kan
+        faktureres. Medarbejderen får en besked en time før. Hun kan rette sin tid i Worklist frem til lønlukningen —
+        mere tid med en begrundelse, mindre tid kun med jeres godkendelse (det kommer i 🔔). Efter lukningen kan kun
+        planlæggerne rette, og rettelsen lægges som efterregulering i den åbne periode.
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12, padding: "8px 12px",
+                    borderRadius: 10, background: v.aktiv ? "#F0FDF4" : "#F8FAFC", border: "1px solid " + (v.aktiv ? "#BBF7D0" : "#E2E8F0") }}>
+        <b style={{ color: v.aktiv ? "#166534" : "#475569" }}>{v.aktiv ? "Auto-slut er slået til" : "Auto-slut er slået fra"}</b>
+        {v.aktiv && v.fra && <span style={{ fontSize: 12.5, color: "#64748B" }}>
+          · gælder opgaver fra {new Date(v.fra).toLocaleString("da-DK", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</span>}
+        <button type="button" style={{ ...styles.secondaryBtn, marginLeft: "auto" }} disabled={gemmer || !gyldig}
+          onClick={() => gem(!v.aktiv)}>{v.aktiv ? "Slå fra" : "Slå til"}</button>
+      </div>
+      {felt("Luk opgaven efter planlagt slut", "efterTimer", "timer")}
+      {felt("Lukkedag for løn (1 = kalendermåned)", "lukkedag", "i måneden")}
+      {felt("Besked til medarbejderen før lukning", "varsel", "dage før (fx 3, 1)", 110)}
+      {felt("Besked til kontoret efter", "antal", "systemlukninger i en periode")}
+      <div style={styles.hint}>
+        Lønperioden lige nu: <b>{periodeTekst(p)}</b>, lukker den {p.lukkedag.split("-").reverse().slice(0, 2).join(".")} kl. 23.59.
+        Lønopgørelsen og «Min tid» i Worklist følger perioden.
+      </div>
+      <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 10 }}>
+        <button type="button" style={styles.primaryBtn} disabled={gemmer || !gyldig} onClick={() => gem(v.aktiv)}>
+          {gemmer ? "Gemmer…" : "Gem indstillingerne"}</button>
+        {!gyldig && <span style={{ fontSize: 12.5, color: "#B91C1C" }}>Timer 0,5–12 · lukkedag 1–28 · antal 1–50</span>}
+        {fejl && <span style={{ fontSize: 12.5, color: "#B91C1C" }}>{fejl}</span>}
       </div>
     </div>
   );
@@ -17491,7 +17679,7 @@ function EmployeeModal({ emp, onClose, onSave, skills: skillList, satsHistorik, 
 }
 
 // ---------- Task / service order detail ----------
-function TaskDetailModal({ task, employees, templates, onSetPreferredEmployee, onCancelTemplate, onEditTemplate, checklistTemplates, skills, isAdminUser, areas, employeeAreas, onClose, onSetStatus, onToggleChecklistItem, onAddChecklistItem, onAddChecklistTemplate, onAddAssignee, onRemoveAssignee, onToggleOplaering, onSetAndel, onUnplace, onDelete, onUpdateCustomer, onUpdateCustomerInfo, onUpdateContractType, onRenameTask, onCopy, onUpdateSkills, onEndBlockEarly, onUpdateSchedule, onUpdateKeyPickup, onUpdateScheduledTime, tilbudPaaOpgaven, onAabnTilbud }) {
+function TaskDetailModal({ task, employees, templates, onSetPreferredEmployee, onCancelTemplate, onEditTemplate, checklistTemplates, skills, isAdminUser, areas, employeeAreas, onClose, onSetStatus, onToggleChecklistItem, onAddChecklistItem, onAddChecklistTemplate, onAddAssignee, onRemoveAssignee, onToggleOplaering, onSetAndel, onUnplace, onDelete, onUpdateCustomer, onUpdateCustomerInfo, onUpdateContractType, onRenameTask, onCopy, onUpdateSkills, onEndBlockEarly, onUpdateSchedule, onUpdateKeyPickup, onUpdateScheduledTime, tilbudPaaOpgaven, onAabnTilbud, onTidLogOpdateret }) {
   // Disse to laa efter det tidlige return for blokeringer (sygdom/ferie) laengere nede.
   // Hooks skal kaldes i samme raekkefoelge hver render: aabnede man en blokering og
   // derefter en almindelig opgave i samme modal, ville React se to hooks mere end sidst
@@ -18468,10 +18656,35 @@ return (
                 {l.note
                   ? <div style={{ color: "#111111", marginTop: 2 }}>«{l.note}»</div>
                   : null}
+                {/* Auto-slut og lønlukning (1.10.2026) */}
+                {l.systemlukket && (
+                  <div style={{ color: "#B45309", fontWeight: 600 }}>
+                    🔒 Lukket af systemet med den planlagte tid{l.fakturaMinutes != null ? ` · faktureres ${fmtMin(l.fakturaMinutes)}` : ""}
+                  </div>
+                )}
+                {l.rettet && (
+                  <div style={{ color: "#475569" }}>
+                    ✎ Rettet fra {fmtMin(l.rettet.fra)} af medarbejderen{l.rettet.godkendtAf ? " (godkendt af kontoret)" : ""}{l.rettet.note ? ` — «${l.rettet.note}»` : ""}
+                  </div>
+                )}
+                {l.rettelseAfventer && (
+                  <div style={{ color: "#B91C1C", fontWeight: 600 }}>
+                    Vil rette til {fmtMin(l.rettelseAfventer.minutes)} — venter på kontoret (🔔){l.rettelseAfventer.note ? ` — «${l.rettelseAfventer.note}»` : ""}
+                  </div>
+                )}
+                {l.rettelseAfvist && <div style={{ color: "#64748B" }}>Rettelse til {fmtMin(l.rettelseAfvist.minutes)} afvist</div>}
+                {l.efterregulering && (
+                  <div style={{ color: "#6D28D9", fontWeight: 600 }}>
+                    ↩ Efterregulering {l.minutes > 0 ? "+" : ""}{fmtMin(Math.abs(l.minutes))}{l.minutes < 0 ? " (fradrag)" : ""} i lønperioden til {String(l.periodeSlut || "").split("-").reverse().join(".")} · rører ikke fakturaen
+                  </div>
+                )}
               </div>
             );
           })}
         </div>
+      )}
+      {isAdminUser && onTidLogOpdateret && (t.assignees || []).length > 0 && (
+        <Efterregulering opgave={t} employees={employees} onOpdateret={(log) => onTidLogOpdateret(t.id, log)} />
       )}
       </div></div>
 
@@ -18489,6 +18702,68 @@ return (
         <button style={{ ...styles.primaryBtn, marginLeft: "auto" }} onClick={onClose}>Luk</button>
       </div>
     </Modal>
+  );
+}
+
+// Efterregulering (1.10.2026). Er lønperioden for opgaven lukket, kan kun en
+// planlægger rette tiden — og rettelsen lægges i den ÅBNE periode som en ny linje
+// (+ eller −), så en udbetalt løn aldrig ændrer sig. Fakturaen røres ikke.
+function Efterregulering({ opgave, employees, onOpdateret }) {
+  const [laast, setLaast] = useState(null);
+  const [aaben, setAaben] = useState(false);
+  const [emp, setEmp] = useState((opgave.assignees || [])[0] || "");
+  const [min, setMin] = useState("");
+  const [note, setNote] = useState("");
+  const [fejl, setFejl] = useState("");
+  const [gemmer, setGemmer] = useState(false);
+  const dato = instanceDateString(opgave);
+  useEffect(() => {
+    let afbrudt = false;
+    if (!dato) return undefined;
+    supabase.rpc("loen_periode_for", { p_dato: dato }).then(({ data }) => { if (!afbrudt) setLaast(!!data?.laast); });
+    return () => { afbrudt = true; };
+  }, [dato]);
+  if (!laast) return null;
+  const tal = Math.round(Number(String(min).replace(",", ".")));
+  async function gem() {
+    if (!tal || !note.trim() || !emp) return;
+    setGemmer(true); setFejl("");
+    const { data, error } = await supabase.rpc("efterreguler_tid",
+      { p_instance_id: opgave.id, p_emp: emp, p_minutes: tal, p_note: note.trim() });
+    setGemmer(false);
+    if (error) { setFejl(error.message); return; }
+    onOpdateret(data || []);
+    setAaben(false); setMin(""); setNote("");
+  }
+  return (
+    <div style={{ marginTop: 10, border: "1px dashed #C4B5FD", borderRadius: 8, padding: "8px 10px", background: "#FAF5FF" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <span style={{ fontSize: 12.5, color: "#6D28D9" }}>🔒 Lønperioden for opgaven er lukket.</span>
+        {!aaben && <button style={{ ...styles.secondaryBtn, padding: "4px 10px", fontSize: 12, marginLeft: "auto" }}
+          onClick={() => setAaben(true)}>Efterreguler tid</button>}
+      </div>
+      {aaben && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 8 }}>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            <select value={emp} onChange={(e) => setEmp(e.target.value)} style={{ ...styles.input, width: 180, marginBottom: 0 }}>
+              {(opgave.assignees || []).map((id) => (
+                <option key={id} value={id}>{(employees || []).find((e) => e.id === id)?.name || id}</option>))}
+            </select>
+            <input value={min} onChange={(e) => setMin(e.target.value)} placeholder="+30 eller −15"
+              style={{ ...styles.input, width: 120, marginBottom: 0 }} />
+            <span style={{ fontSize: 12.5, color: "#64748B", alignSelf: "center" }}>min</span>
+          </div>
+          <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Hvorfor? (kræves)"
+            style={{ ...styles.input, marginBottom: 0 }} />
+          <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+            <button style={styles.primaryBtn} disabled={gemmer || !tal || !note.trim()} onClick={gem}>
+              {gemmer ? "Gemmer…" : "Læg i den åbne lønperiode"}</button>
+            <button style={styles.secondaryBtn} onClick={() => setAaben(false)}>Annuller</button>
+            {fejl && <span style={{ fontSize: 12.5, color: "#B91C1C" }}>{fejl}</span>}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
