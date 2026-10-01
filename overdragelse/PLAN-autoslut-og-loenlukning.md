@@ -4,9 +4,11 @@ Besluttet af Jonn og Charlotte 1.10.2026 (beslutningsdokument:
 https://claude.ai/code/artifact/f7ed5ce9-a11f-4f6c-a774-b417ab87866d, også som
 `planapp/Beslutning-lukning-af-opgaver-og-loenperiode.docx`).
 
-## Status 1.10.2026: bygget, SLÅET FRA
+## Status 1.10.2026: bygget og SLÅET TIL kl. 21.09 (Jonn)
 
-Slås til under Medarbejdere → «🔒 Auto-slut og lønlukning» (gælder kun opgaver fra det øjeblik).
+Panel: Medarbejdere → «🔒 Auto-slut og lønlukning». Gælder kun opgaver med planlagt slut efter 1.10.2026
+kl. 21.09. De 32 gamle åbne opgaver (Karen 17, Nadine 15, fra 21.8) blev bevidst IKKE lukket (Jonn: «kun fra
+nu») og skal ryddes op i hånden.
 - Database (begge): kolonner i `tidsregistrering_indstillinger`, `loen_periode_slut/_laast/_for/_interval`,
   `tjek_loen_aaben` (vagt i append_time_log, afslut_tid, set_employee_task_status, fejlkode 55000),
   `autoslut_behandl`, `loen_varsel_behandl`, `ret_systemlukket_tid`, `behandl_tidsrettelse`,
