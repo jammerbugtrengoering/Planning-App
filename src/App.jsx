@@ -2145,7 +2145,7 @@ const MODULE_HELP = {
         "«Fortryd» sætter aftalen tilbage til den status, den havde før. Den huskes, så en opsagt aftale ikke kan blive aktiv igen ved et uheld.",
         "Brug det til noget, der ikke skulle have været der: en dublet, en fejlindlæsning. Skal en rigtig aftale stoppe, er «Markér som udgået» det rigtige — den beholder historikken og det, der er faktureret.",
         "En aftale, der HAR opgaver, bliver ikke slettet. Sletningen springer den over og siger det, for en sletning ville efterlade opgaverne som løse uden aftale. Brug «udgået» på dem."] },
-    { h: "Konkrete datoer", p: ["Til opgaver uden fast rytme — fx sommerhuse, hvor datoerne kommer fra kunden. Du indtaster hver dato med sit eget klokkeslæt.", "Listen kan rettes løbende: tilføj, ret eller slet en linje, når kunden melder en ændring.", "Ugedage og udløbsdato bruges ikke her. Listen bestemmer selv, hvornår der er opgaver, og hvornår det slutter."] },
+    { h: "Konkrete datoer", p: ["Til opgaver uden fast rytme — fx sommerhuse, hvor datoerne kommer fra kunden. Hver dato har sit eget klokkeslæt og sin egen opgavetid.", "Opgavetiden udfyldes med aftalens varighed, når du trykker «+ Tilføj dato», og kan rettes for den enkelte dato — fx en længere slutrengøring.", "Ugedagene skjules, så længe «Konkrete datoer» er valgt. Skifter du tilbage til en fast rytme, kommer de igen, som de var.", "Listen kan rettes løbende: tilføj, ret eller fjern en linje (✕), når kunden melder en ændring."] },
   ], warn: "«Hver 3. måned» følger kalenderen: besøget lander i den uge, der indeholder samme dato som startdatoen — altså fire besøg om året på samme tid. Er startdatoen den 31., rammes sidste dag i korte måneder, så intet kvartal springes over. «Hver 4. uge» og «Hver 6. uge» tæller derimod i uger og vandrer gennem kalenderen — 13 henholdsvis 8-9 besøg om året, altid på samme ugedag." },
 
   drift: { title: "Drift", intro: "Kører løsningen, og er der noget, nogen skal tage fat i?", blocks: [
@@ -10800,6 +10800,11 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
   // betyder at faktureringen skal gaette sig frem, og at kunden hverken kan faa en
   // portal eller staa rigtigt i kundeoversigten.
   const manglerDineroKunde = !dineroContactGuid;
+  // Ugedage kraeves kun til de faste rytmer. Ved konkrete datoer er det listen, der skal
+  // have mindst én dato.
+  const manglerDage = type === "fixed" && (planInterval === "konkrete_datoer"
+    ? !konkreteDatoer.some((d) => d && d.dato)
+    : days.length === 0);
 
   async function searchDinero(q) {
     setCustomerName(q);
@@ -11222,20 +11227,49 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
               </button>
             ))}
           </div>
+          {/* Konkrete datoer (1.10.2026, Jonn): ugedagene skjules, saa laenge rytmen er
+              valgt - de bruges ikke, og et felt, der intet betyder, bliver udfyldt
+              alligevel. Valget af ugedage huskes og kommer igen, hvis man skifter
+              tilbage til en fast rytme.
+              Hver dato har sit eget klokkeslaet og sin egen opgavetid. Tiden udfyldes
+              med aftalens varighed, naar datoen tilfoejes, og kan rettes pr. dato. */}
           {planInterval === "konkrete_datoer" && (
-              <div style={{ marginBottom: 10 }}>
-                <label style={styles.label}>Datoer</label>
-                {konkreteDatoer.map((d, i) => (
+            <div style={{ marginBottom: 10 }}>
+              <label style={styles.label}>Datoer</label>
+              {konkreteDatoer.length > 0 && (
+                <div style={{ display: "flex", gap: 8, fontSize: 11.5, color: "#64748B", fontWeight: 600, margin: "0 0 4px" }}>
+                  <span style={{ flex: "1 1 160px" }}>Dato</span>
+                  <span style={{ width: 130 }}>Klokkeslæt</span>
+                  <span style={{ width: 150 }}>Opgavetid</span>
+                  <span style={{ width: 34 }} />
+                </div>
+              )}
+              {konkreteDatoer.map((d, i) => {
+                const ret = (felt, v) => setKonkreteDatoer(konkreteDatoer.map((x, j) => (j === i ? { ...x, [felt]: v } : x)));
+                return (
                   <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-                    <input type="date" style={styles.input} value={d.dato || ""} onChange={(e) => setKonkreteDatoer(konkreteDatoer.map((x, j) => j === i ? { ...x, dato: e.target.value } : x))} />
-                    <input type="time" style={styles.input} value={d.tid || ""} onChange={(e) => setKonkreteDatoer(konkreteDatoer.map((x, j) => j === i ? { ...x, tid: e.target.value } : x))} />
-                    <button type="button" onClick={() => setKonkreteDatoer(konkreteDatoer.filter((x, j) => j !== i))}>Slet</button>
+                    <input type="date" style={{ ...styles.input, flex: "1 1 160px", marginBottom: 0 }} value={d.dato || ""}
+                      onChange={(e) => ret("dato", e.target.value)} />
+                    <input type="time" style={{ ...styles.input, width: 130, marginBottom: 0 }} value={d.tid || ""}
+                      onChange={(e) => ret("tid", e.target.value)} />
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, width: 150 }}>
+                      <input type="number" min="5" step="5" style={{ ...styles.input, width: 100, marginBottom: 0 }}
+                        placeholder={`${duration}`} value={d.min ?? ""}
+                        onChange={(e) => ret("min", e.target.value === "" ? null : Number(e.target.value))} />
+                      <span style={{ fontSize: 12, color: "#94A3B8" }}>min</span>
+                    </div>
+                    <button type="button" title="Fjern datoen" style={{ ...styles.secondaryBtn, padding: "7px 10px", width: 34, justifyContent: "center" }}
+                      onClick={() => setKonkreteDatoer(konkreteDatoer.filter((x, j) => j !== i))}>✕</button>
                   </div>
-                ))}
-                <button type="button" onClick={() => setKonkreteDatoer([...konkreteDatoer, { dato: "", tid: "" }])}>Tilfoej dato</button>
-              </div>
-            )}
-            <label style={styles.label}>{planInterval === "konkrete_datoer" ? "Ugedage (bruges ikke ved konkrete datoer)" : "Ugedage (gentages hver uge)"}</label>
+                );
+              })}
+              <button type="button" style={{ ...styles.secondaryBtn, marginTop: 4 }}
+                onClick={() => setKonkreteDatoer([...konkreteDatoer, { dato: "", tid: "", min: Number(duration) || null }])}>+ Tilføj dato</button>
+              <div style={styles.hint}>Opgavetiden udfyldes med aftalens varighed og kan rettes for den enkelte dato. Er klokkeslættet tomt, placeres opgaven på ledig tid den dag.</div>
+            </div>
+          )}
+          {planInterval !== "konkrete_datoer" && (<>
+          <label style={styles.label}>Ugedage (gentages hver uge)</label>
           <div style={styles.skillPicker}>
             {ALL_DAYS.map((d) => <button key={d.key} type="button" onClick={() => toggleDay(d.key)} style={days.includes(d.key) ? styles.skillPickBtnActive : styles.skillPickBtn}>{d.label}</button>)}
           </div>
@@ -11264,6 +11298,7 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
               <div style={styles.hint}>Kræver en bestemt dag mere tid — fx hovedrengøring om onsdagen — så skriv minutter i det sidste felt. Står det tomt, bruges aftalens normale varighed.</div>
             </div>
           )}
+          </>)}
         </>
       )}
 
@@ -11420,7 +11455,7 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
         <button style={styles.secondaryBtn} disabled={gemmer} onClick={onClose}>Annuller</button>
         <button
           style={{ ...styles.primaryBtn, opacity: gemmer ? 0.6 : 1 }}
-          disabled={gemmer || !title.trim() || manglerDineroKunde || (type === "fixed" && days.length === 0) || requiredSkills.length === 0 || (type === "fixed" && !!startDate && startDate < todayIso())}
+          disabled={gemmer || !title.trim() || manglerDineroKunde || manglerDage || requiredSkills.length === 0 || (type === "fixed" && !!startDate && startDate < todayIso())}
           // En slaaet fra knap uden forklaring er det samme som ingen besked. Her
           // staar grunden, naar man holder musen over — og for startdatoen staar den
           // ogsaa i sidepanelet, hvor man ikke skal lede efter den.
@@ -11428,7 +11463,7 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
             manglerDineroKunde ? (KUNDER_I_DINERO() ? "Vælg kunden i Dinero-listen først" : "Vælg kunden i listen først")
             : (type === "fixed" && !!startDate && startDate < todayIso())
               ? "Startdatoen er passeret — ret den til i dag eller senere, før aftalen kan godkendes"
-            : (type === "fixed" && days.length === 0) ? "Vælg mindst én ugedag"
+            : manglerDage ? (planInterval === "konkrete_datoer" ? "Tilføj mindst én dato" : "Vælg mindst én ugedag")
             : requiredSkills.length === 0 ? "Vælg mindst én kompetence"
             : !title.trim() ? "Aftalen mangler en titel"
             : undefined}
