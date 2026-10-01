@@ -5,7 +5,16 @@ Gennemgået 1.10.2026.
 **Bygget 1.10.2026 (Jonn):** formularen skjuler ugedagene ved «Konkrete datoer» (de huskes og
 kommer igen ved en fast rytme), hver dato har klokkeslæt + opgavetid (`min`, udfyldt med
 aftalens varighed, kan rettes), stylede knapper, og Gem kræver mindst én dato i stedet for en
-ugedag. Gem/hent/dannelse (punkt 1–4) mangler stadig.
+ugedag.
+
+**Bygget 1.10.2026, resten:** CHECK-reglen tillader `konkrete_datoer` (begge databaser),
+listen gemmes renset (`rensKonkreteDatoer`) og hentes; start/udløb = første/sidste dato,
+`days` = ugedagene datoerne falder på; `aftaleKoererPaaDag` kører kun på listens datoer
+(14 nye tests); opgaven får datoens klokkeslæt og opgavetid; rettelser på en godkendt aftale
+følger med (ny dato dannes, fjernet dato ryddes, ny tid/varighed rettes på opgaven); kontrol af
+dubletter og passerede datoer; aftalelisten viser «📅 Konkrete datoer (n) · næste …»;
+kontraktsum pr. dato. Ikke gjort: medarbejder pr. dato, kundeportal, tilbud. Ikke afprøvet i
+browseren endnu.
 
 Idé (Jonn 1.10): aftaletypen kan udvides til et **klippekort** — et antal rengøringer, der
 placeres på datoer efterhånden. Ikke besluttet.

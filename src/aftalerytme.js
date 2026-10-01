@@ -68,6 +68,30 @@ function ugenPasser(tpl, ugensMandag) {
   return ugerSidenAnker % uger === 0;
 }
 
+// ── Konkrete datoer (1.10.2026) ─────────────────────────────────────────────
+// En aftale uden fast rytme: listen bestemmer selv, hvilke dage der er opgaver.
+// Hver linje er { dato: "YYYY-MM-DD", tid: "HH:MM" | "", min: tal | null }.
+// Ugedage, interval og udløbsdato betyder intet her — listen er hele reglen.
+export const KONKRETE = "konkrete_datoer";
+
+// Listen renset: uden tomme linjer, én linje pr. dato, sorteret. Bruges både, når
+// aftalen gemmes, og når opgaverne dannes, så de to aldrig læser listen forskelligt.
+export function rensKonkreteDatoer(liste) {
+  const set = new Map();
+  for (const d of Array.isArray(liste) ? liste : []) {
+    if (!d || !/^\d{4}-\d{2}-\d{2}$/.test(String(d.dato || ""))) continue;
+    const min = Number(d.min);
+    set.set(d.dato, { dato: d.dato, tid: d.tid || "", min: min > 0 ? Math.round(min) : null });
+  }
+  return [...set.values()].sort((a, b) => a.dato.localeCompare(b.dato));
+}
+
+// Linjen for en bestemt dato, eller null.
+export function konkretDato(tpl, dagStr) {
+  if (!tpl || tpl.planInterval !== KONKRETE) return null;
+  return rensKonkreteDatoer(tpl.konkreteDatoer).find((d) => d.dato === dagStr) || null;
+}
+
 // Kører aftalen på netop denne dag?
 //
 // ugensMandag skal være mandagen i den uge, dagen ligger i. Den sendes med i stedet
@@ -83,6 +107,20 @@ export function aftaleKoererPaaDag(tpl, ugensMandag, dagNoegle) {
   // blive ved med at lægge opgaver på en medarbejders plan imens — og det er
   // netop dubletter, statussen er lavet til at rydde.
   if (tpl.status === "kladde" || tpl.status === "slettes") return false;
+
+  if (tpl.planInterval === KONKRETE) {
+    const i = DAG_TIL_INDEKS[dagNoegle];
+    if (i === undefined) return false;
+    const dagDato = new Date(ugensMandag);
+    dagDato.setDate(dagDato.getDate() + i);
+    const dagStr = isoDato(dagDato);
+    if (!konkretDato(tpl, dagStr)) return false;
+    if (Array.isArray(tpl.excludedDays) && tpl.excludedDays.includes(dagStr)) return false;
+    if (tpl.status === "udgaaet" && tpl.cancelledEffectiveDate
+        && dagStr > String(tpl.cancelledEffectiveDate).slice(0, 10)) return false;
+    return true;
+  }
+
   if (!tpl.days || tpl.days.length === 0) return false;
 
   const dage = (tpl.days || [])
@@ -132,6 +170,9 @@ export function aftaleKoererPaaDag(tpl, ugensMandag, dagNoegle) {
 // Returnerer null, når datoen ikke behøver at flyttes.
 export function nyStartdatoHvisPasseret(tpl, idag = new Date()) {
   if (!tpl || !tpl.startDate) return null;
+  // Ved konkrete datoer er startdatoen bare den første dato på listen. Den flyttes
+  // ikke: passerede datoer skal rettes eller fjernes på listen.
+  if (tpl.planInterval === KONKRETE) return null;
   const nu = new Date(idag.getFullYear(), idag.getMonth(), idag.getDate());
   const start = new Date(tpl.startDate);
   if (isNaN(start.getTime())) return null;

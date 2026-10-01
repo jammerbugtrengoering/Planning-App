@@ -5,7 +5,7 @@
 // rydder appen enten opgaver væk, der skulle være der, eller lader opgaver stå, der
 // ikke skulle. Begge dele rammer en rigtig medarbejders dag.
 
-import { aftaleKoererPaaDag, mandagIUgen, isoDato, nyStartdatoHvisPasseret } from "./src/aftalerytme.js";
+import { aftaleKoererPaaDag, mandagIUgen, isoDato, nyStartdatoHvisPasseret, rensKonkreteDatoer, konkretDato } from "./src/aftalerytme.js";
 
 let fejl = 0, koert = 0;
 function er(hvad, faktisk, forventet) {
@@ -168,6 +168,31 @@ er("isoDato er lokal i vintertid", isoDato(new Date(2026, 0, 8)), "2026-01-08");
 }
 
 // ── Resultat ────────────────────────────────────────────────────────────────
+
+// ── Konkrete datoer ─────────────────────────────────────────────────────────
+{
+  const k = { planInterval: "konkrete_datoer", status: "aktiv", days: ["Mon"],
+    startDate: "2026-10-14", expiryDate: "2027-01-02",
+    konkreteDatoer: [{ dato: "2026-10-14", tid: "09:00", min: 120 }, { dato: "2026-10-17", tid: "", min: null },
+                     { dato: "2027-01-02", tid: "10:30", min: 90 }, { dato: "", tid: "08:00" }] };
+  er("konkret: onsdag 14.10 står på listen", aftaleKoererPaaDag(k, man(2026, 10, 14), "Wed"), true);
+  er("konkret: ugedagen på aftalen ignoreres (mandag)", aftaleKoererPaaDag(k, man(2026, 10, 14), "Mon"), false);
+  er("konkret: lørdag 17.10 (weekend) står på listen", aftaleKoererPaaDag(k, man(2026, 10, 17), "Sat"), true);
+  er("konkret: onsdag ugen efter står ikke på listen", aftaleKoererPaaDag(k, man(2026, 10, 21), "Wed"), false);
+  er("konkret: over årsskiftet (lør 2.1.2027)", aftaleKoererPaaDag(k, man(2027, 1, 2), "Sat"), true);
+  er("konkret: kladde danner intet", aftaleKoererPaaDag({ ...k, status: "kladde" }, man(2026, 10, 14), "Wed"), false);
+  er("konkret: fravalgt dag", aftaleKoererPaaDag({ ...k, excludedDays: ["2026-10-14"] }, man(2026, 10, 14), "Wed"), false);
+  er("konkret: udgået før datoen", aftaleKoererPaaDag({ ...k, status: "udgaaet", cancelledEffectiveDate: "2026-10-15" }, man(2026, 10, 17), "Sat"), false);
+  er("konkret: uden ugedage", aftaleKoererPaaDag({ ...k, days: [] }, man(2026, 10, 14), "Wed"), true);
+  er("konkret: klokkeslæt og minutter pr. dato", konkretDato(k, "2026-10-14"), { dato: "2026-10-14", tid: "09:00", min: 120 });
+  er("konkret: tom tid/min", konkretDato(k, "2026-10-17"), { dato: "2026-10-17", tid: "", min: null });
+  er("rens: tomme ud, dubletter ud, sorteret",
+    rensKonkreteDatoer([{ dato: "2026-11-02", tid: "8:00" }, { dato: "" }, { dato: "2026-10-01", min: "60" }, { dato: "2026-11-02", tid: "09:00" }]).map((d) => d.dato + "|" + d.tid + "|" + d.min),
+    ["2026-10-01||60", "2026-11-02|09:00|null"]);
+  er("konkret: startdato flyttes ikke", nyStartdatoHvisPasseret({ ...k, startDate: "2026-09-01" }, new Date(2026, 9, 1)), null);
+  er("konkret: andre rytmer kender ikke listen", konkretDato({ ...k, planInterval: "uge" }, "2026-10-14"), null);
+}
+
 if (fejl > 0) {
   console.error(`\n  ${fejl} af ${koert} kontroller fejlede i aftalerytmen.\n`);
   process.exit(1);

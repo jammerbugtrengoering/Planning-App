@@ -7,7 +7,7 @@ import { fakturerbareMinutter, registreredeMinutter, oplaeringsFolk, erUnderOpla
          fordelingen, harFordeling } from "./opgavetid.js";
 import { supabase } from "./supabaseClient";
 import { FIRMA, useFirma, brugTitel, opdaterFirma, farveHex, harModul, KUNDEUDGAVE, hentFirmaEfterSlug, slugFraAdresse, genhentFirma } from "./firma";
-import { aftaleKoererPaaDag, DAG_FRA_INDEKS, nyStartdatoHvisPasseret } from "./aftalerytme";
+import { aftaleKoererPaaDag, DAG_FRA_INDEKS, nyStartdatoHvisPasseret, KONKRETE, rensKonkreteDatoer, konkretDato } from "./aftalerytme";
 import { holdOejeMedNyVersion } from "./nyversion";
 import { filtrerUgevalg } from "./ugevalg";
 import { portefoeljeTal, aarMedBesoeg } from "./portefoelje";
@@ -1105,12 +1105,16 @@ function ensureWeekInstances(week, year, allInstances, templates, employees, are
       // bliver fundet paa igen, hver eneste gang ugen aabnes.
       if (ryddedePladser.has(pladsNoegle(tpl.id, year, week, day))) return;
       const existingIdx = list.findIndex((i) => i.templateId === tpl.id && i.week === week && i.year === year && i.day === day);
+      // Konkrete datoer: linjen for netop den dato har sit eget klokkeslaet og sin egen
+      // opgavetid. Tom tid/minutter = aftalens varighed og ledig tid i planen.
+      const konkret = tpl.planInterval === KONKRETE
+        ? konkretDato(tpl, instanceDateString({ week, year, day })) : null;
       if (existingIdx === -1) {
         const newInst = {
           id: uid("i"), templateId: tpl.id, title: tpl.title, requiredSkills: tpl.requiredSkills,
           // En dag kan kraeve mere tid end aftalens normale varighed — fx hovedrengoering
           // om onsdagen. Er der ikke sat noget for dagen, gaelder aftalens varighed.
-          duration: (tpl.dayDurations && tpl.dayDurations[day]) || tpl.duration,
+          duration: (konkret && konkret.min) || (tpl.dayDurations && tpl.dayDurations[day]) || tpl.duration,
           type: "fixed", day, week, year,
           // Har aftalen en fast medarbejder, foedes opgaven direkte med vedkommende.
           // Auto-planlaegningen roerer aldrig en opgave der allerede har en medarbejder,
@@ -1132,8 +1136,9 @@ function ensureWeekInstances(week, year, allInstances, templates, employees, are
           // Arves fra aftalen. Kan slaas fra paa den enkelte dag hvor noeglen
           // allerede er udleveret, uden at aftalen aendres.
           needsKeyPickup: !!tpl.needsKeyPickup,
-          templateDays: tpl.days, // for off-schedule detection
-          scheduledTime: (tpl.dayTimes && tpl.dayTimes[day]) || null,
+          // for off-schedule detection. Ved konkrete datoer er dagen selv den aftalte.
+          templateDays: konkret ? [day] : tpl.days,
+          scheduledTime: konkret ? (konkret.tid || null) : ((tpl.dayTimes && tpl.dayTimes[day]) || null),
           contractType: tpl.contractType || "privat",
           pricingType: tpl.pricingType || "hourly",
           fixedPrice: tpl.fixedPrice ?? null,
@@ -2145,7 +2150,7 @@ const MODULE_HELP = {
         "«Fortryd» sætter aftalen tilbage til den status, den havde før. Den huskes, så en opsagt aftale ikke kan blive aktiv igen ved et uheld.",
         "Brug det til noget, der ikke skulle have været der: en dublet, en fejlindlæsning. Skal en rigtig aftale stoppe, er «Markér som udgået» det rigtige — den beholder historikken og det, der er faktureret.",
         "En aftale, der HAR opgaver, bliver ikke slettet. Sletningen springer den over og siger det, for en sletning ville efterlade opgaverne som løse uden aftale. Brug «udgået» på dem."] },
-    { h: "Konkrete datoer", p: ["Til opgaver uden fast rytme — fx sommerhuse, hvor datoerne kommer fra kunden. Hver dato har sit eget klokkeslæt og sin egen opgavetid.", "Opgavetiden udfyldes med aftalens varighed, når du trykker «+ Tilføj dato», og kan rettes for den enkelte dato — fx en længere slutrengøring.", "Ugedagene skjules, så længe «Konkrete datoer» er valgt. Skifter du tilbage til en fast rytme, kommer de igen, som de var.", "Listen kan rettes løbende: tilføj, ret eller fjern en linje (✕), når kunden melder en ændring."] },
+    { h: "Konkrete datoer", p: ["Til opgaver uden fast rytme — fx sommerhuse, hvor datoerne kommer fra kunden. Hver dato har sit eget klokkeslæt og sin egen opgavetid.", "Opgavetiden udfyldes med aftalens varighed, når du trykker «+ Tilføj dato», og kan rettes for den enkelte dato — fx en længere slutrengøring.", "Ugedagene skjules, så længe «Konkrete datoer» er valgt. Skifter du tilbage til en fast rytme, kommer de igen, som de var.", "Start- og udløbsdato sættes af sig selv til første og sidste dato på listen. «+ Tilføj dato» foreslår ugen efter den sidste dato med samme klokkeslæt.", "Listen kan rettes løbende — også på en godkendt aftale: en ny dato får en opgave, en fjernet dato får sin kommende opgave slettet, og et nyt klokkeslæt eller en ny opgavetid rettes på opgaven. Udførte opgaver og opgaver med registreret tid røres ikke.", "På en ny aftale eller en kladde må ingen dato være passeret, og den samme dato må ikke stå to gange.", "I aftalelisten står «📅 Konkrete datoer (antal) · næste dato» i stedet for ugedagene. Hold musen over for at se alle datoer. Kontraktsummen er summen af besøgene på listen."] },
   ], warn: "«Hver 3. måned» følger kalenderen: besøget lander i den uge, der indeholder samme dato som startdatoen — altså fire besøg om året på samme tid. Er startdatoen den 31., rammes sidste dag i korte måneder, så intet kvartal springes over. «Hver 4. uge» og «Hver 6. uge» tæller derimod i uger og vandrer gennem kalenderen — 13 henholdsvis 8-9 besøg om året, altid på samme ugedag." },
 
   drift: { title: "Drift", intro: "Kører løsningen, og er der noget, nogen skal tage fat i?", blocks: [
@@ -3102,6 +3107,8 @@ function PlanningApp({ session, onSignOut }) {
             pricingType: t.pricing_type || "hourly",
             fixedPrice: t.fixed_price,
             planInterval: t.plan_interval || "uge",
+            // Listen bag «Konkrete datoer» (1.10.2026). Tom for alle andre rytmer.
+            konkreteDatoer: Array.isArray(t.konkrete_datoer) ? t.konkrete_datoer : [],
             // Fritekst til kontoret. Vises KUN paa en kladde - se AftaleBemaerkning.
             bemaerkning: t.bemaerkning || "",
             statusFoerSlettes: t.status_foer_slettes || null,
@@ -4295,6 +4302,7 @@ function PlanningApp({ session, onSignOut }) {
       pricing_type: payload.pricingType || "hourly",
       fixed_price: fastPris,
       plan_interval: payload.planInterval || "uge",
+      konkrete_datoer: payload.planInterval === KONKRETE ? rensKonkreteDatoer(payload.konkreteDatoer) : null,
       // Skrives KUN, naar feltet var i spil. Noten vises kun paa kladder, saa et
       // «|| null» her ville nulstille den, hver gang nogen gemte en GODKENDT
       // aftale - samme faelde som tjeklisten og koerslen.
@@ -4391,6 +4399,33 @@ function PlanningApp({ session, onSignOut }) {
         : `Aftalen er gemt — ${passerIkke.length} planlagte opgaver passede ikke til den nye rytme og er fjernet`);
     }
 
+    // Konkrete datoer: er klokkeslaet eller opgavetid rettet paa en dato, der allerede
+    // har en opgave, saa ret opgaven med. ensureWeekInstances danner kun NYE opgaver og
+    // roerer ikke tid og varighed paa dem, der findes. Samme vaern som rydningen ovenfor:
+    // kun fremtidige, ikke udfoerte opgaver uden registreret tid.
+    if (opdateret.planInterval === KONKRETE && !payload.saveAsDraft) {
+      const fjernet = new Set(passerIkke.map((i) => i.id));
+      const rettede = instances.filter((i) =>
+        i.templateId === tplId && !fjernet.has(i.id)
+        && instanceDateString(i) > idag
+        && i.status !== "udført"
+        && (i.timeLog || i.time_log || []).length === 0)
+        .map((i) => {
+          const k = konkretDato(opdateret, instanceDateString(i));
+          if (!k) return null;
+          const tid = k.tid || null;
+          const min = Number(k.min || opdateret.duration) || i.duration;
+          if ((i.scheduledTime || null) === tid && Number(i.duration) === Number(min)) return null;
+          return { ...i, scheduledTime: tid, duration: min };
+        })
+        .filter(Boolean);
+      if (rettede.length) {
+        rettede.forEach((i) => syncInstance(i));
+        const nye = new Map(rettede.map((i) => [i.id, i]));
+        setInstances((prev) => prev.map((i) => nye.get(i.id) || i));
+      }
+    }
+
     setTemplates((prevT) => {
       const nextT = prevT.map((t) => (t.id === tplId ? opdateret : t));
       // En kladde materialiseres ikke. Opgaverne dannes foerst ved godkendelsen.
@@ -4482,6 +4517,7 @@ function PlanningApp({ session, onSignOut }) {
         contract_type: tpl.contractType || "privat",
         pricing_type: tpl.pricingType || "hourly", fixed_price: tpl.fixedPrice,
         plan_interval: tpl.planInterval || "uge",
+        konkrete_datoer: tpl.planInterval === KONKRETE ? rensKonkreteDatoer(tpl.konkreteDatoer) : null,
         ...('bemaerkning' in payload && payload.bemaerkning !== undefined
           ? { bemaerkning: payload.bemaerkning } : {}),
         dinero_synced: tpl.dineroSynced,
@@ -10805,6 +10841,22 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
   const manglerDage = type === "fixed" && (planInterval === "konkrete_datoer"
     ? !konkreteDatoer.some((d) => d && d.dato)
     : days.length === 0);
+  // Konkrete datoer: listen renset (sorteret, én pr. dato) er det, der gemmes. Start- og
+  // udloebsdato er foerste og sidste dato, og ugedagene er dem, datoerne falder paa —
+  // saa dubletkontrollen, «udloeber snart» og advarslen om flyttede opgaver virker som
+  // for alle andre aftaler.
+  const erKonkret = type === "fixed" && planInterval === KONKRETE;
+  const konkretRenset = useMemo(() => rensKonkreteDatoer(konkreteDatoer), [konkreteDatoer]);
+  const konkretDobbelt = erKonkret
+    && konkreteDatoer.filter((d) => d && d.dato).length !== konkretRenset.length;
+  // Paa en ny aftale eller en kladde maa ingen dato vaere passeret. Paa en godkendt
+  // aftale er passerede datoer historik og bliver staaende.
+  const konkretFortid = erKonkret && (!editId || erKladde)
+    && konkretRenset.some((d) => d.dato < todayIso());
+  const konkretDage = [...new Set(konkretRenset.map((d) => {
+    const [y, m, dd] = d.dato.split("-").map(Number);
+    return DAG_FRA_INDEKS[(new Date(y, m - 1, dd).getDay() + 6) % 7];
+  }))];
 
   async function searchDinero(q) {
     setCustomerName(q);
@@ -10924,19 +10976,19 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
     contractType,
     pricingType,
     fixedPrice: pricingType === "fixed" ? (Number(fixedPrice) || 0) : null,
-    planInterval, konkreteDatoer,
+    planInterval, konkreteDatoer: erKonkret ? konkretRenset : [],
     title: title.trim(),
     requiredSkills,
     duration,
-    days,
-    dayTimes,
-    dayDurations,
+    days: erKonkret ? konkretDage : days,
+    dayTimes: erKonkret ? {} : dayTimes,
+    dayDurations: erKonkret ? {} : dayDurations,
     day,
     adhocDate,
     deadline,
     preferredTime,
-    startDate,
-    expiryDate,
+    startDate: erKonkret ? (konkretRenset[0]?.dato || null) : startDate,
+    expiryDate: erKonkret ? (konkretRenset[konkretRenset.length - 1]?.dato || null) : expiryDate,
     checklistTemplateIds,
     extraItems,
     videoUrl: videoUrl.trim(),
@@ -11214,10 +11266,14 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
 
       {type === "fixed" && (
         <>
+          {/* Ved konkrete datoer er start og udloeb bare foerste og sidste dato paa
+              listen. De saettes af sig selv og vises kun til orientering. */}
+          {planInterval !== KONKRETE && (<>
           <label style={styles.label}>Startdato (første gang opgaven udføres)</label>
           <input type="date" min={todayIso()} style={styles.input} value={startDate} onChange={(e) => setStartDate(e.target.value)} />{startDate && startDate < todayIso() && (<div style={{ ...styles.hint, color: "#B91C1C" }}>Startdatoen kan ikke ligge i fortiden — vælg dags dato eller senere.</div>)}
           <label style={styles.label}>Udløbsdato (aftalen gælder til og med)</label>
           <input type="date" style={styles.input} value={expiryDate} onChange={(e) => setExpiryDate(e.target.value)} />
+          </>)}
           <label style={styles.label}>Plan parametre</label>
           <div style={styles.typePicker}>
             {[["uge","Hver uge"],["14_dage","Hver 14. dag"],["4_uger","Hver 4. uge"],["6_uger","Hver 6. uge"],["3_maaned","Hver 3. måned"],["konkrete_datoer","Konkrete datoer"]].map(([k,l]) => (
@@ -11264,8 +11320,33 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
                 );
               })}
               <button type="button" style={{ ...styles.secondaryBtn, marginTop: 4 }}
-                onClick={() => setKonkreteDatoer([...konkreteDatoer, { dato: "", tid: "", min: Number(duration) || null }])}>+ Tilføj dato</button>
+                onClick={() => {
+                  // Forslaget er ugen efter den sidste dato, med samme klokkeslaet. Det er
+                  // det hyppigste, og ellers er det bare at rette datoen.
+                  const sidste = konkretRenset[konkretRenset.length - 1];
+                  let dato = "";
+                  if (sidste) {
+                    const [y, m, d] = sidste.dato.split("-").map(Number);
+                    const n = new Date(y, m - 1, d + 7);
+                    dato = `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}-${String(n.getDate()).padStart(2, "0")}`;
+                  }
+                  setKonkreteDatoer([...konkreteDatoer, { dato, tid: sidste?.tid || "", min: Number(duration) || null }]);
+                }}>+ Tilføj dato</button>
               <div style={styles.hint}>Opgavetiden udfyldes med aftalens varighed og kan rettes for den enkelte dato. Er klokkeslættet tomt, placeres opgaven på ledig tid den dag.</div>
+              {konkretRenset.length > 0 && (
+                <div style={{ ...styles.hint, color: "#334155" }}>
+                  {konkretRenset.length} {konkretRenset.length === 1 ? "dato" : "datoer"} · første{" "}
+                  <b>{new Date(konkretRenset[0].dato).toLocaleDateString("da-DK", { day: "numeric", month: "short", year: "numeric" })}</b>
+                  {" "}· sidste{" "}
+                  <b>{new Date(konkretRenset[konkretRenset.length - 1].dato).toLocaleDateString("da-DK", { day: "numeric", month: "short", year: "numeric" })}</b>.
+                  {" "}Aftalen gælder fra første til sidste dato.
+                </div>
+              )}
+              {konkretDobbelt && <div style={{ ...styles.hint, color: "#B91C1C" }}>Den samme dato står to gange — fjern den ene.</div>}
+              {konkretFortid && <div style={{ ...styles.hint, color: "#B91C1C" }}>En af datoerne er passeret. Ret den eller fjern den, før aftalen gemmes.</div>}
+              {editId && !erKladde && (
+                <div style={styles.hint}>Retter du listen, følger planen med: en ny dato får en opgave, en fjernet dato får sin kommende opgave slettet, og et nyt klokkeslæt eller en ny opgavetid rettes på opgaven. Udførte opgaver og opgaver med registreret tid røres ikke.</div>
+              )}
             </div>
           )}
           {planInterval !== "konkrete_datoer" && (<>
@@ -11455,13 +11536,15 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
         <button style={styles.secondaryBtn} disabled={gemmer} onClick={onClose}>Annuller</button>
         <button
           style={{ ...styles.primaryBtn, opacity: gemmer ? 0.6 : 1 }}
-          disabled={gemmer || !title.trim() || manglerDineroKunde || manglerDage || requiredSkills.length === 0 || (type === "fixed" && !!startDate && startDate < todayIso())}
+          disabled={gemmer || !title.trim() || manglerDineroKunde || manglerDage || konkretDobbelt || konkretFortid || requiredSkills.length === 0 || (type === "fixed" && !erKonkret && !!startDate && startDate < todayIso())}
           // En slaaet fra knap uden forklaring er det samme som ingen besked. Her
           // staar grunden, naar man holder musen over — og for startdatoen staar den
           // ogsaa i sidepanelet, hvor man ikke skal lede efter den.
           title={
             manglerDineroKunde ? (KUNDER_I_DINERO() ? "Vælg kunden i Dinero-listen først" : "Vælg kunden i listen først")
-            : (type === "fixed" && !!startDate && startDate < todayIso())
+            : konkretDobbelt ? "Den samme dato står to gange på listen"
+            : konkretFortid ? "En af datoerne er passeret — ret eller fjern den"
+            : (type === "fixed" && !erKonkret && !!startDate && startDate < todayIso())
               ? "Startdatoen er passeret — ret den til i dag eller senere, før aftalen kan godkendes"
             : manglerDage ? (planInterval === "konkrete_datoer" ? "Tilføj mindst én dato" : "Vælg mindst én ugedag")
             : requiredSkills.length === 0 ? "Vælg mindst én kompetence"
@@ -12349,6 +12432,20 @@ function UgeTidslinje({ emp, dage, instances, travelSettings, weekOffset, weekYe
 // ── Contracts View ────────────────────────────────────────────────────────────
 const DAY_ABBR = { Mon: "Man", Tue: "Tirs", Wed: "Ons", Thu: "Tors", Fri: "Fre", Sat: "Lør", Sun: "Søn" };
 
+// «📅 Konkrete datoer (8) · næste 14. okt.» i aftalelisten i stedet for ugedagene.
+function KonkreteDatoerMaerke({ tpl }) {
+  const liste = rensKonkreteDatoer(tpl.konkreteDatoer);
+  const idag = todayIso();
+  const naeste = liste.find((d) => d.dato >= idag);
+  return (
+    <span style={{ fontWeight: 600, color: "#475569" }}
+      title={liste.map((d) => d.dato.split("-").reverse().join(".") + (d.tid ? " kl. " + d.tid : "")).join("\n")}>
+      📅 Konkrete datoer ({liste.length})
+      {naeste ? ` · næste ${new Date(naeste.dato).toLocaleDateString("da-DK", { day: "numeric", month: "short" })}` : " · ingen flere"}
+    </span>
+  );
+}
+
 function DayPills({ days }) {
   if (!days?.length) return null;
   return (
@@ -12618,12 +12715,15 @@ function ContractsView({ templates: alleTemplates, instances, pricing, employees
     // Kvartalet regnes som 13 uger — det er ikke helt præcist over et år, men
     // forskellen er under én procent, og alternativet er at lade som om en aftale
     // med fire besøg om året har 52.
-    // Konkrete datoer har hverken fast interval eller udloebsdato: vaerdien er
-  // simpelthen prisen pr. besoeg gange antallet af datoer paa listen.
-  if (tpl.planInterval === "konkrete_datoer") {
-    const antal = (tpl.konkreteDatoer || []).length;
-    return { sum: weeklyValue * antal, weeks: antal, wholePeriod: true };
-  }
+    // Konkrete datoer: summen af besoegene paa listen. Hver dato kan have sin egen
+    // opgavetid, saa der regnes pr. dato og ikke «pr. uge × antal».
+    if (tpl.planInterval === KONKRETE) {
+      const liste = rensKonkreteDatoer(tpl.konkreteDatoer);
+      const sum = liste.reduce((s, d) => s + (tpl.pricingType === "fixed"
+        ? (Number(tpl.fixedPrice) || 0)
+        : ((d.min || tpl.duration || 0) / 60) * rate), 0);
+      return { sum, weeks: liste.length, wholePeriod: true };
+    }
   const pr = { uge: 1, "14_dage": 2, "4_uger": 4, "6_uger": 6, maaned: 4, "3_maaned": 13 }[tpl.planInterval] || 1;
     if (start && expiry) {
       const weeks = Math.max(1, Math.round((expiry - start) / (1000 * 60 * 60 * 24 * 7)));
@@ -13000,7 +13100,7 @@ function ContractsView({ templates: alleTemplates, instances, pricing, employees
                         Fast: {((employees || []).find((e) => e.id === t.preferredEmployeeId) || {}).name || "ukendt"}
                       </span>
                     )}
-                  <DayPills days={t.days} />
+                  {t.planInterval === KONKRETE ? <KonkreteDatoerMaerke tpl={t} /> : <DayPills days={t.days} />}
                   {t.start && <span>Fra {t.start.toLocaleDateString("da-DK", { day: "numeric", month: "short", year: "numeric" })}</span>}
                   <span>Til {t.expiry.toLocaleDateString("da-DK", { day: "numeric", month: "short", year: "numeric" })}</span>
                   <span style={{ fontWeight: 600, color: "var(--farve-moerk)" }}>{contractIconLabel(t.contractType)}</span>
@@ -13112,7 +13212,7 @@ function ContractsView({ templates: alleTemplates, instances, pricing, employees
                         Fast: {((employees || []).find((e) => e.id === t.preferredEmployeeId) || {}).name || "ukendt"}
                       </span>
                     )}
-                    <DayPills days={t.days} />
+                    {t.planInterval === KONKRETE ? <KonkreteDatoerMaerke tpl={t} /> : <DayPills days={t.days} />}
                     <span style={{ fontWeight: 600, color: "var(--farve-moerk)" }}>{contractIconLabel(t.contractType)}</span>
                   </div>
                   <div style={{ fontSize: 12, color: "#64748B", display: "flex", gap: 14, flexWrap: "wrap", marginTop: 5 }}>
