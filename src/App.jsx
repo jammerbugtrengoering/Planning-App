@@ -1784,6 +1784,7 @@ const MODULE_HELP = {
         "Tallet er rødt, når noget haster. Tryk «Åbn» for at komme derhen, hvor sagen klares.",
         "Linjerne forsvinder af sig selv, når sagen er klaret det rigtige sted — et ønske besvaret, en bestilling godkendt, en tid afsluttet.",
         "Afvigelser har ikke noget andet sted at blive lukket. Tryk «Set ✓», når du har kigget på den. Så forsvinder den for alle planlæggere.",
+        "«Registreret efter lønlukning» er en medarbejder, der registrerer en ikke-udført opgave fra en lukket lønperiode. Hendes begrundelse står i linjen. «Godkend» — tiden kommer med i den åbne periode; «Afvis» — ingen løn, kunden faktureres stadig.",
         "Auto-slut: «Rettelse af tid» er en medarbejder, der vil rette en systemlukket opgave til mindre end planlagt. «Godkend» — hendes løn følger rettelsen; «Afvis» — den planlagte tid står. Fakturaen røres ikke. «Glemmer at afslutte» betyder, at hun har mange systemlukninger i lønperioden.",
         "Alle planlæggere ser den samme liste og får de samme beskeder: push på telefonen, når noget haster (kræver Worklist på telefonen med beskeder slået til), og en mail kl. 7 med alt, der venter."] },
     { h: "Weekend", p: ["Knappen Man–Fre / Man–Søn bestemmer om lørdag og søndag vises.", "Ugeplanen åbner altid på Man–Fre, så fokus er arbejdsugen. Vil du se weekenden, trykker du på knappen.", "Ligger der opgaver i weekenden, står der ved siden af knappen hvor mange der er skjult — så du ikke overser dem."] }, { h: "Sådan er «Ny opgave» og serviceordren bygget op", p: ["Begge skærme er delt i tre farvede afsnit, så det er tydeligt hvad der hører sammen. Farverne betyder det samme begge steder.", "Rosa er kunden: kontrakttype, prismodel, titel, fakturakunde, adresse, fakturabeskrivelse og adgangsforhold. Det er det der ender på fakturaen.", "Grønt er selve opgaven: krævede kompetencer, varighed, tjeklister og instruktionsvideo.", "Blåt er tid: i «Ny opgave» hedder det Planlægning og rummer fast interval eller fleksibel, ansvarlig medarbejder, start- og udløbsdato, interval og ugedage.", "Klikker du på en opgave i ugeplanen, åbner serviceordren med de samme tre farver. Der hedder det blå afsnit Udførelse og rummer status, medarbejdere på opgaven, tasks og tidsregistrering.", "Under Tidsregistrering står hver registrering for sig: hvem, hvornår, hvor lang tid og medarbejderens begrundelse. Øverst står afvigelsen fra den planlagte tid for hele holdet.", "Har medarbejderen start/stop, står den målte tid der også, og afstanden til adressen ved start og ved slut. Er noget værd at se på — fx «afsluttet 3,4 km fra adressen» — står det med orange.", "I «Ny opgave» bliver Annuller og Gem og planlæg stående nederst, uanset hvor langt du har scrollet."] },
@@ -1893,7 +1894,8 @@ const MODULE_HELP = {
         "Kunden faktureres altid den planlagte tid på en systemlukket opgave. Medarbejderens løn er den planlagte tid, medmindre hun selv retter.",
         "Hun kan rette sin tid i Worklist under «Min tid», indtil lønperioden lukker. Mere tid gælder med det samme og kræver en begrundelse. Mindre tid skal I godkende — den kommer i klokken 🔔 som «Rettelse af tid».",
         "Lønperioden går fra lukkedagen til dagen før i næste måned (standard 20.–19.) og lukker på lukkedagen kl. 23.59. Medarbejderen får en besked 3 dage og 1 dag før, hvis hun har systemlukkede opgaver, hun ikke har rettet.",
-        "Efter lukningen kan medarbejderen hverken registrere, rette eller melde færdig i perioden. Kun planlæggerne kan rette: på opgaven står «Efterreguler tid», og rettelsen lægges som en ny linje (+ eller −) i den åbne periode. En udbetalt løn ændres aldrig.",
+        "Låsen gælder kun opgaver, der er udført. Er en opgave i en lukket periode IKKE meldt færdig, kan medarbejderen stadig registrere den — men først når hun har skrevet, hvorfor det sker efter lønlukningen. Begrundelsen kommer i klokken 🔔 som «Registreret efter lønlukning». Godkend: tiden kommer med i den åbne lønperiode. Afvis: ingen løn for registreringen, men kunden faktureres stadig.",
+        "Efter lukningen kan medarbejderen hverken rette eller ændre en udført opgave i perioden. Kun planlæggerne kan rette: på opgaven står «Efterreguler tid», og rettelsen lægges som en ny linje (+ eller −) i den åbne periode. En udbetalt løn ændres aldrig.",
         "Har en medarbejder 3 eller flere systemlukninger i samme periode (kan ændres), står det i klokken som «Glemmer at afslutte». Tag en snak, og tryk «Set ✓».",
         "Slås det til, gælder det kun opgaver fra det øjeblik. Gamle, glemte opgaver røres ikke.",
         "Det er en ændring i medarbejdernes vilkår for tidsregistrering. Varsl det, før det slås til, og tjek reglerne med overenskomsten eller arbejdsgiverforeningen."] },
@@ -3624,7 +3626,7 @@ function PlanningApp({ session, onSignOut }) {
   // Fra klokken til det sted, sagen klares. Opgaver aabnes direkte, hvis de er hentet;
   // ellers vises den side, hvor sagen staar.
   function gaaTilIndbakkeLinje(l) {
-    if (l.instance_id && (l.art === "afvigelse" || l.art === "over_tiden" || l.art === "tidsrettelse")) {
+    if (l.instance_id && (l.art === "afvigelse" || l.art === "over_tiden" || l.art === "tidsrettelse" || l.art === "efter_loenluk")) {
       if (instances.some((t) => t.id === l.instance_id)) { setOpenTaskId(l.instance_id); return; }
       setView("kundetimer");
       notify("Opgaven ligger uden for de hentede uger — den står på Kundetimer");
@@ -8732,7 +8734,7 @@ function EmployeeExportView({ instances, employees, satsHistorik }) {
         const emp = employees.find((e) => e.id === empId);
         if (!emp) return;
         // Efterreguleringer tæller i den periode, de blev lagt i — ikke i opgavens.
-        const myLogs = tl.filter((l) => l.empId === empId && !l.efterregulering);
+        const myLogs = tl.filter((l) => l.empId === empId && !l.efterregulering && !l.efterLoenluk);
         const registered = myLogs.reduce((s, l) => s + (l.minutes || 0), 0);
         // Satsen slaas op paa den dag opgaven blev udfoert, ikke paa dagens sats.
         // Ellers ville en loenstigning aendre alle tidligere maaneder — ogsaa dem der
@@ -8771,7 +8773,8 @@ function EmployeeExportView({ instances, employees, satsHistorik }) {
   // godkendelse — referencen er «opgave:er:tidspunkt», samme som i Worklist.
   instances.forEach((t) => {
     (t.timeLog || t.time_log || []).forEach((l) => {
-      if (!l.efterregulering || l.periodeSlut !== periode.til) return;
+      // Registreringer efter lønlukning (med begrundelse til kontoret) står samme sted.
+      if (!(l.efterregulering || l.efterLoenluk) || l.periodeSlut !== periode.til) return;
       const emp = employees.find((e) => e.id === l.empId);
       if (!emp) return;
       const wage = satsPaaDato(satsHistorik, l.empId, instanceDateString(t));
@@ -8781,7 +8784,7 @@ function EmployeeExportView({ instances, employees, satsHistorik }) {
         week: t.week, day: t.day,
         dayLabel: ALL_DAYS.find((x) => x.key === t.day)?.label || t.day || "—",
         isWeekend: isWeekendDay(t.day),
-        title: `↩ Efterregulering · ${t.title} (${instanceDateString(t).split("-").reverse().join(".")})`,
+        title: `${l.efterLoenluk ? (l.afvistEfterLoenluk ? "⛔ Efter lønluk, afvist" : "⏰ Registreret efter lønluk") : "↩ Efterregulering"} · ${t.title} (${instanceDateString(t).split("-").reverse().join(".")})`,
         planned: 0, registered: minutter, hourlyWage: wage, plannedWage: wage == null ? null : 0,
         registeredWage: wage == null ? null : (minutter / 60) * wage,
         deviationText: l.note || "", efterregulering: true,
@@ -13368,6 +13371,17 @@ function KontorKlokke({ isAdminUser, signal, onGaaTil }) {
   // Auto-slut (1.10.2026): en medarbejder har rettet en systemlukket opgave til MINDRE
   // end planlagt. Godkendt: hendes løn følger rettelsen (efter lønlukning som
   // efterregulering). Afvist: den planlagte tid står. Fakturaen røres ikke.
+  // Registreret efter lønlukning (1.10.2026): godkendt → lønnen i den åbne periode;
+  // afvist → løn 0 for registreringen. Kunden faktureres i begge tilfælde.
+  async function efterLoenluk(l, godkend) {
+    const emp = l.ref.slice(l.ref.lastIndexOf(":") + 1);
+    setLinjer((prev) => (prev || []).filter((x) => !(x.art === l.art && x.ref === l.ref)));
+    const { error } = await supabase.rpc("behandl_efter_loenluk",
+      { p_instance_id: l.instance_id, p_emp: emp, p_godkend: godkend });
+    if (error) setFejl(error.message);
+    hent();
+  }
+
   async function tidsrettelse(l, godkend) {
     const emp = l.ref.slice(l.ref.lastIndexOf(":") + 1);
     setLinjer((prev) => (prev || []).filter((x) => !(x.art === l.art && x.ref === l.ref)));
@@ -13422,6 +13436,12 @@ function KontorKlokke({ isAdminUser, signal, onGaaTil }) {
                   <button style={{ ...styles.secondaryBtn, padding: "4px 10px", fontSize: 12, color: "#166534", borderColor: "#BBF7D0" }}
                     title="Markér som set. Den forsvinder for alle planlæggere." onClick={() => kvitter(l)}>Set ✓</button>
                 )}
+                {l.art === "efter_loenluk" && (<>
+                  <button style={{ ...styles.secondaryBtn, padding: "4px 10px", fontSize: 12, color: "#166534", borderColor: "#BBF7D0" }}
+                    title="Tiden kommer med i den åbne lønperiode." onClick={() => efterLoenluk(l, true)}>Godkend</button>
+                  <button style={{ ...styles.secondaryBtn, padding: "4px 10px", fontSize: 12, color: "#B91C1C", borderColor: "#FECACA" }}
+                    title="Ingen løn for registreringen. Kunden faktureres stadig." onClick={() => efterLoenluk(l, false)}>Afvis</button>
+                </>)}
                 {l.art === "tidsrettelse" && (<>
                   <button style={{ ...styles.secondaryBtn, padding: "4px 10px", fontSize: 12, color: "#166534", borderColor: "#BBF7D0" }}
                     title="Hendes løn følger rettelsen. Fakturaen er uændret." onClick={() => tidsrettelse(l, true)}>Godkend</button>
@@ -18673,6 +18693,12 @@ return (
                   </div>
                 )}
                 {l.rettelseAfvist && <div style={{ color: "#64748B" }}>Rettelse til {fmtMin(l.rettelseAfvist.minutes)} afvist</div>}
+                {l.efterLoenluk && (
+                  <div style={{ color: l.afvistEfterLoenluk ? "#B91C1C" : "#B45309", fontWeight: 600 }}>
+                    ⏰ Registreret efter lønlukning — tæller i lønperioden til {String(l.periodeSlut || "").split("-").reverse().join(".")}
+                    {l.afvistEfterLoenluk ? ` · afvist af kontoret (ingen løn, faktureres ${fmtMin(l.fakturaMinutes || 0)})` : ""}
+                  </div>
+                )}
                 {l.efterregulering && (
                   <div style={{ color: "#6D28D9", fontWeight: 600 }}>
                     ↩ Efterregulering {l.minutes > 0 ? "+" : ""}{fmtMin(Math.abs(l.minutes))}{l.minutes < 0 ? " (fradrag)" : ""} i lønperioden til {String(l.periodeSlut || "").split("-").reverse().join(".")} · rører ikke fakturaen

@@ -27,6 +27,11 @@ Slås til under Medarbejdere → «🔒 Auto-slut og lønlukning» (gælder kun 
 - Planlæggere med Worklist (Charlotte/Karen) får også deres opgaver lukket.
 - Låsen på lukkede perioder gælder kun, når auto-slut er slået til (`loenlukning_aktiv()`, migration autoslut_f).
   Lønopgørelsen, km og «Min tid» følger lønperioden 20.–19. allerede nu.
+- Jonn 1.10: låsen gælder kun UDFØRTE opgaver (fejl 55000). En ikke-udført opgave i en lukket periode kan
+  registreres, når medarbejderen har skrevet en begrundelse (fejl 55001 → Worklist spørger →
+  `begrund_efter_loenluk` → tabel `loenluk_anmodning`). Linjen mærkes `efterLoenluk` + `periodeSlut` og tæller i
+  den åbne periode. Klokken: «Registreret efter lønlukning» → `behandl_efter_loenluk` (afvist = løn 0,
+  fakturaMinutes bevares). SQL: `overdragelse/sql/efter-loenluk-med-begrundelse-2026-10-01.sql`.
 
 ## Beslutningerne
 
