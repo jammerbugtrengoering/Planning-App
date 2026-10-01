@@ -2268,7 +2268,7 @@ const MODULE_HELP = {
         "Fluebenet foran hver linje betyder «godkendt til løn». Kun linjer med flueben kommer med i Danløn-filen — hverken timer eller kilometer sendes automatisk.",
         "Det er med vilje. Timerne i systemet er registreret tid fra marken; løn er betalt tid. Et besøg med dobbelt tidsforbrug og en begrundelse på tre bogstaver skal ses af et menneske, før det bliver til penge.",
         "«Godkend alle viste» sætter flueben på alt i den valgte lønperiode. Fortryder du, skifter knappen til at fjerne dem igen.",
-        "Lønopgørelsen følger lønperioden (1.10.2026): «Oktober» er 20. sep – 19. okt ved lukkedag 20. Perioden og om den er lukket, står ved vælgeren. Kørsel følger samme periode. Lukkedagen sættes under Medarbejdere → «🔒 Auto-slut og lønlukning» (1 = kalendermåned).",
+        "Lønopgørelsen følger lønperioden (1.10.2026), fx 20. sep – 19. okt ved lukkedag 20. Siden åbner i den aktuelle periode; bladr med pilene, og «Aktuel periode» fører tilbage. Om perioden er åben eller lukket, står under den. Kørsel følger samme periode. Lukkedagen sættes under Medarbejdere → «🔒 Auto-slut og lønlukning» (1 = kalendermåned).",
         "«systemlukket» på en linje betyder, at opgaven blev lukket af systemet med den planlagte tid. «rettelse venter» betyder, at medarbejderen vil rette til mindre — godkend eller afvis i klokken 🔔.",
         "Efterreguleringer står som egne lilla linjer «↩ Efterregulering» i den periode, de blev lagt i, og godkendes for sig.",
         "En linje uden registreret tid kan ikke godkendes — der er ingenting at udbetale. Det samme gælder en kørselstur, hvor ruten ikke kunne beregnes; den skal rettes i stedet.",
@@ -8550,6 +8550,18 @@ function EmployeeExportView({ instances, employees, satsHistorik }) {
   }, []);
   const periode = loenPeriode(filterYear, filterMonth + 1, lukkedag);
   const periodeLaast = loenErLaast(periode.til, lukkedag);
+  // Bladr mellem lønperioderne (Jonn 1.10.2026) i stedet for måned- og årvælger.
+  const aktuel = periodeFor(isoDag(new Date()), lukkedag);
+  const erAktuel = aktuel.aar === filterYear && aktuel.maaned === filterMonth + 1;
+  const bladr = (retning) => {
+    const n = filterYear * 12 + filterMonth + retning;
+    setFilterYear(Math.floor(n / 12)); setFilterMonth(((n % 12) + 12) % 12);
+  };
+  const tilAktuel = () => { setFilterYear(aktuel.aar); setFilterMonth(aktuel.maaned - 1); };
+  const vaelger = (
+    <LoenPeriodeVaelger periode={periode} laast={periodeLaast} erAktuel={erAktuel}
+      onForrige={() => bladr(-1)} onNaeste={() => bladr(1)} onAktuel={tilAktuel} />
+  );
   const [exportTab, setExportTab] = useState("hours");
 
   // Godkendelser. Holdes som et Set af "empId|reference", saa opslaget pr. linje er
@@ -8625,7 +8637,6 @@ function EmployeeExportView({ instances, employees, satsHistorik }) {
   }
 
   const MONTHS = ["Januar","Februar","Marts","April","Maj","Juni","Juli","August","September","Oktober","November","December"];
-  const years = [now.getFullYear() - 1, now.getFullYear(), now.getFullYear() + 1];
 
   // ── Danloen-filen ─────────────────────────────────────────────────────────
   //
@@ -8873,7 +8884,7 @@ function EmployeeExportView({ instances, employees, satsHistorik }) {
         <LoenarterSection employees={employees} onEksporter={eksporterDanloen}
           arbejder={danloenArbejder} fejl={danloenFejl} maaned={`${MONTHS[filterMonth]} ${filterYear} (${periodeTekst(periode)})`} />
       ) : exportTab === "km" ? (
-        <KmExportSection employees={employees} periode={periode} filterMonth={filterMonth} filterYear={filterYear} setFilterMonth={setFilterMonth} setFilterYear={setFilterYear} years={years} MONTHS={MONTHS} erGodkendt={erGodkendt} saetGodkendt={saetGodkendt} saetGodkendtFlere={saetGodkendtFlere} />
+        <KmExportSection employees={employees} periode={periode} vaelger={vaelger} filterMonth={filterMonth} filterYear={filterYear} MONTHS={MONTHS} erGodkendt={erGodkendt} saetGodkendt={saetGodkendt} saetGodkendtFlere={saetGodkendtFlere} />
       ) : (
       <>
       <div style={styles.toolbar}>
@@ -8895,18 +8906,7 @@ function EmployeeExportView({ instances, employees, satsHistorik }) {
             </div>
           </div>
         )}
-        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-          <select style={{ ...styles.inputSm, fontSize: 13, fontWeight: 600 }} value={filterMonth} onChange={(e) => setFilterMonth(Number(e.target.value))}>
-            {MONTHS.map((m, i) => <option key={i} value={i}>{m}</option>)}
-          </select>
-          <select style={{ ...styles.inputSm, fontSize: 13, fontWeight: 600 }} value={filterYear} onChange={(e) => setFilterYear(Number(e.target.value))}>
-            {years.map((y) => <option key={y} value={y}>{y}</option>)}
-          </select>
-          <span style={{ fontSize: 12, color: periodeLaast ? "#475569" : "#166534", fontWeight: 600 }}
-            title="Lønperioden. Lukkedagen sættes under Opsætning → Tidsregistrering.">
-            {periodeTekst(periode)} · {periodeLaast ? "🔒 lukket" : `åben til ${periode.lukkedag.split("-").reverse().slice(0, 2).join(".")} kl. 23.59`}
-          </span>
-        </div>
+        {vaelger}
         <div style={styles.toolbarSpacer} />
         {/* Hvor langt er man. Uden det tal ved man foerst at noget mangler, naar
             loenfilen er kortere end forventet. */}
@@ -9122,7 +9122,7 @@ function LoenarterSection({ employees, onEksporter, arbejder, fejl: eksportFejl,
   );
 }
 
-function KmExportSection({ employees, periode, filterMonth, filterYear, setFilterMonth, setFilterYear, years, MONTHS, erGodkendt, saetGodkendt, saetGodkendtFlere }) {
+function KmExportSection({ employees, periode, vaelger, filterMonth, filterYear, MONTHS, erGodkendt, saetGodkendt, saetGodkendtFlere }) {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -9212,14 +9212,7 @@ function KmExportSection({ employees, periode, filterMonth, filterYear, setFilte
         <div style={{ ...styles.statBlock, borderLeft: "3px solid #4F46E5" }}>
           <div><div style={{ ...styles.statValue, color: "#4F46E5" }}>{grandTotal.toFixed(1)} km</div><div style={styles.statLabel}>Kørsel i alt</div></div>
         </div>
-        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-          <select style={{ ...styles.inputSm, fontSize: 13, fontWeight: 600 }} value={filterMonth} onChange={(e) => setFilterMonth(Number(e.target.value))}>
-            {MONTHS.map((m, i) => <option key={i} value={i}>{m}</option>)}
-          </select>
-          <select style={{ ...styles.inputSm, fontSize: 13, fontWeight: 600 }} value={filterYear} onChange={(e) => setFilterYear(Number(e.target.value))}>
-            {years.map((y) => <option key={y} value={y}>{y}</option>)}
-          </select>
-        </div>
+        {vaelger}
         <div style={styles.toolbarSpacer} />
         <button style={{ ...styles.secondaryBtn, opacity: recomputing ? 0.7 : 1 }} onClick={recomputeMonth} disabled={recomputing} title="Genberegn km for alle dage i den valgte maaned - retter ogsaa adresser der tidligere fejlede eller fik urealistisk lang rute">
           <Repeat size={16} /> {recomputing ? `Genberegner (${recomputeProgress ? recomputeProgress.done : 0}/${recomputeProgress ? recomputeProgress.total : 0})` : "Genberegn måned"}
@@ -18728,6 +18721,26 @@ return (
         <button style={{ ...styles.primaryBtn, marginLeft: "auto" }} onClick={onClose}>Luk</button>
       </div>
     </Modal>
+  );
+}
+
+// Lønperiodevælger (Jonn 1.10.2026): ◀ periode ▶, «Aktuel periode» og om den er lukket.
+function LoenPeriodeVaelger({ periode, laast, erAktuel, onForrige, onNaeste, onAktuel }) {
+  const f = (iso) => new Date(iso + "T12:00:00").toLocaleDateString("da-DK", { day: "numeric", month: "short", year: "numeric" });
+  const pil = { ...styles.secondaryBtn, padding: "6px 9px" };
+  return (
+    <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+      <button style={pil} onClick={onForrige} title="Forrige lønperiode"><ChevronLeft size={16} /></button>
+      <div style={{ textAlign: "center", minWidth: 210 }}>
+        <div style={{ fontSize: 13.5, fontWeight: 700, color: "#111111" }}>Lønperiode {f(periode.fra)} – {f(periode.til)}</div>
+        <div style={{ fontSize: 11.5, fontWeight: 600, color: laast ? "#475569" : "#166534" }}>
+          {laast ? "🔒 Lukket" : `Åben til ${periode.lukkedag.split("-").reverse().slice(0, 2).join(".")} kl. 23.59`}
+          {erAktuel && " · aktuel periode"}
+        </div>
+      </div>
+      <button style={pil} onClick={onNaeste} title="Næste lønperiode"><ChevronRight size={16} /></button>
+      {!erAktuel && <button style={styles.secondaryBtn} onClick={onAktuel}>Aktuel periode</button>}
+    </div>
   );
 }
 
