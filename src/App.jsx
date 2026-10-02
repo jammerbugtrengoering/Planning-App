@@ -8080,7 +8080,15 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
             <div style={{ display: "grid", gridTemplateColumns: FAKT_GRID(), gap: 0, padding: "10px 14px", borderBottom: (idx < placed.length - 1 || taskProductLines.length > 0) ? "1px solid #F1F5F9" : "none", alignItems: "center", background: t.dineroExported ? "#EEF2FF" : t.invoiceReady ? "#F0FDF4" : "transparent" }}>
               <div style={{ fontSize: 12, color: "#94A3B8", fontWeight: 600 }}>{t.week}</div>
               <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                {emps.length === 0 ? (
+                {/* Sen kundeaflysning (2.10.2026): ingen medarbejder med vilje — kunden betaler,
+                    ingen får løn. Den skal ikke ligne en glemt opgave. */}
+                {erAflyst(t) ? (
+                  <span title={t.aflyst_forklaring ? `Aflyst: ${t.aflyst_forklaring}` : "Kunden aflyste for sent"}
+                    style={{ fontSize: 11, fontWeight: 700, color: "#B45309", background: "#FFFBEB", border: "1px solid #FDE68A",
+                             borderRadius: 99, padding: "2px 8px", whiteSpace: "nowrap" }}>
+                    🚫 Aflyst · faktureret
+                  </span>
+                ) : emps.length === 0 ? (
                   <span style={{ fontSize: 11, color: "#94A3B8", fontStyle: "italic" }}>Ikke tildelt</span>
                 ) : (
                   <>
