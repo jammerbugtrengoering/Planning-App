@@ -18795,30 +18795,46 @@ function AflysKnap({ opgave, grunde, onAflys, onGenaabn, onLuk }) {
         onClick={async () => { if (await onGenaabn(opgave.id)) onLuk(); }}>↩ Fortryd aflysning</button>
     );
   }
-  if (!aaben) {
-    return <button style={{ ...styles.secondaryBtn, color: "#B91C1C", borderColor: "#FECACA" }} onClick={() => setAaben(true)}>🚫 Aflys</button>;
-  }
+  // Formularen er sin egen lille dialog oven på opgaven (Jonn 2.10.2026) — inde i
+  // knaprækken klemte den Kopiér, Slet og Luk sammen.
   return (
-    <div style={{ flexBasis: "100%", border: "1px solid #FECACA", background: "#FEF2F2", borderRadius: 10, padding: "10px 12px", display: "flex", flexDirection: "column", gap: 8 }}>
-      <div style={{ fontWeight: 700, fontSize: 13.5, color: "#991B1B" }}>Aflys «{opgave.customerName || opgave.title}»</div>
-      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-        {aktive.map((g) => (
-          <button key={g.id} type="button" onClick={() => setGrund(g.id)}
-            style={grund === g.id ? { ...styles.skillPickBtnActive } : styles.skillPickBtn}>{g.navn}</button>
-        ))}
-        {aktive.length === 0 && <span style={styles.hint}>Ingen aflysningsgrunde — opret dem under Opsætning → Aflysningsgrunde.</span>}
-      </div>
-      <textarea rows={2} value={forklaring} onChange={(e) => setForklaring(e.target.value)}
-        placeholder="Forklaring (fx hvem der aflyste og hvornår). Skriv kun det nødvendige — ingen helbredsdetaljer."
-        style={{ ...styles.input, marginBottom: 0, fontFamily: "inherit" }} />
-      <div style={{ display: "flex", gap: 6 }}>
-        <button style={{ ...styles.primaryBtn, background: "#B91C1C" }} disabled={!grund || gemmer}
-          onClick={async () => { setGemmer(true); const ok = await onAflys(opgave.id, grund, forklaring.trim()); setGemmer(false); if (ok) onLuk(); }}>
-          {gemmer ? "Aflyser…" : "Aflys opgaven"}</button>
-        <button style={styles.secondaryBtn} onClick={() => setAaben(false)}>Annuller</button>
-      </div>
-      <div style={{ fontSize: 12, color: "#7F1D1D" }}>Medarbejderen får besked. Opgaven fjernes fra ugeplanen og kan findes under «🚫 Aflyste».</div>
-    </div>
+    <>
+      <button style={{ ...styles.secondaryBtn, color: "#B91C1C", borderColor: "#FECACA" }} onClick={() => setAaben(true)}>🚫 Aflys</button>
+      {aaben && (
+        <div onMouseDown={(e) => { if (e.target === e.currentTarget && !gemmer) setAaben(false); }}
+          style={{ position: "fixed", inset: 0, background: "rgba(17,17,17,0.45)", zIndex: 200,
+                   display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+          <div style={{ background: "#fff", borderRadius: 14, width: "min(440px, 100%)", boxShadow: "0 20px 60px rgba(0,0,0,0.25)", overflow: "hidden" }}>
+            <div style={{ background: "#FEF2F2", borderBottom: "1px solid #FECACA", padding: "12px 16px", fontWeight: 800, color: "#991B1B" }}>
+              🚫 Aflys «{opgave.customerName || opgave.title}»
+            </div>
+            <div style={{ padding: "14px 16px", display: "flex", flexDirection: "column", gap: 10 }}>
+              <label style={{ ...styles.label, marginTop: 0 }}>Grund</label>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                {aktive.map((g) => (
+                  <button key={g.id} type="button" onClick={() => setGrund(g.id)}
+                    style={grund === g.id ? { ...styles.skillPickBtnActive } : styles.skillPickBtn}>{g.navn}</button>
+                ))}
+                {aktive.length === 0 && <span style={styles.hint}>Ingen aflysningsgrunde — opret dem under Opsætning → Aflysningsgrunde.</span>}
+              </div>
+              <label style={{ ...styles.label, marginTop: 4 }}>Forklaring</label>
+              <textarea rows={3} value={forklaring} onChange={(e) => setForklaring(e.target.value)}
+                placeholder="Fx hvem der aflyste og hvornår"
+                style={{ ...styles.input, marginBottom: 0, fontFamily: "inherit", resize: "vertical" }} />
+              <div style={{ fontSize: 12, color: "#64748B", lineHeight: 1.5 }}>
+                Skriv kun det nødvendige — ingen helbredsdetaljer. Medarbejderen får besked, og opgaven flyttes til «🚫 Aflyste» over ugeplanen.
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", padding: "12px 16px", borderTop: "1px solid #F1F5F9", background: "#F8FAFC" }}>
+              <button style={styles.secondaryBtn} disabled={gemmer} onClick={() => setAaben(false)}>Annuller</button>
+              <button style={{ ...styles.primaryBtn, background: "#B91C1C", opacity: !grund || gemmer ? 0.5 : 1 }} disabled={!grund || gemmer}
+                onClick={async () => { setGemmer(true); const ok = await onAflys(opgave.id, grund, forklaring.trim()); setGemmer(false); if (ok) { setAaben(false); onLuk(); } }}>
+                {gemmer ? "Aflyser…" : "Aflys opgaven"}</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 
