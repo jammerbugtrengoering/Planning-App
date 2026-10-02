@@ -1969,7 +1969,7 @@ const MODULE_HELP = {
     { h: "Kolonnerne", p: ["Planlagt er den tid der er sat af. Registreret er den tid der kan faktureres.",
         "Er nogen markeret som oplæring på opgaven, er deres timer trukket fra her. Tre mand på en opgave til to timer giver seks timer i løn og to timer på fakturaen. Vil du se den fulde tid, står den på opgaven og under Løn data.",
         KUNDEUDGAVE ? "Det grønne flueben er fakturagrundlag." : "Dinero (blå) markerer at linjen er sendt. Det grønne flueben er fakturagrundlag."] },
-    { h: "Sådan fakturerer du", p: ["Vælg måned og år.", "Gennemgå listen og ret manglende registreringer med medarbejderen.",
+    { h: "Sådan fakturerer du", p: ["Vælg måned og år — eller tryk «Uge» for at se én hel uge ad gangen og bladre med pilene. En uge kan gå hen over et månedsskift (fx uge 40 = 28. sep – 4. okt); i «Måned» står mandag–onsdag så i september og resten i oktober, i «Uge» står hele ugen samlet.", "Gennemgå listen og ret manglende registreringer med medarbejderen.",
         "Sæt fakturagrundlag på det der skal faktureres.",
         ...(KUNDEUDGAVE ? ["Sæt «Kun fakturagrundlag», og tryk «Eksporter til Excel». Læg filen ind i jeres eget regnskabsprogram."]
           : ["Tryk «Eksportér til Dinero» og bekræft.", "Linjerne markeres som sendt, så de ikke kan faktureres igen."])] },
@@ -7758,6 +7758,22 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
   const now = new Date();
   const [filterMonth, setFilterMonth] = useState(now.getMonth());
   const [filterYear, setFilterYear] = useState(now.getFullYear());
+  // Uge eller måned (Jonn 2.10.2026). En uge kan gå hen over et månedsskift — uge 40
+  // er 28. sep – 4. okt — og så lå mandag–onsdag i september og resten i oktober.
+  const [visning, setVisning] = useState("maaned");
+  const [fUge, setFUge] = useState(() => isoWeekInfo(now));
+  const iVisning = (t) => {
+    if (visning === "uge") return t.week === fUge.week && t.year === fUge.year;
+    const { month, year } = instanceMonthYear(t, filterYear);
+    return month === filterMonth && year === filterYear;
+  };
+  const ugeBladr = (r) => {
+    const m = mondayOfWeek(fUge.week, fUge.year);
+    m.setDate(m.getDate() + 7 * r);
+    setFUge(isoWeekInfo(m));
+  };
+  // Funktion og ikke værdi: MONTHS erklæres længere nede i komponenten.
+  const periodeNavn = () => (visning === "uge" ? `Uge ${fUge.week} ${fUge.year}` : `${MONTHS[filterMonth]} ${filterYear}`);
   const [invoiceOnly, setInvoiceOnly] = useState(false);
   const [showDineroExported, setShowDineroExported] = useState(false);
   // Status-filter: gør det muligt at skelne mellem opgaver der er udført (og dermed
@@ -7780,10 +7796,7 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
     try {
       const monthInstances = instances
         .filter((t) => !BLOCK_TYPES.includes(t.type))
-        .filter((t) => {
-          const { month, year } = instanceMonthYear(t, filterYear);
-          return month === filterMonth && year === filterYear;
-        });
+        .filter(iVisning);
       const byEmpDay = {};
       monthInstances.forEach((t) => {
         (t.assignees || []).forEach((empId) => {
@@ -7825,13 +7838,9 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
 
   const placed = instances
     .filter((t) => !BLOCK_TYPES.includes(t.type))
-    .filter((t) => {
-      // Filtrér på opgavens faktiske dato (mandag i ugen + evt. ugedag), ikke
-      // blot ugenummeret - så en uge der strækker sig over et månedsskift
-      // (fx uge 31: 27. jul - 2. aug) altid lander i præcis den rigtige måned.
-      const { month, year } = instanceMonthYear(t, filterYear);
-      return month === filterMonth && year === filterYear;
-    })
+    // Måned: opgavens faktiske dato, så en uge over et månedsskift fordeles rigtigt.
+    // Uge: hele ugen, uanset måned.
+    .filter(iVisning)
     .filter((t) => statusFilter === "all" || t.status === statusFilter)
     .filter((t) => !invoiceOnly || t.invoiceReady)
     .filter((t) => !invoiceOnly || showDineroExported || !t.dineroExported)
@@ -7918,13 +7927,34 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
             </>
           );
         })()}
-        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+        <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+          <div style={{ display: "flex", border: "1px solid #E2E8F0", borderRadius: 8, overflow: "hidden" }}>
+            {[["maaned", "Måned"], ["uge", "Uge"]].map(([k, n2]) => (
+              <button key={k} onClick={() => setVisning(k)}
+                style={{ padding: "7px 12px", border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600,
+                         background: visning === k ? "var(--farve)" : "#fff", color: visning === k ? "#fff" : "#334155" }}>{n2}</button>
+            ))}
+          </div>
+          {visning === "uge" ? (() => {
+            const man = mondayOfWeek(fUge.week, fUge.year);
+            const son = new Date(man); son.setDate(man.getDate() + 6);
+            const f = (d) => d.toLocaleDateString("da-DK", { day: "numeric", month: "short" });
+            const denne = isoWeekInfo(new Date());
+            return (<>
+              <button style={{ ...styles.secondaryBtn, padding: "6px 9px" }} onClick={() => ugeBladr(-1)} title="Forrige uge"><ChevronLeft size={16} /></button>
+              <span style={{ fontSize: 13, fontWeight: 700, minWidth: 170, textAlign: "center" }}>Uge {fUge.week} · {f(man)} – {f(son)}</span>
+              <button style={{ ...styles.secondaryBtn, padding: "6px 9px" }} onClick={() => ugeBladr(1)} title="Næste uge"><ChevronRight size={16} /></button>
+              {!(denne.week === fUge.week && denne.year === fUge.year) && (
+                <button style={styles.secondaryBtn} onClick={() => setFUge(denne)}>Denne uge</button>)}
+            </>);
+          })() : (<>
           <select style={{ ...styles.inputSm, fontSize: 13, fontWeight: 600 }} value={filterMonth} onChange={(e) => setFilterMonth(Number(e.target.value))}>
             {MONTHS.map((m, i) => <option key={i} value={i}>{m}</option>)}
           </select>
           <select style={{ ...styles.inputSm, fontSize: 13, fontWeight: 600 }} value={filterYear} onChange={(e) => setFilterYear(Number(e.target.value))}>
             {years.map((y) => <option key={y} value={y}>{y}</option>)}
           </select>
+          </>)}
           <select
             style={{ ...styles.inputSm, fontSize: 13, fontWeight: 600, color: statusFilter !== "all" ? "var(--farve-moerk)" : "#111111", borderColor: statusFilter !== "all" ? "var(--farve)" : "#E2E8F0", background: statusFilter !== "all" ? "var(--farve-lys)" : "#fff" }}
             value={statusFilter}
@@ -7982,7 +8012,7 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
         {harModul("dinero") ? (
           <button style={styles.primaryBtn} disabled={exportingToDinero} onClick={async () => {
             setExportingToDinero(true);
-            try { await onExportToDinero(placed, `${MONTHS[filterMonth]}-${filterYear}`); } finally { setExportingToDinero(false); }
+            try { await onExportToDinero(placed, periodeNavn().replace(/ /g, "-")); } finally { setExportingToDinero(false); }
           }}><Download size={16} /> {exportingToDinero ? "Eksporterer…" : "Eksporter til Dinero"}</button>
         ) : (
           <button style={styles.primaryBtn} disabled={placed.length === 0} onClick={() => {
@@ -8002,12 +8032,12 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
                 t2(samletArbejde(t)), planKr, t2(logget), regKr, regKr - planKr, t.invoiceReady ? "Ja" : "Nej",
               ]);
             }
-            hentXlsx(`Fakturering-${MONTHS[filterMonth]}-${filterYear}`, `${MONTHS[filterMonth]} ${filterYear}`, raekker);
+            hentXlsx(`Fakturering-${periodeNavn().replace(/ /g, "-")}`, periodeNavn(), raekker);
           }}><Download size={16} /> Eksporter til Excel</button>
         )}
       </div>
 
-      {isAdminUser && harModul("kundeportal") && harModul("dinero") && <AbonnementLinjer maaned={filterMonth} aar={filterYear} maanedNavn={MONTHS[filterMonth]} />}
+      {visning === "maaned" && isAdminUser && harModul("kundeportal") && harModul("dinero") && <AbonnementLinjer maaned={filterMonth} aar={filterYear} maanedNavn={MONTHS[filterMonth]} />}
 
       {/* Timepris-panel */}
       {showPricing && (
