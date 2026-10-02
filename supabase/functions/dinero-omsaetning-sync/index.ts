@@ -3,6 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 // Natlig synkronisering af betalt omsaetning fra Dinero, til brug som en
 // sammenligningskolonne i Overskud-rapporten (se App.jsx: OverskudRapport).
+// 2.10.2026: gemmer ogsaa ALLE fakturaer pr. maaned og status i dinero_fakturastatus.
 //
 // Kaldes af pg_cron ligesom de andre natlige jobs (compute-daily-km,
 // daglige-paamindelser m.fl.) - ingen bruger er logget ind naar det koerer, saa der
@@ -56,6 +57,8 @@ serve(async (req) => {
     const token = await getDineroToken();
     const felter = "Guid,Date,Status,TotalExclVat";
     const perAar: Record<string, { beloeb: number; antal: number }> = {};
+    // Alle statusser pr. maaned (2.10.2026): saa kan man se faktureret, ikke kun betalt.
+    const perStatus: Record<string, { beloeb: number; antal: number }> = {};
 
     let page = 0;
     let sider = 0;
@@ -74,9 +77,13 @@ serve(async (req) => {
       if (coll.length === 0) break;
 
       coll.forEach((f: any) => {
-        if (String(f.Status) !== "Paid") return;
         const aarMaaned = String(f.Date ?? "").slice(0, 7); // "YYYY-MM"
         if (!/^\d{4}-\d{2}$/.test(aarMaaned)) return;
+        const sk = aarMaaned + "|" + String(f.Status ?? "Ukendt");
+        if (!perStatus[sk]) perStatus[sk] = { beloeb: 0, antal: 0 };
+        perStatus[sk].beloeb += Number(f.TotalExclVat) || 0;
+        perStatus[sk].antal += 1;
+        if (String(f.Status) !== "Paid") return;
         if (!perAar[aarMaaned]) perAar[aarMaaned] = { beloeb: 0, antal: 0 };
         perAar[aarMaaned].beloeb += Number(f.TotalExclVat) || 0;
         perAar[aarMaaned].antal += 1;
@@ -102,6 +109,18 @@ serve(async (req) => {
     if (upsertErr) {
       await log(false, "kunne ikke gemme: " + upsertErr.message);
       return jsonResponse({ error: upsertErr.message }, 500);
+    }
+
+    const statusRows = Object.entries(perStatus).map(([k, v]) => {
+      const [aarMaaned, status] = k.split("|");
+      const [aar, maaned] = aarMaaned.split("-").map(Number);
+      return { aar, maaned, status, beloeb: Math.round(v.beloeb * 100) / 100, antal: v.antal, opdateret: new Date().toISOString() };
+    });
+    // Status skifter (Booked -> Paid), saa gamle raekker skal vaek foer de nye skrives.
+    await admin.from("dinero_fakturastatus").delete().gte("aar", 0);
+    for (let i = 0; i < statusRows.length; i += 500) {
+      const { error: sErr } = await admin.from("dinero_fakturastatus").insert(statusRows.slice(i, i + 500));
+      if (sErr) { await log(false, "kunne ikke gemme status: " + sErr.message); break; }
     }
 
     await log(true, `${hentetIAlt} fakturaer gennemgaaet over ${sider} sider, ${rows.length} maaneder opdateret`);
