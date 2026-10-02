@@ -18837,6 +18837,9 @@ function AflysKnap({ opgave, grunde, regler, onAflys, onGenaabn, onLuk }) {
     );
   }
   const aktive = (grunde || []).filter((g) => g.aktiv && (g.part || "jammerbugt") === part);
+  // Er der kun én grund, er den valgt (2.10.2026: knappen var grå, og det var ikke til
+  // at se, at grunden manglede).
+  const valgtGrund = grund || (aktive.length === 1 ? aktive[0].id : "");
   const info = senAflysningInfo(opgave, regler);
   const gangTilGang = !!info.regel?.fra_gang_til_gang;
   const faktureres = part === "kunde" && (gangTilGang ? afvig : (afvig ? !info.faktureres : info.faktureres));
@@ -18872,7 +18875,7 @@ function AflysKnap({ opgave, grunde, regler, onAflys, onGenaabn, onLuk }) {
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                 {aktive.map((g) => (
                   <button key={g.id} type="button" onClick={() => setGrund(g.id)}
-                    style={grund === g.id ? { ...styles.skillPickBtnActive } : styles.skillPickBtn}>{g.navn}</button>
+                    style={valgtGrund === g.id ? { ...styles.skillPickBtnActive } : styles.skillPickBtn}>{g.navn}</button>
                 ))}
                 {aktive.length === 0 && <span style={styles.hint}>Ingen grunde — opret dem under Opsætning → Aflysning.</span>}
               </div>
@@ -18912,13 +18915,17 @@ function AflysKnap({ opgave, grunde, regler, onAflys, onGenaabn, onLuk }) {
                 Skriv kun det nødvendige — ingen helbredsdetaljer. Medarbejderen får besked, og opgaven flyttes til «🚫 Aflyste» over ugeplanen.
               </div>
             </div>
-            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", padding: "12px 16px", borderTop: "1px solid #F1F5F9", background: "#F8FAFC" }}>
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", alignItems: "center", padding: "12px 16px", borderTop: "1px solid #F1F5F9", background: "#F8FAFC" }}>
+              {(!valgtGrund || manglerForklaring) && (
+                <span style={{ fontSize: 12.5, color: "#B91C1C", marginRight: "auto" }}>
+                  {!valgtGrund ? "Vælg en grund" : "Skriv hvorfor reglen fraviges"}</span>
+              )}
               <button style={styles.secondaryBtn} disabled={gemmer} onClick={() => setAaben(false)}>Annuller</button>
-              <button style={{ ...styles.primaryBtn, background: "#B91C1C", opacity: !grund || gemmer || manglerForklaring ? 0.5 : 1 }}
-                disabled={!grund || gemmer || manglerForklaring}
+              <button style={{ ...styles.primaryBtn, background: "#B91C1C", opacity: !valgtGrund || gemmer || manglerForklaring ? 0.5 : 1 }}
+                disabled={!valgtGrund || gemmer || manglerForklaring}
                 onClick={async () => {
                   setGemmer(true);
-                  const ok = await onAflys(opgave.id, grund, forklaring.trim(), fakturerArg);
+                  const ok = await onAflys(opgave.id, valgtGrund, forklaring.trim(), fakturerArg);
                   setGemmer(false);
                   if (ok) { setAaben(false); onLuk(); }
                 }}>
