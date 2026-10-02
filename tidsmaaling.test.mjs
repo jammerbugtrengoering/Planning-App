@@ -116,4 +116,10 @@ er("koerende systemstart vises i teksten",
   stopurStatus(opg, [{ employee_id: "e1", startet: new Date(nu - 5 * 60000).toISOString(), kilde: "system" }], nu).tekst.includes("startet af systemet"), true);
 
 console.log(fejl ? `\nTidsmåling: ${fejl} fejlede, ${ok} i orden.` : `Tidsmåling: ${ok} kontroller i orden.`);
-process.exit(fejl ? 1 : 0);
+process.exit(fejl ? 1 : 0);// Tolerance (2.10.2026): 56 min tilpasset til 60 er ikke «registreret mere end målt».
+{
+  const m = opsummerMaaling([{ startStop: true, minutes: 60, maalt: 56, afstandStart: 10, afstandSlut: 10, tilpasset: { fra: 56, tolerance: 5 } }]);
+  er("tilpasset: forskel mod målt regnes på det indtastede", m.forskel, 0);
+}
+
+

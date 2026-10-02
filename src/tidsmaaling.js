@@ -35,7 +35,10 @@ export function opsummerMaaling(timeLog) {
   const bemaerk = [];
 
   for (const p of poster) {
-    registreret += Number(p.minutes) || 0;
+    // Tilpasset til planlagt tid inden for tolerancen (2.10.2026): forskellen mod det
+    // maalte regnes paa det, hun selv afsluttede med — ellers ville 56 min, der bliver
+    // til 60, staa som «registreret 4 min mere end maalt».
+    registreret += Number(p.tilpasset?.fra ?? p.minutes) || 0;
     if (p.udenStart) {
       bemaerk.push("ingen start registreret");
       // Afslutningens afstand skal med ogsaa uden start (29.9.2026): en opgave, der er

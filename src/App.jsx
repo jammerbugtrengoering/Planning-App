@@ -1904,6 +1904,7 @@ const MODULE_HELP = {
         "Start kan ikke trykkes, hvis telefonen viser at hun tydeligt er et andet sted. Er der ingen position, må hun godt starte — det bliver noteret. Afslut kan altid trykkes.",
         "Der gemmes kun afstanden til adressen, aldrig hvor hun er. Og kun ved start og ved afslut — ikke undervejs.",
         "Opgaver under grænsen, og alle medarbejdere uden start/stop, registrerer præcis som hidtil: minutter og afvigelsesbegrundelse.",
+        "Tolerance (standard ± 5 min): afslutter hun inden for tolerancen af sin planlagte tid, registreres den planlagte — både løn og faktura, og uden begrundelse. Fx 56 eller 64 min på en 60 min-opgave bliver 60. På opgaven står «Afsluttet med 56 min — inden for ± 5 min». Gælder kun start/stop. 0 slår det fra.",
         "Slås til på det enkelte kort under «Løn og transport», eller for alle på én gang i panelet. Det er slået fra fra start.",
         "Start/stop er en kontrolforanstaltning. Medarbejderne skal varsles, før det slås til — typisk 6 uger. Slå det ikke til, før varslingen er givet."] },
     { h: "Auto-slut og lønlukning", p: [
@@ -13966,16 +13967,21 @@ function KomIGang({ firma, employees, instances, onGaaTil }) {
 
 function StartStopPanel({ supabase, employees, onStartStopAlle }) {
   const [graense, setGraense] = useState(null);
+  // Tolerance (2.10.2026): inden for ± N min af den planlagte tid registreres den planlagte.
+  const [tol, setTol] = useState(null);
+  const [tolKladde, setTolKladde] = useState("");
   const [kladde, setKladde] = useState("");
   const [gemmer, setGemmer] = useState(false);
 
   useEffect(() => {
     let afbrudt = false;
-    supabase.from("tidsregistrering_indstillinger").select("graense_min").eq("id", "default").maybeSingle()
+    supabase.from("tidsregistrering_indstillinger").select("graense_min, tolerance_min").eq("id", "default").maybeSingle()
       .then(({ data }) => {
         if (afbrudt) return;
         const g = data?.graense_min ?? 60;
         setGraense(g); setKladde(String(g));
+        const tl = data?.tolerance_min ?? 5;
+        setTol(tl); setTolKladde(String(tl));
       });
     return () => { afbrudt = true; };
   }, [supabase]);
@@ -13992,6 +13998,16 @@ function StartStopPanel({ supabase, employees, onStartStopAlle }) {
     setGemmer(false);
     if (dbFail(error, "gemme grænsen")) return;
     setGraense(tal);
+  }
+
+  const tolTal = Number(tolKladde);
+  const tolGyldig = Number.isInteger(tolTal) && tolTal >= 0 && tolTal <= 30;
+  async function gemTol() {
+    if (!tolGyldig || tolTal === tol) return;
+    const { error } = await supabase.from("tidsregistrering_indstillinger")
+      .update({ tolerance_min: tolTal, aendret: new Date().toISOString() }).eq("id", "default");
+    if (dbFail(error, "gemme tolerancen")) return;
+    setTol(tolTal);
   }
 
   async function alle(til) {
@@ -14023,6 +14039,21 @@ function StartStopPanel({ supabase, employees, onStartStopAlle }) {
           {gemmer ? "Gemmer…" : "Gem"}
         </button>
         {!gyldig && kladde !== "" && <span style={{ fontSize: 12.5, color: "#B91C1C" }}>Mellem 1 og 600</span>}
+      </div>
+
+      <label style={styles.label}>Tolerance</label>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+        <span style={{ fontSize: 13, color: "#475569" }}>±</span>
+        <input type="number" min={0} max={30} value={tolKladde} onChange={(e) => setTolKladde(e.target.value)}
+          style={{ ...styles.input, width: 80, marginBottom: 0 }} />
+        <span style={{ fontSize: 13, color: "#475569" }}>minutter</span>
+        <button type="button" style={{ ...styles.secondaryBtn, opacity: (!tolGyldig || tolTal === tol) ? 0.5 : 1 }}
+          disabled={!tolGyldig || tolTal === tol} onClick={gemTol}>Gem</button>
+        {!tolGyldig && tolKladde !== "" && <span style={{ fontSize: 12.5, color: "#B91C1C" }}>Mellem 0 og 30</span>}
+      </div>
+      <div style={{ ...styles.hint, marginBottom: 14 }}>
+        Afslutter hun inden for tolerancen, registreres den planlagte tid — både løn og faktura. 60 min-opgave, afsluttet efter
+        56 eller 64 min: 60 min. Ingen begrundelse. 0 slår det fra.
       </div>
 
       <div style={{ fontSize: 13.5, marginBottom: 10 }}>
@@ -18781,6 +18812,11 @@ return (
                   ? <div style={{ color: "#111111", marginTop: 2 }}>«{l.note}»</div>
                   : null}
                 {/* Auto-slut og lønlukning (1.10.2026) */}
+                {l.tilpasset && (
+                  <div style={{ color: "#166534" }}>
+                    ≈ Afsluttet med {fmtMin(l.tilpasset.fra)} — inden for ± {l.tilpasset.tolerance} min, så den planlagte tid er registreret
+                  </div>
+                )}
                 {l.systemlukket && (
                   <div style={{ color: "#B45309", fontWeight: 600 }}>
                     🔒 Lukket af systemet med den planlagte tid{l.fakturaMinutes != null ? ` · faktureres ${fmtMin(l.fakturaMinutes)}` : ""}
