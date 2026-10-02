@@ -236,7 +236,7 @@ const MENU_GRUPPER = [
   // se om der er saebe nok, var et led for meget.
   { key: "lager",     navn: "Lager",      sider: [["inventory", "Lager"]] },
   { key: "oekonomi",  navn: "Økonomi",     sider: [["time", "Fakturering"], ["kundetimer", "Kundetimer"], ["reports", "Rapportering"], ["medExport", "Løn data"]] },
-  { key: "opsaetning", navn: "Opsætning", sider: [["employees", "Medarbejdere"], ["checklists", "Tjeklister"], ["transport", "Transporttid"], ["aflysning", "Aflysningsgrunde"], ["firma", "Firma"]] },
+  { key: "opsaetning", navn: "Opsætning", sider: [["employees", "Medarbejdere"], ["checklists", "Tjeklister"], ["transport", "Transporttid"], ["aflysning", "Aflysning"], ["firma", "Firma"]] },
   // Kun i kundeudgaven (fase 5, 29.9.2026): kundefirmaet bestiller ekstra hjaelp hos
   // Jammerbugt Rengoering. Hos Jammerbugt selv findes siden ikke — der er man den,
   // der modtager bestillingerne.
@@ -872,11 +872,15 @@ function remainingForScore(employees, list, empId, day, travelSettings = DEFAULT
   if (Number.isFinite(r)) return r;
   return 100000 - belastning(employees, list, empId, day, travelSettings);
 }
+// Aflyst (2.10.2026): status «aflyst», eller en sen kundeaflysning, der er «udført» for
+// at kunne faktureres. Begge er aflyst for planen — ingen medarbejder, ingen plads.
+const erAflyst = (t) => !!t && (t.status === "aflyst" || !!t.aflyst_grund);
+
 function scheduleWeek(weekInstances, employees, autoOnly = false, areas = [], employeeAreas = [], restrictToIds = null, travelSettings = DEFAULT_TRAVEL) {
   // Aflyste opgaver (2.10.2026) planlægges aldrig — de har ingen medarbejder med vilje.
-  if (weekInstances.some((t) => t.status === "aflyst")) {
-    return [...scheduleWeek(weekInstances.filter((t) => t.status !== "aflyst"), employees, autoOnly, areas,
-      employeeAreas, restrictToIds, travelSettings), ...weekInstances.filter((t) => t.status === "aflyst")];
+  if (weekInstances.some(erAflyst)) {
+    return [...scheduleWeek(weekInstances.filter((t) => !erAflyst(t)), employees, autoOnly, areas,
+      employeeAreas, restrictToIds, travelSettings), ...weekInstances.filter(erAflyst)];
   }
   let list = weekInstances.map((t) => ({ ...t }));
 
@@ -1793,11 +1797,15 @@ const MODULE_HELP = {
         "Auto-slut: «Rettelse af tid» er en medarbejder, der vil rette en systemlukket opgave til mindre end planlagt. «Godkend» — hendes løn følger rettelsen; «Afvis» — den planlagte tid står. Fakturaen røres ikke. «Glemmer at afslutte» betyder, at hun har mange systemlukninger i lønperioden.",
         "Alle planlæggere ser den samme liste og får de samme beskeder: push på telefonen, når noget haster (kræver Worklist på telefonen med beskeder slået til), og en mail kl. 7 med alt, der venter."] },
     { h: "Aflys en opgave", p: [
-        "Åbn opgaven og tryk «🚫 Aflys». Vælg en grund (fx Sygdom, Ferie, Andet) og skriv en kort forklaring. Skriv kun det nødvendige — ingen helbredsdetaljer.",
+        "Åbn opgaven og tryk «🚫 Aflys». Vælg først, hvem der aflyser — kunden eller jer — og så en grund. Skriv evt. en kort forklaring; skriv kun det nødvendige, ingen helbredsdetaljer.",
+        "Aflyser I (fx sygdom eller ferie hos jer), faktureres der aldrig.",
+        "Aflyser KUNDEN for sent, bliver opgaven udført og faktureret med den planlagte tid — men medarbejderen får ingen løn for den. Fristen gælder pr. kundetype: Nexus og ældrelov (fx Carelink) 3 døgn, private 24 timer, erhverv fra gang til gang. Dialogen viser, hvad der sker, før du trykker.",
+        "Du kan fravige reglen med et flueben («Fakturér ikke» / «Fakturér alligevel») — så skal du skrive hvorfor. Ved erhverv vælger du selv.",
+        "En sen aflysning står på fakturaen som tid fra kontoret med noten «Sen aflysning: …». I kundeportalen står den som aflyst.",
         "Medarbejderne på opgaven får besked, og opgaven forsvinder fra ugeplanen. Den lægger sig IKKE i «Ikke tildelt», og aftalen danner den ikke igen.",
-        "Ugens aflyste opgaver står under «🚫 Aflyste» på linjen over ugeplanen — med grund og forklaring. Tryk «Fortryd» for at genåbne; så kommer medarbejderne tilbage på opgaven.",
+        "Ugens aflyste opgaver står under «🚫 Aflyste» over ugeplanen. «Fortryd» genåbner opgaven og sætter medarbejderne på igen — også en sen aflysning, så længe den ikke er sendt til Dinero.",
         "Udførte opgaver og opgaver med registreret tid kan ikke aflyses.",
-        "Grundene sættes op under Opsætning → Aflysningsgrunde. En grund, der ikke bruges mere, slås fra i stedet for at blive slettet."] },
+        "Grunde og frister sættes under Opsætning → Aflysning."] },
     { h: "Weekend", p: ["Knappen Man–Fre / Man–Søn bestemmer om lørdag og søndag vises.", "Ugeplanen åbner altid på Man–Fre, så fokus er arbejdsugen. Vil du se weekenden, trykker du på knappen.", "Ligger der opgaver i weekenden, står der ved siden af knappen hvor mange der er skjult — så du ikke overser dem."] }, { h: "Sådan er «Ny opgave» og serviceordren bygget op", p: ["Begge skærme er delt i tre farvede afsnit, så det er tydeligt hvad der hører sammen. Farverne betyder det samme begge steder.", "Rosa er kunden: kontrakttype, prismodel, titel, fakturakunde, adresse, fakturabeskrivelse og adgangsforhold. Det er det der ender på fakturaen.", "Grønt er selve opgaven: krævede kompetencer, varighed, tjeklister og instruktionsvideo.", "Blåt er tid: i «Ny opgave» hedder det Planlægning og rummer fast interval eller fleksibel, ansvarlig medarbejder, start- og udløbsdato, interval og ugedage.", "Klikker du på en opgave i ugeplanen, åbner serviceordren med de samme tre farver. Der hedder det blå afsnit Udførelse og rummer status, medarbejdere på opgaven, tasks og tidsregistrering.", "Under Tidsregistrering står hver registrering for sig: hvem, hvornår, hvor lang tid og medarbejderens begrundelse. Øverst står afvigelsen fra den planlagte tid for hele holdet.", "Har medarbejderen start/stop, står den målte tid der også, og afstanden til adressen ved start og ved slut. Er noget værd at se på — fx «afsluttet 3,4 km fra adressen» — står det med orange.", "I «Ny opgave» bliver Annuller og Gem og planlæg stående nederst, uanset hvor langt du har scrollet."] },
     { h: "Beskeder fra medarbejderne", p: [
         "Øverst i ugeplanen kommer et banner, når en medarbejder har meldt noget ind. Der er to slags.",
@@ -2670,19 +2678,32 @@ function PlanningApp({ session, onSignOut }) {
     const { data } = await supabase.from("aflysningsgrunde").select("*").order("raekkefoelge").order("navn");
     setAflysningsgrunde(data || []);
   }, []);
-  useEffect(() => { hentAflysningsgrunde(); }, [hentAflysningsgrunde]);
-  async function aflysOpgave(id, grund, forklaring) {
-    const { data, error } = await supabase.rpc("aflys_opgave", { p_id: id, p_grund: grund, p_forklaring: forklaring || null });
+  // Frister for sen kundeaflysning pr. kundetype (Opsætning → Aflysning).
+  const [aflysningRegler, setAflysningRegler] = useState([]);
+  const hentAflysningRegler = useCallback(async () => {
+    const { data } = await supabase.from("aflysning_regler").select("*");
+    setAflysningRegler(data || []);
+  }, []);
+  useEffect(() => { hentAflysningsgrunde(); hentAflysningRegler(); }, [hentAflysningsgrunde, hentAflysningRegler]);
+  async function aflysOpgave(id, grund, forklaring, fakturer = null) {
+    const { data, error } = await supabase.rpc("aflys_opgave",
+      { p_id: id, p_grund: grund, p_forklaring: forklaring || null, p_fakturer: fakturer });
     if (error) { notify(error.message); return false; }
-    setInstances((prev) => prev.map((i) => (i.id === id ? { ...i, ...data, assignees: [], status: "aflyst" } : i)));
-    notify("Opgaven er aflyst — medarbejderen får besked");
+    const log = data.time_log || [];
+    setInstances((prev) => prev.map((i) => (i.id === id
+      ? { ...i, ...data, assignees: [], timeLog: log, time_log: log, completedAt: data.completed_at || null } : i)));
+    notify(data.aflyst_faktureret
+      ? "Sen aflysning — opgaven faktureres med planlagt tid, ingen løn. Medarbejderen får besked"
+      : "Opgaven er aflyst — medarbejderen får besked");
     return true;
   }
   async function genaabnOpgave(id) {
     const { data, error } = await supabase.rpc("genaabn_opgave", { p_id: id });
     if (error) { notify(error.message); return false; }
+    const log = data.time_log || [];
     setInstances((prev) => prev.map((i) => (i.id === id
-      ? { ...i, ...data, assignees: data.assignees || [], aflyst_grund: null, aflyst_forklaring: null, aflyst_tid: null } : i)));
+      ? { ...i, ...data, assignees: data.assignees || [], timeLog: log, time_log: log, completedAt: null,
+          aflyst_grund: null, aflyst_forklaring: null, aflyst_tid: null, aflyst_faktureret: false } : i)));
     notify("Aflysningen er fortrudt");
     return true;
   }
@@ -5883,13 +5904,13 @@ function PlanningApp({ session, onSignOut }) {
   const currentIsoWeek = isoWeekInfo(new Date());
   // Aflyste opgaver (2.10.2026) står hverken i ugen eller i «Ikke tildelt». De vises
   // for sig under «🚫 Aflyste» i ugeplanen, hvor de kan genåbnes.
-  const weekInstancesList = instances.filter((t) => t.week === weekOffset && t.year === weekYear && t.status !== "aflyst");
-  const aflysteIUgen = instances.filter((t) => t.week === weekOffset && t.year === weekYear && t.status === "aflyst");
+  const weekInstancesList = instances.filter((t) => t.week === weekOffset && t.year === weekYear && !erAflyst(t));
+  const aflysteIUgen = instances.filter((t) => t.week === weekOffset && t.year === weekYear && erAflyst(t));
   // Ikke-tildelte opgaver skal være tilgængelige uanset hvilken uge man kigger på —
   // ikke kun i den uge de oprindeligt hørte til. Så en opgave man har taget ud kan
   // ses og placeres i en hvilken som helst uge, fx hvis den skal rykkes til næste uge.
   const unplaced = instances
-    .filter((t) => !(t.assignees && t.assignees.length) && t.status !== "aflyst")
+    .filter((t) => !(t.assignees && t.assignees.length) && !erAflyst(t))
     .sort((a, b) => {
       if (a.week !== b.week) return a.week - b.week;
       const aDay = a.day ? ALL_DAYS.findIndex((d) => d.key === a.day) : 99;
@@ -6289,7 +6310,8 @@ function PlanningApp({ session, onSignOut }) {
       {view === "ekstrahjaelp" && KUNDEUDGAVE && isAdminUser && <EkstraHjaelpView />}
 
       {view === "aflysning" && (
-        <AflysningsgrundeView isAdminUser={isAdminUser} grunde={aflysningsgrunde} onGemt={hentAflysningsgrunde} notify={notify} />
+        <AflysningsgrundeView isAdminUser={isAdminUser} grunde={aflysningsgrunde} regler={aflysningRegler}
+          onGemt={() => { hentAflysningsgrunde(); hentAflysningRegler(); }} notify={notify} />
       )}
 
       {view === "firma" && (
@@ -6476,7 +6498,7 @@ function PlanningApp({ session, onSignOut }) {
             setCopyPayload(task);
           }}
           tilbudPaaOpgaven={tilbudPerOpgave[openTaskId] || null}
-          aflysningsgrunde={aflysningsgrunde} onAflys={aflysOpgave} onGenaabn={genaabnOpgave}
+          aflysningsgrunde={aflysningsgrunde} aflysningRegler={aflysningRegler} onAflys={aflysOpgave} onGenaabn={genaabnOpgave}
           onTidLogOpdateret={(id, log) => setInstances((prev) => prev.map((i) => (i.id === id ? { ...i, timeLog: log, time_log: log } : i)))}
           onAabnTilbud={(t) => { setOpenTaskId(null); setAabnTilbudId(t.id); setView("tilbud"); }}
         />
@@ -11838,7 +11860,7 @@ function SimuleringView({ weekNo, weekYear, instances, employees, templates, are
   const [visning, setVisning] = useState("sim");
   const [kunAendr, setKunAendr] = useState(false);
 
-  const ugensOpgaver = useMemo(() => instances.filter((t) => t.week === weekNo && t.year === weekYear && t.status !== "aflyst"), [instances, weekNo, weekYear]);
+  const ugensOpgaver = useMemo(() => instances.filter((t) => t.week === weekNo && t.year === weekYear && !erAflyst(t)), [instances, weekNo, weekYear]);
   const mandag = mondayOfWeek(weekNo, weekYear);
   const mandagIso = mandag ? new Date(mandag.getTime() - mandag.getTimezoneOffset() * 60000).toISOString().slice(0, 10) : null;
 
@@ -17735,7 +17757,7 @@ function EmployeeModal({ emp, onClose, onSave, skills: skillList, satsHistorik, 
 }
 
 // ---------- Task / service order detail ----------
-function TaskDetailModal({ task, employees, templates, onSetPreferredEmployee, onCancelTemplate, onEditTemplate, checklistTemplates, skills, isAdminUser, areas, employeeAreas, onClose, onSetStatus, onToggleChecklistItem, onAddChecklistItem, onAddChecklistTemplate, onAddAssignee, onRemoveAssignee, onToggleOplaering, onSetAndel, onUnplace, onDelete, onUpdateCustomer, onUpdateCustomerInfo, onUpdateContractType, onRenameTask, onCopy, onUpdateSkills, onEndBlockEarly, onUpdateSchedule, onUpdateKeyPickup, onUpdateScheduledTime, tilbudPaaOpgaven, onAabnTilbud, onTidLogOpdateret, aflysningsgrunde = [], onAflys, onGenaabn }) {
+function TaskDetailModal({ task, employees, templates, onSetPreferredEmployee, onCancelTemplate, onEditTemplate, checklistTemplates, skills, isAdminUser, areas, employeeAreas, onClose, onSetStatus, onToggleChecklistItem, onAddChecklistItem, onAddChecklistTemplate, onAddAssignee, onRemoveAssignee, onToggleOplaering, onSetAndel, onUnplace, onDelete, onUpdateCustomer, onUpdateCustomerInfo, onUpdateContractType, onRenameTask, onCopy, onUpdateSkills, onEndBlockEarly, onUpdateSchedule, onUpdateKeyPickup, onUpdateScheduledTime, tilbudPaaOpgaven, onAabnTilbud, onTidLogOpdateret, aflysningsgrunde = [], aflysningRegler = [], onAflys, onGenaabn }) {
   // Disse to laa efter det tidlige return for blokeringer (sygdom/ferie) laengere nede.
   // Hooks skal kaldes i samme raekkefoelge hver render: aabnede man en blokering og
   // derefter en almindelig opgave i samme modal, ville React se to hooks mere end sidst
@@ -18654,9 +18676,10 @@ return (
         </a>
       )}
 
-      {t.status === "aflyst" && (
+      {erAflyst(t) && (
         <div style={{ background: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 10, padding: "10px 12px", margin: "10px 0", color: "#991B1B", fontSize: 13 }}>
           <b>🚫 Aflyst</b> · {grundNavn(aflysningsgrunde, t.aflyst_grund)}
+          {t.aflyst_faktureret && <span style={{ marginLeft: 6, fontWeight: 700, color: "#B45309" }}>· sen kundeaflysning — faktureres</span>}
           {t.aflyst_tid ? ` · ${new Date(t.aflyst_tid).toLocaleString("da-DK", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}` : ""}
           {t.aflyst_forklaring && <div style={{ color: "#7F1D1D", marginTop: 3 }}>«{t.aflyst_forklaring}»</div>}
         </div>
@@ -18759,8 +18782,8 @@ return (
 
       <div style={styles.modalActions}>
         {onCopy && <button style={{ ...styles.secondaryBtn, color: "var(--farve-moerk)", borderColor: "var(--farve-lys)" }} onClick={() => onCopy(t)}><Copy size={14} /> Kopiér</button>}
-        {isAdminUser && onAflys && !BLOCK_TYPES.includes(t.type) && t.status !== "udført" && (
-          <AflysKnap opgave={t} grunde={aflysningsgrunde} onAflys={onAflys} onGenaabn={onGenaabn} onLuk={onClose} />
+        {isAdminUser && onAflys && !BLOCK_TYPES.includes(t.type) && (t.status !== "udført" || erAflyst(t)) && (
+          <AflysKnap opgave={t} grunde={aflysningsgrunde} regler={aflysningRegler} onAflys={onAflys} onGenaabn={onGenaabn} onLuk={onClose} />
         )}
         {/* Sletning findes kun paa fleksible/adhoc-opgaver. Faste opgaver kommer fra en
             aftale og skal fjernes ved at markere aftalen som udgaaet, saa planen ikke
@@ -18783,20 +18806,46 @@ return (
 // Udførte opgaver og opgaver med registreret tid kan ikke aflyses.
 const grundNavn = (grunde, id) => (grunde || []).find((g) => g.id === id)?.navn || id || "";
 
-function AflysKnap({ opgave, grunde, onAflys, onGenaabn, onLuk }) {
-  const aktive = (grunde || []).filter((g) => g.aktiv);
+const KONTRAKT_NAVN = { privat: "Privat", nexus: "Nexus", aeldrelov: "Ældrelov (fx Carelink)", erhverv: "Erhverv" };
+
+// Hvornår starter opgaven, og hvad siger reglen for en kundeaflysning nu? Samme regel
+// som aflys_opgave i databasen — dialogen viser det, databasen afgør det.
+function senAflysningInfo(opgave, regler, nu = new Date()) {
+  const kt = opgave.contractType || opgave.contract_type || "privat";
+  const regel = (regler || []).find((r) => r.kontrakttype === kt) || null;
+  const d = instanceDateString(opgave);
+  const [hh, mm] = String(opgave.scheduledTime || "08:00").split(":").map(Number);
+  const [y, m, dd] = (d || "").split("-").map(Number);
+  const start = d ? new Date(y, m - 1, dd, hh || 0, mm || 0) : null;
+  const timer = start ? (start - nu) / 3600000 : null;
+  const sen = !!(regel && regel.frist_timer != null && timer != null && timer < regel.frist_timer);
+  return { kt, regel, timer, sen, faktureres: !!(regel && !regel.fra_gang_til_gang && sen && regel.fakturer_sen) };
+}
+const fristTekst = (t) => (t == null ? "—" : t % 24 === 0 ? `${t / 24} ${t === 24 ? "døgn" : "døgn"}` : `${t} timer`);
+
+function AflysKnap({ opgave, grunde, regler, onAflys, onGenaabn, onLuk }) {
   const [aaben, setAaben] = useState(false);
+  const [part, setPart] = useState("kunde");
   const [grund, setGrund] = useState("");
   const [forklaring, setForklaring] = useState("");
+  const [afvig, setAfvig] = useState(false);       // fravig reglen (eller: fakturér erhverv)
   const [gemmer, setGemmer] = useState(false);
-  if (opgave.status === "aflyst") {
+  if (erAflyst(opgave)) {
     return (
       <button style={{ ...styles.secondaryBtn, color: "#166534", borderColor: "#BBF7D0" }}
         onClick={async () => { if (await onGenaabn(opgave.id)) onLuk(); }}>↩ Fortryd aflysning</button>
     );
   }
-  // Formularen er sin egen lille dialog oven på opgaven (Jonn 2.10.2026) — inde i
-  // knaprækken klemte den Kopiér, Slet og Luk sammen.
+  const aktive = (grunde || []).filter((g) => g.aktiv && (g.part || "jammerbugt") === part);
+  const info = senAflysningInfo(opgave, regler);
+  const gangTilGang = !!info.regel?.fra_gang_til_gang;
+  const faktureres = part === "kunde" && (gangTilGang ? afvig : (afvig ? !info.faktureres : info.faktureres));
+  // p_fakturer: null = følg reglen. Kun sat, når kontoret vælger (erhverv) eller fraviger.
+  const fakturerArg = part !== "kunde" ? null : gangTilGang ? afvig : (afvig ? !info.faktureres : null);
+  const manglerForklaring = part === "kunde" && afvig && !gangTilGang && !forklaring.trim();
+  const tid = fmtMin(planlagtFakturerbart(opgave));
+  const omTimer = info.timer == null ? "" : info.timer < 0 ? "efter planlagt start"
+    : info.timer < 48 ? `${Math.round(info.timer)} timer før start` : `${Math.round(info.timer / 24)} døgn før start`;
   return (
     <>
       <button style={{ ...styles.secondaryBtn, color: "#B91C1C", borderColor: "#FECACA" }} onClick={() => setAaben(true)}>🚫 Aflys</button>
@@ -18804,20 +18853,58 @@ function AflysKnap({ opgave, grunde, onAflys, onGenaabn, onLuk }) {
         <div onMouseDown={(e) => { if (e.target === e.currentTarget && !gemmer) setAaben(false); }}
           style={{ position: "fixed", inset: 0, background: "rgba(17,17,17,0.45)", zIndex: 200,
                    display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
-          <div style={{ background: "#fff", borderRadius: 14, width: "min(440px, 100%)", boxShadow: "0 20px 60px rgba(0,0,0,0.25)", overflow: "hidden" }}>
+          <div style={{ background: "#fff", borderRadius: 14, width: "min(470px, 100%)", boxShadow: "0 20px 60px rgba(0,0,0,0.25)", overflow: "hidden" }}>
             <div style={{ background: "#FEF2F2", borderBottom: "1px solid #FECACA", padding: "12px 16px", fontWeight: 800, color: "#991B1B" }}>
               🚫 Aflys «{opgave.customerName || opgave.title}»
+              <div style={{ fontWeight: 500, fontSize: 12.5, color: "#7F1D1D", marginTop: 2 }}>
+                {KONTRAKT_NAVN[info.kt] || info.kt}{omTimer ? ` · ${omTimer}` : ""}
+              </div>
             </div>
             <div style={{ padding: "14px 16px", display: "flex", flexDirection: "column", gap: 10 }}>
-              <label style={{ ...styles.label, marginTop: 0 }}>Grund</label>
+              <label style={{ ...styles.label, marginTop: 0 }}>Hvem aflyser?</label>
+              <div style={{ display: "flex", gap: 6 }}>
+                {[["kunde", "Kunden"], ["jammerbugt", `${FIRMA.navn || "Vi"}`]].map(([k, n]) => (
+                  <button key={k} type="button" onClick={() => { setPart(k); setGrund(""); setAfvig(false); }}
+                    style={part === k ? { ...styles.typePickBtn, borderColor: "#B91C1C", color: "#B91C1C", background: "#FEF2F2" } : styles.typePickBtn}>{n}</button>
+                ))}
+              </div>
+              <label style={{ ...styles.label, marginTop: 2 }}>Grund</label>
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                 {aktive.map((g) => (
                   <button key={g.id} type="button" onClick={() => setGrund(g.id)}
                     style={grund === g.id ? { ...styles.skillPickBtnActive } : styles.skillPickBtn}>{g.navn}</button>
                 ))}
-                {aktive.length === 0 && <span style={styles.hint}>Ingen aflysningsgrunde — opret dem under Opsætning → Aflysningsgrunde.</span>}
+                {aktive.length === 0 && <span style={styles.hint}>Ingen grunde — opret dem under Opsætning → Aflysning.</span>}
               </div>
-              <label style={{ ...styles.label, marginTop: 4 }}>Forklaring</label>
+
+              {part === "kunde" && (
+                <div style={{ borderRadius: 10, padding: "10px 12px", fontSize: 13, lineHeight: 1.5,
+                              background: faktureres ? "#FFFBEB" : "#F0FDF4", border: "1px solid " + (faktureres ? "#FDE68A" : "#BBF7D0") }}>
+                  {gangTilGang ? (
+                    <>Erhverv vurderes fra gang til gang.</>
+                  ) : !info.regel || info.regel.frist_timer == null ? (
+                    <>Ingen frist for {KONTRAKT_NAVN[info.kt] || info.kt} — almindelig aflysning.</>
+                  ) : info.sen ? (
+                    <>Aflyst {omTimer} — under fristen på <b>{fristTekst(info.regel.frist_timer)}</b>.</>
+                  ) : (
+                    <>Over fristen på {fristTekst(info.regel.frist_timer)} — almindelig aflysning.</>
+                  )}
+                  <div style={{ marginTop: 4, fontWeight: 700, color: faktureres ? "#92400E" : "#166534" }}>
+                    {faktureres
+                      ? `Opgaven bliver udført og faktureret med ${tid}. Medarbejderen får ingen løn for den.`
+                      : "Intet faktureres. Medarbejderen får besked."}
+                  </div>
+                  {(gangTilGang || info.regel?.frist_timer != null) && (
+                    <label style={{ display: "flex", gap: 6, alignItems: "center", marginTop: 6, cursor: "pointer" }}>
+                      <input type="checkbox" checked={afvig} onChange={(e) => setAfvig(e.target.checked)} />
+                      {gangTilGang ? `Fakturér som sen aflysning (${tid})`
+                        : info.faktureres ? "Fakturér ikke (skriv hvorfor)" : `Fakturér alligevel (${tid}, skriv hvorfor)`}
+                    </label>
+                  )}
+                </div>
+              )}
+
+              <label style={{ ...styles.label, marginTop: 2 }}>Forklaring{manglerForklaring ? " (kræves)" : ""}</label>
               <textarea rows={3} value={forklaring} onChange={(e) => setForklaring(e.target.value)}
                 placeholder="Fx hvem der aflyste og hvornår"
                 style={{ ...styles.input, marginBottom: 0, fontFamily: "inherit", resize: "vertical" }} />
@@ -18827,9 +18914,15 @@ function AflysKnap({ opgave, grunde, onAflys, onGenaabn, onLuk }) {
             </div>
             <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", padding: "12px 16px", borderTop: "1px solid #F1F5F9", background: "#F8FAFC" }}>
               <button style={styles.secondaryBtn} disabled={gemmer} onClick={() => setAaben(false)}>Annuller</button>
-              <button style={{ ...styles.primaryBtn, background: "#B91C1C", opacity: !grund || gemmer ? 0.5 : 1 }} disabled={!grund || gemmer}
-                onClick={async () => { setGemmer(true); const ok = await onAflys(opgave.id, grund, forklaring.trim()); setGemmer(false); if (ok) { setAaben(false); onLuk(); } }}>
-                {gemmer ? "Aflyser…" : "Aflys opgaven"}</button>
+              <button style={{ ...styles.primaryBtn, background: "#B91C1C", opacity: !grund || gemmer || manglerForklaring ? 0.5 : 1 }}
+                disabled={!grund || gemmer || manglerForklaring}
+                onClick={async () => {
+                  setGemmer(true);
+                  const ok = await onAflys(opgave.id, grund, forklaring.trim(), fakturerArg);
+                  setGemmer(false);
+                  if (ok) { setAaben(false); onLuk(); }
+                }}>
+                {gemmer ? "Aflyser…" : faktureres ? "Aflys og fakturér" : "Aflys opgaven"}</button>
             </div>
           </div>
         </div>
@@ -18857,6 +18950,7 @@ function AflysteChip({ aflyste, grunde, onGenaabn, onOpenTask }) {
                   {t.customerName || t.title}</div>
                 <div style={{ fontSize: 12, color: "#64748B" }}>
                   {ALL_DAYS.find((d) => d.key === t.day)?.label || ""}{t.scheduledTime ? ` kl. ${t.scheduledTime}` : ""} · {grundNavn(grunde, t.aflyst_grund)}
+                  {t.aflyst_faktureret ? " · faktureres" : ""}
                   {t.aflyst_forklaring ? ` — «${t.aflyst_forklaring}»` : ""}
                 </div>
               </div>
@@ -18869,40 +18963,87 @@ function AflysteChip({ aflyste, grunde, onGenaabn, onOpenTask }) {
   );
 }
 
-function AflysningsgrundeView({ isAdminUser, grunde, onGemt, notify }) {
-  const [ny, setNy] = useState("");
-  if (!isAdminUser) return <div style={styles.page}>Kun planlæggere kan sætte aflysningsgrunde op.</div>;
-  async function gem(raekke) {
-    const { error } = await supabase.from("aflysningsgrunde").upsert(raekke);
+function AflysningsgrundeView({ isAdminUser, grunde, regler = [], onGemt, notify }) {
+  const [ny, setNy] = useState({ jammerbugt: "", kunde: "" });
+  if (!isAdminUser) return <div style={styles.page}>Kun planlæggere kan sætte aflysning op.</div>;
+  async function gem(tabel, raekke) {
+    const { error } = await supabase.from(tabel).upsert(raekke);
     if (error) { notify(error.message); return; }
     onGemt();
   }
-  return (
-    <div style={styles.page}>
-      <div style={{ fontWeight: 700, fontSize: 18, marginBottom: 4 }}>Aflysningsgrunde</div>
-      <div style={{ fontSize: 13, color: "#64748B", marginBottom: 14, maxWidth: 640 }}>
-        Grundene vælges, når en opgave aflyses (knappen «🚫 Aflys» på opgaven). En grund, der ikke bruges længere,
-        slås fra i stedet for at blive slettet — så kan gamle aflysninger stadig læses.
-      </div>
-      <div style={{ background: "#fff", borderRadius: 12, padding: 12, boxShadow: "0 1px 3px rgba(0,0,0,0.06)", maxWidth: 560 }}>
-        {grunde.map((g, i) => (
+  const boks = { background: "#fff", borderRadius: 12, padding: 14, boxShadow: "0 1px 3px rgba(0,0,0,0.06)", maxWidth: 640, marginBottom: 16 };
+  const liste = (part, titel, tekst) => {
+    const mine = grunde.filter((g) => (g.part || "jammerbugt") === part);
+    return (
+      <div style={boks}>
+        <div style={{ fontWeight: 700, fontSize: 15 }}>{titel}</div>
+        <div style={{ fontSize: 12.5, color: "#64748B", margin: "2px 0 8px" }}>{tekst}</div>
+        {mine.map((g, i) => (
           <div key={g.id} style={{ display: "flex", gap: 8, alignItems: "center", padding: "6px 0", borderBottom: "1px solid #F1F5F9" }}>
-            <input defaultValue={g.navn} onBlur={(e) => { const v = e.target.value.trim(); if (v && v !== g.navn) gem({ ...g, navn: v }); }}
+            <input defaultValue={g.navn} onBlur={(e) => { const v = e.target.value.trim(); if (v && v !== g.navn) gem("aflysningsgrunde", { ...g, navn: v }); }}
               style={{ ...styles.input, marginBottom: 0, flex: 1, opacity: g.aktiv ? 1 : 0.5 }} />
             <button style={{ ...styles.secondaryBtn, padding: "6px 9px" }} disabled={i === 0} title="Op"
-              onClick={() => { const a = grunde[i - 1]; gem([{ ...g, raekkefoelge: a.raekkefoelge }, { ...a, raekkefoelge: g.raekkefoelge }]); }}>↑</button>
+              onClick={() => { const a = mine[i - 1]; gem("aflysningsgrunde", [{ ...g, raekkefoelge: a.raekkefoelge }, { ...a, raekkefoelge: g.raekkefoelge }]); }}>↑</button>
             <label style={{ display: "flex", gap: 5, alignItems: "center", fontSize: 13 }}>
-              <input type="checkbox" checked={g.aktiv} onChange={(e) => gem({ ...g, aktiv: e.target.checked })} /> I brug
+              <input type="checkbox" checked={g.aktiv} onChange={(e) => gem("aflysningsgrunde", { ...g, aktiv: e.target.checked })} /> I brug
             </label>
           </div>
         ))}
         <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
-          <input value={ny} onChange={(e) => setNy(e.target.value)} placeholder="Ny grund, fx «Kunden aflyste»"
+          <input value={ny[part]} onChange={(e) => setNy((x) => ({ ...x, [part]: e.target.value }))} placeholder="Ny grund"
             style={{ ...styles.input, marginBottom: 0, flex: 1 }} />
-          <button style={styles.primaryBtn} disabled={!ny.trim()}
-            onClick={async () => { await gem({ navn: ny.trim(), raekkefoelge: Math.max(0, ...grunde.map((g) => g.raekkefoelge || 0)) + 1 }); setNy(""); }}>
-            <Plus size={14} /> Tilføj</button>
+          <button style={styles.primaryBtn} disabled={!ny[part].trim()}
+            onClick={async () => {
+              await gem("aflysningsgrunde", { navn: ny[part].trim(), part, raekkefoelge: Math.max(0, ...grunde.map((g) => g.raekkefoelge || 0)) + 1 });
+              setNy((x) => ({ ...x, [part]: "" }));
+            }}><Plus size={14} /> Tilføj</button>
         </div>
+      </div>
+    );
+  };
+  const typer = ["nexus", "aeldrelov", "privat", "erhverv"];
+  return (
+    <div style={styles.page}>
+      <div style={{ fontWeight: 700, fontSize: 18, marginBottom: 4 }}>Aflysning</div>
+      <div style={{ fontSize: 13, color: "#64748B", marginBottom: 14, maxWidth: 640 }}>
+        Når en opgave aflyses (knappen «🚫 Aflys» på opgaven), vælger man, om det er kunden eller jer, der aflyser, og en
+        grund. En grund, der ikke bruges længere, slås fra i stedet for at blive slettet — så kan gamle aflysninger stadig læses.
+      </div>
+      {liste("kunde", "Kunden aflyser", "Her gælder fristerne nedenfor: aflyser kunden for sent, bliver opgaven udført og faktureret med den planlagte tid — uden løn til medarbejderen.")}
+      {liste("jammerbugt", `${FIRMA.navn || "Vi"} aflyser`, "Fx sygdom og ferie hos jer. Faktureres aldrig.")}
+      <div style={boks}>
+        <div style={{ fontWeight: 700, fontSize: 15 }}>Frister for sen kundeaflysning</div>
+        <div style={{ fontSize: 12.5, color: "#64748B", margin: "2px 0 8px" }}>
+          Aflyser kunden senere end fristen før planlagt start (uden klokkeslæt: kl. 8), faktureres opgaven. Fristen er i timer — 72 er 3 døgn.
+        </div>
+        {typer.map((k) => {
+          const r = regler.find((x) => x.kontrakttype === k) || { kontrakttype: k, frist_timer: null, fakturer_sen: false, fra_gang_til_gang: false };
+          return (
+            <div key={k} style={{ display: "flex", gap: 10, alignItems: "center", padding: "7px 0", borderBottom: "1px solid #F1F5F9", flexWrap: "wrap" }}>
+              <span style={{ width: 170, fontSize: 13.5, fontWeight: 600 }}>{KONTRAKT_NAVN[k]}</span>
+              <label style={{ display: "flex", gap: 5, alignItems: "center", fontSize: 13 }}>
+                <input type="checkbox" checked={!!r.fra_gang_til_gang}
+                  onChange={(e) => gem("aflysning_regler", { ...r, fra_gang_til_gang: e.target.checked, aendret: new Date().toISOString() })} />
+                Fra gang til gang
+              </label>
+              {!r.fra_gang_til_gang && (<>
+                <input type="number" min={0} max={720} defaultValue={r.frist_timer ?? ""} key={`${k}-${r.frist_timer}`}
+                  onBlur={(e) => {
+                    const v = e.target.value === "" ? null : Math.round(Number(e.target.value));
+                    if (v !== r.frist_timer && (v === null || (v >= 0 && v <= 720)))
+                      gem("aflysning_regler", { ...r, frist_timer: v, aendret: new Date().toISOString() });
+                  }}
+                  style={{ ...styles.input, width: 80, marginBottom: 0 }} />
+                <span style={{ fontSize: 12.5, color: "#64748B" }}>timer</span>
+                <label style={{ display: "flex", gap: 5, alignItems: "center", fontSize: 13 }}>
+                  <input type="checkbox" checked={!!r.fakturer_sen}
+                    onChange={(e) => gem("aflysning_regler", { ...r, fakturer_sen: e.target.checked, aendret: new Date().toISOString() })} />
+                  Fakturér ved sen aflysning
+                </label>
+              </>)}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
