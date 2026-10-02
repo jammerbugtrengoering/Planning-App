@@ -2219,6 +2219,11 @@ const MODULE_HELP = {
   ], warn: "Siden er kun for administratorer. Den er også spærret i databasen — job_koersel kan kun læses af en administrator, så en planlægger, der skriver sig frem til siden, får ingen tal at se." },
 
   reports: { title: "Rapportering", intro: "Rapporter: budget mod faktisk omsætning, hvad aftalerne er værd, overskuddet og hvordan start/stop bliver brugt.", blocks: [
+    { h: "Aflysninger", p: [
+        "Rapporteringen åbner nu på Aftaleportefølje. Fanen «🚫 Aflysninger» viser aflyste opgaver i en periode (denne måned, sidste måned, i år eller egne datoer).",
+        "Øverst: antal aflysninger (af kunden og af jer), tabt omsætning — aflyst og ikke faktureret — og hvad der er hentet hjem på sene kundeaflysninger.",
+        "«Pr. aflysningsgrund» viser antal, hvor mange af kundens aflysninger der var sene, og kronerne for hver grund. Nederst står hver aflysning med kunde, grund, forklaring og værdi.",
+        "Værdien er den planlagte tid for dem, der var på opgaven, gange timeprisen for kundetypen — eller fastprisen."] },
     { h: "Start/stop pr. medarbejder", p: [
         "Fanen «⏱ Start/stop» viser, hvordan tiden bliver startet og afsluttet: af medarbejderen selv, automatisk ved ankomst, af systemet eller slet ikke — og hvor langt fra adressen den blev afsluttet.",
         "Kun opgaver, hvor start/stop gælder, er med: hendes egen tid på opgaven er mindst grænsen under Opsætning → Tidsregistrering. Rettes grænsen dér, følger rapporten med. Er tiden fordelt, er det hendes andel, der tæller.",
@@ -6330,6 +6335,7 @@ function PlanningApp({ session, onSignOut }) {
 
       {view === "reports" && (
         <ReportsView instances={instances} templates={templates} pricing={pricing} budgets={budgets} onSaveBudget={saveBudget} isAdminUser={isAdminUser}
+          aflysningsgrunde={aflysningsgrunde}
           employees={employees} satsHistorik={satsHistorik} kmSatser={kmSatser} kmLog={kmLog}
           omkostninger={omkostninger} onSaveOmkostning={saveOmkostning}
           onDeleteOmkostning={deleteOmkostning}
@@ -10450,16 +10456,127 @@ function StartStopRapport() {
   );
 }
 
+// Aflysninger (Jonn 2.10.2026): hvorfor aflyses der, hvad mister vi i omsætning, og hvad
+// får vi hjem på sene kundeaflysninger. Værdien af en opgave er den planlagte tid for
+// dem, der var på den (eller varigheden) × timeprisen for kundetypen — eller fastprisen.
+function AflysningRapport({ instances, pricing = {}, grunde = [] }) {
+  const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  const nu = new Date();
+  const [fra, setFra] = useState(iso(new Date(nu.getFullYear(), nu.getMonth(), 1)));
+  const [til, setTil] = useState(iso(new Date(nu.getFullYear(), nu.getMonth() + 1, 0)));
+  const sat = (a, b) => { setFra(iso(a)); setTil(iso(b)); };
+  const kr = (v) => Math.round(v).toLocaleString("da-DK") + " kr";
+  const vaerdi = (t) => {
+    if (t.pricingType === "fixed" || t.pricing_type === "fixed") return Number(t.fixedPrice ?? t.fixed_price) || 0;
+    const folk = Array.isArray(t.aflyst_assignees) && t.aflyst_assignees.length ? t.aflyst_assignees : [null];
+    const f = t.tidFordeling || t.tid_fordeling || {};
+    const min = t.aflyst_faktureret ? fakturerbareMinutter(t)
+      : folk.reduce((s2, id) => s2 + (id && Number(f[id]) > 0 ? Number(f[id]) : (Number(t.duration) || 0)), 0);
+    return (min / 60) * (Number(pricing[t.contractType || t.contract_type || "privat"]) || 0);
+  };
+  const raekker = instances.filter((t) => erAflyst(t)).map((t) => ({ t, dato: instanceDateString(t) }))
+    .filter((r) => r.dato >= fra && r.dato <= til)
+    .map((r) => {
+      const g = grunde.find((x) => x.id === r.t.aflyst_grund);
+      return { ...r, grund: g?.navn || r.t.aflyst_grund || "Ukendt", part: g?.part || "jammerbugt",
+               fakt: !!r.t.aflyst_faktureret, kr: vaerdi(r.t) };
+    })
+    .sort((a, b) => a.dato.localeCompare(b.dato));
+  const tabt = raekker.filter((r) => !r.fakt).reduce((s2, r) => s2 + r.kr, 0);
+  const hjem = raekker.filter((r) => r.fakt).reduce((s2, r) => s2 + r.kr, 0);
+  const prGrund = {};
+  raekker.forEach((r) => {
+    const k = r.grund + "|" + r.part;
+    prGrund[k] = prGrund[k] || { grund: r.grund, part: r.part, n: 0, tabt: 0, hjem: 0, sene: 0 };
+    prGrund[k].n++;
+    if (r.fakt) { prGrund[k].hjem += r.kr; prGrund[k].sene++; } else prGrund[k].tabt += r.kr;
+  });
+  const kort = (titel, tal, farve, under) => (
+    <div style={{ ...styles.statBlock, borderLeft: `3px solid ${farve}` }}>
+      <div><div style={{ ...styles.statValue, color: farve }}>{tal}</div><div style={styles.statLabel}>{titel}</div>
+        {under && <div style={{ fontSize: 11.5, color: "#64748B" }}>{under}</div>}</div>
+    </div>
+  );
+  const th = { padding: "8px 10px", fontSize: 12, color: "#475569", textAlign: "left" };
+  const td = { padding: "8px 10px", fontSize: 13.5, borderTop: "1px solid #E2E8F0" };
+  return (
+    <div>
+      <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 12 }}>
+        <button style={styles.secondaryBtn} onClick={() => sat(new Date(nu.getFullYear(), nu.getMonth(), 1), new Date(nu.getFullYear(), nu.getMonth() + 1, 0))}>Denne måned</button>
+        <button style={styles.secondaryBtn} onClick={() => sat(new Date(nu.getFullYear(), nu.getMonth() - 1, 1), new Date(nu.getFullYear(), nu.getMonth(), 0))}>Sidste måned</button>
+        <button style={styles.secondaryBtn} onClick={() => sat(new Date(nu.getFullYear(), 0, 1), new Date(nu.getFullYear(), 11, 31))}>I år</button>
+        <input type="date" value={fra} onChange={(e) => setFra(e.target.value)} style={{ ...styles.input, width: 160, marginBottom: 0 }} />
+        <span>–</span>
+        <input type="date" value={til} onChange={(e) => setTil(e.target.value)} style={{ ...styles.input, width: 160, marginBottom: 0 }} />
+      </div>
+      <div style={{ ...styles.toolbar, marginBottom: 14 }}>
+        {kort("Aflyste opgaver", raekker.length, "#475569", `${raekker.filter((r) => r.part === "kunde").length} af kunden · ${raekker.filter((r) => r.part !== "kunde").length} af os`)}
+        {kort("Tabt omsætning", kr(tabt), "#B91C1C", "aflyst og ikke faktureret")}
+        {kort("Hentet hjem", kr(hjem), "#166534", `${raekker.filter((r) => r.fakt).length} sene kundeaflysninger faktureret`)}
+      </div>
+
+      <div style={{ fontWeight: 700, fontSize: 15, margin: "6px 0 8px" }}>Pr. aflysningsgrund</div>
+      <table style={{ width: "100%", borderCollapse: "collapse", background: "#fff", borderRadius: 12, overflow: "hidden", marginBottom: 18 }}>
+        <thead><tr style={{ background: "#F8FAFC" }}>
+          {["Grund", "Hvem aflyste", "Antal", "Heraf sene", "Tabt omsætning", "Hentet hjem"].map((h) => <th key={h} style={th}>{h}</th>)}
+        </tr></thead>
+        <tbody>
+          {Object.values(prGrund).sort((a, b) => b.n - a.n).map((g) => (
+            <tr key={g.grund + g.part}>
+              <td style={{ ...td, fontWeight: 700 }}>{g.grund}</td>
+              <td style={td}>{g.part === "kunde" ? "Kunden" : (FIRMA.navn || "Os")}</td>
+              <td style={td}>{g.n}</td>
+              <td style={td}>{g.part === "kunde" ? g.sene : "—"}</td>
+              <td style={{ ...td, color: g.tabt ? "#B91C1C" : "#94A3B8" }}>{kr(g.tabt)}</td>
+              <td style={{ ...td, color: g.hjem ? "#166534" : "#94A3B8" }}>{kr(g.hjem)}</td>
+            </tr>
+          ))}
+          {raekker.length === 0 && <tr><td colSpan={6} style={{ ...td, color: "#64748B", textAlign: "center" }}>Ingen aflysninger i perioden</td></tr>}
+        </tbody>
+      </table>
+
+      {raekker.length > 0 && (<>
+        <div style={{ fontWeight: 700, fontSize: 15, margin: "6px 0 8px" }}>Aflysningerne</div>
+        <table style={{ width: "100%", borderCollapse: "collapse", background: "#fff", borderRadius: 12, overflow: "hidden" }}>
+          <thead><tr style={{ background: "#F8FAFC" }}>
+            {["Dato", "Kunde", "Kundetype", "Grund", "Forklaring", "Værdi", ""].map((h) => <th key={h} style={th}>{h}</th>)}
+          </tr></thead>
+          <tbody>
+            {raekker.map((r) => (
+              <tr key={r.t.id}>
+                <td style={td}>{r.dato.split("-").reverse().join(".")}</td>
+                <td style={{ ...td, fontWeight: 600 }}>{r.t.customerName || r.t.title}</td>
+                <td style={td}>{KONTRAKT_NAVN[r.t.contractType || r.t.contract_type] || r.t.contractType || ""}</td>
+                <td style={td}>{r.grund}{r.part === "kunde" ? " (kunden)" : ""}</td>
+                <td style={{ ...td, color: "#475569", maxWidth: 280 }}>{r.t.aflyst_forklaring || "—"}</td>
+                <td style={{ ...td, color: r.fakt ? "#166534" : "#B91C1C", fontWeight: 600 }}>{kr(r.kr)}</td>
+                <td style={td}>{r.fakt
+                  ? <span style={{ fontSize: 11.5, fontWeight: 700, color: "#B45309", background: "#FFFBEB", borderRadius: 99, padding: "2px 8px" }}>faktureret</span>
+                  : <span style={{ fontSize: 11.5, color: "#94A3B8" }}>tabt</span>}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </>)}
+      <div style={{ ...styles.hint, marginTop: 10 }}>
+        Værdien er den planlagte tid for dem, der var på opgaven, gange timeprisen for kundetypen (eller fastprisen). En sen
+        kundeaflysning er udført og faktureret med den planlagte tid; alle andre aflysninger er tabt omsætning.
+      </div>
+    </div>
+  );
+}
+
 function ReportsView({ instances, templates, pricing, budgets, onSaveBudget, isAdminUser,
                         employees, satsHistorik, kmSatser, kmLog, omkostninger,
                         onSaveOmkostning, onDeleteOmkostning,
-                        bonus, onSaveBonus, onDeleteBonus, dineroOmsaetning }) {
+                        bonus, onSaveBonus, onDeleteBonus, dineroOmsaetning, aflysningsgrunde = [] }) {
   // To rapporter, to spørgsmål. «Budget» handler om, hvad der er kommet ind måned
   // for måned. «Aftaleportefølje» handler om, hvad der ER aftalt — hvad de aftaler,
   // der ligger, er værd, og hvordan de fordeler sig. Det andet kan ikke læses ud af
   // det første: en aftale underskrevet i dag fylder ingenting i budgettet i år og
   // alligevel en halv million over sin løbetid.
-  const [rapport, setRapport] = useState("budget");
+  // Aftaleporteføljen er den første, man lander på (Jonn 2.10.2026).
+  const [rapport, setRapport] = useState("portefoelje");
   const now = new Date();
   const [selectedArea, setSelectedArea] = useState("privat");
   const [selectedYear, setSelectedYear] = useState(now.getFullYear());
@@ -10540,8 +10657,9 @@ function ReportsView({ instances, templates, pricing, budgets, onSaveBudget, isA
   const CHART_H = 160;
 
   const rapportFaner = [
-    ["budget", "📊 Budget og omsætning"],
     ["portefoelje", "📁 Aftaleportefølje"],
+    ["budget", "📊 Budget og omsætning"],
+    ["aflysning", "🚫 Aflysninger"],
     ...(isAdminUser ? [["overskud", "💰 Overskud"]] : []),
     ...(isAdminUser && harModul("start_stop") ? [["startstop", "⏱ Start/stop"]] : []),
   ];
@@ -10561,6 +10679,8 @@ function ReportsView({ instances, templates, pricing, budgets, onSaveBudget, isA
 
       {rapport === "startstop" ? (
         <StartStopRapport />
+      ) : rapport === "aflysning" ? (
+        <AflysningRapport instances={instances} pricing={pricing} grunde={aflysningsgrunde} />
       ) : rapport === "portefoelje" ? (
         <PortefoeljeRapport templates={templates} instances={instances} pricing={pricing} />
       ) : rapport === "overskud" ? (
