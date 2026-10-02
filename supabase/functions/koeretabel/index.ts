@@ -41,10 +41,23 @@ const svar = (body: unknown, status = 200) =>
 // ORS' svar bruges KUN, naar postnummeret passer — et punkt i den forkerte by giver
 // forkerte kilometer, og det er vaerre end ingen.
 const GS_TOKEN = Deno.env.get("DATAFORSYNINGEN_TOKEN") ?? "";
-function delAdresse(q: string): { vej: string; postnr: string } {
-  const vej = q.split(",")[0].trim();
+// «Simonivej 49 stuen, Pandrup» og «Torvet 7B, 1.sal, 9492 Blokhus» findes ikke i
+// registret som skrevet. Vej + husnummer + (postnummer eller by) findes. Etage, doer og
+// supplerende bynavn skaeres fra (2.10.2026: 5 af 35 gamle ruter fejlede paa det).
+function delAdresse(q: string): { vej: string; postnr: string; by: string } {
+  const dele = q.split(",").map((s) => s.trim()).filter(Boolean);
+  const foerste = dele[0] || q.trim();
   const postnr = (q.match(/\b(\d{4})\b(?!.*\b\d{4}\b)/) ?? [])[1] ?? "";
-  return { vej: vej.replace(/\b\d{4}\b.*$/, "").trim() || vej, postnr };
+  const uden = foerste.replace(/\b\d{4}\b.*$/, "").trim() || foerste;
+  const m = uden.match(/^(.*?\D\s*\d+\s?[A-Za-zÆØÅæøå]?)(?=$|[\s.,])/);
+  const vej = (m ? m[1] : uden).trim();
+  const sidste = dele.length > 1 ? dele[dele.length - 1].replace(/\b\d{4}\b/, "").trim() : "";
+  const by = postnr ? "" : (sidste || (foerste.match(/\d+\s?[A-Za-zÆØÅæøå]?\s+([A-Za-zÆØÅæøå][\wÆØÅæøå .-]*)$/) ?? [])[1] || "");
+  return { vej, postnr, by: by.replace(/^(stuen|st\.?|\d+\.?\s*sal)\b\s*/i, "").trim() };
+}
+function renTekst(q: string): string {
+  const { vej, postnr, by } = delAdresse(q);
+  return [vej, postnr || by].filter(Boolean).join(", ");
 }
 function foerstePunkt(g: any): [number, number] | null {
   let c = g?.coordinates;
@@ -53,6 +66,9 @@ function foerstePunkt(g: any): [number, number] | null {
 }
 async function geocodeRegister(adresse: string): Promise<{ lat: number; lng: number } | null> {
   if (!GS_TOKEN) return null;
+  return (await geocodeRegisterEn(adresse)) ?? (renTekst(adresse) !== adresse ? await geocodeRegisterEn(renTekst(adresse)) : null);
+}
+async function geocodeRegisterEn(adresse: string): Promise<{ lat: number; lng: number } | null> {
   try {
     const r = await fetch("https://api.dataforsyningen.dk/rest/gsearch/v2.0/adresse?q=" + encodeURIComponent(adresse)
       + "&limit=1&srid=4326&token=" + encodeURIComponent(GS_TOKEN),
@@ -66,9 +82,9 @@ async function geocodeRegister(adresse: string): Promise<{ lat: number; lng: num
 async function geocodeOrsDk(adresse: string): Promise<{ lat: number; lng: number } | null> {
   if (!ORS_API_KEY) return null;
   try {
-    const { vej, postnr } = delAdresse(adresse);
+    const { postnr } = delAdresse(adresse);
     const r = await fetch("https://api.openrouteservice.org/geocode/search?api_key=" + encodeURIComponent(ORS_API_KEY)
-      + "&text=" + encodeURIComponent(postnr ? vej + ", " + postnr : vej)
+      + "&text=" + encodeURIComponent(renTekst(adresse))
       + "&boundary.country=DK&layers=address&size=5&focus.point.lat=57.16&focus.point.lon=9.73");
     if (!r.ok) return null;
     const d = await r.json();

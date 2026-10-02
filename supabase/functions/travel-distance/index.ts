@@ -56,8 +56,30 @@ function foerstePunkt(g) {
 // Danmarks adresseregister (GSearch). Erstatter DAWA, som lukkede i 2026.
 // «Accept-Encoding: identity» er noedvendig — uden den knaekker Deno paa svaret
 // («unexpected end of file»), maalt 2.10.2026.
+// «Simonivej 49 stuen, Pandrup» og «Torvet 7B, 1.sal, 9492 Blokhus» findes ikke i
+// registret som skrevet. Vej + husnummer + (postnummer eller by) findes. Etage, doer og
+// supplerende bynavn skaeres fra (2.10.2026: 5 af 35 gamle ruter fejlede paa det).
+function delAdresse(q) {
+  const dele = q.split(",").map((s) => s.trim()).filter(Boolean);
+  const foerste = dele[0] || q.trim();
+  const postnr = (q.match(/\b(\d{4})\b(?!.*\b\d{4}\b)/) ?? [])[1] ?? "";
+  const uden = foerste.replace(/\b\d{4}\b.*$/, "").trim() || foerste;
+  const m = uden.match(/^(.*?\D\s*\d+\s?[A-Za-zÆØÅæøå]?)(?=$|[\s.,])/);
+  const vej = (m ? m[1] : uden).trim();
+  const sidste = dele.length > 1 ? dele[dele.length - 1].replace(/\b\d{4}\b/, "").trim() : "";
+  const by = postnr ? "" : (sidste || (foerste.match(/\d+\s?[A-Za-zÆØÅæøå]?\s+([A-Za-zÆØÅæøå][\wÆØÅæøå .-]*)$/) ?? [])[1] || "");
+  return { vej, postnr, by: by.replace(/^(stuen|st\.?|\d+\.?\s*sal)\b\s*/i, "").trim() };
+}
+function renTekst(q) {
+  const { vej, postnr, by } = delAdresse(q);
+  return [vej, postnr || by].filter(Boolean).join(", ");
+}
+
 async function geocodeRegister(address) {
   if (!GS_TOKEN) return null;
+  return (await geocodeRegisterEn(address)) || (renTekst(address) !== address ? await geocodeRegisterEn(renTekst(address)) : null);
+}
+async function geocodeRegisterEn(address) {
   try {
     const url = "https://api.dataforsyningen.dk/rest/gsearch/v2.0/adresse?q=" + encodeURIComponent(address)
       + "&limit=1&srid=4326&token=" + encodeURIComponent(GS_TOKEN);

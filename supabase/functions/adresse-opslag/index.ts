@@ -103,10 +103,23 @@ const FOKUS = "&focus.point.lat=57.16&focus.point.lon=9.73";
 
 // Folk skriver «Guldstjernevej 18, V. Hjermitslev, 9700 Brønderslev». ORS finder
 // intet med det supplerende bynavn med, saa der spoerges paa «vej nr, postnr».
-function delAdresse(q: string): { vej: string; postnr: string } {
-  const vej = q.split(",")[0].trim();
+// «Simonivej 49 stuen, Pandrup» og «Torvet 7B, 1.sal, 9492 Blokhus» findes ikke i
+// registret som skrevet. Vej + husnummer + (postnummer eller by) findes. Etage, doer og
+// supplerende bynavn skaeres fra (2.10.2026: 5 af 35 gamle ruter fejlede paa det).
+function delAdresse(q: string): { vej: string; postnr: string; by: string } {
+  const dele = q.split(",").map((s) => s.trim()).filter(Boolean);
+  const foerste = dele[0] || q.trim();
   const postnr = (q.match(/\b(\d{4})\b(?!.*\b\d{4}\b)/) ?? [])[1] ?? "";
-  return { vej: vej.replace(/\b\d{4}\b.*$/, "").trim() || vej, postnr };
+  const uden = foerste.replace(/\b\d{4}\b.*$/, "").trim() || foerste;
+  const m = uden.match(/^(.*?\D\s*\d+\s?[A-Za-zÆØÅæøå]?)(?=$|[\s.,])/);
+  const vej = (m ? m[1] : uden).trim();
+  const sidste = dele.length > 1 ? dele[dele.length - 1].replace(/\b\d{4}\b/, "").trim() : "";
+  const by = postnr ? "" : (sidste || (foerste.match(/\d+\s?[A-Za-zÆØÅæøå]?\s+([A-Za-zÆØÅæøå][\wÆØÅæøå .-]*)$/) ?? [])[1] || "");
+  return { vej, postnr, by: by.replace(/^(stuen|st\.?|\d+\.?\s*sal)\b\s*/i, "").trim() };
+}
+function renTekst(q: string): string {
+  const { vej, postnr, by } = delAdresse(q);
+  return [vej, postnr || by].filter(Boolean).join(", ");
 }
 
 function orsForslag(d: any): Forslag[] {
@@ -137,8 +150,8 @@ async function orsKald(ep: string, tekst: string, antal: number): Promise<Forsla
 async function ors(q: string, antal: number): Promise<Forslag[] | null> {
   if (!ORS_API_KEY) return null;
   try {
-    const { vej, postnr } = delAdresse(q);
-    const tekst = postnr ? vej + ", " + postnr : vej;
+    const { postnr } = delAdresse(q);
+    const tekst = renTekst(q);
     let liste = await orsKald("autocomplete", tekst, antal);
     if (liste === null) return null;
     // Kender vi postnummeret og ramte autocomplete ikke, er «search» bedre til hele adresser.
@@ -167,9 +180,9 @@ function kmFraFokus(f: Forslag): number {
 // Finder registret intet med hele teksten («Passagen 43,3.sal,9440 Aabybro»), proeves
 // igen med «vej nr, postnr».
 async function slaaOp(q: string, antal: number): Promise<Forslag[] | null> {
-  const { vej, postnr } = delAdresse(q);
+  const { postnr } = delAdresse(q);
   let gs = await gsearch(q, 20);
-  if (gs && !gs.length && (vej + (postnr ? ", " + postnr : "")) !== q) gs = await gsearch(postnr ? vej + ", " + postnr : vej, 20);
+  if (gs && !gs.length && renTekst(q) !== q) gs = await gsearch(renTekst(q), 20);
   if (gs && gs.length) {
     gs.sort((a, b) => (Number(b.adresse.postnr === postnr) - Number(a.adresse.postnr === postnr)) || (kmFraFokus(a) - kmFraFokus(b)));
     const naer = gs.some((f) => kmFraFokus(f) < 60);
