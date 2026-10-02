@@ -15,7 +15,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 //      kilometerpenge.
 //
 // Kortpunkter: travel_overrides' lat/lng, ellers adresse_punkt, ellers Danmarks
-// adresseregister (DAWA). Kun kundeadresser — aldrig medarbejderes position.
+// adresseregister (GSearch) eller ORS — DAWA lukkede 2026. Kun kundeadresser — aldrig medarbejderes position.
 //
 // Kun planlaeggere. Gratis-kvoten hos ORS er 500 matrix-kald i doegnet og højst 3.500
 // par pr. kald (50 × 50) — en dag har typisk under 40 adresser.
@@ -35,15 +35,54 @@ const cors = {
 const svar = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { ...cors, "Content-Type": "application/json" } });
 
-async function geocodeDawa(adresse: string) {
+// Geokodning (2.10.2026). DAWA (api.dataforsyningen.dk/adresser) er lukket og svarer
+// 410 Gone. Nu: GSearch (Danmarks adresseregister), naar DATAFORSYNINGEN_TOKEN er sat,
+// ellers OpenRouteService. Samme regler som edge-funktionen adresse-opslag.
+// ORS' svar bruges KUN, naar postnummeret passer — et punkt i den forkerte by giver
+// forkerte kilometer, og det er vaerre end ingen.
+const GS_TOKEN = Deno.env.get("DATAFORSYNINGEN_TOKEN") ?? "";
+function delAdresse(q: string): { vej: string; postnr: string } {
+  const vej = q.split(",")[0].trim();
+  const postnr = (q.match(/\b(\d{4})\b(?!.*\b\d{4}\b)/) ?? [])[1] ?? "";
+  return { vej: vej.replace(/\b\d{4}\b.*$/, "").trim() || vej, postnr };
+}
+function foerstePunkt(g: any): [number, number] | null {
+  let c = g?.coordinates;
+  while (Array.isArray(c) && Array.isArray(c[0])) c = c[0];
+  return Array.isArray(c) && c.length >= 2 && Number.isFinite(c[0]) && Number.isFinite(c[1]) ? [c[0], c[1]] : null;
+}
+async function geocodeRegister(adresse: string): Promise<{ lat: number; lng: number } | null> {
+  if (!GS_TOKEN) return null;
   try {
-    const r = await fetch("https://api.dataforsyningen.dk/adresser?q=" + encodeURIComponent(adresse) + "&per_side=1&srid=4326",
-      { headers: { "Accept-Encoding": "identity" } });
+    const r = await fetch("https://api.dataforsyningen.dk/rest/gsearch/v2.0/adresse?q=" + encodeURIComponent(adresse)
+      + "&limit=1&srid=4326&token=" + encodeURIComponent(GS_TOKEN),
+      { headers: { "Accept-Encoding": "identity" } });   // ellers «unexpected end of file»
     if (!r.ok) return null;
     const d = await r.json();
-    const k = d?.[0]?.adgangsadresse?.adgangspunkt?.koordinater;
-    return Array.isArray(k) && k.length >= 2 ? { lat: k[1], lng: k[0] } : null;
+    const p = Array.isArray(d) && d[0] ? foerstePunkt(d[0].geometri ?? d[0].geometry) : null;
+    return p ? { lat: p[1], lng: p[0] } : null;
   } catch { return null; }
+}
+async function geocodeOrsDk(adresse: string): Promise<{ lat: number; lng: number } | null> {
+  if (!ORS_API_KEY) return null;
+  try {
+    const { vej, postnr } = delAdresse(adresse);
+    const r = await fetch("https://api.openrouteservice.org/geocode/search?api_key=" + encodeURIComponent(ORS_API_KEY)
+      + "&text=" + encodeURIComponent(postnr ? vej + ", " + postnr : vej)
+      + "&boundary.country=DK&layers=address&size=5&focus.point.lat=57.16&focus.point.lon=9.73");
+    if (!r.ok) return null;
+    const d = await r.json();
+    const f = (d?.features ?? []).find((x: any) => !postnr || String(x?.properties?.postalcode ?? "") === postnr);
+    const p = f ? foerstePunkt(f.geometry) : null;
+    return p ? { lat: p[1], lng: p[0] } : null;
+  } catch { return null; }
+}
+
+async function geocode(adresse: string): Promise<{ lat: number; lng: number; kilde: string } | null> {
+  const g = await geocodeRegister(adresse);
+  if (g) return { ...g, kilde: "gsearch" };
+  const o = await geocodeOrsDk(adresse);
+  return o ? { ...o, kilde: "ors" } : null;
 }
 
 Deno.serve(async (req) => {
@@ -94,10 +133,10 @@ Deno.serve(async (req) => {
     for (const p of pkt ?? []) if (p.lat != null) punkt[p.adresse] ||= { lat: Number(p.lat), lng: Number(p.lng) };
     for (const a of adresser) {
       if (punkt[a]) continue;
-      const g = await geocodeDawa(a);
+      const g = await geocode(a);
       if (g) {
-        punkt[a] = g;
-        await admin.from("adresse_punkt").upsert({ adresse: a, lat: g.lat, lng: g.lng, kilde: "dawa", hentet: new Date().toISOString() });
+        punkt[a] = { lat: g.lat, lng: g.lng };
+        await admin.from("adresse_punkt").upsert({ adresse: a, lat: g.lat, lng: g.lng, kilde: g.kilde, hentet: new Date().toISOString() });
       }
     }
     const mangler = adresser.filter((a) => !punkt[a]);

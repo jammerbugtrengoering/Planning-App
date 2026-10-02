@@ -2202,8 +2202,8 @@ const MODULE_HELP = {
         "I stedet står der, hvornår tjenesten sidst svarede os, og hvad den svarede. Dinero hentede 13.650 fakturaer kl. 06.15 — det er et bevis. «OK» er en påstand.",
         "Netlify-linjen viser, hvornår den app, du sidder med, blev bygget. Er den ældre, end du forventer, er dit sidste push ikke gået igennem."] },
     { h: "Adresseregistret spørges med det samme", p: [
-        "Alle de andre tjenester kaldes fra serveren og efterlader spor. Adresseregistret kaldes fra din browser, og det fejler i stilhed — adressefeltet holder bare op med at foreslå adresser uden at sige hvorfor.",
-        "Derfor slår siden op med det samme, når den åbnes, og svaret er fra dette sekund.",
+        "Adresseopslaget fejler i stilhed — adressefeltet holder bare op med at foreslå adresser uden at sige hvorfor. Derfor slår siden op med det samme, når den åbnes, og svaret er fra dette sekund.",
+        "Det gamle adresseregister (DAWA) blev lukket i 2026. Opslaget går nu gennem vores egen funktion «adresse-opslag»: Danmarks adresseregister (GSearch), når nøglen DATAFORSYNINGEN_TOKEN er sat i Supabase, ellers OpenRouteService. Står der «reserven» i gult, er nøglen ikke sat eller registret svarer ikke — forslagene virker stadig, men er lidt mindre præcise på landet.",
         "Under linjen står, hvor mange af de gemte ruter der er slået op i registret, og hvor mange der kom fra reserven hos OpenRouteService. Alt andet end registret er værd at kigge på: findes adressen ikke i registret, kan reserven finde på et svar — og så er kilometerne opdigtede."] },
     { h: "Cpr-numre på medarbejdernes telefoner", p: [
         "På Nexus-opgaver står borgerens cpr-nummer forrest i referencen, fordi kommunen skal bruge det på fakturaen. Worklist fjerner det, før medarbejderen ser referencen — men kun når opgaven står som Nexus.",
@@ -2234,7 +2234,7 @@ const MODULE_HELP = {
     { h: "Fanerne", p: [
         "«Budget og omsætning» svarer på, hvad der er kommet ind måned for måned i år.",
         "«Aftaleportefølje» svarer på, hvad der er aftalt — hvad de aftaler, I har, er værd, og hvordan de fordeler sig.",
-        "Det andet kan ikke læses ud af det første. En aftale, du skriver under i dag, fylder næsten ingenting i budgettet i år og kan alligevel være en halv million værd over sin løbetid.", "«Overskud» viser overskuddet måned for måned. Kun administratorer kan se den."] }, { h: "Overskud", p: ["Overskuddet regnes som omsætning minus lønsum, kørsel og frie omkostninger, måned for måned.", "Er en måned allerede godkendt til løn og «låst», ændrer senere rettelser i lønnen ikke det overskud, der allerede er opgjort for den måned.", ...(KUNDEUDGAVE ? [] : ["«Oms. (Dinero)» er betalte fakturaer hentet fra Dinero natten før — kun til sammenligning, den tæller ikke med i selve overskuddet."])] },
+        "Det andet kan ikke læses ud af det første. En aftale, du skriver under i dag, fylder næsten ingenting i budgettet i år og kan alligevel være en halv million værd over sin løbetid.", "«Overskud» viser overskuddet måned for måned. Kun administratorer kan se den."] }, { h: "Overskud", p: ["Overskuddet regnes som omsætning minus lønsum, kørsel og frie omkostninger, måned for måned.", "Er en måned allerede godkendt til løn og «låst», ændrer senere rettelser i lønnen ikke det overskud, der allerede er opgjort for den måned.", ...(KUNDEUDGAVE ? [] : ["«Faktureret (Dinero)» er alle bogførte fakturaer med fakturadato i måneden, hentet fra Dinero natten før. Under står, hvor meget der er betalt, og — med rødt — hvor meget der er forfaldent og ikke betalt. Hold musen over tallet for at se det hele, også kladder. Kun til sammenligning; det tæller ikke med i selve overskuddet."])] },
     { h: "Budget og omsætning", p: ["Budget er det du selv lægger ind med «Redigér budget».",
         "Planlagt er værdien af det der ligger i kalenderen.",
         "Registreret er den tid der faktisk er logget.",
@@ -9442,6 +9442,27 @@ function OverskudRapport({ instances, employees, satsHistorik, kmSatser, kmLog, 
   const [selectedYear, setSelectedYear] = useState(now.getFullYear());
   const years = [now.getFullYear() - 1, now.getFullYear(), now.getFullYear() + 1];
 
+  // Alle Dinero-fakturaer pr. måned og status (Jonn 2.10.2026): faktureret, betalt,
+  // udestående og forfaldent — ikke kun betalt. Synkroniseres natligt.
+  const [dineroStatus, setDineroStatus] = useState({});
+  useEffect(() => {
+    if (!harModul("dinero")) return;
+    supabase.from("dinero_fakturastatus").select("aar, maaned, status, beloeb, antal").then(({ data }) => {
+      const m = {};
+      (data || []).forEach((r) => {
+        const k = `${r.aar}-${r.maaned}`;
+        m[k] = m[k] || { faktureret: 0, antal: 0, betalt: 0, udestaaende: 0, forfaldent: 0, nForfaldent: 0, kladde: 0 };
+        const b = Number(r.beloeb) || 0;
+        if (r.status === "Draft") { m[k].kladde += b; return; }
+        m[k].faktureret += b; m[k].antal += r.antal || 0;
+        if (r.status === "Paid") m[k].betalt += b;
+        else if (r.status === "Overdue") { m[k].forfaldent += b; m[k].nForfaldent += r.antal || 0; }
+        else m[k].udestaaende += b;
+      });
+      setDineroStatus(m);
+    });
+  }, []);
+
   // Godkendelser — samme tabel og nøgleform som Danløn-eksporten i
   // EmployeeExportView ("slags|employee_id|reference"), hentet uafhængigt her
   // så overskudsrapporten kan læses uden at afhænge af den fane.
@@ -9604,13 +9625,13 @@ function OverskudRapport({ instances, employees, satsHistorik, kmSatser, kmLog, 
       {godkFejl && <div style={{ color: "#DC2626", fontSize: 12.5, marginBottom: 10 }}>{godkFejl}</div>}
       <div style={{ fontSize: 12.5, color: "#94A3B8", marginBottom: 10 }}>
         Kun godkendte timer og kilometer (samme godkendelser som bruges til Danløn-eksporten) tælles med i lønsum og kørsel.
-        {harModul("dinero") && <>{" "}"Oms. (Dinero)" er betalte fakturaer hentet fra Dinero natten før — kun til sammenligning, den tæller ikke med i overskuddet.</>}
+        {harModul("dinero") && <>{" "}«Faktureret (Dinero)» er alle bogførte fakturaer med fakturadato i måneden, hentet fra Dinero natten før — under står hvor meget der er betalt, og hvor meget der er forfaldent. Kun til sammenligning; det tæller ikke med i overskuddet.</>}
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: OVERSKUD_GRID(), gap: 0, background: "#F8FAFC", borderRadius: "10px 10px 0 0", padding: "8px 14px", fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.04em" }}>
         <span>Måned</span>
         <span style={{ textAlign: "right" }}>Omsætning</span>
-        <span style={{ textAlign: "right" }}>{harModul("dinero") ? "Oms. (Dinero)" : ""}</span>
+        <span style={{ textAlign: "right" }}>{harModul("dinero") ? "Faktureret (Dinero)" : ""}</span>
         <span style={{ textAlign: "right" }}>Løn</span>
         <span style={{ textAlign: "right" }}>Kørsel</span>
         <span style={{ textAlign: "right" }}>Andet</span>
@@ -9622,7 +9643,21 @@ function OverskudRapport({ instances, employees, satsHistorik, kmSatser, kmLog, 
           <div key={r.month} style={{ display: "grid", gridTemplateColumns: OVERSKUD_GRID(), gap: 0, padding: "9px 14px", borderBottom: idx < monthRows.length - 1 ? "1px solid #F1F5F9" : "none", alignItems: "center" }}>
             <div style={{ fontSize: 13, fontWeight: 600, color: "#111111" }}>{r.label}</div>
             <div style={{ fontSize: 13, color: "#334155", textAlign: "right" }}>{r.omsaetning > 0 ? kr(r.omsaetning) : "—"}</div>
-            <div style={{ fontSize: 13, color: "#0369A1", textAlign: "right" }} title={r.dineroAntal != null ? `${r.dineroAntal} betalte fakturaer` : undefined}>{!harModul("dinero") ? "" : r.dineroKr != null ? kr(r.dineroKr) : "—"}</div>
+            {(() => {
+              if (!harModul("dinero")) return <div />;
+              const d = dineroStatus[`${selectedYear}-${r.month}`];
+              if (!d) return <div style={{ fontSize: 13, color: "#0369A1", textAlign: "right" }}>{r.dineroKr != null ? kr(r.dineroKr) : "—"}</div>;
+              return (
+                <div style={{ textAlign: "right", lineHeight: 1.35 }}
+                  title={`${d.antal} fakturaer · betalt ${kr(d.betalt)} · ikke forfaldent ${kr(d.udestaaende)} · forfaldent ${kr(d.forfaldent)}${d.kladde ? ` · kladder ${kr(d.kladde)}` : ""}`}>
+                  <div style={{ fontSize: 13, color: "#0369A1", fontWeight: 600 }}>{kr(d.faktureret)}</div>
+                  {d.betalt < d.faktureret - 1 && (
+                    <div style={{ fontSize: 11, color: "#64748B" }}>betalt {kr(d.betalt)}</div>)}
+                  {d.forfaldent > 0 && (
+                    <div style={{ fontSize: 11, color: "#B91C1C", fontWeight: 600 }}>forfaldent {kr(d.forfaldent)} ({d.nForfaldent})</div>)}
+                </div>
+              );
+            })()}
             <div style={{ fontSize: 13, color: "#64748B", textAlign: "right" }}>{r.loenKr > 0 ? kr(r.loenKr) : "—"}</div>
             <div style={{ fontSize: 13, color: "#64748B", textAlign: "right" }}>{r.kmKr > 0 ? kr(r.kmKr) : "—"}</div>
             <div style={{ fontSize: 13, color: "#64748B", textAlign: "right" }}>{r.manuelleKr > 0 ? kr(r.manuelleKr) : "—"}</div>
@@ -9634,7 +9669,8 @@ function OverskudRapport({ instances, employees, satsHistorik, kmSatser, kmLog, 
       <div style={{ display: "grid", gridTemplateColumns: OVERSKUD_GRID(), gap: 0, padding: "10px 14px", background: "var(--farve-lys)", borderRadius: 10, marginTop: 8, fontWeight: 700, fontSize: 13 }}>
         <span style={{ color: "var(--farve-moerk)" }}>I alt {selectedYear}</span>
         <span style={{ textAlign: "right", color: "#111111" }}>{kr(aarTotal.omsaetning)}</span>
-        <span style={{ textAlign: "right", color: "#0369A1" }}>{harModul("dinero") ? kr(aarTotal.dineroKr) : ""}</span>
+        <span style={{ textAlign: "right", color: "#0369A1" }}>{harModul("dinero") ? kr(Object.entries(dineroStatus)
+          .filter(([k]) => k.startsWith(`${selectedYear}-`)).reduce((s2, [, d]) => s2 + d.faktureret, 0) || aarTotal.dineroKr) : ""}</span>
         <span />
         <span />
         <span />
@@ -9773,7 +9809,7 @@ const DRIFT_JOB = [
 
 // En adresse, der med sikkerhed findes i Danmarks adresseregister, og som ikke hører
 // til nogen kunde. Bruges kun til at spørge registret, om det svarer.
-const PROEVEADRESSE = "Rådhuspladsen 1, 1550 København V";
+const PROEVEADRESSE = "Toftevej 43, 9440 Aabybro";   // Jammerbugt Rådhus
 
 function dkNaar(t) {
   if (!t) return "aldrig";
@@ -9816,6 +9852,7 @@ function DriftView({ isAdminUser, paaSide }) {
   const [job, setJob] = useState(null);          // null = henter endnu
   const [tal, setTal] = useState(null);
   const [kilder, setKilder] = useState(null);
+  const [registerKilde, setRegisterKilde] = useState(null);
   const [register, setRegister] = useState("spoerger");  // spoerger | svarer | svarer_ikke | ukendt_adresse
   const [fejl, setFejl] = useState("");
 
@@ -9896,12 +9933,14 @@ function DriftView({ isAdminUser, paaSide }) {
 
       // Og det levende opslag. Registret kaldes direkte fra browseren, præcis som
       // adressefeltet gør det — så det her er det samme svar, kontoret ville få.
+      // 2.10.2026: DAWA er lukket (410). Opslaget går nu gennem edge-funktionen
+      // adresse-opslag: GSearch, hvis DATAFORSYNINGEN_TOKEN er sat, ellers ORS.
       try {
-        const res = await fetch("https://api.dataforsyningen.dk/adresser/autocomplete?per_side=1&q="
-          + encodeURIComponent(PROEVEADRESSE));
-        if (!res.ok) throw new Error(String(res.status));
-        const d = await res.json();
-        if (!afbrudt) setRegister(Array.isArray(d) && d.length ? "svarer" : "ukendt_adresse");
+        const d = await slaaAdresseOp(PROEVEADRESSE, 1);
+        if (!afbrudt) {
+          setRegisterKilde(d.kilde);
+          setRegister(d.forslag.length ? "svarer" : "ukendt_adresse");
+        }
       } catch {
         if (!afbrudt) setRegister("svarer_ikke");
       }
@@ -9935,7 +9974,7 @@ function DriftView({ isAdminUser, paaSide }) {
     ? Object.entries(kilder).filter(([k]) => k !== "api" && k !== "?")
     : [];
   const kilderIAlt = kilderKendt.reduce((s, [, n]) => s + n, 0);
-  const kilderRegister = kilderKendt.filter(([k]) => k === "dawa").reduce((s, [, n]) => s + n, 0);
+  const kilderRegister = kilderKendt.filter(([k]) => k === "dawa" || k === "gsearch").reduce((s, [, n]) => s + n, 0);
   const kilderIkkeRegister = kilderIAlt - kilderRegister;
   const kilderUkendt = kilder ? ((kilder.api || 0) + (kilder["?"] || 0)) : 0;
 
@@ -10124,11 +10163,16 @@ function DriftView({ isAdminUser, paaSide }) {
         <DriftTjeneste navn="Adresseregistret"
           maerkat={{ spoerger: "spørger…", svarer: "Svarer nu",
                      svarer_ikke: "Svarer ikke", ukendt_adresse: "Svarer mærkeligt" }[register]}
-          slags={{ spoerger: "graa", svarer: "ok", svarer_ikke: "roed", ukendt_adresse: "gul" }[register]}>
-          {register === "svarer" && <>Slået op nu, fra denne browser. Registret kender prøveadressen.</>}
+          slags={register === "svarer" && registerKilde !== "gsearch" ? "gul"
+            : { spoerger: "graa", svarer: "ok", svarer_ikke: "roed", ukendt_adresse: "gul" }[register]}>
+          {register === "svarer" && registerKilde === "gsearch" && <>Slået op nu i Danmarks adresseregister
+            (GSearch). Registret kender prøveadressen.</>}
+          {register === "svarer" && registerKilde !== "gsearch" && <>Svarer fra <b>reserven</b>
+            (OpenRouteService). Det gamle register (DAWA) er lukket, og <code>DATAFORSYNINGEN_TOKEN</code> er
+            ikke sat under Edge Functions → Secrets — eller GSearch svarede ikke.</>}
           {register === "spoerger" && <>Slår op…</>}
-          {register === "svarer_ikke" && <>dataforsyningen.dk svarede ikke. Adressefeltet holder op med
-            at foreslå adresser, <b>uden at sige det</b> — og kørslen geokodes fra reserven i stedet.</>}
+          {register === "svarer_ikke" && <>Hverken adresseregistret eller reserven svarede. Adressefeltet holder
+            op med at foreslå adresser, <b>uden at sige det</b>.</>}
           {register === "ukendt_adresse" && <>Registret svarede, men kendte ikke en adresse, det burde
             kende. Noget er anderledes end forventet.</>}
           {kilder && (
@@ -15742,8 +15786,8 @@ function KunderView({ supabase, currentEmployeeId }) {
 //   sted skrevet paa to maader. Gav dobbelte raekker i Transporttid, og en gemt
 //   koeretid kunne ikke genbruges.
 //
-// Registret er Danmarks officielle (dataforsyningen.dk) — samme kilde som geokodningen
-// i travel-distance, saa det man vaelger her, er praecis det ruteberegningen kan finde.
+// Opslaget gaar gennem edge-funktionen adresse-opslag (se slaaAdresseOp). DAWA, som det
+// tidligere kaldte direkte, blev lukket i 2026.
 //
 // Fri indtastning er STADIG tilladt. Nogle adresser i drift har etage og doer skrevet
 // ind ("Passagen 43,3.sal,9440 Aabybro"), og en spaerring ville bare faa folk til at
@@ -15752,6 +15796,29 @@ const adresserIBrug = { nu: [] };
 
 function normalisérAdresse(a) {
   return (a || "").toLowerCase().replace(/[\s,.]/g, "");
+}
+
+// Adresseopslag (2.10.2026). DAWA, som før blev kaldt direkte herfra, er lukket (410
+// Gone). Nu går opslaget gennem edge-funktionen adresse-opslag, som spørger GSearch
+// (Dataforsyningen, kræver DATAFORSYNINGEN_TOKEN som secret) og ellers OpenRouteService.
+// Svaret har DAWA's form: { forslag: [{ tekst, adresse: { x, y, vejnavn, husnr, postnr } }], kilde }.
+async function slaaAdresseOp(q, antal = 6) {
+  const { data, error } = await supabase.functions.invoke("adresse-opslag", { body: { q, antal } });
+  if (error || !data || data.error) throw new Error(error?.message || data?.error || "intet svar");
+  return { forslag: Array.isArray(data.forslag) ? data.forslag : [], kilde: data.kilde };
+}
+
+// Er forslaget DEN adresse, der er skrevet? Samme vej, husnummer og postnummer.
+function adresseRammer(tekst, f) {
+  if (normalisérAdresse(f?.tekst) === normalisérAdresse(tekst)) return true;
+  const a = f?.adresse || {};
+  const t = String(tekst || "").toLowerCase();
+  const vej = String(a.vejnavn || "").toLowerCase();
+  const husnr = String(a.husnr || "").toLowerCase().replace(/[^0-9a-z]/g, "");
+  const postnr = String(a.postnr || "");
+  if (!vej || !husnr || !postnr) return false;
+  return t.includes(vej) && new RegExp(`\\b${postnr}\\b`).test(t)
+    && new RegExp(`(^|[^0-9])${husnr}([^0-9a-z]|$)`).test(t);
 }
 
 function AdresseFelt({ vaerdi, onChange, kendteAdresser, disabled, placeholder }) {
@@ -15778,14 +15845,11 @@ function AdresseFelt({ vaerdi, onChange, kendteAdresser, disabled, placeholder }
     timer.current = setTimeout(async () => {
       setSoeger(true);
       try {
-        const res = await fetch(
-          "https://api.dataforsyningen.dk/adresser/autocomplete?per_side=6&q=" + encodeURIComponent(q));
-        const data = res.ok ? await res.json() : [];
-        setForslag(Array.isArray(data) ? data : []);
-        // Rammer det indtastede en rigtig adresse praecist? Sammenlignes normaliseret,
-        // saa komma og mellemrum ikke afgoer det.
-        setKendtIRegistret((Array.isArray(data) ? data : [])
-          .some((f) => normalisérAdresse(f.tekst) === normalisérAdresse(q)));
+        const data = (await slaaAdresseOp(q, 6)).forslag;
+        setForslag(data);
+        // Rammer det indtastede en rigtig adresse? Samme vej, husnummer og postnummer
+        // tæller — «V. Hjermitslev» i midten skal ikke gøre adressen ukendt.
+        setKendtIRegistret(data.some((f) => adresseRammer(q, f)));
       } catch {
         // Registret kan vaere nede. Saa siger vi ingenting frem for at paastaa at
         // adressen er forkert.
