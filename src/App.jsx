@@ -10365,7 +10365,7 @@ function StartStopRapport() {
                 </div>
                 <table style={{ width: "100%", borderCollapse: "collapse", background: "#fff", borderRadius: 12, overflow: "hidden" }}>
                   <thead><tr style={{ background: "#F8FAFC", fontSize: 12, color: "#475569", textAlign: "left" }}>
-                    {["Planlagt", "Opgave", "Påmindelse / systemstart", "Start", "Afslut", "Registreret"].map((h) => (
+                    {["Planlagt", "Opgave", "Påmindelse / systemstart", "Start", "Afslut", "Målt", "Registreret"].map((h) => (
                       <th key={h} style={{ padding: "8px 10px" }}>{h}</th>))}
                   </tr></thead>
                   <tbody>
@@ -10391,15 +10391,25 @@ function StartStopRapport() {
                                   </SsMaerke>
                                 : <span style={{ color: "#94A3B8" }}>—</span>}
                             </td>
+                            {/* Målt tid (Jonn 2.10.2026). Ved en systemstart er den et skøn — tiden
+                                løb fra det tidspunkt, systemet satte — og står derfor grå. */}
+                            <td style={{ padding: "9px 10px", color: o.maalt == null ? "#94A3B8" : st.slags === "system" ? "#94A3B8" : "#111111" }}
+                              title={st.slags === "system" ? "Skøn: tiden blev startet af systemet" : undefined}>
+                              {o.maalt != null ? <>⏱ {fmtMin(o.maalt)}{st.slags === "system" ? " (skøn)" : ""}</> : "—"}
+                            </td>
                             <td style={{ padding: "9px 10px" }}>
                               {o.min != null ? fmtMin(o.min) : <span style={{ color: "#94A3B8" }}>—</span>}
                               {afv ? <> <SsMaerke farve={afv > 0 ? "orange" : "graa"}>{afv > 0 ? "+" : ""}{afv}m</SsMaerke></> : null}
+                              {o.tilpasset != null && (
+                                <div style={{ fontSize: 11.5, color: "#166534" }} title="Inden for tolerancen — den planlagte tid er registreret">
+                                  ≈ afsluttet med {fmtMin(o.tilpasset)}</div>
+                              )}
                             </td>
                           </tr>
                           {aaben === noegle && (
                             <tr style={{ background: "#FAFAFA", fontSize: 13, color: "#334155" }}>
                               <td />
-                              <td colSpan={5} style={{ padding: "8px 10px", lineHeight: 1.6 }}>
+                              <td colSpan={6} style={{ padding: "8px 10px", lineHeight: 1.6 }}>
                                 {o.paam && <div>🔔 Påmindelse sendt kl. {o.paam}.</div>}
                                 {o.sys && <div>⚙️ Systemet startede tiden kl. {o.sys}.
                                   {st.slags === "fjernet" ? ` Starten blev fjernet igen${o.fortrudt ? ` kl. ${o.fortrudt} med «Fortryd start»` : " — typisk med «Fortryd start»"}.` : ""}
