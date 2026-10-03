@@ -146,10 +146,13 @@ Kommer der en konflikt, **så stop**. Lad være med at gætte, og lad være med 
 
 ---
 
-## Slut altid af med push-kommandoen
+## Push — hvem gør det
 
-Claude kan ikke nå GitHub — adgangskoden ligger i brugerens nøglering, ikke i Claudes
-miljø. Arbejdsdelingen er derfor: **Claude retter filerne og laver commit, brugeren
+**Fra 3.10.2026 committer og pusher Claude selv**, når build og tests er grønne (Jonns
+beslutning). Det gælder, hvor Claude har adgang til GitHub (cloud-udgaven).
+
+Kører Claude et sted uden adgang — fx lokalt, hvor adgangskoden ligger i brugerens
+nøglering — gælder den gamle deling: **Claude retter filerne og laver commit, brugeren
 pusher.**
 
 Har du lavet en commit, så slut svaret af med den færdige kommando, klar til at

@@ -206,8 +206,13 @@ sletter den andens arbejde. `git merge --abort` sætter dig tilbage, hvor du var
     npm run build
     node aftalerytme.test.mjs   # og de øvrige *.test.mjs, der rører dit område
 
-Claude kan ikke nå GitHub — adgangskoden ligger i brugerens nøglering. Arbejdsdelingen er:
-**Claude retter og committer, brugeren pusher.** Slut svaret af med den færdige kommando:
+**Claude committer og pusher selv** (Jonns beslutning 3.10.2026), men først når
+build og tests er grønne, og hele outputtet er læst. Push går i drift med det samme.
+Først `git pull --no-rebase origin main`, aldrig `--force`. Commit-beskeder uden æøå.
+
+Kører Claude et sted uden adgang til GitHub (fx lokalt, hvor adgangskoden ligger i
+brugerens nøglering), gælder den gamle deling: Claude committer, brugeren pusher, og
+svaret sluttes af med kommandoen:
 
     cd ~/planapp/Planning-App && git push origin main
 
