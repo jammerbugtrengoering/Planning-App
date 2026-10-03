@@ -229,7 +229,7 @@ function instanceDateString(t) {
 // og ikke sidefaner — der er ikke andre sider at skifte til.
 const MENU_GRUPPER = [
   { key: "drift",     navn: "Ugeplan",    sider: [["uge", "Ugeplan"]] },
-  { key: "salg",      navn: "Salg",       sider: [["kunder", "Kunder"], ["tilbud", "Tilbud"], ["contracts", "Aftaler"], ["produkter", "Produkter"]] },
+  { key: "salg",      navn: "Salg",       sider: [["kunder", "Kunder"], ["henvendelser", "Henvendelser"], ["tilbud", "Tilbud"], ["contracts", "Aftaler"], ["produkter", "Produkter"]] },
   // Lager er sin egen gruppe og ikke en fane under Opsaetning. Det er drift, ikke
   // opsaetning: beholdningen roeres i loebet af ugen, mens medarbejdere og
   // tjeklister saettes op én gang og saa staar. At skulle gennem Opsaetning for at
@@ -259,7 +259,9 @@ function gruppeFor(view) {
 // siden fra menuen — og databasen afviser den alligevel. Hos Jammerbugt er alle med.
 // Produkter er kundeportalens abonnementer og bestillingsliste. Uden kundeportal (som i
 // kundeudgaven, 29.9.2026) er der intet at saette priser paa, saa siden forsvinder.
-const SIDE_MODUL = { inventory: "lager", tilbud: "tilbud", produkter: "kundeportal" };
+// Henvendelser kommer fra kundeportalens offentlige side /bestil (3.10.2026). Uden
+// kundeportal findes siden ikke, og tabellen findes ikke i kundedatabasen.
+const SIDE_MODUL = { inventory: "lager", tilbud: "tilbud", produkter: "kundeportal", henvendelser: "kundeportal" };
 function synligeSider(gr) {
   return gr.sider.filter(([k]) => !SIDE_MODUL[k] || harModul(SIDE_MODUL[k]));
 }
@@ -2111,6 +2113,20 @@ const MODULE_HELP = {
         "Den behandles præcis som en bestilling fra kundeportalen. Svaret sendes til den, der bestilte, og kunden ser status under Ekstra hjælp."] },
   ], warn: "Kunden ser sine opgaver med tid, tjekliste og hvem der udførte dem — men aldrig interne advarsler, kontrakttype eller lønrelevante tal. Felterne er valgt enkeltvis i databasen." },
 
+  henvendelser: { title: "Henvendelser", intro: "Borgere, der har scannet QR-koden i pjecen og bedt om at blive ringet op.", blocks: [
+    { h: "Hvor de kommer fra", p: [
+        "QR-koden i pjecen åbner siden «Bliv ringet op» i kundeportalen. Der skal ikke logges ind. Borgeren skriver navn og telefon — resten kan springes over.",
+        "Siden er lavet til ældre: stor skrift, store knapper og kun to felter, der skal udfyldes. Kontorets telefonnummer står øverst, for mange vil hellere ringe selv.",
+        "Når en henvendelse kommer ind, får alle planlæggere en mail, og den står i klokken som «Ring op», indtil den har fået en anden status end Ny. Er den over et døgn gammel, står den som «haster»."] },
+    { h: "Sådan følger du op", p: [
+        "Ring op, og sæt status: Ringet op, Tilbud sendt, Blev kunde eller Afsluttet (ingen aftale). Skriv en kort note om, hvad I aftalte.",
+        "Skal der laves et tilbud, så opret kunden og tilbuddet som altid under Kunder og Tilbud. Henvendelsen opretter ikke selv noget.",
+        "Samme telefonnummer inden for en time giver ikke en ny henvendelse — mange trykker to gange, fordi de ikke er sikre på, at det virkede."] },
+    { h: "Persondata", p: [
+        "Der gemmes kun det, borgeren selv skriver. Ingen IP-adresse og intet om telefonen.",
+        "Henvendelsen slettes automatisk 6 måneder efter, at den er Afsluttet eller Blev kunde, og alle senest efter 12 måneder. Bliver borgeren kunde, ligger oplysningerne på kunden og aftalen — ikke her.",
+        "Beder en borger om at få sine oplysninger slettet før, så tryk «Slet» på henvendelsen. Det kan ikke fortrydes."] },
+  ], warn: "Spørger borgeren om kommunal hjælp, så husk: hvem der leverer, bestemmer borgeren selv, men det er kommunens visitation, der skal have besked om skiftet." },
   tilbud: { title: "Tilbud", intro: "Tilbuddet er forløberen for aftalen. Accepterer kunden, dannes aftalen af sig selv — som kladde.", blocks: [
     { h: "Sådan laver du et", p: [
         (KUNDEUDGAVE ? "Tryk «Nyt tilbud», find eller opret kunden," : "Tryk «Nyt tilbud», find kunden i Dinero,") + " og udfyld kontrakttype, pris og hvilke tjeklister der er med.",
@@ -2357,6 +2373,7 @@ const MODULE_HELP = {
         "Navn, adresse, telefon, e-mail og kontaktperson. Aftale, tider, priser og fakturaer.",
         "Noter og billeder fra besøget. Adgangsforhold, herunder nøgleboks- og alarmkoder.",
         "Ved accept af et tilbud gemmes desuden IP-adresse og browser sammen med underskriften. Kunden får det oplyst på accept-siden, inden hun trykker.",
+        "Henvendelser fra «Bliv ringet op» (QR-koden i pjecen): navn, telefon, hvornår vi må ringe, og det borgeren selv vælger at skrive — adresse, om hun får hjælp fra kommunen, hvad hun er interesseret i, og en besked. Ingen IP-adresse. Slettes automatisk 6 måneder efter, at den er afsluttet, og senest efter 12 måneder.",
         "På Nexus- og ældrelovsopgaver er det kommunen der er dataansvarlig. Spørger en borger om indsigt i sine oplysninger, skal hun henvises til kommunen — vi udfører alene arbejdet efter kommunens instruks."] },
     { h: "Det systemet ikke indeholder", p: [
         "Ingen CPR-numre. Lønfilen bruger Danløn-nummeret.",
@@ -2373,6 +2390,7 @@ const MODULE_HELP = {
         "Danløn — men ikke automatisk. Du henter selv filen og lægger den op."] },
     { h: "Hvad der slettes automatisk", p: [
         "Billeder på opgaver: efter 12 måneder. Noten består, men markeres som havende haft billeder.",
+        "Henvendelser fra «Bliv ringet op»: 6 måneder efter, at de er afsluttet eller blevet til en kunde — alle senest efter 12 måneder.",
         "Nøgleboks- og alarmkoder: tre måneder efter at opgaven er afsluttet eller slettet.",
         "Push-tilmeldinger: når telefonen ikke svarer længere.",
         "Ved fratrædelse: login og arbejdsmail straks. Løn- og kørselsdokumentationen bliver stående, fordi den skal kunne fremvises år efter.",
@@ -3695,6 +3713,7 @@ function PlanningApp({ session, onSignOut }) {
     if (l.art === "produktbestilling" || l.art === "udlevering") { setView("inventory"); return; }
     if (l.art === "drift") { setView("drift"); return; }
     if (l.art === "systemlukninger") { setView("reports"); return; }
+    if (l.art === "henvendelse") { setView("henvendelser"); return; }
     setView("uge");
   }
 
@@ -6313,6 +6332,7 @@ function PlanningApp({ session, onSignOut }) {
       )}
 
       {view === "produkter" && harModul("kundeportal") && <ProdukterView isAdminUser={isAdminUser} notify={notify} />}
+      {view === "henvendelser" && harModul("kundeportal") && <HenvendelserView isAdminUser={isAdminUser} notify={notify} onGaaTil={setView} />}
       {view === "ekstrahjaelp" && KUNDEUDGAVE && isAdminUser && <EkstraHjaelpView />}
 
       {view === "aflysning" && (
@@ -13724,6 +13744,136 @@ function KontorKlokke({ isAdminUser, signal, onGaaTil }) {
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+// ── Henvendelser («Bliv ringet op») ──────────────────────────────────────────
+// 3.10.2026, Jonn: QR-koden i pjecen -> /bestil i kundeportalen -> edge-funktionen
+// henvendelse-modtag -> tabellen henvendelser. Her ringer kontoret op og sætter status.
+// Henvendelsen opretter ikke selv en kunde eller et tilbud; det gøres som altid.
+const HENV_STATUS = {
+  ny: { navn: "Ny", farve: "#4F46E5", bg: "#EEF2FF" },
+  ringet: { navn: "Ringet op", farve: "#B45309", bg: "#FEF3C7" },
+  tilbud: { navn: "Tilbud sendt", farve: "#0369A1", bg: "#E0F2FE" },
+  kunde: { navn: "Blev kunde", farve: "#166534", bg: "#DCFCE7" },
+  afsluttet: { navn: "Afsluttet", farve: "#475569", bg: "#F1F5F9" },
+};
+const HENV_OENSKE = {
+  fast: "Fast rengøring", hovedrengoering: "Hovedrengøring", vinduer: "Vinduespudsning",
+  ovn_koeleskab: "Ovn og køleskab", toejvask: "Tøjvask og strygning", hoejtid: "Klar til højtid", andet: "Andet",
+};
+const HENV_RING = { formiddag: "helst formiddag", eftermiddag: "helst eftermiddag", lige_meget: "når som helst" };
+const HENV_HJAELP = { ja: "Får hjælp fra kommunen", nej: "Ingen hjælp fra kommunen", ved_ikke: "Ved ikke om kommunal hjælp" };
+
+const HENV_KORT = { background: "#fff", borderRadius: 12, padding: "14px 16px", boxShadow: "0 1px 3px rgba(15,23,42,0.08)", border: "1px solid #EEF2F6" };
+function HenvendelserView({ isAdminUser, notify, onGaaTil }) {
+  const [liste, setListe] = useState(null);
+  const [fejl, setFejl] = useState("");
+  const [filter, setFilter] = useState("aabne");
+  const [noter, setNoter] = useState({});
+
+  const hent = useCallback(async () => {
+    const { data, error } = await supabase.from("henvendelser").select("*").order("oprettet", { ascending: false }).limit(500);
+    if (error) { setFejl(error.message); return; }
+    setFejl("");
+    setListe(data || []);
+  }, []);
+  useEffect(() => { hent(); }, [hent]);
+
+  if (!isAdminUser) {
+    return <div style={styles.page}><div style={{ color: "#64748B" }}>Siden er kun for planlæggere.</div></div>;
+  }
+
+  async function saetStatus(h, status) {
+    const note = (noter[h.id] ?? "").trim();
+    const { data, error } = await supabase.rpc("behandl_henvendelse", { p_id: h.id, p_status: status, p_note: note || null });
+    if (error) { setFejl(error.message); return; }
+    setListe((prev) => prev.map((x) => (x.id === h.id ? { ...x, ...(data || {}), status } : x)));
+    setNoter((n) => ({ ...n, [h.id]: undefined }));
+    notify(`${h.navn}: ${HENV_STATUS[status].navn}`);
+  }
+
+  async function slet(h) {
+    if (!window.confirm(`Slet henvendelsen fra ${h.navn} for altid?\n\nBrug det, når borgeren beder om at få sine oplysninger slettet. Det kan ikke fortrydes.`)) return;
+    const { error } = await supabase.from("henvendelser").delete().eq("id", h.id);
+    if (error) { setFejl(error.message); return; }
+    setListe((prev) => prev.filter((x) => x.id !== h.id));
+    notify("Henvendelsen er slettet");
+  }
+
+  const alle = liste || [];
+  const vist = alle.filter((h) => (filter === "nye" ? h.status === "ny"
+    : filter === "aabne" ? ["ny", "ringet", "tilbud"].includes(h.status) : true));
+  const antalNye = alle.filter((h) => h.status === "ny").length;
+  const tid = (t) => new Date(t).toLocaleString("da-DK", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+  const telHref = (t) => "tel:" + String(t || "").replace(/[^\d+]/g, "");
+
+  return (
+    <div style={styles.page}>
+      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, flexWrap: "wrap", marginBottom: 6 }}>
+        <h2 style={{ margin: 0 }}>Henvendelser</h2>
+        <div style={{ display: "flex", gap: 6 }}>
+          {[["nye", `Nye${antalNye ? ` (${antalNye})` : ""}`], ["aabne", "Åbne"], ["alle", "Alle"]].map(([k, t]) => (
+            <button key={k} onClick={() => setFilter(k)}
+              style={{ ...styles.secondaryBtn, ...(filter === k ? { background: "var(--farve)", color: "#fff", borderColor: "var(--farve)" } : null) }}>{t}</button>
+          ))}
+        </div>
+      </div>
+      <div style={{ fontSize: 13, color: "#64748B", marginBottom: 16, lineHeight: 1.5 }}>
+        Borgere, der har scannet QR-koden i pjecen og bedt om at blive ringet op. Ring, og sæt status.
+        Kunde og tilbud oprettes som altid under Kunder og Tilbud.
+      </div>
+      {fejl && <div style={{ color: "#B91C1C", marginBottom: 12 }}>{fejl}</div>}
+      {liste === null && !fejl && <div style={{ color: "#64748B" }}>Henter …</div>}
+      {liste !== null && vist.length === 0 && (
+        <div style={{ ...HENV_KORT, color: "#64748B", textAlign: "center", padding: 28 }}>
+          {filter === "alle" ? "Ingen henvendelser endnu." : "Ingen her lige nu. ✓"}
+        </div>
+      )}
+      {vist.map((h) => {
+        const st = HENV_STATUS[h.status] || HENV_STATUS.ny;
+        const gammel = h.status === "ny" && Date.now() - new Date(h.oprettet).getTime() > 86400000;
+        return (
+          <div key={h.id} style={{ ...HENV_KORT, marginBottom: 12, borderLeft: `4px solid ${st.farve}` }}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 17, fontWeight: 800 }}>{h.navn}</div>
+                <a href={telHref(h.telefon)} style={{ fontSize: 19, fontWeight: 800, color: "var(--farve-moerk)", textDecoration: "none" }}>📞 {h.telefon}</a>
+                <span style={{ marginLeft: 10, fontSize: 13, color: "#475569" }}>{HENV_RING[h.ring_tid] || ""}</span>
+              </div>
+              <div style={{ textAlign: "right" }}>
+                <span style={{ fontSize: 12, fontWeight: 800, color: st.farve, background: st.bg, borderRadius: 6, padding: "3px 8px" }}>{st.navn}</span>
+                {gammel && <span style={{ marginLeft: 6, fontSize: 11, fontWeight: 800, color: "#fff", background: "#DC2626", borderRadius: 4, padding: "2px 6px" }}>over et døgn</span>}
+                <div style={{ fontSize: 12, color: "#64748B", marginTop: 4 }}>{tid(h.oprettet)}{h.kilde && h.kilde !== "portal" ? ` · ${h.kilde}` : ""}</div>
+              </div>
+            </div>
+            <div style={{ fontSize: 13.5, color: "#334155", marginTop: 10, lineHeight: 1.6 }}>
+              {h.adresse && <div>📍 {h.adresse}</div>}
+              <div>{HENV_HJAELP[h.kommune_hjaelp] || ""}</div>
+              {(h.oensker || []).length > 0 && (
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 6 }}>
+                  {h.oensker.map((o) => (
+                    <span key={o} style={{ fontSize: 12, fontWeight: 600, background: "var(--farve-lys)", color: "var(--farve-moerk)", borderRadius: 6, padding: "2px 8px" }}>{HENV_OENSKE[o] || o}</span>
+                  ))}
+                </div>
+              )}
+              {h.besked && <div style={{ marginTop: 8, padding: "8px 10px", background: "#F8FAFC", borderRadius: 8, whiteSpace: "pre-wrap" }}>«{h.besked}»</div>}
+              {h.note && <div style={{ marginTop: 8, fontSize: 12.5, color: "#475569" }}><b>Note:</b> {h.note}{h.behandlet ? ` · ${tid(h.behandlet)}` : ""}</div>}
+            </div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginTop: 12 }}>
+              <input value={noter[h.id] ?? ""} onChange={(e) => setNoter((n) => ({ ...n, [h.id]: e.target.value }))}
+                placeholder="Note fra opringningen (valgfri)" style={{ ...styles.input, flex: "1 1 220px", margin: 0 }} />
+              {["ringet", "tilbud", "kunde", "afsluttet"].filter((s) => s !== h.status).map((s) => (
+                <button key={s} onClick={() => saetStatus(h, s)} style={{ ...styles.secondaryBtn, color: HENV_STATUS[s].farve }}>{HENV_STATUS[s].navn}</button>
+              ))}
+              {h.status === "tilbud" && <button onClick={() => onGaaTil("tilbud")} style={styles.secondaryBtn}>Gå til Tilbud</button>}
+              <button onClick={() => slet(h)} title="Slet for altid — når borgeren beder om det"
+                style={{ ...styles.secondaryBtn, color: "#B91C1C", borderColor: "#FECACA", marginLeft: "auto" }}>Slet</button>
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }

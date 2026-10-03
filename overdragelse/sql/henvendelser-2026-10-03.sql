@@ -1,0 +1,15 @@
+-- Henvendelser fra «Bliv ringet op» (Jonn 3.10.2026). QR-koden i pjecen peger paa
+-- kundeportalen /bestil?k=pjece. Siden sender til edge-funktionen henvendelse-modtag
+-- (uden login), som skriver i tabellen henvendelser. Kun planlaeggere kan laese den.
+-- Anvendt i JR-databasen som migrationerne henvendelser_fra_pjece og
+-- kontor_indbakke_henvendelser. Se dem i supabase_migrations for den fulde tekst.
+--
+-- Tabel:     henvendelser (navn, telefon, adresse, kommune_hjaelp, oensker, ring_tid,
+--            besked, kilde, status ny|ringet|tilbud|kunde|afsluttet, note, behandlet_af, behandlet)
+-- RLS:       kun is_admin(); anon har ingen rettigheder.
+-- Funktion:  behandl_henvendelse(p_id, p_status, p_note)
+-- Oprydning: ryd_henvendelser() via pg_cron «ryd-henvendelser» kl. 03.45:
+--            afsluttet/kunde efter 6 mdr., alle efter 12 mdr.
+-- Klokken:   kontor_indbakke() punkt 11, art 'henvendelse', «Ring op».
+-- Persondata: 14 felter i persondata_register (daekket_af = 'henvendelser').
+-- Kundeudgaven (kunde-DB) har ingen henvendelser: siden findes kun naar KUNDEUDGAVE er falsk.
