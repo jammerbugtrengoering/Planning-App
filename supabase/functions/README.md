@@ -100,7 +100,7 @@ kopiere tilbage — og så er det filen her, der skal opdateres, ikke omvendt.
 | `dinero-omsaetning` | Faktureret omsætning måned for måned, et år ad gangen | I hånden |
 | `dinero-omsaetning-sync` | Skriver betalt omsætning pr. måned ind i `dinero_omsaetning` | Natligt job kl. 4.15 |
 | `dinero-omsaetning-probe` | Slukket — svarer 410 | — |
-| `dinero-probe` | Midlertidig afprøvning af fakturaopslag på nummer. Kun planlæggere. Bør slukkes som `dinero-omsaetning-probe` | I hånden |
+| `dinero-probe` | Slukket 3.10.2026 — svarer 410. Oprindelig kode i git-historikken | — |
 | `inviter-bruger` | Opretter login til en ny medarbejder | Planlægningsappen |
 | `fratraed-medarbejder` | Lukker adgangen for en der stopper | Planlægningsappen |
 | `portal-login` | Sender kunden en engangskode til portalen | Kundeportalen |
