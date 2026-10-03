@@ -63,7 +63,9 @@ function median(tal) {
 // Kun AKTIVE aftaler tælles med. En udgået aftale er ikke en del af porteføljen,
 // selvom den har kørt en del af året — det, den nåede at levere, står under
 // Rapportering som realiseret omsætning, og det er dér, det hører hjemme.
-export function portefoeljeTal({ templates = [], instances = [], pricing = {}, aar = null }) {
+// satsFor(inst, type) er valgfri. Planlaegningsappen giver satsen paa besoegets egen
+// dato (timepris_satser, 3.10.2026); uden den bruges pricing[type] som foer.
+export function portefoeljeTal({ templates = [], instances = [], pricing = {}, aar = null, satsFor = null }) {
   const aktive = new Map();
   templates.forEach((t) => { if (t && t.status === "aktiv") aktive.set(t.id, t); });
 
@@ -79,7 +81,7 @@ export function portefoeljeTal({ templates = [], instances = [], pricing = {}, a
 
     const tpl = i.templateId ? aktive.get(i.templateId) : null;
     const type = i.contractType || (tpl && tpl.contractType) || "privat";
-    const vaerdi = besoegsVaerdi(i, pricing[type]);
+    const vaerdi = besoegsVaerdi(i, satsFor ? satsFor(i, type) : pricing[type]);
     const minutter = Number(i.duration) || 0;
 
     if (!i.templateId || LOESE_TYPER.includes(i.type)) {

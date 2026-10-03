@@ -16,6 +16,7 @@ import { hentAlleRaekker } from "./hentalle";
 import { vinduetsGraenser, vinduetsStykker, hentedeUgerFra, ugenErHentet, andenRundesGraense, ugeNoegle } from "./vindue";
 import { opsummerMaaling, formatAfstand, stopurStatus, startSlutLinjer } from "./tidsmaaling";
 import { hentXlsx } from "./excel";
+import { lavPrisliste, timeprisPaaDato, satserPaaDato, kommendeSatser } from "./timepriser";
 import { findDubletter } from "./dubletter";
 import { simulerUge, noegletal as simNoegletal, nuvaerendePlan, dagensTal as simDagensTal, satsFor as simSatsFor } from "./simulering";
 import {
@@ -378,6 +379,25 @@ function antalPaaOpgaven(t) {
 // af andelene; ellers varigheden gange antal personer, som hidtil.
 function samletArbejde(t) {
   return planlagtIAlt(t);
+}
+
+// Timepriserne med gyldighedsdato (3.10.2026, se src/timepriser.js).
+//
+// Ligger her paa modulniveau ligesom FIRMA, fordi satsen skal bruges dybt nede i
+// mange visninger (fakturering, rapporter, aftaler, aflysninger), og hver af dem
+// ellers skulle have den sendt ned som prop. App saetter den ved indlaesning og
+// efter gem, og kalder samtidig setPricing med et NYT objekt, saa visningerne
+// tegnes og beregnes forfra.
+let PRISLISTE = {};
+function saetPrisliste(raekker) { PRISLISTE = lavPrisliste(raekker); return PRISLISTE; }
+function idagIso() {
+  const d = new Date();
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+}
+// Satsen for en opgave: den, der gjaldt paa opgavens egen dato. Saa faar en opgave,
+// der er sendt til Dinero, altid det samme beloeb — ogsaa efter en prisaendring.
+function satsForOpgave(t) {
+  return timeprisPaaDato(PRISLISTE, (t && (t.contractType || t.contract_type)) || "privat", instanceDateString(t));
 }
 
 // Den timeloen der gjaldt for en medarbejder paa en bestemt dato: raekken med den
@@ -1863,15 +1883,19 @@ const MODULE_HELP = {
         "Modulerne kan ingen slå til eller fra her, heller ikke ved et uheld. Det håndhæves også i databasen."] },
   ] },
 
-  timepriser: { title: "Timepriser", intro: "Satsen pr. time for hver kontrakttype, ekskl. moms.", blocks: [
-    { h: "Sådan gør du", p: ["Ret beløbet ud for kontrakttypen, og tryk «Gem timepriser». Knappen kan først trykkes, når noget er ændret.",
-        "Kontrakttyper, der ikke er i brug hos jer, vises ikke."] },
-    { h: "Hvor satsen bruges", p: ["Fakturering og Kundetimer: beløbet for registreret tid.",
-        "Ugeplan og Aftaler: værdien af planlagte besøg og aftalens samlede værdi.",
-        "Rapportering: omsætning og portefølje.",
-        "Tilbud: satsen foreslås, når du vælger kontrakttype, men kan rettes på det enkelte tilbud.",
+  timepriser: { title: "Timepriser", intro: "Satsen pr. time for hver kontrakttype, ekskl. moms — med den dato, den gælder fra.", blocks: [
+    { h: "Sådan sætter du en ny pris", p: ["Vælg kontrakttype, skriv satsen, og vælg hvilken dato den gælder fra. Tryk «Gem sats».",
+        "Datoen foreslås som den 1. i næste måned. Du kan vælge en dato bagud i tiden, så længe den ligger efter den sidste opgave, der er " + (KUNDEUDGAVE ? "markeret som fakturagrundlag." : "sendt til Dinero."),
+        "En sats rettes ikke — du lægger en ny oveni. Den gamle står i listen som historik.",
+        "Gemmer du en sats med en dato, der allerede har en sats, bliver satsen for den dato rettet."] },
+    { h: "Hvilken sats bruger en opgave?", p: ["Den, der gjaldt på opgavens egen dag. Hæver du prisen fra 1. november, koster opgaver i oktober det samme som før, og opgaver fra 1. november koster den nye pris.",
+        "Det gælder overalt: Fakturering, " + (KUNDEUDGAVE ? "Excel-eksporten" : "eksporten til Dinero") + ", Kundetimer, Rapportering, aftalernes realiserede værdi og aflysninger.",
+        "Overslag over fremtiden — en aftales samlede værdi og forslaget på et nyt tilbud — bruger dagens sats.",
         "Opgaver og aftaler med fast pris bruger deres egen pris og påvirkes ikke."] },
-  ], warn: "En ny sats slår igennem med det samme overalt — også i fakturering og rapporter for tidligere måneder, fordi beløbene regnes ud fra den sats, der gælder nu. Fakturaer, der allerede er sendt til Dinero, ændres ikke. Skift derfor sats ved et månedsskifte, når den forrige måned er faktureret." },
+    { h: "Fakturerede opgaver ændrer aldrig beløb", p: [
+        (KUNDEUDGAVE ? "Når en opgave er markeret som fakturagrundlag" : "Når en opgave er sendt til Dinero") + ", kan ingen sats lægges ind, rettes eller slettes, så den rammer opgavens dato. Systemet siger fra med det samme og fortæller, hvilken dato satsen tidligst kan gælde fra.",
+        "Kommende satser kan slettes igen, så længe de ikke er brugt på fakturerede opgaver. Startsatsen kan ikke slettes."] },
+  ], warn: "Vil du ændre prisen for en periode, der allerede er faktureret, skal det ske som en kreditnota eller en ekstra faktura i " + (KUNDEUDGAVE ? "jeres regnskabsprogram" : "Dinero") + " — ikke ved at ændre satsen her." },
 
   transport: { title: "Transporttid", intro: "Hvor lang tid der lægges ind til kørsel mellem to opgaver i ugeplanen.", blocks: [
     { h: "Sådan virker det", p: [
@@ -2905,7 +2929,7 @@ function PlanningApp({ session, onSignOut }) {
         r("employee_wage_history"), r("km_sats_historik"), r("omkostninger"), r("km_log"),
         r("bonus"), r("dinero_omsaetning"), r("employee_home"), r("instance_access"),
         r("customer_access"), { data: d.travel_settings ?? null }, r("travel_overrides"),
-        r("areas"), r("employee_areas"), r("pricing"), r("budgets"),
+        r("areas"), r("employee_areas"), r("pricing"), r("budgets"), r("timepris_satser"),
       ];
     }
 
@@ -2996,18 +3020,20 @@ function PlanningApp({ session, onSignOut }) {
         supabase.from("travel_overrides").select("*"),
       ]);
       // Load areas
-      const [{ data: areasData }, { data: empAreasData }, { data: pricingData }, { data: budgetsData }] = samlet ? samlet.slice(24) : await Promise.all([
+      // pricing hentes stadig med i det samlede kald, men bruges ikke laengere: fra
+      // 3.10.2026 kommer timepriserne fra timepris_satser, som har gyldighedsdato.
+      const [{ data: areasData }, { data: empAreasData }, , { data: budgetsData }, { data: satserData }] = samlet ? samlet.slice(24) : await Promise.all([
         supabase.from("areas").select("*").order("name"),
         supabase.from("employee_areas").select("*"),
-        supabase.from("pricing").select("*"),
+        Promise.resolve({ data: null }),
         supabase.from("budgets").select("*"),
+        supabase.from("timepris_satser").select("*").order("gyldig_fra", { ascending: false }),
       ]);
       if (areasData) setAreas(areasData);
       if (empAreasData) setEmployeeAreas(empAreasData);
-      if (pricingData?.length) {
-        const p = {};
-        pricingData.forEach((r) => { p[r.contract_type] = r.hourly_rate; });
-        setPricing((prev) => ({ ...prev, ...p }));
+      if (satserData?.length) {
+        saetPrisliste(satserData);
+        setPricing({ ...satserPaaDato(PRISLISTE, idagIso()) });
       }
       if (budgetsData) setBudgets(budgetsData);
 
@@ -5836,7 +5862,9 @@ function PlanningApp({ session, onSignOut }) {
             }
           : (() => {
               const hours = Math.round((loggedMinutes / 60) * 100) / 100;
-              const rate = pricing[t.contractType || "privat"] || 0;
+              // Satsen paa opgavens dato — ikke dagens. Det beloeb, der sendes nu, er
+              // det, opgaven skal have for altid.
+              const rate = satsForOpgave(t);
               return {
                 description: `${t.title} (Uge ${t.week}, ${dayLabelOf(t)})`,
             comments: t.poNumber || "",
@@ -6359,16 +6387,13 @@ function PlanningApp({ session, onSignOut }) {
           den under Opsaetning sammen med de andre faste indstillinger (Jonns oenske). */}
       {view === "timepriser" && (
         <TimepriserView isAdminUser={isAdminUser} pricing={pricing}
-          onGem={async (nyePriser) => {
-            for (const [type, rate] of Object.entries(nyePriser)) {
-              const { error: priceErr } = await supabase.from("pricing").upsert({ id: `price_${type}`, contract_type: type, hourly_rate: rate }, { onConflict: "id" });
-              if (dbFail(priceErr, "gemme timeprisen")) return false;
-            }
-            // Foerst naar alle satser er gemt. Fejler én, viser appen ikke priser,
-            // databasen ikke har — ellers ville fakturering regne med et tal, der
-            // forsvinder ved naeste genindlaesning.
-            setPricing(nyePriser);
-            return true;
+          onGemt={async () => {
+            // Hent satserne forfra efter en aendring, saa appen viser praecis det,
+            // databasen har godtaget — ogsaa hvis nogen anden har rettet imens.
+            const { data, error } = await supabase.from("timepris_satser").select("*").order("gyldig_fra", { ascending: false });
+            if (dbFail(error, "hente timepriserne")) return;
+            saetPrisliste(data || []);
+            setPricing({ ...satserPaaDato(PRISLISTE, idagIso()) });
           }} />
       )}
 
@@ -7801,7 +7826,7 @@ const FAKT_GRID = () => harModul("dinero")
   ? "50px 140px 120px 160px 1fr 70px 80px 100px 100px 100px 90px 70px 28px"
   : "50px 140px 120px 160px 1fr 70px 80px 100px 100px 100px 90px 0px 28px";
 
-function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLabel, onUpdateInstance, onSaetFakturagrundlagFlere, pricing: pricingProp, isAdminUser, onOpenTask, productUsage, onToggleProductInvoice, onToggleProductDinero, opgaveNoter }) {
+function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLabel, onUpdateInstance, onSaetFakturagrundlagFlere, isAdminUser, onOpenTask, productUsage, onToggleProductInvoice, onToggleProductDinero, opgaveNoter }) {
   const productLinesByTask = useMemo(() => {
     const map = {};
     (productUsage || []).forEach((tx) => {
@@ -7845,9 +7870,9 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
   const [statusFilter, setStatusFilter] = useState("all");
   const [editMinutes, setEditMinutes] = useState({});
   const [exportingToDinero, setExportingToDinero] = useState(false);
-  const [localPricing, setLocalPricing] = useState(pricingProp || { privat: 450, erhverv: 550, nexus: 380, aeldrelov: 410 });
-
-  useEffect(() => { if (pricingProp) setLocalPricing(pricingProp); }, [JSON.stringify(pricingProp)]);
+  // Satsen slaas op pr. opgave med satsForOpgave(t) — satsen paa opgavens dato
+  // (3.10.2026). pricing kommer stadig ind som prop, saa siden tegnes forfra, naar
+  // satserne aendres.
 
   const [kmData, setKmData] = useState(null);
   const [kmLoading, setKmLoading] = useState(false);
@@ -7954,7 +7979,7 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
       return s + (hasLog ? (Number(t.fixedPrice) || 0) : 0);
     }
     const logged = fakturerbareMinutter(t);
-    const rate = localPricing[t.contractType || "privat"] || 0;
+    const rate = satsForOpgave(t);
     return s + (logged / 60) * rate;
   }, 0);
 
@@ -7973,7 +7998,7 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
     <div style={styles.page}>
       <div style={styles.toolbar}>
         {(() => {
-          const plannedRev = placed.reduce((s, t) => s + (t.pricingType === "fixed" ? (Number(t.fixedPrice) || 0) : (t.duration / 60) * (localPricing[t.contractType || "privat"] || 0)), 0);
+          const plannedRev = placed.reduce((s, t) => s + (t.pricingType === "fixed" ? (Number(t.fixedPrice) || 0) : (t.duration / 60) * satsForOpgave(t)), 0);
           const regRev = expectedRevenue;
           const diff = Math.round(regRev - plannedRev);
           return (
@@ -8078,7 +8103,7 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
             const raekker = [["Uge", "Dag", "Medarbejder", "Kunde", "Adresse", "Opgave", "Status",
               "Planlagt (timer)", "Planlagt kr.", "Registreret (timer)", "Registreret kr.", "Difference kr.", "Fakturagrundlag"]];
             for (const t of placed) {
-              const rate = localPricing[t.contractType || "privat"] || 0;
+              const rate = satsForOpgave(t);
               const fast = t.pricingType === "fixed";
               const logget = fakturerbareMinutter(t);
               const planKr = fast ? Math.round(Number(t.fixedPrice) || 0) : Math.round((samletArbejde(t) / 60) * rate);
@@ -8126,7 +8151,7 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
               const who = employees.find((e) => e.id === l.empId)?.name || "Medarbejder";
               return `${who} (${fmtMin(l.minutes || 0)}): ${l.note}`;
             });
-          const rate = localPricing[t.contractType || "privat"] || 0;
+          const rate = satsForOpgave(t);
           const isFixedPrice = t.pricingType === "fixed";
           const plannedKr = isFixedPrice ? Math.round(Number(t.fixedPrice) || 0) : Math.round((samletArbejde(t) / 60) * rate);
           const registeredKr = isFixedPrice ? (logged > 0 ? plannedKr : 0) : Math.round((logged / 60) * rate);
@@ -8306,7 +8331,7 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
       {placed.length > 0 && (() => {
         const totalPlannedKr = placed.reduce((s, t) => {
           if (t.pricingType === "fixed") return s + Math.round(Number(t.fixedPrice) || 0);
-          const rate = localPricing[t.contractType || "privat"] || 0;
+          const rate = satsForOpgave(t);
           return s + Math.round((samletArbejde(t) / 60) * rate);
         }, 0);
         const totalRegisteredKr = Math.round(expectedRevenue);
@@ -9521,7 +9546,7 @@ function OverskudRapport({ instances, employees, satsHistorik, kmSatser, kmLog, 
       return my.month === idx && my.year === selectedYear;
     });
     const omsaetning = tasksInMonth.reduce((s, t) => {
-      const rate = pricing[t.contractType || "privat"] || 0;
+      const rate = satsForOpgave(t);
       if (t.pricingType === "fixed") {
         const hasLog = (t.timeLog || t.time_log || []).length > 0 || t.status === "udført";
         return s + (hasLog ? (Number(t.fixedPrice) || 0) : 0);
@@ -10541,7 +10566,7 @@ function AflysningRapport({ instances, pricing = {}, grunde = [] }) {
     const f = t.tidFordeling || t.tid_fordeling || {};
     const min = t.aflyst_faktureret ? fakturerbareMinutter(t)
       : folk.reduce((s2, id) => s2 + (id && Number(f[id]) > 0 ? Number(f[id]) : (Number(t.duration) || 0)), 0);
-    return (min / 60) * (Number(pricing[t.contractType || t.contract_type || "privat"]) || 0);
+    return (min / 60) * satsForOpgave(t);
   };
   const raekker = instances.filter((t) => erAflyst(t)).map((t) => ({ t, dato: instanceDateString(t) }))
     .filter((r) => r.dato >= fra && r.dato <= til)
@@ -10676,7 +10701,8 @@ function ReportsView({ instances, templates, pricing, budgets, onSaveBudget, isA
       let registeredKr = 0;
       let budgetKr = 0;
       areasToSum.forEach((area) => {
-        const rate = pricing[area] || 0;
+        // Satsen tages pr. opgave (dens egen dato), ikke pr. kontrakttype for hele
+        // maaneden: en prisaendring midt i en maaned skal kun ramme dagene efter.
         // Filtrér på opgavens faktiske dato, ikke blot ugenummeret - så en uge
         // der strækker sig over et månedsskift altid tælles i den rigtige måned.
         const tasksInMonth = instances.filter((t) => {
@@ -10686,14 +10712,14 @@ function ReportsView({ instances, templates, pricing, budgets, onSaveBudget, isA
           const my = instanceMonthYear(t, selectedYear);
           return my.month === idx && my.year === selectedYear;
         });
-        plannedKr += tasksInMonth.reduce((s, t) => s + (t.pricingType === "fixed" ? (Number(t.fixedPrice) || 0) : (samletArbejde(t) / 60) * rate), 0);
+        plannedKr += tasksInMonth.reduce((s, t) => s + (t.pricingType === "fixed" ? (Number(t.fixedPrice) || 0) : (samletArbejde(t) / 60) * satsForOpgave(t)), 0);
         registeredKr += tasksInMonth.reduce((s, t) => {
           if (t.pricingType === "fixed") {
             const hasLog = (t.timeLog || t.time_log || []).length > 0 || t.status === "udført";
             return s + (hasLog ? (Number(t.fixedPrice) || 0) : 0);
           }
           const logged = fakturerbareMinutter(t);
-          return s + (logged / 60) * rate;
+          return s + (logged / 60) * satsForOpgave(t);
         }, 0);
         if (isAllAreas) {
           const row = budgets.find((b) => b.contract_type === area && Number(b.year) === selectedYear && Number(b.month) === month);
@@ -10922,7 +10948,7 @@ function PortefoeljeRapport({ templates, instances, pricing }) {
   const aarene = useMemo(() => aarMedBesoeg(templates, instances), [templates, instances]);
   const valgtAar = aar === "alle" ? null : Number(aar);
   const tal = useMemo(
-    () => portefoeljeTal({ templates, instances, pricing, aar: valgtAar }),
+    () => portefoeljeTal({ templates, instances, pricing, aar: valgtAar, satsFor: (i, type) => timeprisPaaDato(PRISLISTE, type, instanceDateString(i)) }),
     [templates, instances, pricing, valgtAar]);
 
   const kr = (n) => Math.round(n).toLocaleString("da-DK") + " kr.";
@@ -13054,6 +13080,13 @@ function ContractsView({ templates: alleTemplates, instances, pricing, employees
       .filter((i) => i.templateId === tplId)
       .reduce((s, i) => s + fakturerbareMinutter(i), 0);
   }
+  // Realiseret i kroner: hver opgave med satsen paa sin egen dato. Minutter gange
+  // dagens sats ville flytte beloebet for besoeg, der allerede er faktureret.
+  function realizedKr(tplId) {
+    return instances
+      .filter((i) => i.templateId === tplId)
+      .reduce((s, i) => s + (fakturerbareMinutter(i) / 60) * satsForOpgave(i), 0);
+  }
 
   // Planlagte timer/uge for en skabelon: varighed pr. besøg × antal ugedage den
   // gentages på.
@@ -13075,6 +13108,9 @@ function ContractsView({ templates: alleTemplates, instances, pricing, employees
   // Samlet stod kontraktsummen 1,18 mio. kr for højt: 3,37 mio. mod 2,19 mio. Det er
   // et tal, nogen kunne bruge til at vurdere forretningen, så det må ikke være pynt.
   function contractSumInfo(tpl, contractType, start, expiry) {
+    // Et overslag over hele aftaleperioden med dagens sats. Det realiserede (det, der
+    // er udfoert og faktureret) regnes for sig i realizedKr med satsen paa hver
+    // opgaves egen dato.
     const rate = pricing[contractType || "privat"] || 0;
     const weeklyMin = weeklyPlannedMinutes(tpl);
     const weeklyValue = tpl.pricingType === "fixed"
@@ -13138,13 +13174,12 @@ function ContractsView({ templates: alleTemplates, instances, pricing, employees
       const start = t.startDate ? new Date(t.startDate) : null;
       const daysLeft = Math.ceil((expiry - new Date()) / (1000 * 60 * 60 * 24));
       const contractType = effectiveContractType(t);
-      const rate = pricing[contractType || "privat"] || 0;
       const realizedMin = realizedMinutes(t.id);
       const { sum: plannedSum, wholePeriod } = contractSumInfo(t, contractType, start, expiry);
       return {
         ...t, contractType, expiry, start, daysLeft,
         plannedSum, wholePeriod,
-        realizedMin, realizedSum: (realizedMin / 60) * rate,
+        realizedMin, realizedSum: realizedKr(t.id),
       };
     })
     // Kladderne sorteres efter VAERDI, stoerst foerst. Alt andet efter udloebsdato.
@@ -13171,7 +13206,7 @@ function ContractsView({ templates: alleTemplates, instances, pricing, employees
       return {
         ...t, contractType,
         weeklyPlannedSum: (weeklyMin / 60) * rate,
-        realizedMin, realizedSum: (realizedMin / 60) * rate,
+        realizedMin, realizedSum: realizedKr(t.id),
       };
     });
 
@@ -19393,54 +19428,126 @@ function AflysteChip({ aflyste, grunde, onGenaabn, onOpenTask }) {
   );
 }
 
-// Timepriser pr. kontrakttype. Flyttet fra en knap paa Fakturering 3.10.2026 — se
-// kommentaren ved view === "timepriser". Satsen bruges i fakturering, ugebelaegning,
-// aftalernes vaerdi, tilbud (som forslag) og rapportering. Opgaver med fast pris
-// bruger deres egen pris og roeres ikke af det her.
-function TimepriserView({ isAdminUser, pricing, onGem }) {
-  const [lokal, setLokal] = useState(pricing || {});
-  const [gemmer, setGemmer] = useState(false);
-  const [gemt, setGemt] = useState(false);
-  // Priserne hentes ved opstart og kan komme efter, at siden er tegnet. Uden det
-  // her ville felterne staa paa 0 og et tryk paa Gem nulstille alle satser.
-  useEffect(() => { if (pricing) setLokal(pricing); }, [JSON.stringify(pricing)]);
+// Timepriser pr. kontrakttype med gyldighedsdato (3.10.2026).
+//
+// En sats rettes aldrig — der laegges en ny oveni, der gaelder fra en dato. Saa
+// beholder hver opgave satsen fra sin egen dato, og en faktureret opgave kan ikke
+// skifte beloeb. Databasen haandhaever det (triggeren timepris_laas): en dato, der
+// rammer en opgave sendt til Dinero, afvises, og beskeden derfra vises direkte her.
+function TimepriserView({ isAdminUser, pricing, onGemt }) {
+  const idag = idagIso();
+  const typer = valgbareKontrakttyper();
+  // Forslag: den 1. i naeste maaned. Prisstigninger lægges typisk ved et
+  // maanedsskifte, og det er en dato, der sjaeldent rammer noget allerede faktureret.
+  const naesteMaaned = (() => { const d = new Date(); return isoDag(new Date(d.getFullYear(), d.getMonth() + 1, 1)); })();
+  const [ny, setNy] = useState({ type: typer[0]?.key || "privat", sats: "", fra: naesteMaaned });
+  const [arbejder, setArbejder] = useState(false);
+  const [fejl, setFejl] = useState("");
+  const [ok, setOk] = useState("");
   if (!isAdminUser) return <div style={styles.page}>Kun planlæggere kan rette timepriserne.</div>;
-  const aendret = JSON.stringify(lokal) !== JSON.stringify(pricing || {});
+  void pricing; // kun for at siden tegnes forfra, naar satserne er hentet paa ny
+
+  const datoTekst = (d) => d <= "2000-01-01" ? "start" : new Date(d + "T12:00:00").toLocaleDateString("da-DK", { day: "numeric", month: "short", year: "numeric" });
+  const kr = (n) => `${Number(n).toLocaleString("da-DK", { maximumFractionDigits: 2 })} kr/t`;
+
+  async function gem() {
+    setFejl(""); setOk("");
+    const sats = Number(String(ny.sats).replace(",", "."));
+    if (!(sats >= 0) || ny.sats === "") { setFejl("Skriv satsen i kroner pr. time."); return; }
+    if (!ny.fra) { setFejl("Vælg hvilken dato satsen gælder fra."); return; }
+    setArbejder(true);
+    try {
+      // upsert paa (type, dato): samme dato to gange retter satsen for den dato i
+      // stedet for at fejle. Er datoen laast, afviser databasen begge dele.
+      const { error } = await supabase.from("timepris_satser")
+        .upsert({ contract_type: ny.type, hourly_rate: sats, gyldig_fra: ny.fra }, { onConflict: KUNDEUDGAVE ? "firma_id,contract_type,gyldig_fra" : "contract_type,gyldig_fra" });
+      if (error) { setFejl(error.message); return; }
+      await onGemt();
+      setOk(`${contractMeta(ny.type).label}: ${kr(sats)} fra ${datoTekst(ny.fra)}.`);
+      setNy((x) => ({ ...x, sats: "" }));
+    } finally { setArbejder(false); }
+  }
+
+  async function slet(r, type) {
+    setFejl(""); setOk("");
+    if (!window.confirm(`Slet satsen ${kr(r.sats)} fra ${datoTekst(r.gyldig_fra)}?`)) return;
+    setArbejder(true);
+    try {
+      const { error } = await supabase.from("timepris_satser").delete()
+        .eq("contract_type", type).eq("gyldig_fra", r.gyldig_fra);
+      if (error) { setFejl(error.message); return; }
+      await onGemt();
+    } finally { setArbejder(false); }
+  }
+
+  const boks = { background: "#fff", borderRadius: 12, padding: 16, boxShadow: "0 1px 3px rgba(0,0,0,0.06)", maxWidth: 680, marginBottom: 16 };
   return (
     <div style={styles.page}>
       <div style={{ fontWeight: 700, fontSize: 18, marginBottom: 4 }}>Timepriser</div>
-      <div style={{ fontSize: 13, color: "#64748B", marginBottom: 14, maxWidth: 640 }}>
-        Satsen pr. time for hver kontrakttype, ekskl. moms. Den bruges i fakturering, ugebelægning,
-        aftalernes værdi og rapportering, og foreslås på nye tilbud. Opgaver med fast pris bruger
-        deres egen pris.
+      <div style={{ fontSize: 13, color: "#64748B", marginBottom: 14, maxWidth: 680 }}>
+        Satsen pr. time for hver kontrakttype, ekskl. moms. En ny sats gælder fra den dato, du vælger, og
+        hver opgave bruger den sats, der gjaldt på opgavens dag. Opgaver, der er
+        {KUNDEUDGAVE ? " markeret som fakturagrundlag" : " sendt til Dinero"}, ændrer aldrig beløb.
       </div>
-      <div style={{ background: "#fff", borderRadius: 12, padding: 16, boxShadow: "0 1px 3px rgba(0,0,0,0.06)", maxWidth: 640 }}>
-        {valgbareKontrakttyper().map((c) => (
-          <div key={c.key} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: "1px solid #F1F5F9" }}>
-            <span style={{ flex: 1, fontSize: 14, fontWeight: 600 }}>{c.icon} {c.label}</span>
-            <input type="number" min={0} step={10}
-              style={{ ...styles.inputSm, width: 100, textAlign: "right" }}
-              value={lokal[c.key] ?? 0}
-              onChange={(e) => { setGemt(false); setLokal((x) => ({ ...x, [c.key]: Number(e.target.value) })); }} />
-            <span style={{ fontSize: 13, color: "#64748B", width: 32 }}>kr/t</span>
+
+      <div style={boks}>
+        <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 10 }}>Ny sats</div>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end" }}>
+          <div>
+            <label style={styles.label}>Kontrakttype</label>
+            <select style={{ ...styles.inputSm, minWidth: 160 }} value={ny.type} onChange={(e) => setNy((x) => ({ ...x, type: e.target.value }))}>
+              {typer.map((c) => <option key={c.key} value={c.key}>{c.icon} {c.label}</option>)}
+            </select>
           </div>
-        ))}
-        <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 14 }}>
-          <button style={styles.primaryBtn} disabled={!aendret || gemmer}
-            onClick={async () => {
-              setGemmer(true);
-              try { if (await onGem(lokal)) setGemt(true); } finally { setGemmer(false); }
-            }}>
-            {gemmer ? "Gemmer…" : "Gem timepriser"}
-          </button>
-          {gemt && !aendret && <span style={{ fontSize: 13, color: "#16A34A" }}>Gemt</span>}
+          <div>
+            <label style={styles.label}>Sats (kr/t)</label>
+            <input type="number" min={0} step={1} style={{ ...styles.inputSm, width: 110, textAlign: "right" }}
+              value={ny.sats} placeholder={String(timeprisPaaDato(PRISLISTE, ny.type, idag) || "")}
+              onChange={(e) => setNy((x) => ({ ...x, sats: e.target.value }))} />
+          </div>
+          <div>
+            <label style={styles.label}>Gælder fra</label>
+            <input type="date" style={{ ...styles.inputSm, width: 160 }} value={ny.fra}
+              onChange={(e) => setNy((x) => ({ ...x, fra: e.target.value }))} />
+          </div>
+          <button style={styles.primaryBtn} disabled={arbejder} onClick={gem}>{arbejder ? "Gemmer…" : "Gem sats"}</button>
         </div>
+        {fejl && <div style={{ marginTop: 10, padding: "8px 12px", borderRadius: 8, background: "#FEF2F2", color: "#B91C1C", fontSize: 13 }}>{fejl}</div>}
+        {ok && <div style={{ marginTop: 10, fontSize: 13, color: "#16A34A" }}>Gemt — {ok}</div>}
       </div>
-      <div style={{ fontSize: 12.5, color: "#64748B", marginTop: 12, maxWidth: 640 }}>
-        En ny sats slår igennem alle steder med det samme — også i fakturering og rapporter for
-        tidligere måneder, fordi beløbene regnes ud fra den sats, der gælder nu. Det, der allerede
-        er sendt til Dinero, ændres ikke.
-      </div>
+
+      {typer.map((c) => {
+        const liste = PRISLISTE[c.key] || [];
+        const nu = timeprisPaaDato(PRISLISTE, c.key, idag);
+        const kommende = kommendeSatser(PRISLISTE, c.key, idag);
+        const foerste = liste[liste.length - 1];
+        return (
+          <div key={c.key} style={boks}>
+            <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
+              <span style={{ fontWeight: 700, fontSize: 15, flex: 1 }}>{c.icon} {c.label}</span>
+              <span style={{ fontSize: 15, fontWeight: 700 }}>{liste.length ? kr(nu) : "—"}</span>
+              <span style={{ fontSize: 12, color: "#64748B" }}>i dag</span>
+            </div>
+            {kommende.length > 0 && (
+              <div style={{ fontSize: 13, color: "#4F46E5", marginTop: 4 }}>
+                Kommende: {kommende.map((r) => `${kr(r.sats)} fra ${datoTekst(r.gyldig_fra)}`).join(" · ")}
+              </div>
+            )}
+            <div style={{ marginTop: 8 }}>
+              {liste.map((r) => (
+                <div key={r.gyldig_fra} style={{ display: "flex", gap: 10, alignItems: "center", padding: "5px 0", borderTop: "1px solid #F1F5F9", fontSize: 13 }}>
+                  <span style={{ width: 130, color: "#64748B" }}>Fra {datoTekst(r.gyldig_fra)}</span>
+                  <span style={{ flex: 1 }}>{kr(r.sats)}</span>
+                  {r !== foerste && (
+                    <button style={{ ...styles.secondaryBtn, padding: "4px 9px", fontSize: 12 }} disabled={arbejder}
+                      title="Slet satsen. Databasen afviser det, hvis den er brugt på fakturerede opgaver." onClick={() => slet(r, c.key)}>Slet</button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }

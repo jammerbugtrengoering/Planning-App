@@ -121,6 +121,29 @@ række, der ville blive indsat, før den opdager at id'et er taget, og `title`, 
 **Kun én ad gangen rører databasen.** Koden kan rulles tilbage; en tabel, der er lavet om,
 mens den andens app kørte på den gamle form, kan ikke.
 
+### Du rører ved timepriser eller noget, der regner kroner ud
+
+**Timepriserne har gyldighedsdato** (3.10.2026). De ligger i `timepris_satser`
+(kontrakttype, sats, `gyldig_fra`) i begge databaser — **ikke** i `pricing`, som er
+forældet og ikke læses. En opgave prissættes med satsen på **opgavens egen dato**:
+`satsForOpgave(t)` i `src/App.jsx`, logikken i `src/timepriser.js`
+(`node timepriser.test.mjs`).
+
+- Regner du kroner ud for en bestemt opgave, så brug `satsForOpgave(t)` — aldrig
+  `pricing[type]`. `pricing` er kun dagens satser, til forslag på tilbud og overslag
+  over en aftales fremtid.
+- **En faktureret opgave må aldrig skifte beløb.** Triggeren `timepris_laas` afviser
+  en sats, der oprettes, rettes eller slettes med en dato, der rammer en opgave sendt
+  til Dinero (i kundeudgaven: markeret som fakturagrundlag). Startsatsen kan ikke
+  slettes. Lav aldrig en vej uden om — skal en faktureret periode have en anden pris,
+  sker det som kreditnota eller ekstra faktura i Dinero.
+- Fastprisopgaver bruger deres egen pris og påvirkes ikke.
+- I kundedatabasen spejler triggeren `pricing_til_timepris` nye `pricing`-rækker fra
+  `opret_firma` som startsatser, så et nyt firma ikke står uden priser.
+
+> Indtil 3.10.2026 var timeprisen ét tal pr. kontrakttype. Rettede man det, regnede
+> alt om — også fakturering og rapporter for måneder, der allerede var sendt til Dinero.
+
 ### Du tilføjer en menugruppe eller en side
 
 Nøglerne i **`MENU_GRUPPER`** skal være unikke. To grupper med samme nøgle får **begge**
@@ -184,6 +207,20 @@ sletter den andens arbejde. `git merge --abort` sætter dig tilbage, hvor du var
 
 ---
 
+## Fælles læring — læs før, skriv efter
+
+Jonn og Charlotte arbejder begge i de her repositories med hver sin Claude. Det eneste,
+de to Claude-samtaler deler, er **filerne her**. Det, der kun står i en samtale, er væk
+for den anden. Derfor (Jonns beslutning 3.10.2026):
+
+- **Før du begynder:** `git pull`, og læs den nyeste `STATUS-*.md` i
+  `Planning-App/overdragelse/` — den anden kan have lært noget siden sidst.
+- **Når en regel, en beslutning eller en arbejdsgang ændres, eller I har lært noget
+  af en fejl:** skriv det ind i samme commit som ændringen — reglen her i `CLAUDE.md`,
+  og hvad der er sket og besluttet i dagens `STATUS-*.md`. Ligesom hjælpen i appen
+  skal følge med funktionaliteten, skal instruktionsfilerne følge med arbejdsgangen.
+- Skriv **hvorfor** og gerne hvilken fejl, der lå bag — ikke bare reglen.
+
 ## Faste ting
 
 - **Hjælpen skal opdateres, når funktionalitet ændres.** Det gælder alle tre apps. En
@@ -233,6 +270,6 @@ detaljerne om privatlivsteksten og `persondata_register`.
 Den samtale, hvor meget af systemet blev bygget, lukkede 6.10.2026. Det, der kun stod
 dér — beslutninger, hvad der er lært om ydelse, åbne punkter — er samlet i
 `Planning-App/overdragelse/STATUS-2026-09-30.md` og tillægget
-`Planning-App/overdragelse/STATUS-2026-10-03.md` (1.–3.10: adresseopslag efter DAWA,
+`Planning-App/overdragelse/STATUS-2026-10-03.md` (1.–3.10: adresseopslag efter DAWA, timepriser med gyldighedsdato, fælles læring,
 henvendelser fra pjecen, pjece/magnet, næste opgave: kampagneappen). Læs dem, før du begynder på noget
 større.

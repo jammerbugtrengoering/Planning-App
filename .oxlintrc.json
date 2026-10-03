@@ -25,7 +25,8 @@
     "vindue.test.mjs",
     "tidsmaaling.test.mjs",
     "excel.test.mjs",
-    "simulering.test.mjs"
+    "simulering.test.mjs",
+    "timepriser.test.mjs"
   ],
   "rules": {
     "no-undef": "error",
