@@ -22,7 +22,7 @@ Supabase. Ingen historik, ingen sammenligning, og ingen vej tilbage hvis nogen k
 til at overskrive en. Nu kan man i det mindste se, hvad der stod, og hvad der er
 ændret hvornår.
 
-## Status 3.10.2026: alle 29 funktioner ligger her
+## Status 3.10.2026: alle funktioner ligger her (30 med `deploy-besked`)
 
 Mappen er komplet. De sidste ti (`compute-daily-km`, `daglige-paamindelser`,
 `helsetjek`, `send-push`, `portal-login`, `fratraed-medarbejder`, `tilbud-pdf`,
@@ -95,6 +95,7 @@ kopiere tilbage — og så er det filen her, der skal opdateres, ikke omvendt.
 | `travel-distance` | Afstand og køretid mellem to adresser. Geokoder via Dataforsyningen (GSearch), ORS som reserve | Planlægningsappen, `compute-daily-km` |
 | `adresse-opslag` | Adresseforslag i adressefelter (GSearch, ORS som reserve). Erstatter DAWA, der lukkede 2026 | Planlægningsappen |
 | `koeretabel` | Køretabel for en dags adresser til «Simulér uge». Gemmer i `koeretabel`, aldrig i `travel_overrides`, så simuleringen ikke kan flytte kilometerpenge | Planlægningsappen |
+| `deploy-besked` | Push til alle planlæggere, når Netlify har udgivet (eller fejlet) en af de tre apps. `verify_jwt` fra; kaldet skal være signeret af Netlify med secret `NETLIFY_DEPLOY_HEMMELIGHED` — mangler den, afvises alt | Netlify «Outgoing webhook» på de tre sites |
 | `henvendelse-modtag` | «Bliv ringet op» fra `/bestil` (pjece/magnet). `verify_jwt` fra; honningkrukke og loft pr. time | Kundeportalens offentlige side |
 | `dinero` | Kunder, fakturaer og bogføring | Planlægningsappen |
 | `dinero-omsaetning` | Faktureret omsætning måned for måned, et år ad gangen | I hånden |

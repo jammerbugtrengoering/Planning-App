@@ -2243,6 +2243,10 @@ const MODULE_HELP = {
         "Den ligger inde i det, den holder øje med. Kan du se den, virker både Netlify og Supabase — og er de nede, kan du ikke åbne den.",
         "Derfor er den et overblik, ikke en vagt. Vagten er morgenmailen fra helsetjekket, som kommer udefra og lander i din indbakke, også når appen ikke kan åbnes. Den må aldrig slukkes.",
         "Hører du ingenting om morgenen, har alt kørt. Mailen sendes kun, når noget fejler."] },
+    { h: "Besked på telefonen, når appen opdateres", p: [
+        "Når en ny version af Planlægning, Worklist eller Kundeportalen er lagt ud, får alle planlæggere en besked på telefonen: «… er opdateret» med en kort tekst om, hvad der er ændret. Tryk på beskeden for at åbne appen, og genindlæs den.",
+        "Fejler en udgivelse, står der «udgivelsen fejlede». Så er ændringen IKKE ude, og den gamle version kører stadig. Beskeden åbner Netlify, hvor fejlen står — giv den videre til den, der lavede ændringen.",
+        "Beskeden kommer kun på telefoner, hvor Worklist er tilmeldt beskeder."] },
     { h: "De automatiske job", p: [
         "Grøn betyder, at jobbet har skrevet et livstegn inden for den tid, der må gå — ikke at der skete noget sidste gang det kørte.",
         "Morgentjekket skriver «intet at melde», når alt er i orden. Det er med vilje: uden den linje kunne man ikke se forskel på en rolig nat og et job, der er holdt op med at køre.",

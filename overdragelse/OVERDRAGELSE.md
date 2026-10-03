@@ -146,6 +146,7 @@ skal flyttes nogen steder hen:
 - `BREVO_API_KEY` — mail
 - `ORS_API_KEY` — afstande
 - `DATAFORSYNINGEN_TOKEN` — adresseopslag i registret (GSearch)
+- `NETLIFY_DEPLOY_HEMMELIGHED` — samme værdi som «JWS secret token» på Netlifys deploy-webhooks (push ved udgivelse)
 - Dinero-adgangen
 - `AFSENDER_EMAIL`, `AFSENDER_NAVN`, `SVAR_TIL` — hvem mails kommer fra
 
