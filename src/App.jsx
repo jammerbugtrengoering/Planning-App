@@ -2684,7 +2684,21 @@ function PlanningApp({ session, onSignOut }) {
   // årstal udledes altid herfra, så navigation aldrig kan give et ugyldigt resultat.
   const [weekAnchor, setWeekAnchor] = useState(() => mondayOf(new Date()));
   const { week: weekOffset, year: weekYear } = isoWeekInfo(weekAnchor);
-  const [view, setView] = useState("uge");
+  // Link direkte til en side: ?side=henvendelser (3.10.2026). Bruges af mailen om en ny
+  // henvendelse, saa man lander paa Salg -> Henvendelser og ikke paa Ugeplan. Kun kendte
+  // sider; alt andet giver Ugeplan som foer. Adressen ryddes, saa et genindlaes ikke
+  // hopper tilbage til siden.
+  const [view, setView] = useState(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const side = params.get("side");
+      if (!side) return "uge";
+      params.delete("side");
+      const rest = params.toString();
+      window.history.replaceState(null, "", window.location.pathname + (rest ? "?" + rest : "") + window.location.hash);
+      return MENU_GRUPPER.some((g) => g.sider.some(([k]) => k === side)) ? side : "uge";
+    } catch { return "uge"; }
+  });
   const [showAddTask, setShowAddTask] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
   const [showAddBlock, setShowAddBlock] = useState(false);

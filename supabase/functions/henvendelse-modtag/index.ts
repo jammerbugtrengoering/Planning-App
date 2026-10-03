@@ -92,7 +92,8 @@ Deno.serve(async (req) => {
         + `Hjælp fra kommunen: ${pnt(HJAELP_NAVN[kommune])}</p>`
         + (oensker.length ? `<p>Interesseret i: ${oensker.map((o) => pnt(OENSKE_NAVN[o])).join(", ")}</p>` : "")
         + (besked ? `<p>${pnt(besked)}</p>` : "")
-        + `<p>Henvendelsen står under Salg → Henvendelser: <a href="${PLANNING}">${PLANNING}</a></p>`;
+        // ?side=henvendelser lander direkte paa siden (efter login), ikke paa Ugeplan.
+        + `<p><a href="${PLANNING}/?side=henvendelser">Åbn Henvendelser i planlægningsappen</a></p>`;
       for (const p of planlaeggere ?? []) {
         await admin.functions.invoke("send-email", {
           headers: { Authorization: `Bearer ${SERVICE_KEY}` },
