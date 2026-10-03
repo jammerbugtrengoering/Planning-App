@@ -236,7 +236,7 @@ const MENU_GRUPPER = [
   // se om der er saebe nok, var et led for meget.
   { key: "lager",     navn: "Lager",      sider: [["inventory", "Lager"]] },
   { key: "oekonomi",  navn: "Økonomi",     sider: [["time", "Fakturering"], ["kundetimer", "Kundetimer"], ["reports", "Rapportering"], ["medExport", "Løn data"]] },
-  { key: "opsaetning", navn: "Opsætning", sider: [["employees", "Medarbejdere"], ["checklists", "Tjeklister"], ["transport", "Transporttid"], ["aflysning", "Aflysning"], ["firma", "Firma"]] },
+  { key: "opsaetning", navn: "Opsætning", sider: [["employees", "Medarbejdere"], ["checklists", "Tjeklister"], ["transport", "Transporttid"], ["aflysning", "Aflysning"], ["timepriser", "Timepriser"], ["firma", "Firma"]] },
   // Kun i kundeudgaven (fase 5, 29.9.2026): kundefirmaet bestiller ekstra hjaelp hos
   // Jammerbugt Rengoering. Hos Jammerbugt selv findes siden ikke — der er man den,
   // der modtager bestillingerne.
@@ -1863,6 +1863,16 @@ const MODULE_HELP = {
         "Modulerne kan ingen slå til eller fra her, heller ikke ved et uheld. Det håndhæves også i databasen."] },
   ] },
 
+  timepriser: { title: "Timepriser", intro: "Satsen pr. time for hver kontrakttype, ekskl. moms.", blocks: [
+    { h: "Sådan gør du", p: ["Ret beløbet ud for kontrakttypen, og tryk «Gem timepriser». Knappen kan først trykkes, når noget er ændret.",
+        "Kontrakttyper, der ikke er i brug hos jer, vises ikke."] },
+    { h: "Hvor satsen bruges", p: ["Fakturering og Kundetimer: beløbet for registreret tid.",
+        "Ugeplan og Aftaler: værdien af planlagte besøg og aftalens samlede værdi.",
+        "Rapportering: omsætning og portefølje.",
+        "Tilbud: satsen foreslås, når du vælger kontrakttype, men kan rettes på det enkelte tilbud.",
+        "Opgaver og aftaler med fast pris bruger deres egen pris og påvirkes ikke."] },
+  ], warn: "En ny sats slår igennem med det samme overalt — også i fakturering og rapporter for tidligere måneder, fordi beløbene regnes ud fra den sats, der gælder nu. Fakturaer, der allerede er sendt til Dinero, ændres ikke. Skift derfor sats ved et månedsskifte, når den forrige måned er faktureret." },
+
   transport: { title: "Transporttid", intro: "Hvor lang tid der lægges ind til kørsel mellem to opgaver i ugeplanen.", blocks: [
     { h: "Sådan virker det", p: [
         "Ligger to opgaver efter hinanden samme dag med forskellig adresse, lægger ugeplanen transport ind imellem.",
@@ -1955,7 +1965,7 @@ const MODULE_HELP = {
     ...(KUNDEUDGAVE ? [{ h: "Eksporter til Excel", p: [
         "Knappen «Eksporter til Excel» henter præcis de rækker, du ser: samme måned, samme status og samme filtre.",
         "Filen har uge, dag, medarbejder, kunde, adresse, opgave, status, planlagt og registreret tid i timer, beløbene og om rækken er fakturagrundlag.",
-        "Beløbene regnes ud fra timepriserne under «Timepriser» eller opgavens fastpris.",
+        "Beløbene regnes ud fra timepriserne under Opsætning → Timepriser eller opgavens fastpris.",
         "Filen kan åbnes i Excel, Numbers og Google Sheets og lægges ind i jeres eget regnskabsprogram."] }] : []),
     ...(KUNDEUDGAVE ? [{ h: "Kunder", p: [
         "Kunden vælges i feltet «Fakturakunde» på aftalen eller opgaven. Skriv navnet; findes kunden ikke, vælger du «＋ Opret som ny kunde»."] }] : [
@@ -1988,7 +1998,7 @@ const MODULE_HELP = {
         "Er alt i listen allerede sat, bliver knappen til «Fjern fakturagrundlag fra N viste». Så kan man fortryde uden at klikke sig igennem hver linje."] },
     { h: "Produkter", p: ["Produktforbrug vises som egne linjer under opgaven med antal og beløb.",
         "Hver produktlinje har sit eget flueben, men kræver at selve opgaven også er fakturagrundlag."] },
-    { h: "Timepriser", p: ["Tryk «Timepriser» for at rette satsen pr. kontrakttype. Satsen bruges i fakturering, ugebelægning og rapportering.",
+    { h: "Timepriser", p: ["Satsen pr. kontrakttype rettes under Opsætning → Timepriser. Beløbene her regnes ud fra den.",
         "Opgaver med fastpris bruger deres egen pris i stedet."] },
     { h: "Kommentarer og billeder fra medarbejderen", p: [
         "Har medarbejderen skrevet en kommentar eller taget billeder ude hos kunden, står de direkte under opgavens linje.",
@@ -6323,13 +6333,7 @@ function PlanningApp({ session, onSignOut }) {
         <TimeView instances={instances} employees={employees} opgaveNoter={opgaveNoter}
           onExportToDinero={exportToDinero} totalLogged={totalLogged} weekLabel={wk.label}
           isAdminUser={isAdminUser} productUsage={productUsage} onToggleProductInvoice={toggleProductInvoiceReady} onToggleProductDinero={toggleProductDineroExported}
-          pricing={pricing} onPricingChange={async (newPricing) => {
-            setPricing(newPricing);
-            for (const [type, rate] of Object.entries(newPricing)) {
-              const { error: priceErr } = await supabase.from("pricing").upsert({ id: `price_${type}`, contract_type: type, hourly_rate: rate }, { onConflict: "id" });
-              if (dbFail(priceErr, "gemme timeprisen")) return;
-            }
-          }}
+          pricing={pricing}
           onUpdateInstance={(taskId, fields) => updateInstance(taskId, (t) => ({ ...t, ...fields }))}
           onSaetFakturagrundlagFlere={saetFakturagrundlagFlere}
           onOpenTask={setOpenTaskId} />
@@ -6348,6 +6352,25 @@ function PlanningApp({ session, onSignOut }) {
       {view === "produkter" && harModul("kundeportal") && <ProdukterView isAdminUser={isAdminUser} notify={notify} />}
       {view === "henvendelser" && harModul("kundeportal") && <HenvendelserView isAdminUser={isAdminUser} notify={notify} onGaaTil={setView} />}
       {view === "ekstrahjaelp" && KUNDEUDGAVE && isAdminUser && <EkstraHjaelpView />}
+
+      {/* Timepriser stod som en knap paa Fakturering indtil 3.10.2026. Satsen er en
+          indstilling, man saetter én gang — ikke noget, man retter, mens man fakturerer —
+          og den bruges ogsaa i ugebelaegning, aftaler, tilbud og rapportering. Derfor bor
+          den under Opsaetning sammen med de andre faste indstillinger (Jonns oenske). */}
+      {view === "timepriser" && (
+        <TimepriserView isAdminUser={isAdminUser} pricing={pricing}
+          onGem={async (nyePriser) => {
+            for (const [type, rate] of Object.entries(nyePriser)) {
+              const { error: priceErr } = await supabase.from("pricing").upsert({ id: `price_${type}`, contract_type: type, hourly_rate: rate }, { onConflict: "id" });
+              if (dbFail(priceErr, "gemme timeprisen")) return false;
+            }
+            // Foerst naar alle satser er gemt. Fejler én, viser appen ikke priser,
+            // databasen ikke har — ellers ville fakturering regne med et tal, der
+            // forsvinder ved naeste genindlaesning.
+            setPricing(nyePriser);
+            return true;
+          }} />
+      )}
 
       {view === "aflysning" && (
         <AflysningsgrundeView isAdminUser={isAdminUser} grunde={aflysningsgrunde} regler={aflysningRegler}
@@ -7778,7 +7801,7 @@ const FAKT_GRID = () => harModul("dinero")
   ? "50px 140px 120px 160px 1fr 70px 80px 100px 100px 100px 90px 70px 28px"
   : "50px 140px 120px 160px 1fr 70px 80px 100px 100px 100px 90px 0px 28px";
 
-function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLabel, onUpdateInstance, onSaetFakturagrundlagFlere, pricing: pricingProp, onPricingChange, isAdminUser, onOpenTask, productUsage, onToggleProductInvoice, onToggleProductDinero, opgaveNoter }) {
+function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLabel, onUpdateInstance, onSaetFakturagrundlagFlere, pricing: pricingProp, isAdminUser, onOpenTask, productUsage, onToggleProductInvoice, onToggleProductDinero, opgaveNoter }) {
   const productLinesByTask = useMemo(() => {
     const map = {};
     (productUsage || []).forEach((tx) => {
@@ -7821,7 +7844,6 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
   // reelt klar til fakturering) og dem der blot er planlagt/i gang.
   const [statusFilter, setStatusFilter] = useState("all");
   const [editMinutes, setEditMinutes] = useState({});
-  const [showPricing, setShowPricing] = useState(false);
   const [exportingToDinero, setExportingToDinero] = useState(false);
   const [localPricing, setLocalPricing] = useState(pricingProp || { privat: 450, erhverv: 550, nexus: 380, aeldrelov: 410 });
 
@@ -8043,11 +8065,6 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
             Vis sendt til Dinero
           </label>
         )}
-        <button
-          style={{ ...styles.secondaryBtn, ...(showPricing ? { background: "#ECFDF5", color: "#16A34A", borderColor: "#22C55E" } : {}) }}
-          onClick={() => setShowPricing((v) => !v)}>
-          💰 Timepriser
-        </button>
         {/* Kundeudgaven har ingen Dinero (Jonn 29.9.2026): der eksporteres til Excel i
             stedet. Hos Jammerbugt Rengoering er knappen den samme som altid. */}
         {harModul("dinero") ? (
@@ -8079,32 +8096,6 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
       </div>
 
       {visning === "maaned" && isAdminUser && harModul("kundeportal") && harModul("dinero") && <AbonnementLinjer maaned={filterMonth} aar={filterYear} maanedNavn={MONTHS[filterMonth]} />}
-
-      {/* Timepris-panel */}
-      {showPricing && (
-        <div style={{ background: "#fff", borderRadius: 12, padding: 16, marginBottom: 12, boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
-          <div style={{ fontWeight: 700, fontSize: 14, color: "#111111", marginBottom: 12 }}>💰 Timepriser pr. kontrakttype</div>
-          <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 12 }}>
-            {valgbareKontrakttyper().map((c) => [c.key, c.icon + " " + c.label]).map(([type, label]) => (
-              <div key={type} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                <label style={styles.label}>{label}</label>
-                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  <input
-                    type="number" min={0} step={10}
-                    style={{ ...styles.inputSm, width: 90, textAlign: "right" }}
-                    value={localPricing[type] || 0}
-                    onChange={(e) => setLocalPricing((prev) => ({ ...prev, [type]: Number(e.target.value) }))}
-                  />
-                  <span style={{ fontSize: 13, color: "#64748B" }}>kr/t</span>
-                </div>
-              </div>
-            ))}
-          </div>
-          <button style={styles.primaryBtn} onClick={async () => { if (onPricingChange) { await onPricingChange(localPricing); setShowPricing(false); } }}>
-            Gem timepriser
-          </button>
-        </div>
-      )}
 
       <div style={{ display: "grid", gridTemplateColumns: FAKT_GRID(), gap: 0, background: "#F8FAFC", borderRadius: "10px 10px 0 0", padding: "8px 14px", fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.04em", marginTop: 8 }}>
         <span>Uge</span><span>Medarbejder</span><span>Kunde</span><span>Adresse</span><span>Opgave</span><span>Dag</span>
@@ -19399,6 +19390,58 @@ function AflysteChip({ aflyste, grunde, onGenaabn, onOpenTask }) {
         </div>
       )}
     </span>
+  );
+}
+
+// Timepriser pr. kontrakttype. Flyttet fra en knap paa Fakturering 3.10.2026 — se
+// kommentaren ved view === "timepriser". Satsen bruges i fakturering, ugebelaegning,
+// aftalernes vaerdi, tilbud (som forslag) og rapportering. Opgaver med fast pris
+// bruger deres egen pris og roeres ikke af det her.
+function TimepriserView({ isAdminUser, pricing, onGem }) {
+  const [lokal, setLokal] = useState(pricing || {});
+  const [gemmer, setGemmer] = useState(false);
+  const [gemt, setGemt] = useState(false);
+  // Priserne hentes ved opstart og kan komme efter, at siden er tegnet. Uden det
+  // her ville felterne staa paa 0 og et tryk paa Gem nulstille alle satser.
+  useEffect(() => { if (pricing) setLokal(pricing); }, [JSON.stringify(pricing)]);
+  if (!isAdminUser) return <div style={styles.page}>Kun planlæggere kan rette timepriserne.</div>;
+  const aendret = JSON.stringify(lokal) !== JSON.stringify(pricing || {});
+  return (
+    <div style={styles.page}>
+      <div style={{ fontWeight: 700, fontSize: 18, marginBottom: 4 }}>Timepriser</div>
+      <div style={{ fontSize: 13, color: "#64748B", marginBottom: 14, maxWidth: 640 }}>
+        Satsen pr. time for hver kontrakttype, ekskl. moms. Den bruges i fakturering, ugebelægning,
+        aftalernes værdi og rapportering, og foreslås på nye tilbud. Opgaver med fast pris bruger
+        deres egen pris.
+      </div>
+      <div style={{ background: "#fff", borderRadius: 12, padding: 16, boxShadow: "0 1px 3px rgba(0,0,0,0.06)", maxWidth: 640 }}>
+        {valgbareKontrakttyper().map((c) => (
+          <div key={c.key} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: "1px solid #F1F5F9" }}>
+            <span style={{ flex: 1, fontSize: 14, fontWeight: 600 }}>{c.icon} {c.label}</span>
+            <input type="number" min={0} step={10}
+              style={{ ...styles.inputSm, width: 100, textAlign: "right" }}
+              value={lokal[c.key] ?? 0}
+              onChange={(e) => { setGemt(false); setLokal((x) => ({ ...x, [c.key]: Number(e.target.value) })); }} />
+            <span style={{ fontSize: 13, color: "#64748B", width: 32 }}>kr/t</span>
+          </div>
+        ))}
+        <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 14 }}>
+          <button style={styles.primaryBtn} disabled={!aendret || gemmer}
+            onClick={async () => {
+              setGemmer(true);
+              try { if (await onGem(lokal)) setGemt(true); } finally { setGemmer(false); }
+            }}>
+            {gemmer ? "Gemmer…" : "Gem timepriser"}
+          </button>
+          {gemt && !aendret && <span style={{ fontSize: 13, color: "#16A34A" }}>Gemt</span>}
+        </div>
+      </div>
+      <div style={{ fontSize: 12.5, color: "#64748B", marginTop: 12, maxWidth: 640 }}>
+        En ny sats slår igennem alle steder med det samme — også i fakturering og rapporter for
+        tidligere måneder, fordi beløbene regnes ud fra den sats, der gælder nu. Det, der allerede
+        er sendt til Dinero, ændres ikke.
+      </div>
+    </div>
   );
 }
 
