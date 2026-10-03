@@ -118,6 +118,22 @@ række, der ville blive indsat, før den opdager at id'et er taget, og `title`, 
 > `arvede-felter-sync` havde samme fejl. Og en fejl, der ikke siges højt, er ikke en fejl,
 > der ikke sker — den er bare en, ingen retter.
 
+**En ny `security definer`-funktion kan kaldes uden login, indtil du lukker den.**
+Supabase giver `anon` adgang gennem `PUBLIC`. Skriv derfor altid, i samme migration:
+
+    revoke execute on function public.<navn>(<typer>) from public, anon;
+    grant execute on function public.<navn>(<typer>) to authenticated, service_role;
+
+Triggerfunktioner lukkes også for `authenticated` — de skal aldrig kaldes direkte.
+Kun de funktioner, loginsiderne og RLS-politikkerne har brug for, er åbne for `anon`
+(`firma_offentlig`, `hent_portal_forside`, `is_admin`, `current_*`, `er_medarbejder`,
+`modul`, og i kundedatabasen `current_firma_id` og `firma_efter_slug`). Tjek
+bagefter med `get_advisors` — listen over funktioner, `anon` kan kalde, skal være
+præcis den.
+
+> 3.10.2026 stod 30 funktioner åbne for `anon` (31 i kundedatabasen). Intet hul —
+> de skrivende funktioner tjekkede selv — men det var held, ikke design.
+
 **Kun én ad gangen rører databasen.** Koden kan rulles tilbage; en tabel, der er lavet om,
 mens den andens app kørte på den gamle form, kan ikke.
 
