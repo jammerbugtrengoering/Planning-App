@@ -26,7 +26,8 @@ Tre apps, tre GitHub-repositories, samme database:
 
 Alle tre er React + Vite, deployes på Netlify, og bruger den samme Supabase-database
 (`gteowfoahsfpunzgdxum`, i Stockholm — **ikke** Frankfurt). Databasen har edge-funktioner,
-der taler med Dinero (bogføring), Brevo (mail) og OpenRouteService (kørselsafstande).
+der taler med Dinero (bogføring), Brevo (mail), Dataforsyningen (adresser) og
+OpenRouteService (kørselsafstande).
 
 ## Sådan vil jeg have, du arbejder
 
@@ -130,9 +131,10 @@ tekst på hvid baggrund i en `<select>`. Sæt `color` eksplicit på felter.
 to timer har leveret fire timers arbejde. Den ene misforståelse fik Kundetimer til at
 melde overforbrug på besøg, der gik præcis som planlagt.
 
-**Worklist henter én uge ad gangen; planlægningsappen henter alle opgaver.** Regner du
-med, at en opgave ligger i hukommelsen i Worklist, holder det kun for den uge, der er
-åben.
+**Worklist henter én uge ad gangen; planlægningsappen henter i tre runder** — først
+ugerne omkring i dag, så op til 26 uger frem, og resten (2027–28) kun ved behov. Regner
+du med, at en opgave ligger i hukommelsen, holder det kun for det, der er hentet. Se
+`hentedeUger` og `src/vindue.js` i planlægningsappen, og `SIDER_DER_KRAEVER_ALT`.
 
 **Planen danner opgaver, når nogen åbner en uge.** Sletter du derfor en opgave helt,
 er den tilbage, næste gang nogen bladrer hen til den uge — med et nyt id, så det

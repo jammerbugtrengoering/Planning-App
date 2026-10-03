@@ -37,11 +37,14 @@ tre, så et build opfører sig forudsigeligt.
 behandlingsaktiviteter, og det er svaret, hvis kommunens databeskyttelsesrådgiver
 spørger, hvor data ligger. Sig aldrig Frankfurt; det er forkert.
 
-**Tre tjenester udenfor:**
+**Fire tjenester udenfor:**
 
 - **Dinero** — kunder, fakturaer, bogføring
 - **Brevo** — alle mails systemet sender: login-koder, invitationer, påmindelser, alarmer
-- **OpenRouteService** — afstande mellem adresser, som kilometerpengene bygger på
+- **Dataforsyningen (GSearch)** — slår adresser op i det officielle adresseregister.
+  Erstattede DAWA, som lukkede i 2026 (svarer 410 Gone)
+- **OpenRouteService** — køreruter og afstande, som kilometerpengene bygger på, og
+  reserve til adresseopslag, når registret ikke kender en adresse
 
 Dertil et link til **KMD Nexus Mobile**, som medarbejderne kvitterer i på kommunale
 opgaver. Vi taler ikke med Nexus; vi åbner bare appen.
@@ -50,29 +53,39 @@ opgaver. Vi taler ikke med Nexus; vi åbner bare appen.
 
 ## Det der kører af sig selv
 
-Otte planlagte jobs. Tidspunkterne herunder er **dansk sommertid**; om vinteren ligger
-de en time tidligere, undtagen dem hvor det står, at de har en urkontrol.
+21 planlagte jobs (opgjort 3.10.2026 — `select jobname, schedule from cron.job`
+giver den aktuelle liste). Tidspunkterne herunder er **dansk sommertid**; om vinteren
+ligger de en time tidligere, undtagen dem med urkontrol.
 
 | Hvornår | Hvad | Hvis det stopper |
 |---|---|---|
-| ca. 01.00 | Beregner dagens kørsel ud fra registreret tid | Medarbejderne mister kilometerpenge |
+| ca. 01.00 | Beregner gårsdagens kørsel ud fra registreret tid | Medarbejderne mister kilometerpenge |
+| ca. 02.00 og 03.00 | Genforsøg af kørslen — kun hvis natkørslen fejlede | Som ovenfor |
 | ca. 04.00 | Rydder billeder ældre end 12 måneder | Persondata hober sig op |
+| ca. 04.30 | Sletter oprydningskopier, når deres dato er nået | Gamle kopier med persondata bliver liggende |
 | ca. 05.00 | Rydder nøglebokskoder fra overståede opgaver | Det følsomste i systemet hober sig op |
+| ca. 05.15 | Rydder gammel ændringslog | Loggen vokser |
+| ca. 05.45 | Rydder gamle henvendelser fra `/bestil` | Persondata hober sig op |
+| ca. 06.15–06.25 | Dinero: omsætning, kundekontakter, og ret opgaver ud af trit med aftalen | Tal og kontaktoplysninger bliver forældede |
 | 07.00 **og** 08.00 | **Morgentjek** — se bemærkningen nedenfor | I opdager ikke, at de andre er stoppet |
+| kl. 7 | Morgenmail til planlæggerne med alt, der venter | Kontoret ser ikke, hvad der haster |
 | 18.00 (urkontrol) | Påmindelse til medarbejdere om manglende registrering | Timer og kørsel går tabt |
 | 18.00 (urkontrol) | To dage før månedsskiftet: sidste chance-mail | Fakturering og løn går tabt for den måned |
 | ca. 19.00 (søn–tor) | Besked om morgendagens plan | Medarbejderne ved ikke, planen er ændret |
-| Hvert kvarter | Sender beskeder om ændringer i planen | Ændringer når ikke ud |
+| Hvert kvarter | Beskeder om planændringer til medarbejdere, og det hastende til planlæggerne | Ændringer når ikke ud |
+| Hvert 5. minut | Glemt start: påmindelse efter 5 min, systemstart efter 10 min | Start/stop-opgaver står uden tid |
+| 1. april og 1. oktober | Sæsonskift på Rødhus-aftalen (sommer/vinter) | Aftalen kører med forkert sæson |
 
 **Hvorfor nogle jobs står to gange.** pg_cron kører i UTC, og Danmark skifter mellem
 sommer- og vintertid. De jobs, der skal ramme et bestemt klokkeslæt, er derfor lagt på
 både 16 og 17 UTC — og har så en kontrol inde i databasen, der ser efter, om klokken
 faktisk er 18 dansk tid. Så rammer de 18.00 hele året uden manuel justering.
 
-**Morgentjekket mangler den kontrol.** Det ligger på 5 og 6 UTC, men uden urkontrol —
-og kører derfor to gange hver morgen. Er noget galt, kommer den samme alarm altså
-**to gange med en times mellemrum**. Det er ikke farligt, men det er den slags støj,
-der lærer folk at ignorere alarmer. Det står på listen over udeståender nedenfor.
+**Morgentjekket kører også to gange — med vilje.** Det ligger på 5 og 6 UTC uden
+urkontrol, fordi den anden kørsel er et genforsøg: går den første i gulvet, er det den
+anden, der redder morgenen. I stedet for at spærre kørslen spærrer tjekket **mailen**:
+er der allerede sendt en alarm i dag, sendes der ikke en til (rettet 12.9.2026, se
+`supabase/functions/helsetjek/index.ts`).
 
 **Morgentjekket er det vigtigste af dem.** Det findes, fordi de daglige påmindelser
 engang fejlede i et helt døgn uden at nogen opdagede det. Det sender **kun** mail, når
@@ -122,6 +135,7 @@ adgangskodemanager.
 | Supabase-projektet | Database, edge-funktioner, nøgler | Jonn |
 | Brevo | Alle udgående mails | Jonn |
 | OpenRouteService | Afstandsberegning | Jonn |
+| Dataforsyningen | Adresseopslag (GSearch) | Jonn |
 | Dinero | Bogføring | Jer i forvejen |
 
 **Nøgler, der ligger inde i Supabase** under *Edge Functions → Secrets*, og som ikke
@@ -131,6 +145,7 @@ skal flyttes nogen steder hen:
   aldrig i et repository, aldrig i en mail.
 - `BREVO_API_KEY` — mail
 - `ORS_API_KEY` — afstande
+- `DATAFORSYNINGEN_TOKEN` — adresseopslag i registret (GSearch)
 - Dinero-adgangen
 - `AFSENDER_EMAIL`, `AFSENDER_NAVN`, `SVAR_TIL` — hvem mails kommer fra
 
@@ -232,9 +247,8 @@ kan hjælpe fra sin egen maskine uden at skulle gætte, hvad der er ændret side
    Skal I have kopierne længere, er datoen det ene sted i `ryd_oprydningskopier()`.
 5. **To udgåede aftaler hos Anne Sørensen** har hver en åben opgave, der skal afgøres i
    hånden — den ene er sidste dags rengøring, den anden blev dannet ved en fejl.
-6. **Morgentjekket sender to ens alarmer**, fordi det mangler den urkontrol, de andre
-   daglige jobs har. Rettelsen er en enkelt linje, og den bør laves, inden nogen vænner
-   sig til at der altid kommer to.
+6. ~~Morgentjekket sender to ens alarmer.~~ **Rettet 12. september 2026.** Kørslen
+   beholdes to gange som genforsøg, men mailen sendes højst én gang om dagen.
 7. ~~Den gamle anon-nøgle udfases ved udgangen af 2026.~~ **Lukket 12. september 2026.**
    Alle tre apps kører på den nye publishable-nøgle. Efterprøvet i de udgivne filer på
    begge Netlify-sites: nøglen er der, den gamle anon-nøgle er ikke. Kundeportalen har

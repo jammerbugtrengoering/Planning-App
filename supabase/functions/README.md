@@ -22,74 +22,40 @@ Supabase. Ingen historik, ingen sammenligning, og ingen vej tilbage hvis nogen k
 til at overskrive en. Nu kan man i det mindste se, hvad der stod, og hvad der er
 ændret hvornår.
 
-## MANGLER: mappen er kun halvt fyldt
+## Status 3.10.2026: alle 29 funktioner ligger her
 
-Der ligger **elleve** funktioner her ud af toogtyve. Det er med vilje, og det skal gøres
-færdigt — men det skal gøres med et værktøj og ikke i hånden.
+Mappen er komplet. De sidste ti (`compute-daily-km`, `daglige-paamindelser`,
+`helsetjek`, `send-push`, `portal-login`, `fratraed-medarbejder`, `tilbud-pdf`,
+`tilbud-offentlig`, `dinero-probe`, `dinero-omsaetning-probe`) blev hentet 3.10.2026
+gennem Supabase-MCP'ens `get_edge_function` — den udrullede tekst, ikke en afskrift
+fra skærmen — og kontrolleret for syntaks med esbuild.
 
-Der lå i forvejen en `send-email/index.ts`, men den var forældet: 68 linjer mod cirka
-130 i drift, og uden den adgangskontrol, funktionen har i dag. Den er fjernet, for en
-forældet kopi er farligere end ingen — den ser rigtig ud, og nogen kunne finde på at
-rulle den ud. Git husker den stadig, hvis nogen skulle få brug for at se, hvad der stod.
+Vil man have det helt sikkert, kan CLI'en hente det hele igen (se nedenfor). Viser
+`git diff` bagefter ingenting, står der nøjagtig det, der kører.
 
-De elleve er dem, vi kan stå inde for tegn for tegn, fordi de blev skrevet her.
-De øvrige elleve skulle kopieres af fra Supabase, og fire tusind linjer kopieret i
-hånden har en reel risiko for en tavs tegnfejl. **En kopi, man ikke kan stole på, er
-værre end ingen kopi** — den ser rigtig ud lige indtil den dag, man skal bruge den.
+Før 12.9.2026 fandtes seksten af sytten funktioner udelukkende inde i Supabase.
+En forældet `send-email/index.ts` blev dengang fjernet, fordi en forkert kopi er
+farligere end ingen. Det princip gælder stadig: **retter nogen i Supabase uden at
+kopiere tilbage, er filen her forkert** — og så er det filen, der skal opdateres.
 
-Sådan hentes resten ned, nøjagtigt som de kører:
+### Hent alle ned med CLI'en
 
 **Installér ikke CLI'en med `npm install -g supabase`.** Supabase afviser den med
-vilje som globalt modul, og fejlen, man får, handler om filrettigheder og leder én på
-et vildspor. Brug én af disse i stedet:
-
-```powershell
-# Windows: kør den uden at installere noget
-npx supabase@latest login
-```
-
-```bash
-# macOS: samme, eller installér med Homebrew
-npx supabase@latest login
-brew install supabase/tap/supabase
-```
-
-Derefter, fra `Planning-App`-mappen (drop `npx supabase@latest` og skriv bare
-`supabase`, hvis du installerede med Homebrew):
+vilje som globalt modul. Brug `npx supabase@latest login` (Windows og macOS) eller
+`brew install supabase/tap/supabase` (macOS). Derefter, fra `Planning-App`:
 
 ```
-npx supabase@latest functions download dinero               --project-ref gteowfoahsfpunzgdxum
-npx supabase@latest functions download dinero-omsaetning    --project-ref gteowfoahsfpunzgdxum
-npx supabase@latest functions download dinero-omsaetning-sync --project-ref gteowfoahsfpunzgdxum
-npx supabase@latest functions download dinero-kontakt-sync   --project-ref gteowfoahsfpunzgdxum
-npx supabase@latest functions download arvede-felter-sync    --project-ref gteowfoahsfpunzgdxum
-npx supabase@latest functions download dinero-omsaetning-probe --project-ref gteowfoahsfpunzgdxum
-npx supabase@latest functions download dinero-probe         --project-ref gteowfoahsfpunzgdxum
-npx supabase@latest functions download compute-daily-km     --project-ref gteowfoahsfpunzgdxum
-npx supabase@latest functions download travel-distance      --project-ref gteowfoahsfpunzgdxum
-npx supabase@latest functions download send-email           --project-ref gteowfoahsfpunzgdxum
-npx supabase@latest functions download send-push            --project-ref gteowfoahsfpunzgdxum
-npx supabase@latest functions download plan-beskeder        --project-ref gteowfoahsfpunzgdxum
-npx supabase@latest functions download kontor-beskeder      --project-ref gteowfoahsfpunzgdxum
-npx supabase@latest functions download daglige-paamindelser --project-ref gteowfoahsfpunzgdxum
-npx supabase@latest functions download maaneds-paamindelse  --project-ref gteowfoahsfpunzgdxum
-npx supabase@latest functions download helsetjek            --project-ref gteowfoahsfpunzgdxum
-npx supabase@latest functions download slet-gamle-fotos     --project-ref gteowfoahsfpunzgdxum
-npx supabase@latest functions download inviter-bruger       --project-ref gteowfoahsfpunzgdxum
-npx supabase@latest functions download fratraed-medarbejder --project-ref gteowfoahsfpunzgdxum
-npx supabase@latest functions download portal-login         --project-ref gteowfoahsfpunzgdxum
-npx supabase@latest functions download bestilling-besked    --project-ref gteowfoahsfpunzgdxum
-npx supabase@latest functions download tilbud-offentlig     --project-ref gteowfoahsfpunzgdxum
-npx supabase@latest functions download tilbud-pdf           --project-ref gteowfoahsfpunzgdxum
+for f in aabn-planlaegning adresse-opslag arvede-felter-sync bestilling-besked bro-modtag \
+  compute-daily-km daglige-paamindelser dinero dinero-kontakt-sync dinero-omsaetning \
+  dinero-omsaetning-probe dinero-omsaetning-sync dinero-probe fratraed-medarbejder \
+  helsetjek henvendelse-modtag inviter-bruger koeretabel kontor-beskeder kundeloesning \
+  maaneds-paamindelse plan-beskeder portal-login send-email send-push slet-gamle-fotos \
+  tilbud-offentlig tilbud-pdf travel-distance; do
+  npx supabase@latest functions download $f --project-ref gteowfoahsfpunzgdxum
+done
 ```
 
-Alle er med — også de elleve, der allerede ligger her. Så bliver de overskrevet med
-den udrullede udgave, og så ved I med sikkerhed, at der ikke står noget andet i mappen
-end det, der faktisk kører.
-
-CLI'en kræver Node 20 eller nyere. Det har I i forvejen.
-
-Bagefter: `git add supabase/functions`, commit og push.
+CLI'en kræver Node 20 eller nyere. Bagefter: `git diff supabase/functions`.
 
 ## Hvorfor de ikke bare rulles ud herfra
 
@@ -126,12 +92,15 @@ kopiere tilbage — og så er det filen her, der skal opdateres, ikke omvendt.
 | `plan-beskeder` | Besked til medarbejdere om ændringer i planen, og påmindelse når en startet opgave (start/stop) er et kvarter over tiden | Job hvert kvarter |
 | `send-email` | Sender al mail gennem Brevo | De øvrige funktioner |
 | `send-push` | Push-beskeder til telefonerne | De øvrige funktioner |
-| `travel-distance` | Afstand og køretid mellem to adresser | Planlægningsappen |
+| `travel-distance` | Afstand og køretid mellem to adresser. Geokoder via Dataforsyningen (GSearch), ORS som reserve | Planlægningsappen, `compute-daily-km` |
+| `adresse-opslag` | Adresseforslag i adressefelter (GSearch, ORS som reserve). Erstatter DAWA, der lukkede 2026 | Planlægningsappen |
+| `koeretabel` | Køretabel for en dags adresser til «Simulér uge». Gemmer i `koeretabel`, aldrig i `travel_overrides`, så simuleringen ikke kan flytte kilometerpenge | Planlægningsappen |
+| `henvendelse-modtag` | «Bliv ringet op» fra `/bestil` (pjece/magnet). `verify_jwt` fra; honningkrukke og loft pr. time | Kundeportalens offentlige side |
 | `dinero` | Kunder, fakturaer og bogføring | Planlægningsappen |
 | `dinero-omsaetning` | Faktureret omsætning måned for måned, et år ad gangen | I hånden |
 | `dinero-omsaetning-sync` | Skriver betalt omsætning pr. måned ind i `dinero_omsaetning` | Natligt job kl. 4.15 |
-| `dinero-omsaetning-probe` | Afprøvning brugt under bygningen af synkroniseringen | I hånden |
-| `dinero-probe` | Afprøver forbindelsen til Dinero | I hånden |
+| `dinero-omsaetning-probe` | Slukket — svarer 410 | — |
+| `dinero-probe` | Midlertidig afprøvning af fakturaopslag på nummer. Kun planlæggere. Bør slukkes som `dinero-omsaetning-probe` | I hånden |
 | `inviter-bruger` | Opretter login til en ny medarbejder | Planlægningsappen |
 | `fratraed-medarbejder` | Lukker adgangen for en der stopper | Planlægningsappen |
 | `portal-login` | Sender kunden en engangskode til portalen | Kundeportalen |
