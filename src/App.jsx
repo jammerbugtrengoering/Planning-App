@@ -4655,6 +4655,10 @@ function PlanningApp({ session, onSignOut }) {
     });
 
     notify(payload.saveAsDraft ? "Kladden er gemt" : "Aftalen er godkendt og opgaverne er oprettet");
+    // Svaret fortaeller vinduet, at gemningen lykkedes og det maa lukke. Alle de tidlige
+    // return ovenfor (fejl, afvist kladde, «nej» til dublet) giver undefined, saa vinduet
+    // staar aabent med det, man har skrevet.
+    return true;
   }
 
   async function addTask(payload) {
@@ -6513,7 +6517,14 @@ function PlanningApp({ session, onSignOut }) {
         <SkillsView supabase={supabase} skills={skills} onSkillsChange={setSkills} />
       )}
 
-      {showAddTask && <TaskModal onClose={() => { setShowAddTask(false); setCopyPayload(null); setEditTplId(null); }} onSave={(p, editId) => (editId ? updateTemplate(p, editId) : addTask(p))} editId={editTplId} checklistTemplates={checklistTemplates} skills={skills} copyFrom={copyPayload} employees={aktiveEmployees} templates={templates} />}
+      {showAddTask && <TaskModal onClose={() => { setShowAddTask(false); setCopyPayload(null); setEditTplId(null); }} onSave={async (p, editId) => {
+        if (!editId) return addTask(p);
+        // 4.10.2026: «Godkend og planlaeg» paa en eksisterende aftale lod vinduet staa
+        // aabent efter gemningen (addTask lukkede det selv, updateTemplate gjorde ikke).
+        // Det ser ud som om intet skete, og man trykker igen.
+        const lykkedes = await updateTemplate(p, editId);
+        if (lykkedes === true) { setShowAddTask(false); setCopyPayload(null); setEditTplId(null); }
+      }} editId={editTplId} checklistTemplates={checklistTemplates} skills={skills} copyFrom={copyPayload} employees={aktiveEmployees} templates={templates} />}
       {visSimulering && (
         <SimuleringView weekNo={weekOffset} weekYear={weekYear} instances={instances} employees={employees}
           templates={templates} areas={areas} employeeAreas={employeeAreas} kmSatser={kmSatser}
