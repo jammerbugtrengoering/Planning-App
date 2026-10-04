@@ -13743,7 +13743,10 @@ function KontorKlokke({ isAdminUser, signal, onGaaTil }) {
   // Hvert minut, naar vinduet kommer i fokus, og naar der sker noget i planen.
   useEffect(() => {
     hent();
-    const ur = setInterval(hent, 60000);
+    // En fane, der ligger i baggrunden, spoerger ikke. Planlaeggerne har faner staaende
+    // hele dagen, og hvert opslag kostede databasen over et sekund (4.10.2026). Naar
+    // fanen kommer frem igen, henter «focus» straks, saa listen er frisk, naar nogen ser den.
+    const ur = setInterval(() => { if (!document.hidden) hent(); }, 60000);
     const fokus = () => hent();
     window.addEventListener("focus", fokus);
     return () => { clearInterval(ur); window.removeEventListener("focus", fokus); };
