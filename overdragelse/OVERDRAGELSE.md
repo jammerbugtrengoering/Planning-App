@@ -237,8 +237,7 @@ kan hjælpe fra sin egen maskine uden at skulle gætte, hvad der er ændret side
 1. ~~Supabase Pro.~~ **Opgraderet 4. oktober 2026** (organisationen «Jammerbugt
    Rengoering project», som JR-databasen ligger i). Pro giver daglige
    sikkerhedskopier. To ting følger ikke med af sig selv:
-   - **Beskyttelse mod lækkede adgangskoder** skal slås til under Authentication
-     (Supabase-advisoren melder den stadig som slået fra).
+   - ~~Beskyttelse mod lækkede adgangskoder~~ **slået til 4.10.2026** (Authentication).
    - **Tilbagerulning til et bestemt tidspunkt (PITR)** er et tilkøb oven på Pro og
      er ikke slået til. Det er det, der redder en dag, hvor der er slettet noget ved
      en fejl, fordi der ikke findes en prøvedatabase.
