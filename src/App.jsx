@@ -4568,6 +4568,31 @@ function PlanningApp({ session, onSignOut }) {
       status: nyStatus,
     };
 
+    // Retter aftalens titel, skal de opgaver med, der stadig bærer den gamle.
+    //
+    // 4.10.2026: «Rengøring ifølge aftale» blev til «…aftalen» på aftalen, men de 26 opgaver
+    // stod ved den gamle titel — selvhelbredelsen i ensureWeekInstances rører ikke titlen,
+    // og opgaverne er allerede dannet. Kun dem, der STADIG har aftalens gamle titel: en
+    // opgave, nogen har omdøbt i hånden, er ikke længere aftalens, og må ikke overskrives.
+    // Samme vaern som selvhelbredelsen: intet udfoert, intet med tid, intet sendt til Dinero.
+    const gammelTitel = templates.find((t) => t.id === tplId)?.title;
+    if (gammelTitel && gammelTitel !== payload.title) {
+      const skalOmdoebes = instances.filter((i) =>
+        i.templateId === tplId && i.title === gammelTitel
+        && i.status !== "udført" && !i.dineroExported && registreredeMinutter(i) === 0)
+        .map((i) => i.id);
+      for (let n = 0; n < skalOmdoebes.length; n += 100) {
+        const bunke = skalOmdoebes.slice(n, n + 100);
+        const { error: titelErr } = await supabase.from("instances")
+          .update({ title: payload.title }).in("id", bunke);
+        if (dbFail(titelErr, "rette titlen på aftalens opgaver")) return;
+      }
+      if (skalOmdoebes.length) {
+        const omdoebt = new Set(skalOmdoebes);
+        setInstances((prev) => prev.map((i) => (omdoebt.has(i.id) ? { ...i, title: payload.title } : i)));
+      }
+    }
+
     // Ryd de opgaver, der ikke passer til den nye rytme.
     //
     // Uden det her ville en aendring vaere usynlig: skifter man fra hver uge til hver
