@@ -85,6 +85,8 @@ ud fra `?k=` i adressen. **Alle værdier tages imod** (bogstaver, tal, `-` og `_
 | Magnet (findes) | `…/bestil?k=magnet` |
 | Facebook, almindelige opslag (QR: `QR-facebook.png`/`.svg`) | `…/bestil?k=facebook` |
 | LinkedIn (QR: `QR-linkedin.png`/`.svg`) | `…/bestil?k=linkedin` |
+| Instagram (QR: `QR-instagram.png`/`.svg`) | `…/bestil?k=instagram` |
+| Messenger (Facebook-siden) | `https://m.me/jammerbugtrengoering` |
 | Facebook til børnene | `…/bestil?k=fb-boern` |
 | Facebook til de ældre | `…/bestil?k=fb-aeldre` |
 | Google | `…/bestil?k=google` |
