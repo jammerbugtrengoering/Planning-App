@@ -6106,7 +6106,13 @@ function PlanningApp({ session, onSignOut }) {
       )}
       <header style={styles.header}>
         <div style={styles.brand}>
-          <img src={firma?.logo_url || "/app-icon.png"} alt={firma?.navn || "Jammerbugt Rengøring"} style={{ width: 36, height: 36, minWidth: 36, borderRadius: 10, objectFit: "cover", background: "#000", display: "block" }} />
+          {/* Logoet genindlaeser siden. Installeret som app har vinduet hverken adresselinje
+              eller genindlaes-knap, saa der ellers ikke var nogen maade at hente en ny
+              udgave paa (4.10.2026). */}
+          <button type="button" onClick={() => window.location.reload()} title="Opdater siden" aria-label="Opdater siden"
+            style={{ background: "none", border: "none", padding: 0, cursor: "pointer", display: "block" }}>
+            <img src={firma?.logo_url || "/app-icon.png"} alt={firma?.navn || "Jammerbugt Rengøring"} style={{ width: 36, height: 36, minWidth: 36, borderRadius: 10, objectFit: "cover", background: "#000", display: "block" }} />
+          </button>
           <div>
             <div style={styles.brandTitle}>{firma?.navn || "Jammerbugt Rengøring"}</div>
             <div style={styles.brandSub}>{firma?.undertekst ?? L.sub}</div>
