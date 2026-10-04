@@ -1644,7 +1644,9 @@ function SetNewPasswordScreen({ onDone }) {
 const MODULE_HELP = {
   aendringer: { title: "Ændringer", intro: "Hvem ændrede hvad på aftaler og opgaver — og hvad stod der før.", blocks: [
     { h: "Sådan læses den", p: [
-        "Vælg en dag og eventuelt en person. Hver linje er én ændring: klokkeslæt, hvem, hvilken aftale eller opgave, og for hvert felt den gamle (overstreget) og den nye værdi.",
+        "Vælg en periode (fra–til) og eventuelt en person. Hver linje er én ændring: tidspunkt, hvem, hvilken aftale eller opgave, og for hvert felt den gamle (overstreget) og den nye værdi.",
+        "Under «Hvem» kan du vælge både planlæggere og medarbejdere. Medarbejdernes ændringer kommer fra Worklist — fx status, tidsregistrering, tjekliste og afslutning. Fratrådte står for sig nederst.",
+        "Der vises højst 1.000 ændringer ad gangen. Står der det, så gør perioden kortere eller vælg en person.",
         "«planlægning», «Worklist» og «portal» siger, hvor ændringen blev lavet. «Systemet» er baggrundsjob, fx en automatisk start af tiden.",
         "Tidsregistrering, tjekliste og afslutninger står kun som «ændret». Selve indholdet ser du på opgaven."] },
     { h: "Det står der ikke", p: [
@@ -15106,7 +15108,10 @@ const AENDRING_SKJULT = new Set(["id", "template_id", "customer_id", "video_url"
 
 function AendringslogView({ employees }) {
   const idag = new Date().toISOString().slice(0, 10);
-  const [dato, setDato] = useState(idag);
+  // Fra–til i stedet for én dag (4.10.2026, Jonn): vælger man en medarbejder, vil man
+  // typisk se alt, hun har lavet i en periode — ikke lede dag for dag.
+  const [fraDato, setFraDato] = useState(idag);
+  const [tilDato, setTilDato] = useState(idag);
   const [hvem, setHvem] = useState("");
   const [tabel, setTabel] = useState("");
   const [raekker, setRaekker] = useState(null);
@@ -15118,8 +15123,8 @@ function AendringslogView({ employees }) {
     let afbrudt = false;
     (async () => {
       setRaekker(null); setFejl("");
-      const fra = new Date(`${dato}T00:00:00`);
-      const til = new Date(fra); til.setDate(til.getDate() + 1);
+      const fra = new Date(`${fraDato}T00:00:00`);
+      const til = new Date(`${tilDato < fraDato ? fraDato : tilDato}T00:00:00`); til.setDate(til.getDate() + 1);
       let q = supabase.from("aendringslog").select("*")
         .gte("tidspunkt", fra.toISOString()).lt("tidspunkt", til.toISOString())
         .order("tidspunkt", { ascending: false }).limit(1000);
@@ -15127,7 +15132,7 @@ function AendringslogView({ employees }) {
       else if (hvem) q = q.eq("hvem_id", hvem);
       if (tabel) q = q.eq("tabel", tabel);
       const [{ data, error }, { data: t }] = await Promise.all([
-        q, supabase.from("aendringslog_tomme").select("*").eq("dato", dato).order("antal", { ascending: false }).limit(20),
+        q, supabase.from("aendringslog_tomme").select("*").gte("dato", fraDato).lte("dato", tilDato < fraDato ? fraDato : tilDato).order("antal", { ascending: false }).limit(200),
       ]);
       if (afbrudt) return;
       if (error) { setFejl(error.message); setRaekker([]); return; }
@@ -15135,7 +15140,7 @@ function AendringslogView({ employees }) {
       setTomme(t || []);
     })();
     return () => { afbrudt = true; };
-  }, [dato, hvem, tabel]);
+  }, [fraDato, tilDato, hvem, tabel]);
 
   const vis = (felt, v) => {
     if (v === null || v === undefined || v === "") return "—";
@@ -15147,21 +15152,36 @@ function AendringslogView({ employees }) {
     if (typeof v === "object") return JSON.stringify(v);
     return String(v);
   };
-  const hvemListe = [...new Map((employees || []).filter((e) => e.isAdmin || e.is_admin).map((e) => [e.id, e.name])).entries()];
+  // Alle kan vaelges — ogsaa medarbejderne, hvis aendringer kommer fra Worklist (status,
+  // tid, tjekliste, afslutning). Foer stod kun planlaeggerne paa listen. Fratraadte
+  // staar for sig nederst: deres aendringer er stadig i loggen i 12 maaneder.
+  const sorter = (a, b) => (a.name || "").localeCompare(b.name || "", "da");
+  const alle = [...new Map((employees || []).map((e) => [e.id, e])).values()];
+  const planlaeggere = alle.filter((e) => (e.isAdmin || e.is_admin) && !e.fratraadtDato).sort(sorter);
+  const medarbejdere = alle.filter((e) => !(e.isAdmin || e.is_admin) && !e.fratraadtDato).sort(sorter);
+  const fratraadte = alle.filter((e) => e.fratraadtDato).sort(sorter);
   const tomtIAlt = tomme.reduce((sum, r) => sum + r.antal, 0);
 
   return (
     <div style={{ ...styles.page, maxWidth: 1000 }}>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end", marginBottom: 12 }}>
         <div>
-          <label style={styles.label}>Dag</label>
-          <input type="date" style={styles.input} value={dato} max={idag} onChange={(e) => setDato(e.target.value || idag)} />
+          <label style={styles.label}>Fra</label>
+          <input type="date" style={styles.input} value={fraDato} max={idag}
+            onChange={(e) => { const v = e.target.value || idag; setFraDato(v); if (tilDato < v) setTilDato(v); }} />
         </div>
-        <div style={{ minWidth: 200 }}>
+        <div>
+          <label style={styles.label}>Til</label>
+          <input type="date" style={styles.input} value={tilDato} min={fraDato} max={idag}
+            onChange={(e) => setTilDato(e.target.value || idag)} />
+        </div>
+        <div style={{ minWidth: 220 }}>
           <label style={styles.label}>Hvem</label>
           <select style={styles.input} value={hvem} onChange={(e) => setHvem(e.target.value)}>
             <option value="">Alle</option>
-            {hvemListe.map(([id, n]) => <option key={id} value={id}>{n}</option>)}
+            {planlaeggere.length > 0 && <optgroup label="Planlæggere">{planlaeggere.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}</optgroup>}
+            {medarbejdere.length > 0 && <optgroup label="Medarbejdere">{medarbejdere.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}</optgroup>}
+            {fratraadte.length > 0 && <optgroup label="Fratrådte">{fratraadte.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}</optgroup>}
             <option value="system">Systemet (baggrundsjob)</option>
           </select>
         </div>
@@ -15176,7 +15196,8 @@ function AendringslogView({ employees }) {
       </div>
       {fejl && <div style={{ color: "#B91C1C", fontSize: 13, marginBottom: 8 }}>{fejl}</div>}
       {raekker === null && <div style={styles.hint}>Henter …</div>}
-      {raekker && raekker.length === 0 && <div style={styles.hint}>Ingen ændringer den dag med de valg.</div>}
+      {raekker && raekker.length === 0 && <div style={styles.hint}>Ingen ændringer i perioden med de valg.</div>}
+      {raekker && raekker.length >= 1000 && <div style={{ ...styles.hint, color: "#B45309" }}>Der vises kun de nyeste 1.000 ændringer. Gør perioden kortere, eller vælg en person, for at se resten.</div>}
       {raekker && raekker.length > 0 && (
         <div style={{ background: "#fff", borderRadius: 10, boxShadow: "0 1px 3px rgba(0,0,0,0.06)", overflow: "hidden" }}>
           {raekker.map((r) => {
@@ -15185,6 +15206,7 @@ function AendringslogView({ employees }) {
               <div key={r.id} style={{ padding: "9px 14px", borderBottom: "1px solid #F1F5F9", fontSize: 13 }}>
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "baseline" }}>
                   <span style={{ color: "#64748B", fontVariantNumeric: "tabular-nums" }}>
+                    {fraDato !== tilDato && <>{new Date(r.tidspunkt).toLocaleDateString("da-DK", { day: "numeric", month: "short" })} </>}
                     {new Date(r.tidspunkt).toLocaleTimeString("da-DK", { hour: "2-digit", minute: "2-digit" })}
                   </span>
                   <b>{r.hvem_navn || (r.kilde === "system" ? "Systemet" : "Ukendt")}</b>
@@ -15213,7 +15235,7 @@ function AendringslogView({ employees }) {
       )}
       {tomtIAlt > 0 && (
         <div style={{ ...styles.hint, marginTop: 12 }}>
-          Derudover {tomtIAlt.toLocaleString("da-DK")} gemninger denne dag, der ikke ændrede noget. De vises ikke som ændringer.
+          Derudover {tomtIAlt.toLocaleString("da-DK")} gemninger {fraDato === tilDato ? "denne dag" : "i perioden"}, der ikke ændrede noget. De vises ikke som ændringer.
         </div>
       )}
     </div>
