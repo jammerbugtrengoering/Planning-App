@@ -52,6 +52,8 @@ Aabybro-tallet er fra januar, de to andre fra juli — forskellen er uden betydn
 
 1. **Frit valg efter visitation (ældrelov/Nexus).** Kommunen afgør behovet; borgeren —
    i praksis ofte barnet — vælger leverandør. Her skal vi være kendt *før* visitationen.
+   Jammerbugt Rengøring er godkendt leverandør til kommunen og underleverandør til
+   Carelink — så vejen er åben nu.
 2. **Privat tilkøb.** Det, kommunen ikke dækker. Ofte betalt af børnene som en gave:
    «hovedrengøring til mor», «vinduerne inden jul».
 
@@ -98,8 +100,12 @@ og `Fortegnelse-markedsfoering.docx`.
 
 ## 5. Åbne spørgsmål til Jonn og Charlotte
 
-- Er Jammerbugt Rengøring godkendt som leverandør under frit valg i Jammerbugt Kommune
-  — og til hvilke ydelser? Det afgør, om «vej 1» kan bruges i kampagnen nu.
+- ~~Godkendt leverandør?~~ **Ja** (Jonn 4.10.2026): godkendt leverandør til Jammerbugt
+  Kommune og underleverandør til Carelink. «Vej 1» kan bruges i kampagnen nu.
+- Budskabet skal tage hensyn til Carelink: kampagnen bør sige «vælg Jammerbugt
+  Rengøring, når kommunen har visiteret dig» — ikke sætte sig op imod Carelink, som også
+  sender opgaver til os. Afklar med Carelink, om de har noget imod, at vi markedsfører
+  os direkte over for borgere i samme område.
 - Budget og periode for Facebook.
 - Skal der laves en udgave af formularen til pårørende (se punkt 4)?
 - Skal kampagnen køre gennem kampagneappen (SoMePlanning)?
