@@ -23,7 +23,7 @@ import {
   Plus, Download, X, Clock, AlertTriangle,
   Trash2, Pencil, Repeat, Zap, CalendarClock, Wand2, Star, ChevronLeft, ChevronRight, ChevronUp, ChevronDown,
   ClipboardList, Video, CheckCircle2, LogIn, ListChecks, Check, Lock, Navigation, Building2, Car, Copy,
-  Thermometer, Palmtree, LogOut,
+  Thermometer, Palmtree, LogOut, RotateCw,
 } from "lucide-react";
 
 // ---------- Opgavenoter og billeder ----------
@@ -6130,6 +6130,11 @@ function PlanningApp({ session, onSignOut }) {
             <button key={vinduesnavn} onClick={() => aabnSomApp(url, vinduesnavn)}
               title={navn + " åbnes i eget vindue"} style={styles.navBtn}>{navn} ↗</button>
           ))}
+          {/* Genindlaes: installeret som app findes hverken adresselinje eller genindlaes-knap. */}
+          <button type="button" onClick={() => window.location.reload()} title="Opdater siden" aria-label="Opdater siden"
+            style={{ ...styles.navBtn, padding: "8px 10px", display: "inline-flex", alignItems: "center" }}>
+            <RotateCw size={17} />
+          </button>
           {/* Sprogvalg og Google Translate fjernet - planlaegningsappen bruges kun paa dansk. */}
           <KontorKlokke isAdminUser={isAdminUser}
             signal={instances.length + ":" + Object.keys(koerendeTider).length + ":" + (bestillinger?.length || 0)}
