@@ -167,9 +167,16 @@ kommende opgaver uden tid, som ikke passer til den nye udgave af aftalen — og 
 kører på ingen dage, så **alle** ryddes. Knappen «Gem kladde» vises derfor kun på nye
 aftaler og kladder, og `updateTemplate` afviser det også selv (gamle faner).
 
+**Værnet står nu i tre lag:** knappen vises ikke, `updateTemplate` afviser, og triggeren
+`forbyd_aktiv_til_kladde` på `service_templates` afviser `aktiv` -> `kladde` i selve basen
+(4.10.2026, `overdragelse/sql/forbyd-aktiv-til-kladde-2026-10-04.sql`). Skal en edge-funktion
+eller et natjob sætte status, må den aldrig gå fra `aktiv` til `kladde`. Triggeren er
+kun i Jammerbugts database; kundedatabasen har den ikke endnu.
+
 > 4.10.2026 fik en aktiv Carelink-aftale (Kornblomstvej, Klim) rettet adressen og blev
 > gemt med «Gem kladde». 48 kommende opgaver blev slettet, og beskeden sagde, at de
 > «ikke passede til den nye rytme». Ingen var udført, så intet tid eller penge gik tabt.
+> Det samme var sket 2.10.2026 på Springvandstorvet 3A (ændringsloggen viste det).
 
 ### Du tilføjer en menugruppe eller en side
 
