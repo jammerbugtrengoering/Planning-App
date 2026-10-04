@@ -160,6 +160,17 @@ forældet og ikke læses. En opgave prissættes med satsen på **opgavens egen d
 > Indtil 3.10.2026 var timeprisen ét tal pr. kontrakttype. Rettede man det, regnede
 > alt om — også fakturering og rapporter for måneder, der allerede var sendt til Dinero.
 
+### Du rører ved at gemme en aftale
+
+En aftale, der kører, må **aldrig** kunne gemmes som kladde. `updateTemplate` rydder
+kommende opgaver uden tid, som ikke passer til den nye udgave af aftalen — og en kladde
+kører på ingen dage, så **alle** ryddes. Knappen «Gem kladde» vises derfor kun på nye
+aftaler og kladder, og `updateTemplate` afviser det også selv (gamle faner).
+
+> 4.10.2026 fik en aktiv Carelink-aftale (Kornblomstvej, Klim) rettet adressen og blev
+> gemt med «Gem kladde». 48 kommende opgaver blev slettet, og beskeden sagde, at de
+> «ikke passede til den nye rytme». Ingen var udført, så intet tid eller penge gik tabt.
+
 ### Du tilføjer en menugruppe eller en side
 
 Nøglerne i **`MENU_GRUPPER`** skal være unikke. To grupper med samme nøgle får **begge**

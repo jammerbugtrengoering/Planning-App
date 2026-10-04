@@ -2198,7 +2198,7 @@ const MODULE_HELP = {
     { h: "Gentagelse", p: [
         "En aftale kan gentages hver uge, hver 14. dag, hver 4. uge, hver 6. uge eller hver 3. måned. Kadencen tælles fra startdatoen.",
         "«Hver 4. uge» er ikke det samme som en gang om måneden. Det giver 13 besøg om året i stedet for 12, og dagen vandrer gennem kalenderen — et besøg den 5. bliver med tiden den 28. Til gengæld ligger det altid på den samme ugedag, og det er sådan, rengøring aftales i praksis.",
-        "Vil du have en fast dato i måneden i stedet, findes den mulighed ikke længere. Sig til, hvis I får brug for den."] }, { h: "Under udarbejdelse", p: ["Er du ikke færdig med en ny aftale, så tryk «Gem som kladde» i stedet for «Gem og planlæg».", "En kladde opretter ingen opgaver. Den ligger og venter, og du kan rette alle felter i den så mange gange du vil.", "Find den igen med filteret «Under udarbejdelse» øverst her på siden. Tallet i knappen viser hvor mange der ligger.", "Tryk «Åbn og godkend» for at rette videre. Inde i aftalen vælger du så «Gem kladde» hvis du stadig ikke er færdig, eller «Godkend og planlæg» når den er klar.", "Først ved godkendelsen oprettes opgaverne — fra startdatoen og frem til udløbsdatoen. Det kan være mange på én gang, så tjek datoerne inden du godkender.", "Er startdatoen løbet fra kladden, mens den lå i bunken, flytter appen den frem, når du åbner den — og siger det med blåt øverst i kolonnen til højre, med både den gamle og den nye dato.", "Den nye dato er ikke altid i morgen. Startdatoen er nemlig ankeret for rytmen: for «hver 14. dag» tæller systemet uger fra startdatoens mandag, så flytter man datoen én uge, skifter aftalen fra lige til ulige uger. Derfor vælges den første dag fra i morgen, der holder aftalen i de samme uger som før. Passer det ikke, retter du den selv.", "Datoerne kommer fra kladden. Indtil 21. september 2026 stod der «i dag» og «i dag + 1 år» uanset hvad, så en kladde med toårig løbetid blev etårig ved godkendelsen — uden at nogen fik det at vide.", "Er kladden lavet ved en indlæsning, står der en gul «Bemærkning til kontoret» med det, indlæsningen ikke kunne afgøre — manglende kundenavn, en gættet kontrakttype, noter fra det ark den kom fra. Læs den, ret det den peger på, og godkend så.", "På en bred skærm står bemærkningen i en kolonne til højre, og den bliver hængende, mens du bladrer ned gennem felterne. Den hørte før nederst, altså længst væk fra det, den handler om. Er skærmen for smal til to kolonner, står den øverst i stedet.", "Ligner kladden en aftale, der allerede findes, står advarslen øverst i den samme kolonne — med hvilken aftale, hvilken dag og hvor længe. Den regnes ud fra det, der står i felterne lige nu, så retter du adressen eller dagen, forsvinder den af sig selv.", "Feltet vises kun, så længe aftalen er en kladde. Når den er godkendt, er noten gjort op, og feltet forsvinder — teksten bliver stående i databasen, men skal ikke stå og fylde bagefter."] }, { h: "Del kladdebunken op", p: [
+        "Vil du have en fast dato i måneden i stedet, findes den mulighed ikke længere. Sig til, hvis I får brug for den."] }, { h: "Under udarbejdelse", p: ["Er du ikke færdig med en ny aftale, så tryk «Gem som kladde» i stedet for «Gem og planlæg».", "En kladde opretter ingen opgaver. Den ligger og venter, og du kan rette alle felter i den så mange gange du vil.", "Find den igen med filteret «Under udarbejdelse» øverst her på siden. Tallet i knappen viser hvor mange der ligger.", "Tryk «Åbn og godkend» for at rette videre. Inde i aftalen vælger du så «Gem kladde» hvis du stadig ikke er færdig, eller «Godkend og planlæg» når den er klar.", "«Gem kladde» findes kun på nye aftaler og kladder. Retter du en aftale, der allerede kører, gemmer du med «Godkend og planlæg» — en aftale, der kører, kan ikke laves om til en kladde, for så ville alle dens kommende opgaver blive slettet.", "Først ved godkendelsen oprettes opgaverne — fra startdatoen og frem til udløbsdatoen. Det kan være mange på én gang, så tjek datoerne inden du godkender.", "Er startdatoen løbet fra kladden, mens den lå i bunken, flytter appen den frem, når du åbner den — og siger det med blåt øverst i kolonnen til højre, med både den gamle og den nye dato.", "Den nye dato er ikke altid i morgen. Startdatoen er nemlig ankeret for rytmen: for «hver 14. dag» tæller systemet uger fra startdatoens mandag, så flytter man datoen én uge, skifter aftalen fra lige til ulige uger. Derfor vælges den første dag fra i morgen, der holder aftalen i de samme uger som før. Passer det ikke, retter du den selv.", "Datoerne kommer fra kladden. Indtil 21. september 2026 stod der «i dag» og «i dag + 1 år» uanset hvad, så en kladde med toårig løbetid blev etårig ved godkendelsen — uden at nogen fik det at vide.", "Er kladden lavet ved en indlæsning, står der en gul «Bemærkning til kontoret» med det, indlæsningen ikke kunne afgøre — manglende kundenavn, en gættet kontrakttype, noter fra det ark den kom fra. Læs den, ret det den peger på, og godkend så.", "På en bred skærm står bemærkningen i en kolonne til højre, og den bliver hængende, mens du bladrer ned gennem felterne. Den hørte før nederst, altså længst væk fra det, den handler om. Er skærmen for smal til to kolonner, står den øverst i stedet.", "Ligner kladden en aftale, der allerede findes, står advarslen øverst i den samme kolonne — med hvilken aftale, hvilken dag og hvor længe. Den regnes ud fra det, der står i felterne lige nu, så retter du adressen eller dagen, forsvinder den af sig selv.", "Feltet vises kun, så længe aftalen er en kladde. Når den er godkendt, er noten gjort op, og feltet forsvinder — teksten bliver stående i databasen, men skal ikke stå og fylde bagefter."] }, { h: "Del kladdebunken op", p: [
         "Vælger du «Under udarbejdelse», kommer der to filtre mere frem, som kun findes dér.",
         "Det ene deler bunken i dem, der ser ud som dubletter, og dem der ikke gør. Tag dubletterne først — det er dem, der enten skal slettes eller lægges sammen med en aftale, der allerede kører, og de fylder mest.",
         "Det andet er en liste med medarbejdere. Listen viser kun dem, der faktisk har kladder, og tallet siger hvor mange. Så kan du tage én medarbejders ruteplan ad gangen og få alle spørgsmålene afklaret med hende på én gang.",
@@ -4375,8 +4375,9 @@ function PlanningApp({ session, onSignOut }) {
     return result.find((t) => t.id === task.id) || { ...task, warning: "no_slot" };
   }
 
-  // Opdaterer en eksisterende aftale. Bruges kun paa kladder, hvor der endnu ikke
-  // findes opgaver — derfor kan alle felter aendres frit uden at roere ved historik.
+  // Opdaterer en eksisterende aftale — baade kladder og aftaler, der koerer. Paa en
+  // aftale, der koerer, ryddes kommende opgaver uden tid, der ikke passer til den nye
+  // udgave (se nedenfor); derfor maa den aldrig gemmes tilbage til kladde.
   //
   // Er saveAsDraft sand, gemmes den bare videre som kladde. Er den falsk, er det en
   // godkendelse: status saettes til aktiv, og opgaverne dannes fra startdatoen.
@@ -4399,6 +4400,17 @@ function PlanningApp({ session, onSignOut }) {
     //
     // Man kan stadig sige ja. To naboer i samme opgang med samme rengoering paa samme
     // dag rammer ogsaa reglen, og saa er svaret ja.
+    // En aftale, der koerer, maa ikke gemmes tilbage til kladde herfra. Det sletter
+    // alle dens kommende opgaver uden registreret tid (se knappen «Gem kladde» og
+    // haendelsen 4.10.2026). Vaernet staar ogsaa her, saa en fane med den gamle
+    // knap heller ikke kan goere det.
+    if (payload.saveAsDraft) {
+      const foer = templates.find((t) => t.id === tplId);
+      if (foer && (foer.status || "aktiv") === "aktiv") {
+        notify("En aktiv aftale kan ikke gemmes som kladde — så ville dens opgaver blive slettet. Tryk «Godkend og planlæg» for at gemme ændringerne.");
+        return;
+      }
+    }
     if (!payload.saveAsDraft) {
       const foer = templates.find((t) => t.id === tplId);
       if (foer && foer.status === "kladde") {
@@ -11974,7 +11986,12 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
         </button>
         {/* Kladde giver kun mening paa en fast aftale. En fleksibel opgave er en
             enkeltstaaende opgave, ikke en aftale, og har intet at vaere kladde for. */}
-        {type === "fixed" && (
+        {/* Kun paa en ny aftale eller en kladde — ALDRIG paa en aftale, der koerer.
+            4.10.2026: en aktiv aftale (Carelink, Kornblomstvej) fik rettet adressen og
+            blev gemt med «Gem kladde». Den blev til en kladde, og alle 48 kommende
+            opgaver blev slettet, fordi en kladde ikke koerer paa nogen dag. Beskeden
+            sagde, at de «ikke passede til den nye rytme». */}
+        {type === "fixed" && (!editId || erKladde) && (
           <button
             style={{ ...styles.secondaryBtn, color: "var(--farve-moerk)", borderColor: "#F4C0D1", opacity: gemmer ? 0.6 : 1 }}
             // En passeret startdato blokerer IKKE en kladde. En kladde danner ingen
