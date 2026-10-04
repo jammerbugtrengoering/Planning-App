@@ -95,7 +95,7 @@ kopiere tilbage — og så er det filen her, der skal opdateres, ikke omvendt.
 | `travel-distance` | Afstand og køretid mellem to adresser. Geokoder via Dataforsyningen (GSearch), ORS som reserve | Planlægningsappen, `compute-daily-km` |
 | `adresse-opslag` | Adresseforslag i adressefelter (GSearch, ORS som reserve). Erstatter DAWA, der lukkede 2026 | Planlægningsappen |
 | `koeretabel` | Køretabel for en dags adresser til «Simulér uge». Gemmer i `koeretabel`, aldrig i `travel_overrides`, så simuleringen ikke kan flytte kilometerpenge | Planlægningsappen |
-| `deploy-besked` | Push til alle planlæggere, når Netlify har udgivet (eller fejlet) en af de tre apps. `verify_jwt` fra; kaldet skal være signeret af Netlify med secret `NETLIFY_DEPLOY_HEMMELIGHED` — mangler den, afvises alt | Netlify «Outgoing webhook» på de tre sites |
+| `deploy-besked` | **Ikke slået til** (Jonn 4.10.2026: båndet om ny version er nok). Ville sende push til alle planlæggere, når Netlify har udgivet (eller fejlet) en af de tre apps. `verify_jwt` fra; kaldet skal være signeret af Netlify med secret `NETLIFY_DEPLOY_HEMMELIGHED` — mangler den, afvises alt | Netlify «Outgoing webhook» på de tre sites |
 | `henvendelse-modtag` | «Bliv ringet op» fra `/bestil` (pjece/magnet). `verify_jwt` fra; honningkrukke og loft pr. time | Kundeportalens offentlige side |
 | `dinero` | Kunder, fakturaer og bogføring | Planlægningsappen |
 | `dinero-omsaetning` | Faktureret omsætning måned for måned, et år ad gangen | I hånden |
