@@ -1124,6 +1124,20 @@ export function stopDannelseAfOpgaver() { planenMaaIkkeDanneMere = true; }
 let hentedeUger = null;
 function saetHentedeUger(uger) { hentedeUger = uger; }
 
+// Hvilke opgaver er NYE i `efter` i forhold til `foer`? Opslaget sker i et Set.
+//
+// 4.10.2026: at gemme en aftale tog over et minut. Her sorterede et filter fra med et
+// find paa id inde i hver gennemgang, og det er n gange n: med
+// 18.500 opgaver i hukommelsen er det cirka 170 millioner sammenligninger PR. UGE, og
+// en aftale gennemgaar op til 104 uger. Browseren stod stille i 70 sekunder og laa
+// ikke engang paa nettet. Tiden vokser med kvadratet af antal opgaver, saa den blev
+// ved med at blive vaerre, jo flere aftaler der kom til. `skrivehastighed.test.mjs`
+// fejler, hvis nogen skriver det op igen.
+function nyeOpgaver(efter, foer) {
+  const kendte = new Set(foer.map((i) => i.id));
+  return efter.filter((i) => !kendte.has(i.id));
+}
+
 function ensureWeekInstances(week, year, allInstances, templates, employees, areas = [], employeeAreas = [], travelSettings = DEFAULT_TRAVEL) {
   let list = [...allInstances];
   if (planenMaaIkkeDanneMere) return list;
@@ -1132,7 +1146,16 @@ function ensureWeekInstances(week, year, allInstances, templates, employees, are
   if (!ugenErHentet(hentedeUger, year, week)) return list;
   const weekMonday = mondayOfWeek(week, year);
   const newlyCreatedIds = new Set();
-  
+  // Pladserne i DENNE uge, slaaet op paa skabelon og dag. Uden det scannede hver
+  // skabelon-dag hele listen (findIndex), og det blev gjort for hver af ugerne, når en
+  // aftale gemmes. Første fund vinder, som findIndex gjorde.
+  const pladsIndeks = new Map();
+  list.forEach((i, ix) => {
+    if (i.week !== week || i.year !== year) return;
+    const noegle = i.templateId + "|" + i.day;
+    if (!pladsIndeks.has(noegle)) pladsIndeks.set(noegle, ix);
+  });
+
   templates.forEach((tpl) => {
     // Hele reglen for «kører aftalen den dag?» ligger i src/aftalerytme.js.
     //
@@ -1149,7 +1172,7 @@ function ensureWeekInstances(week, year, allInstances, templates, employees, are
       // opgave hentes ikke ind, saa uden det her ser pladsen tom ud — og opgaven
       // bliver fundet paa igen, hver eneste gang ugen aabnes.
       if (ryddedePladser.has(pladsNoegle(tpl.id, year, week, day))) return;
-      const existingIdx = list.findIndex((i) => i.templateId === tpl.id && i.week === week && i.year === year && i.day === day);
+      const existingIdx = pladsIndeks.get(tpl.id + "|" + day) ?? -1;
       // Konkrete datoer: linjen for netop den dato har sit eget klokkeslaet og sin egen
       // opgavetid. Tom tid/minutter = aftalens varighed og ledig tid i planen.
       const konkret = tpl.planInterval === KONKRETE
@@ -1191,6 +1214,7 @@ function ensureWeekInstances(week, year, allInstances, templates, employees, are
           dineroSynced: tpl.dineroSynced ?? false,
         };
         list.push(newInst);
+        pladsIndeks.set(tpl.id + "|" + day, list.length - 1);
         newlyCreatedIds.add(newInst.id);
       } else {
         // Selvhelbredende: hold allerede-materialiserede, ikke-fakturerede opgaver i sync
@@ -4614,7 +4638,7 @@ function PlanningApp({ session, onSignOut }) {
         ugerFraStartTilUdloeb(payload.startDate, payload.expiryDate).forEach(({ week: wk, year: wy }) => {
           const before = next;
           const expanded = ensureWeekInstances(wk, wy, next, nextT, employees, areas, employeeAreas, travelSettings);
-          const newOnes = expanded.filter((i) => !next.find((c) => c.id === i.id));
+          const newOnes = nyeOpgaver(expanded, next);
           newOnes.forEach((inst) => syncInstance({
             ...inst,
             contractType: payload.contractType,
@@ -4726,7 +4750,7 @@ function PlanningApp({ session, onSignOut }) {
           weeks.forEach(({ week: wk, year: wy }) => {
             const before = next;
             const expanded = ensureWeekInstances(wk, wy, next, nextT, employees, areas, employeeAreas, travelSettings);
-            const newOnes = expanded.filter((i) => !next.find((c) => c.id === i.id));
+            const newOnes = nyeOpgaver(expanded, next);
             newOnes.forEach((inst) => syncInstance({ ...inst, contractType: payload.contractType, expiryDate: payload.expiryDate, pricingType: tpl.pricingType, fixedPrice: tpl.fixedPrice }));
             syncHealedAssignments(before, expanded);
             next = expanded;

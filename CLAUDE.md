@@ -178,6 +178,18 @@ kun i Jammerbugts database; kundedatabasen har den ikke endnu.
 > «ikke passede til den nye rytme». Ingen var udført, så intet tid eller penge gik tabt.
 > Det samme var sket 2.10.2026 på Springvandstorvet 3A (ændringsloggen viste det).
 
+### Du løber noget igennem for hver uge, når en aftale gemmes
+
+Der er 18.500 opgaver i hukommelsen, og en aftale gennemgår op til 104 uger. **Slå aldrig
+op i listen med `.find`/`.findIndex`/`.includes` inde i en løkke** — brug et `Set` eller et
+`Map`, bygget én gang (`nyeOpgaver` og `pladsIndeks` i `src/App.jsx`). `n × n` er usynligt
+ved 500 opgaver og over et minut ved 18.500; `node skrivehastighed.test.mjs` håndhæver det.
+
+> 4.10.2026 tog det over et minut at gemme en aftale. Det var ikke databasen: en
+> `filter(... find(...))` i `updateTemplate` og `addTask` lavede cirka 170 millioner
+> sammenligninger pr. uge. Tiden steg med kvadratet af antal opgaver (10.900 den 21.9,
+> 18.500 nu), så den blev ved med at blive værre.
+
 ### Du tilføjer en menugruppe eller en side
 
 Nøglerne i **`MENU_GRUPPER`** skal være unikke. To grupper med samme nøgle får **begge**
