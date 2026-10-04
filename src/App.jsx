@@ -253,6 +253,19 @@ const MENU_GRUPPER = [
   { key: "system", navn: "Drift", kunAdmin: true, sider: [["drift", "Drift"], ["aendringer", "Ændringer"]] },
 ];
 const WORKLIST_URL = import.meta.env.VITE_WORKLIST_URL || "https://jammerbugtrengoering-service.netlify.app";
+// Genveje til de to eksterne vaerktoejer i topmenuen (4.10.2026). De aabnes i et lille
+// vindue uden menulinje og vaerktoejslinje, saa de foeles som en app ved siden af planen.
+// Adresselinjen kan en browser ikke fjerne helt (Chrome viser en skrivebeskyttet) — en
+// helt raen app kraever, at siden installeres som app fra browseren.
+const SOME_APP_URL = import.meta.env.VITE_SOME_URL || "https://jammerbugtsomeplanningapp.netlify.app";
+const DINERO_URL = import.meta.env.VITE_DINERO_URL || "https://app.dinero.dk";
+function aabnSomApp(url, navn) {
+  const w = Math.min(1280, window.screen.availWidth), h = Math.min(900, window.screen.availHeight);
+  const vindue = window.open(url, navn,
+    `popup=yes,width=${w},height=${h},left=${Math.round((window.screen.availWidth - w) / 2)},top=${Math.round((window.screen.availHeight - h) / 2)},menubar=no,toolbar=no,location=no,status=no`);
+  // Blokerer browseren popup-vinduet, saa aabn i en almindelig fane frem for ingenting.
+  if (!vindue) window.open(url, "_blank", "noopener");
+}
 function gruppeFor(view) {
   return MENU_GRUPPER.find((g) => g.sider.some(([k]) => k === view)) || MENU_GRUPPER[0];
 }
@@ -6107,6 +6120,10 @@ function PlanningApp({ session, onSignOut }) {
                 style={aktiv ? styles.navBtnActive : styles.navBtn}>{gr.navn}</button>
             );
           })}
+          {!KUNDEUDGAVE && [["SoMe", SOME_APP_URL, "some-app"], ["Dinero", DINERO_URL, "dinero-app"]].map(([navn, url, vinduesnavn]) => (
+            <button key={vinduesnavn} onClick={() => aabnSomApp(url, vinduesnavn)}
+              title={navn + " åbnes i eget vindue"} style={styles.navBtn}>{navn} ↗</button>
+          ))}
           {/* Sprogvalg og Google Translate fjernet - planlaegningsappen bruges kun paa dansk. */}
           <KontorKlokke isAdminUser={isAdminUser}
             signal={instances.length + ":" + Object.keys(koerendeTider).length + ":" + (bestillinger?.length || 0)}
