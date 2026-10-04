@@ -18,6 +18,7 @@ import { opsummerMaaling, formatAfstand, stopurStatus, startSlutLinjer } from ".
 import { hentXlsx } from "./excel";
 import { lavPrisliste, timeprisPaaDato, satserPaaDato, kommendeSatser } from "./timepriser";
 import { findDubletter } from "./dubletter";
+import { nyBunke, laegHaendelseIBunke, anvendBunke } from "./realtimebunke";
 import { simulerUge, noegletal as simNoegletal, nuvaerendePlan, dagensTal as simDagensTal, satsFor as simSatsFor } from "./simulering";
 import {
   Plus, Download, X, Clock, AlertTriangle,
@@ -3657,23 +3658,28 @@ function PlanningApp({ session, onSignOut }) {
       };
     }
 
+    let realtimeBunke = nyBunke();
+    let realtimeTimer = null;
     const channel = supabase
       .channel("instances-sync")
       .on("postgres_changes", { event: "*", schema: "public", table: "instances" }, (payload) => {
+        // Samles i bunker (src/realtimebunke.js). Én haendelse pr. opgave betoed, at en
+        // aftale med 100 opgaver tegnede hele planen om 100 gange i hver aaben fane.
+        // Forsinkelsen er fast og ikke en nedtaelling, saa en enkelt aendring fra en
+        // kollega ses efter hoejst en fjerdedel sekund, og en lang bunke ikke venter for evigt.
         if (payload.eventType === "DELETE") {
-          const deletedId = payload.old?.id;
-          if (!deletedId) return;
-          setInstances((prev) => prev.filter((t) => t.id !== deletedId));
-          return;
+          laegHaendelseIBunke(realtimeBunke, "DELETE", payload.old?.id, null);
+        } else {
+          const mapped = mapRealtimeInstanceRow(payload.new);
+          laegHaendelseIBunke(realtimeBunke, payload.eventType, mapped.id, mapped);
         }
-        const mapped = mapRealtimeInstanceRow(payload.new);
-        setInstances((prev) => {
-          const idx = prev.findIndex((t) => t.id === mapped.id);
-          if (idx === -1) return [...prev, mapped];
-          const next = [...prev];
-          next[idx] = { ...next[idx], ...mapped };
-          return next;
-        });
+        if (realtimeTimer) return;
+        realtimeTimer = setTimeout(() => {
+          realtimeTimer = null;
+          const bunke = realtimeBunke;
+          realtimeBunke = nyBunke();
+          setInstances((prev) => anvendBunke(prev, bunke));
+        }, 250);
       })
       .subscribe((status) => {
         // Genforbundet (30.9.2026): realtime leverer kun det, der sker, MENS
@@ -3716,6 +3722,7 @@ function PlanningApp({ session, onSignOut }) {
     window.addEventListener("online", online);
 
     return () => {
+      clearTimeout(realtimeTimer);
       supabase.removeChannel(channel);
       document.removeEventListener("visibilitychange", synlig);
       window.removeEventListener("online", online);
