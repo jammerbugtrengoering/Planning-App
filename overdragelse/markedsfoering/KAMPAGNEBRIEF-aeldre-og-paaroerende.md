@@ -83,6 +83,8 @@ ud fra `?k=` i adressen. **Alle værdier tages imod** (bogstaver, tal, `-` og `_
 |---|---|
 | Pjece (findes) | `…/bestil?k=pjece` |
 | Magnet (findes) | `…/bestil?k=magnet` |
+| Facebook, almindelige opslag (QR: `QR-facebook.png`/`.svg`) | `…/bestil?k=facebook` |
+| LinkedIn (QR: `QR-linkedin.png`/`.svg`) | `…/bestil?k=linkedin` |
 | Facebook til børnene | `…/bestil?k=fb-boern` |
 | Facebook til de ældre | `…/bestil?k=fb-aeldre` |
 | Google | `…/bestil?k=google` |
