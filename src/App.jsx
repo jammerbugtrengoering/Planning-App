@@ -1584,12 +1584,14 @@ function SetNewPasswordScreen({ onDone }) {
   const [done, setDone] = useState(false);
 
   async function save() {
-    if (pw1.length < 6) { setErr("Adgangskoden skal være mindst 6 tegn"); return; }
+    // Samme krav som Supabase (Jonn 4.10.2026): mindst 8 tegn, baade bogstaver og tal.
+    if (pw1.length < 8 || !/[A-Za-zÆØÅæøå]/.test(pw1) || !/[0-9]/.test(pw1)) { setErr("Adgangskoden skal være mindst 8 tegn og have både bogstaver og tal"); return; }
     if (pw1 !== pw2) { setErr("Adgangskoderne er ikke ens"); return; }
     setLoading(true); setErr("");
     const { error } = await supabase.auth.updateUser({ password: pw1 });
     setLoading(false);
-    if (error) setErr("Kunne ikke opdatere adgangskode — prøv igen.");
+    // Kendt fra et datalaek (beskyttelsen slaaet til 4.10.2026) — sig det ligeud.
+    if (error) setErr(error.code === "weak_password" ? "Den adgangskode er kendt fra et datalæk og kan ikke bruges. Vælg en anden." : "Kunne ikke opdatere adgangskode — prøv igen.");
     else setDone(true);
   }
 
@@ -1616,6 +1618,7 @@ function SetNewPasswordScreen({ onDone }) {
               placeholder="••••••••" autoFocus
               style={{ width:"100%",padding:"11px 12px",borderRadius:10,border:"1px solid #E2E8F0",fontSize:15,color:"#111111",background:"#fff",boxSizing:"border-box",marginBottom:10 }}
             />
+            <div style={{ fontSize: 12.5, color: "#64748B", margin: "-4px 0 10px" }}>Mindst 8 tegn, både bogstaver og tal.</div>
             <div style={{ fontSize:13,fontWeight:600,color:"#475569",marginBottom:6 }}>Gentag adgangskode</div>
             <input
               type="password" value={pw2} onChange={(e) => setPw2(e.target.value)}
