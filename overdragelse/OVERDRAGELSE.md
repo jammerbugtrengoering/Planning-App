@@ -234,9 +234,16 @@ kan hjælpe fra sin egen maskine uden at skulle gætte, hvad der er ændret side
 
 Ærligt, så I ikke opdager det selv om tre måneder:
 
-1. **Supabase Pro.** Projektet kører på det gratis niveau. Pro giver beskyttelse mod
-   lækkede adgangskoder og mulighed for at rulle databasen tilbage til et tidspunkt.
-   Det sidste er værd at have, når der ikke findes en prøvedatabase.
+1. ~~Supabase Pro.~~ **Opgraderet 4. oktober 2026** (organisationen «Jammerbugt
+   Rengoering project», som JR-databasen ligger i). Pro giver daglige
+   sikkerhedskopier. To ting følger ikke med af sig selv:
+   - **Beskyttelse mod lækkede adgangskoder** skal slås til under Authentication
+     (Supabase-advisoren melder den stadig som slået fra).
+   - **Tilbagerulning til et bestemt tidspunkt (PITR)** er et tilkøb oven på Pro og
+     er ikke slået til. Det er det, der redder en dag, hvor der er slettet noget ved
+     en fejl, fordi der ikke findes en prøvedatabase.
+   Kundedatabasen (`zwbsbckoyxzzobudjxij`) ligger i en **anden** organisation og
+   kører stadig på det gratis niveau.
 2. **Afsenderadressen** — se afsnittet om nøgler ovenfor.
 3. **`Fortegnelse-markedsfoering.docx`** mangler afklaring på nogle punkter om
    SoMePlanning: samtykke til billeder af medarbejdere, en fremgangsmåde til at fjerne
