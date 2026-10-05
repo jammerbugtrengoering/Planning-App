@@ -2212,6 +2212,10 @@ const MODULE_HELP = {
         "Timeprisen foreslås ud fra kontrakttypen, men du kan rette den. Vælger du fast pris, gælder den uanset hvor lang tid besøget tager.",
         "«Anslået tid pr. besøg» bliver til varigheden på aftalen ved accept. Ved timepris står det også i tilbuddet som et cirka-beløb — der faktureres stadig kun for registreret tid.",
         "Tjeklisternes punkter kommer med i PDF'en, så kunden kan se præcis hvad der bliver gjort."] },
+    { h: "Opgaveliste", p: [
+        "Øverst i tilbuddet ligger en liste over det, der skal gøres før, under og efter mødet. Sæt flueben, efterhånden som du når det. Hvem og hvornår står under punktet.",
+        "Listen er den samme i Worklist, så planlæggeren og den, der tager med på mødet, kan se hvad den anden har nået. Du kan tilføje egne punkter og fjerne dem, der ikke passer til netop dette tilbud. Fluebenene sendes ikke til kunden og sætter ikke tilbuddet i gang af sig selv.",
+        "Når kunden har accepteret eller afvist, er listen låst."] },
     { h: "Referat og billeder", p: [
         "Referatfeltet er lavet til at blive dikteret. Tryk på mikrofonen på tastaturet og tal — ret det bagefter.",
         "På iPhone kan du markere teksten og bruge Omskriv eller Korrekturlæs. Det sker på telefonen, og teksten sendes ingen steder hen.",
@@ -16914,7 +16918,7 @@ function TilbudView({ supabase, checklistTemplates, pricing, currentUserName, em
     return (
       <TilbudEditor
         supabase={supabase} checklistTemplates={checklistTemplates} pricing={pricing}
-        currentUserName={currentUserName}
+        currentUserName={currentUserName} employees={employees}
         tilbud={redigerer === "nyt" ? null : redigerer}
         onLuk={() => { setRedigerer(null); hent(); }}
       />
@@ -16999,8 +17003,79 @@ function TilbudView({ supabase, checklistTemplates, pricing, currentUserName, em
   );
 }
 
-function TilbudEditor({ supabase, checklistTemplates, pricing, currentUserName, tilbud, onLuk }) {
+const TILBUD_FASER = [["foer", "Før mødet"], ["under", "Under mødet"], ["efter", "Efter mødet"]];
+
+// Tjeklisten ændres ét punkt ad gangen gennem funktioner i databasen (tilbud_opgave_*) og aldrig ved at
+// gemme hele listen: planlæggeren og medarbejderen på mødet kan sidde med samme tilbud, og en liste hentet for
+// ti minutter siden ville ellers overskrive kollegaens flueben. Svaret er altid den nye, samlede liste.
+function TilbudOpgaveliste({ supabase, tilbudId, opgaver, setOpgaver, employees, laast }) {
+  const [ny, setNy] = useState({ foer: "", under: "", efter: "" });
+  const [fejl, setFejl] = useState("");
+
+  async function kald(navn, args) {
+    setFejl("");
+    const { data, error } = await supabase.rpc(navn, args);
+    if (error) { setFejl(error.message); return; }
+    setOpgaver(data || []);
+  }
+
+  const klar = opgaver.filter((o) => o.done).length;
+  const navnPaa = (id) => employees?.find((e) => e.id === id)?.name || "";
+
+  return (
+    <div style={{ ...styles.formSection, borderColor: "#BBF7D0" }}>
+      <div style={{ ...styles.formSectionHead, background: "#F0FDF4", borderBottom: "1.5px solid #BBF7D0" }}>
+        <div style={{ ...styles.formSectionTitle, color: "#166534" }}>Opgaveliste · {klar} af {opgaver.length}</div>
+        <div style={{ ...styles.formSectionHint, color: "#15803D" }}>Så intet, der hører til tilbuddet, bliver glemt</div>
+      </div>
+      <div style={styles.formSectionBody}>
+        {TILBUD_FASER.map(([fase, navn]) => (
+          <div key={fase} style={{ marginBottom: 12 }}>
+            <div style={{ fontWeight: 700, fontSize: 13, color: "#334155", marginBottom: 4 }}>{navn}</div>
+            {opgaver.filter((o) => o.fase === fase).map((o) => (
+              <div key={o.id} style={{ display: "flex", alignItems: "flex-start", gap: 8, padding: "5px 0" }}>
+                <input type="checkbox" checked={!!o.done} disabled={laast}
+                  style={{ marginTop: 3, width: 17, height: 17, flexShrink: 0 }}
+                  onChange={(e) => kald("tilbud_opgave_flueben", { p_tilbud_id: tilbudId, p_opgave_id: o.id, p_done: e.target.checked })} />
+                <div style={{ flex: 1, minWidth: 0, fontSize: 13.5, lineHeight: 1.45,
+                              color: o.done ? "#94A3B8" : "#1E293B", textDecoration: o.done ? "line-through" : "none" }}>
+                  {o.tekst}
+                  {o.done && o.doneAt && (
+                    <span style={{ fontSize: 11.5, color: "#94A3B8", textDecoration: "none", display: "block" }}>
+                      {navnPaa(o.doneBy) ? navnPaa(o.doneBy) + " · " : ""}
+                      {new Date(o.doneAt).toLocaleString("da-DK", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+                    </span>
+                  )}
+                </div>
+                {!laast && (
+                  <button type="button" title="Fjern punktet" style={{ ...styles.iconBtnGhostInline, padding: 3 }}
+                    onClick={() => kald("tilbud_opgave_fjern", { p_tilbud_id: tilbudId, p_opgave_id: o.id })}>
+                    <Trash2 size={13} />
+                  </button>
+                )}
+              </div>
+            ))}
+            {!laast && (
+              <input style={{ ...styles.input, marginTop: 4, fontSize: 13 }} placeholder="Tilføj et punkt og tryk Enter…"
+                value={ny[fase]} onChange={(e) => setNy({ ...ny, [fase]: e.target.value })}
+                onKeyDown={(e) => {
+                  if (e.key !== "Enter" || !ny[fase].trim()) return;
+                  e.preventDefault();
+                  kald("tilbud_opgave_tilfoej", { p_tilbud_id: tilbudId, p_fase: fase, p_tekst: ny[fase] });
+                  setNy({ ...ny, [fase]: "" });
+                }} />
+            )}
+          </div>
+        ))}
+        {fejl && <div style={{ color: "#B91C1C", fontSize: 12.5 }}>{fejl}</div>}
+      </div>
+    </div>
+  );
+}
+
+function TilbudEditor({ supabase, checklistTemplates, pricing, currentUserName, tilbud, onLuk, employees }) {
   const nyt = !tilbud;
+  const [opgaver, setOpgaver] = useState(tilbud?.opgaveliste || []);
   const [id] = useState(() => tilbud?.id || uid("til"));
   const [titel, setTitel] = useState(tilbud?.titel || "");
   const [kundeNavn, setKundeNavn] = useState(tilbud?.kunde_navn || "");
@@ -17163,6 +17238,11 @@ function TilbudEditor({ supabase, checklistTemplates, pricing, currentUserName, 
     if (!kundeNavn.trim()) { setFejl("Vælg en kunde først."); return false; }
     const { error } = await supabase.from("tilbud").upsert(raekke(ekstra), { onConflict: "id" });
     if (error) { setFejl(error.message); return false; }
+    // Et nyt tilbud får sin opgaveliste af databasen ved første gem; den hentes her, så kortet kan vises.
+    if (opgaver.length === 0) {
+      const { data } = await supabase.from("tilbud").select("opgaveliste").eq("id", id).maybeSingle();
+      if (data?.opgaveliste?.length) setOpgaver(data.opgaveliste);
+    }
     return true;
   }
 
@@ -17250,6 +17330,11 @@ function TilbudEditor({ supabase, checklistTemplates, pricing, currentUserName, 
             Kunden har accepteret tilbuddet, og der er dannet en aftale i kladde under Aftaler.
             Tilbuddet kan ikke længere rettes — det er dokumentationen for det hun skrev under på.
           </div>
+        )}
+
+        {opgaver.length > 0 && (
+          <TilbudOpgaveliste supabase={supabase} tilbudId={id} opgaver={opgaver} setOpgaver={setOpgaver}
+            employees={employees} laast={status === "accepteret" || status === "afvist"} />
         )}
 
         {/* Kunde */}
