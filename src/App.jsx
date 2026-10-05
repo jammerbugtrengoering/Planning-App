@@ -4251,9 +4251,12 @@ function PlanningApp({ session, onSignOut }) {
   // saa den ser alle opgaverne og ikke kun dem, der var der, da der blev trykket.
   async function medAlleOpgaver(navn, args) {
     notify("Henter de fjerne opgaver først — et øjeblik …");
-    const ok = await sikrAlleOpgaver();
+    // Højst 90 sekunder: hentningen kan gå i stå uden fejl (anden runde, der aldrig melder færdig), og så ventede
+    // «Godkend og planlæg» for evigt uden at sige noget.
+    const ok = await Promise.race([sikrAlleOpgaver(), new Promise((svar) => setTimeout(() => svar(false), 90000))]);
     if (!ok) {
       notify("Kunne ikke hente alle opgaverne — prøv igen.");
+      window.alert("Aftalen blev ikke gemt: opgaverne kunne ikke hentes. Genindlæs siden (logoet øverst) og prøv igen.");
       return false;
     }
     return senesteRef.current[navn](...args);
@@ -11504,12 +11507,23 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
   // stadig til at trykke igen — man foler bare, at knappen er gaaet i staa.
   const [gemmer, setGemmer] = useState(false);
 
+  // Hvorfor beskeden og fangsten af fejl (5.10.2026): «Godkend og planlæg» på en kladde ventede stille på, at alle
+  // fjerne opgaver blev hentet, før noget blev skrevet — og en fejl i den kæde blev kun til en linje i konsollen.
+  // For planlæggeren så det ud som om knappen ikke gjorde noget, og så trykkes der igen og igen.
+  const [venteBesked, setVenteBesked] = useState("");
   async function gemEnGang(nyttelast) {
     if (gemmer) return;
     setGemmer(true);
+    const ur = setTimeout(() => setVenteBesked(
+      "Henter først alle aftalens opgaver, så de kan lægges rigtigt ind i planen — det kan tage op til et halvt minut. Vinduet lukker af sig selv, når det er gemt."), 1500);
     try {
       await onSave(nyttelast, editId);
+    } catch (e) {
+      console.error("Gem aftale fejlede:", e);
+      window.alert("Aftalen blev ikke gemt: " + (e?.message || e));
     } finally {
+      clearTimeout(ur);
+      setVenteBesked("");
       setGemmer(false);
     }
   }
@@ -12153,6 +12167,7 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
       </div>
 
       <div style={{ ...styles.modalActions, position: "sticky", bottom: 0, zIndex: 5, background: "#F8FAFC", borderTop: "1px solid #E2E8F0", padding: "12px 84px 12px 18px", margin: "0 -18px -16px" }}>
+        {venteBesked && <div style={{ flex: 1, fontSize: 12.5, color: "#1D4ED8", lineHeight: 1.4 }}>{venteBesked}</div>}
         <button style={styles.secondaryBtn} disabled={gemmer} onClick={onClose}>Annuller</button>
         <button
           style={{ ...styles.primaryBtn, opacity: gemmer ? 0.6 : 1 }}
