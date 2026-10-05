@@ -3,7 +3,8 @@
 // Hvad de beskytter mod: tid, der bliver til penge på en lønseddel, og kilometer, kontoret
 // skal tage en svær samtale på. En tastefejl i aflæsningen af «2.30» eller en afvigelse, der
 // lyver, er værre end ingen indlæsning.
-import { skemaOpgaver, laesTimer, laesKm, kmAfvigelse, klientNoegle, erIndlaest, systemKm, KM_GRAENSE } from "./src/papirskema.js";
+import { skemaOpgaver, laesTimer, laesKm, kmAfvigelse, klientNoegle, erIndlaest, systemKm, KM_GRAENSE,
+  worklistMinutter, tidAfvigelse, TID_GRAENSE_MIN } from "./src/papirskema.js";
 
 let fejl = 0, koert = 0;
 function er(hvad, faktisk, forventet) {
@@ -76,6 +77,21 @@ const km = systemKm([
 ], "e1");
 er("km pr. opgave", [...km.pr_opgave], [["a", 6], ["b", 8]]);
 er("km pr. dag tæller hjemturen med", [...km.pr_dag], [["2026-10-05", 19]]);
+
+// ── Worklist-tid mod papir ──────────────────────────────────────────────────
+const wl = { id: "i1", timeLog: [{ minutes: 90, empId: "e1" }, { minutes: 30, empId: "e1", note: "retning" }, { minutes: 45, empId: "e2" },
+                                   { minutes: 60, empId: "e1", kid: "papir:e1:i1" }] };
+er("worklist: egen tid lægges sammen", worklistMinutter(wl, "e1"), 120);
+er("worklist: andres tid tæller ikke", worklistMinutter(wl, "e2"), 45);
+er("worklist: papirets egen indlæsning tæller ikke", worklistMinutter({ timeLog: [{ minutes: 60, empId: "e1", kid: "papir:e1:i1" }] }, "e1"), 0);
+er("worklist: ingen log", worklistMinutter({}, "e1"), 0);
+er("tid: samme", tidAfvigelse(120, 120).status, "ok");
+er("tid: under grænsen er afrunding", tidAfvigelse(120, 112).status, "ok");
+er("tid: papir længere", tidAfvigelse(150, 120), { status: "afviger", diff: 30, afviger: true });
+er("tid: papir kortere", tidAfvigelse(90, 120).diff, -30);
+er("tid: intet på papir", tidAfvigelse(null, 120).status, "ingen-papir");
+er("tid: intet i Worklist", tidAfvigelse(120, 0).status, "ingen-worklist");
+er("tid: grænsen er ti minutter", TID_GRAENSE_MIN, 10);
 
 if (fejl > 0) { throw new Error(`${fejl} af ${koert} kontroller fejlede i papirskemaet.`); }
 console.log(`Papirskema: ${koert} kontroller i orden.`);

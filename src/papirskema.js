@@ -90,3 +90,24 @@ export function systemKm(raekker, empId) {
   const rund = (m) => new Map([...m].map(([k, v]) => [k, Math.round(v * 10) / 10]));
   return { pr_opgave: rund(pr_opgave), pr_dag: rund(pr_dag) };
 }
+
+// Tid, medarbejderen allerede har registreret selv i Worklist (pilotmedarbejdere). Papirets egne
+// indlæsninger (kid «papir:…») tæller ikke med: ellers ville en indlæst linje sammenligne sig selv.
+export function worklistMinutter(opgave, empId) {
+  const log = opgave?.timeLog ?? opgave?.time_log ?? [];
+  if (!Array.isArray(log)) return 0;
+  return log
+    .filter((l) => l && l.empId === empId && !String(l.kid || "").startsWith("papir:"))
+    .reduce((sum, l) => sum + (Number(l.minutes) || 0), 0);
+}
+
+// Afvigelsen mellem papirets timer og det, Worklist har registreret. Under 10 minutter er afrunding:
+// en medarbejder, der skriver «2» for to timer og tolv minutter, har ikke gjort noget forkert.
+export const TID_GRAENSE_MIN = 10;
+export function tidAfvigelse(papirMin, worklistMin, graense = TID_GRAENSE_MIN) {
+  if (!papirMin) return { status: "ingen-papir", diff: null, afviger: false };
+  if (!worklistMin) return { status: "ingen-worklist", diff: null, afviger: false };
+  const diff = papirMin - worklistMin;
+  const afviger = Math.abs(diff) >= graense;
+  return { status: afviger ? "afviger" : "ok", diff, afviger };
+}

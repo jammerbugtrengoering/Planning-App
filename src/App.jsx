@@ -20,7 +20,7 @@ import { hentXlsx } from "./excel";
 import { lavPrisliste, timeprisPaaDato, satserPaaDato, kommendeSatser } from "./timepriser";
 import { findDubletter } from "./dubletter";
 import { nyBunke, laegHaendelseIBunke, anvendBunke } from "./realtimebunke";
-import { skemaOpgaver, laesTimer, laesKm, kmAfvigelse, klientNoegle, erIndlaest, systemKm } from "./papirskema";
+import { skemaOpgaver, laesTimer, laesKm, kmAfvigelse, klientNoegle, erIndlaest, systemKm, worklistMinutter, tidAfvigelse } from "./papirskema";
 import { simulerUge, noegletal as simNoegletal, nuvaerendePlan, dagensTal as simDagensTal, satsFor as simSatsFor } from "./simulering";
 import {
   Plus, Download, X, Clock, AlertTriangle,
@@ -2377,6 +2377,7 @@ const MODULE_HELP = {
   papirskema: { title: "Papirskema", intro: "Indlæs de udfyldte time- og kørselsskemaer, som kommer tilbage på papir.", blocks: [
     { h: "Sådan gør du", p: ["Vælg medarbejder og uge — brug pilene eller skriv ugenummeret. Du ser de samme linjer, som stod på det udprintede skema, med samme nummer i første kolonne.",
         "Skriv timerne ud for hver linje, som medarbejderen har skrevet dem: «2», «2,5», «2:30» eller «90 min». Skærmen viser minutterne ved siden af, så du kan se, hvordan tallet blev læst.",
+        "Har medarbejderen selv registreret tiden i Worklist, står den i kolonnen «Worklist». Papirets timer lægges så IKKE oveni — de bruges kun til at se, om de to er uenige (10 minutter eller mere), og opgaven tæller ikke dobbelt i løn og fakturering.",
         "Skriv også kilometerne. De bruges kun til at sammenligne — det er altid systemets egne kilometer, der gælder.",
         "Linjerne er ugeplanen, som den ser ud lige nu. Er en opgave flyttet, aflyst eller givet til en anden, efter skemaet blev trykt, og står den stadig på papiret, så vælg den under «Vælg en opgave fra ugen» (søg på kunde, adresse, nummer eller medarbejder), eller skriv dens nummer. Så kan du skrive timer og km ud for den, der står håndskrevet.",
         "Under linjerne står «Sæt opgaverne til udført» og «Sæt som fakturagrundlag». Fakturagrundlag er slået fra, til du selv vælger det: det er det, der gør tiden til en regning til kunden.",
@@ -12340,6 +12341,7 @@ function PapirskemaView({ instances, employees, kmLog, onTidIndlaest, onFakturag
   const [soeg, setSoeg] = useState("");
   const [udfoert, setUdfoert] = useState(true);
   const [fakturagrundlag, setFakturagrundlag] = useState(false);
+  const [gemte, setGemte] = useState(() => new Set());   // opgaver, der allerede er gemt fra et papirskema
   const [klar, setKlar] = useState(null);         // null: tjekker · true/false: tabellen findes
   const [arbejder, setArbejder] = useState(false);
   const [besked, setBesked] = useState(null);     // { slags: "ok" | "fejl", tekst }
@@ -12369,6 +12371,16 @@ function PapirskemaView({ instances, employees, kmLog, onTidIndlaest, onFakturag
   }, [kmLog, mandag, soendag]);
   const km = useMemo(() => systemKm(kmRaekker, empId), [kmRaekker, empId]);
 
+  // Hvad der allerede er gemt for medarbejderen. Linjer, hvor tiden stod i Worklist, lægger ikke tid
+  // på opgaven (den ville tælle dobbelt) og kan derfor ikke kendes på loggen — det her kan.
+  useEffect(() => {
+    if (!empId) { setGemte(new Set()); return; }
+    let afbrudt = false;
+    supabase.from("papirskema_linjer").select("instance_id").eq("employee_id", empId)
+      .then(({ data }) => { if (!afbrudt) setGemte(new Set((data || []).map((r) => r.instance_id))); });
+    return () => { afbrudt = true; };
+  }, [empId]);
+
   const raekker = useMemo(() => {
     if (!empId) return [];
     const ugensOpgaver = instances.filter((i) => i.year === uge.year && i.week === uge.week);
@@ -12381,17 +12393,19 @@ function PapirskemaView({ instances, employees, kmLog, onTidIndlaest, onFakturag
       const minutter = laesTimer(f.timer);
       const kmPapir = laesKm(f.km);
       const kmSys = km.pr_opgave.has(t.id) ? km.pr_opgave.get(t.id) : null;
+      const wl = worklistMinutter(t, empId);
       return {
         t, nr: t.opgave_nr ?? null, dato: instanceDateString(t),
         sted: [id.primaer || t.title, id.sekundaer].filter(Boolean).join(", "),
-        indlaest: erIndlaest(t, empId),
+        indlaest: erIndlaest(t, empId) || gemte.has(t.id),
+        wl, harWorklist: wl > 0, tidAfv: tidAfvigelse(minutter, wl),
         timerTekst: f.timer || "", kmTekst: f.km || "",
         minutter, timerFejl: !!(f.timer || "").trim() && minutter === null,
         kmPapir, kmFejl: Number.isNaN(kmPapir), kmSys,
         afv: kmAfvigelse(kmPapir, kmSys),
       };
     });
-  }, [instances, empId, uge, ekstra, felter, km]);
+  }, [instances, empId, uge, ekstra, felter, km, gemte]);
 
   // Dagstotaler: papirets kilometer står som regel for hele dagen, så dagen er det rigtige
   // sted at sammenligne, når rækkerne ikke har en tur hver.
@@ -12432,8 +12446,12 @@ function PapirskemaView({ instances, employees, kmLog, onTidIndlaest, onFakturag
       .slice(0, 12);
   }, [instances, employees, raekker, soeg, empId, uge]);
 
-  const attGodkende = raekker.filter((r) => !r.indlaest && r.minutter);
+  // En linje kan godkendes, når der er timer at lægge på opgaven — eller, hvis tiden allerede står i
+  // Worklist, når der er noget at sammenligne (timer eller km). I det tilfælde lægges der ikke tid på.
+  const kmSkrevet = (r) => typeof r.kmPapir === "number" && !Number.isNaN(r.kmPapir);
+  const attGodkende = raekker.filter((r) => !r.indlaest && (r.minutter || (r.harWorklist && kmSkrevet(r))));
   const afvigelser = [
+    ...raekker.filter((r) => r.tidAfv.afviger).map((r) => ({ tekst: `${r.sted}: skrev ${fmtMin(r.minutter)}, Worklist ${fmtMin(r.wl)} (${r.tidAfv.diff > 0 ? "+" : ""}${r.tidAfv.diff} min)` })),
     ...raekker.filter((r) => r.afv.afviger).map((r) => ({ tekst: `${r.sted}: skrev ${r.kmPapir} km, systemet ${r.kmSys} km (${r.afv.diff > 0 ? "+" : ""}${r.afv.diff})` })),
     ...dage.filter((d) => d.afv.afviger).map((d) => ({ tekst: `Hele ${new Date(d.dato).toLocaleDateString("da-DK", { weekday: "long", day: "numeric", month: "short" })}: skrev ${Math.round(d.papir * 10) / 10} km, systemet ${d.system} km (${d.afv.diff > 0 ? "+" : ""}${d.afv.diff})` })),
   ];
@@ -12454,30 +12472,39 @@ function PapirskemaView({ instances, employees, kmLog, onTidIndlaest, onFakturag
     setArbejder(true); setBesked(null);
     const { data: bruger } = await supabase.auth.getUser();
     const af = bruger?.user?.email || null;
-    let ok = 0; const fejl = []; const indlaeste = [];
+    let ok = 0, sammenlignet = 0; const fejl = []; const indlaeste = []; const gemt = [];
     for (const r of attGodkende) {
-      const { data: log, error } = await supabase.rpc("append_time_log", {
-        p_instance_id: r.t.id, p_minutes: r.minutter, p_emp_id: empId,
-        p_note: `Fra papirskema${r.nr ? ` (nr. ${r.nr})` : ""}`, p_klient_id: klientNoegle(empId, r.t.id),
-      });
-      if (error) { fejl.push(`${r.sted}: ${error.message}`); continue; }
-      onTidIndlaest(r.t.id, log, udfoert);
+      // Står tiden allerede i Worklist, lægges papirets timer IKKE oveni: så talte opgaven dobbelt
+      // i løn og fakturering. Papirets tal gemmes kun til sammenligningen.
+      if (!r.harWorklist) {
+        const { data: log, error } = await supabase.rpc("append_time_log", {
+          p_instance_id: r.t.id, p_minutes: r.minutter, p_emp_id: empId,
+          p_note: `Fra papirskema${r.nr ? ` (nr. ${r.nr})` : ""}`, p_klient_id: klientNoegle(empId, r.t.id),
+        });
+        if (error) { fejl.push(`${r.sted}: ${error.message}`); continue; }
+        onTidIndlaest(r.t.id, log, udfoert);
+        indlaeste.push(r.t.id);
+      }
       const { error: e2 } = await supabase.from("papirskema_linjer").upsert({
-        employee_id: empId, instance_id: r.t.id, opgave_nr: r.nr, dato: r.dato || null, minutter: r.minutter,
-        km_papir: typeof r.kmPapir === "number" && !Number.isNaN(r.kmPapir) ? r.kmPapir : null,
-        km_system: r.kmSys, afvigelse_km: r.afv.diff, afviger: r.afv.afviger, godkendt_af: af,
+        employee_id: empId, instance_id: r.t.id, opgave_nr: r.nr, dato: r.dato || null, minutter: r.minutter || null,
+        km_papir: kmSkrevet(r) ? r.kmPapir : null,
+        km_system: r.kmSys, afvigelse_km: r.afv.diff, afviger: r.afv.afviger || r.tidAfv.afviger, godkendt_af: af,
+        note: r.harWorklist ? `Tiden stod i Worklist (${r.wl} min). Kun sammenlignet.` : null,
       }, { onConflict: "employee_id,instance_id" });
-      if (e2) fejl.push(`${r.sted}: tiden er gemt, men afvigelsen kunne ikke gemmes (${e2.message})`);
-      indlaeste.push(r.t.id);
-      ok++;
+      if (e2) fejl.push(`${r.sted}: ${r.harWorklist ? "sammenligningen" : "tiden er gemt, men afvigelsen"} kunne ikke gemmes (${e2.message})`);
+      else gemt.push(r.t.id);
+      if (r.harWorklist) sammenlignet++; else ok++;
     }
+    if (gemt.length) setGemte((p) => new Set([...p, ...gemt]));
     // Fakturagrundlag sættes som ét samlet kald, og kun på de linjer, der faktisk blev indlæst.
     // Det er et valg pr. gang og slået fra som udgangspunkt: det er det, der gør tiden til en regning.
     if (fakturagrundlag && indlaeste.length) await onFakturagrundlag(indlaeste, true);
     setArbejder(false);
+    const hvad = `${ok} ${ok === 1 ? "linje er" : "linjer er"} indlæst`
+      + (sammenlignet ? ` og ${sammenlignet} sammenlignet med Worklist (tiden stod der allerede)` : "");
     setBesked(fejl.length
-      ? { slags: "fejl", tekst: `${ok} linjer er indlæst. ${fejl.length} gik galt:\n${fejl.join("\n")}` }
-      : { slags: "ok", tekst: `${ok} ${ok === 1 ? "linje er" : "linjer er"} indlæst.` });
+      ? { slags: "fejl", tekst: `${hvad}. ${fejl.length} gik galt:\n${fejl.join("\n")}` }
+      : { slags: "ok", tekst: `${hvad}.` });
   }
 
   const celle = { padding: "7px 8px", borderBottom: "1px solid #E2E8F0", fontSize: 13, verticalAlign: "middle", textAlign: "left" };
@@ -12532,14 +12559,15 @@ function PapirskemaView({ instances, employees, kmLog, onTidIndlaest, onFakturag
             <div style={styles.hint}>Medarbejderen har ingen opgaver i den uge.</div>
           ) : (
             <div style={{ overflowX: "auto" }}>
-              <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 760 }}>
+              <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 840 }}>
                 <thead>
                   <tr>
                     <th style={{ ...hoved, width: 60 }}>Nr.</th>
                     <th style={{ ...hoved, width: 62 }}>Dato</th>
                     <th style={hoved}>Arbejdssted</th>
                     <th style={{ ...hoved, width: 70 }}>Planlagt</th>
-                    <th style={{ ...hoved, width: 100 }}>Timer</th>
+                    <th style={{ ...hoved, width: 76 }}>Worklist</th>
+                    <th style={{ ...hoved, width: 100 }}>Timer (papir)</th>
                     <th style={{ ...hoved, width: 84 }}>Km (papir)</th>
                     <th style={{ ...hoved, width: 84 }}>Km (system)</th>
                     <th style={{ ...hoved, width: 96 }}>Afvigelse</th>
@@ -12556,13 +12584,19 @@ function PapirskemaView({ instances, employees, kmLog, onTidIndlaest, onFakturag
                           <td style={celle}>{r.dato ? `${r.dato.slice(8, 10)}.${r.dato.slice(5, 7)}` : ""}</td>
                           <td style={celle}>{r.sted}{r.t.assignees?.includes(empId) ? "" : <span style={{ color: roed }}> · ikke på hendes plan</span>}</td>
                           <td style={celle}>{fmtMin(r.t.duration || 0)}</td>
+                          <td style={{ ...celle, color: r.harWorklist ? "#1D4ED8" : "#94A3B8", fontWeight: r.harWorklist ? 600 : 400 }}>
+                            {r.harWorklist ? fmtMin(r.wl) : "–"}
+                          </td>
                           <td style={celle}>
-                            {r.indlaest ? <span style={{ color: "#166534", fontWeight: 600 }}>Indlæst ✓</span> : (
+                            {r.indlaest ? <span style={{ color: "#166534", fontWeight: 600 }}>{r.harWorklist ? "Sammenlignet ✓" : "Indlæst ✓"}</span> : (
                               <div>
                                 <input aria-label={`Timer, ${r.sted}`} style={{ ...lille, width: 84, borderColor: r.timerFejl ? roed : "#CBD5E1" }}
                                   value={r.timerTekst} placeholder="fx 2,5" onChange={(e) => saet(r.t.id, "timer", e.target.value)} />
-                                {r.minutter ? <div style={{ fontSize: 11, color: "#64748B" }}>= {fmtMin(r.minutter)}</div>
+                                {r.minutter ? <div style={{ fontSize: 11, color: r.tidAfv.afviger ? roed : "#64748B", fontWeight: r.tidAfv.afviger ? 700 : 400 }}>
+                                    = {fmtMin(r.minutter)}{r.tidAfv.afviger ? ` (${r.tidAfv.diff > 0 ? "+" : ""}${r.tidAfv.diff} min mod Worklist)` : ""}
+                                  </div>
                                   : r.timerFejl ? <div style={{ fontSize: 11, color: roed }}>kan ikke læses</div> : null}
+                                {r.harWorklist && <div style={{ fontSize: 11, color: "#1D4ED8" }}>tid findes i Worklist: kun sammenligning</div>}
                               </div>
                             )}
                           </td>
@@ -12578,7 +12612,7 @@ function PapirskemaView({ instances, employees, kmLog, onTidIndlaest, onFakturag
                         {dag && (i === raekker.length - 1 || raekker[i + 1].dato !== r.dato) && dag.harKm && (
                           <tr style={{ background: "#F8FAFC" }}>
                             <td style={celle} />
-                            <td style={{ ...celle, fontSize: 12, color: "#475569" }} colSpan={4}>Hele dagen, papir mod system</td>
+                            <td style={{ ...celle, fontSize: 12, color: "#475569" }} colSpan={5}>Hele dagen, papir mod system</td>
                             <td style={{ ...celle, fontWeight: 600 }}>{Math.round(dag.papir * 10) / 10}</td>
                             <td style={{ ...celle, color: "#475569" }}>{dag.system === null ? "–" : dag.system}</td>
                             <td style={{ ...celle, fontWeight: 700, color: dag.afv.afviger ? roed : "#64748B" }}>
@@ -12621,7 +12655,9 @@ function PapirskemaView({ instances, employees, kmLog, onTidIndlaest, onFakturag
               {arbejder ? "Gemmer…" : `Godkend ${attGodkende.length || ""} ${attGodkende.length === 1 ? "linje" : "linjer"}`}
             </button>
             <span style={styles.hint}>
-              {attGodkende.length ? `${fmtMin(attGodkende.reduce((s, r) => s + r.minutter, 0))} lægges på opgaverne.` : "Skriv timer ud for de linjer, der skal indlæses."}
+              {attGodkende.length
+                ? `${fmtMin(attGodkende.filter((r) => !r.harWorklist).reduce((s, r) => s + (r.minutter || 0), 0))} lægges på opgaverne.`
+                : "Skriv timer ud for de linjer, der skal indlæses."}
             </span>
           </div>
           {besked && (
