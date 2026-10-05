@@ -20,6 +20,7 @@ import { hentXlsx } from "./excel";
 import { lavPrisliste, timeprisPaaDato, satserPaaDato, kommendeSatser } from "./timepriser";
 import { findDubletter } from "./dubletter";
 import { nyBunke, laegHaendelseIBunke, anvendBunke } from "./realtimebunke";
+import { skemaOpgaver, laesTimer, laesKm, kmAfvigelse, klientNoegle, erIndlaest, systemKm } from "./papirskema";
 import { simulerUge, noegletal as simNoegletal, nuvaerendePlan, dagensTal as simDagensTal, satsFor as simSatsFor } from "./simulering";
 import {
   Plus, Download, X, Clock, AlertTriangle,
@@ -238,7 +239,7 @@ const MENU_GRUPPER = [
   // tjeklister saettes op én gang og saa staar. At skulle gennem Opsaetning for at
   // se om der er saebe nok, var et led for meget.
   { key: "lager",     navn: "Lager",      sider: [["inventory", "Lager"]] },
-  { key: "oekonomi",  navn: "Økonomi",     sider: [["time", "Fakturering"], ["kundetimer", "Kundetimer"], ["reports", "Rapportering"], ["medExport", "Løn data"]] },
+  { key: "oekonomi",  navn: "Økonomi",     sider: [["time", "Fakturering"], ["kundetimer", "Kundetimer"], ["reports", "Rapportering"], ["medExport", "Løn data"], ["papirskema", "Papirskema"]] },
   { key: "opsaetning", navn: "Opsætning", sider: [["employees", "Medarbejdere"], ["checklists", "Tjeklister"], ["transport", "Transporttid"], ["aflysning", "Aflysning"], ["timepriser", "Timepriser"], ["firma", "Firma"]] },
   // Kun i kundeudgaven (fase 5, 29.9.2026): kundefirmaet bestiller ekstra hjaelp hos
   // Jammerbugt Rengoering. Hos Jammerbugt selv findes siden ikke — der er man den,
@@ -466,7 +467,7 @@ const HORIZON_WEEKS = 4;
 // «uge» staar bevidst IKKE her: ugeplanen viser én uge ad gangen, og de uger, man kan
 // blade til med det samme, er hentet i foerste runde. Drift, Lager, Kunder og Tilbud
 // roerer slet ikke opgavebunken.
-const SIDER_DER_KRAEVER_ALT = ["contracts", "reports", "time", "kundetimer", "medExport"];
+const SIDER_DER_KRAEVER_ALT = ["contracts", "reports", "time", "kundetimer", "medExport", "papirskema"];
 
 // Bruger crypto.randomUUID når den er tilgængelig (alle moderne browsere).
 // Math.random gav kun ~36^7 kombinationer og var i praksis kollisionsfølsom,
@@ -2373,6 +2374,16 @@ const MODULE_HELP = {
         "Der står ingen priser — hverken på skærmen eller i filen. Skal der kroner på, ligger de under Fakturering."] },
   ], warn: "Tilbudsmøder og interne blokke som ferie og sygdom tæller ikke med. To medarbejdere på samme besøg er ét besøg, og deres minutter lægges sammen — det er sådan kunden ser det. Undtagen dem der er markeret som oplæring: deres tid er med i lønnen, men hverken i denne liste eller på fakturaen." },
 
+  papirskema: { title: "Papirskema", intro: "Indlæs de udfyldte time- og kørselsskemaer, som kommer tilbage på papir.", blocks: [
+    { h: "Sådan gør du", p: ["Vælg medarbejder og en dag i den uge, skemaet gælder. Du ser de samme linjer, som stod på det udprintede skema, med samme nummer i første kolonne.",
+        "Skriv timerne ud for hver linje, som medarbejderen har skrevet dem: «2», «2,5», «2:30» eller «90 min». Skærmen viser minutterne ved siden af, så du kan se, hvordan tallet blev læst.",
+        "Skriv også kilometerne. De bruges kun til at sammenligne — det er altid systemets egne kilometer, der gælder.",
+        "Står der en linje på papiret, som ikke var på skemaet, så skriv dens nummer under «Tilføj linje».",
+        "Tryk «Godkend». Tiden lægges på opgaven og kommer med under Løn data og i faktureringen som al anden registreret tid — fluebenet til løn sætter du dér, som du plejer. En linje, der er indlæst, kan ikke indlæses to gange."] },
+    { h: "Afvigelser i kilometer", p: ["Er det, medarbejderen skrev, mere end 1,5 km og 15 % fra det, systemet har regnet, står linjen med rødt og en forskel i kilometer. Det er dem, du tager en snak om.",
+        "Systemets kilometer regnes pr. opgave (turen hen til opgaven) og pr. dag. Papirets kilometer står som regel for hele dagen, så kig på dagslinjen under hver dag, før du trækker en konklusion.",
+        "Alle afvigelser gemmes sammen med den, der godkendte dem."] },
+  ] },
   medExport: { title: "Løn data", intro: "Grundlaget for løn: timer og kørsel pr. medarbejder.", blocks: [
     { h: "Sådan gør du", p: ["Vælg måned og år.", "«Afvigelse» viser hvor medarbejderen har skrevet en begrundelse.",
         "«Heraf weekend» er timer der udløser tillæg.",
@@ -5704,6 +5715,13 @@ function PlanningApp({ session, onSignOut }) {
   function setTaskStatus(taskId, status) {
     updateInstance(taskId, (t) => withCompletion(t, status));
   }
+  // Papirskemaet (5.10.2026): tiden er allerede skrevet i databasen af append_time_log, som
+  // giver den fulde log tilbage. Den lægges ind i planen FØR opgaven eventuelt sættes til udført,
+  // for sætningen af status skriver hele opgaven igen — med den gamle log ville tiden forsvinde.
+  function papirTidIndlaest(opgaveId, log, saetUdfoert) {
+    setInstances((prev) => prev.map((i) => (i.id === opgaveId ? { ...i, timeLog: log, time_log: log } : i)));
+    if (saetUdfoert) updateInstance(opgaveId, (t) => (t.status === "udført" ? t : withCompletion(t, "udført")));
+  }
   function toggleChecklistItem(taskId, itemId) {
     updateInstance(taskId, (t) => ({
       ...t, checklist: (t.checklist || []).map((i) => (i.id === itemId ? { ...i, done: !i.done } : i)),
@@ -6543,6 +6561,9 @@ function PlanningApp({ session, onSignOut }) {
 
       {view === "kundetimer" && (<CustomerHoursView instances={instances} />)}
       {view === "medExport" && (<EmployeeExportView instances={instances} employees={employees} satsHistorik={satsHistorik} />)}
+      {view === "papirskema" && (isAdminUser
+        ? <PapirskemaView instances={instances} employees={aktiveEmployees} onTidIndlaest={papirTidIndlaest} />
+        : <div style={styles.hint}>Kun planlæggere kan indlæse skemaer.</div>)}
       {view === "inventory" && (
         <InventoryView supabase={supabase} employees={employees} currentUserName={currentEmployeeForAuth?.name || null} onInventoryChanged={loadProductUsage} />
       )}
@@ -12204,21 +12225,20 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
 //
 // Kun på papir. På skærmen ville det være en tom tabel, ingen skal bruge til noget.
 function TimeOgKmSkema({ emp, dage, instances, ugeLabel }) {
-  const raekker = [];
-  dage.forEach((d) => {
-    instances
-      .filter((t) => t.day === d.key && (t.assignees || []).includes(emp.id)
-                  && !["sygdom", "ferie"].includes(t.type))
-      .sort((a, b) => String(a.scheduledTime || "99:99").localeCompare(String(b.scheduledTime || "99:99")))
-      .forEach((t) => {
-        const id = opgaveIdentitet(t);
-        const dato = instanceDateString(t);
-        raekker.push({
-          dato: dato ? `${dato.slice(8, 10)}.${dato.slice(5, 7)}` : d.label,
-          sted: [id.primaer || t.title, id.sekundaer].filter(Boolean).join(", "),
-        });
-      });
+  // Udvælgelsen ligger i papirskema.js og bruges også af indlæsningen under Økonomi →
+  // Papirskema, så en linje på papiret altid er en linje på skærmen.
+  const raekker = skemaOpgaver(instances, emp.id, dage.map((d) => d.key)).map((t) => {
+    const id = opgaveIdentitet(t);
+    const dato = instanceDateString(t);
+    return {
+      dato: dato ? `${dato.slice(8, 10)}.${dato.slice(5, 7)}` : (dage.find((d) => d.key === t.day)?.label || ""),
+      sted: [id.primaer || t.title, id.sekundaer].filter(Boolean).join(", "),
+      // Opgavenummeret (5.10.2026). Det er det, kontoret skriver ind igen, når skemaet kommer
+      // tilbage udfyldt. Findes kolonnen ikke i databasen endnu, udelades den hele vejen.
+      nr: t.opgave_nr ?? null,
+    };
   });
+  const harNr = raekker.some((r) => r.nr);
   // Altid mindst nogle blanke linjer: der kommer altid noget, der ikke stod i planen.
   const blanke = Math.max(4, 20 - raekker.length);
   const celle = { border: "1px solid #111", padding: "5px 6px", fontSize: 10.5 };
@@ -12249,6 +12269,7 @@ function TimeOgKmSkema({ emp, dage, instances, ugeLabel }) {
       <table style={{ borderCollapse: "collapse", width: "100%" }}>
         <thead>
           <tr>
+            {harNr && <th style={{ ...hoved, width: 52, textAlign: "left" }}>Nr.:</th>}
             <th style={{ ...hoved, width: 62, textAlign: "left" }}>Dato:</th>
             <th style={{ ...hoved, textAlign: "left" }}>Arbejdssted:</th>
             <th style={{ ...hoved, width: 90, textAlign: "left" }}>Antal timer:</th>
@@ -12258,6 +12279,7 @@ function TimeOgKmSkema({ emp, dage, instances, ugeLabel }) {
         <tbody>
           {raekker.map((r, i) => (
             <tr key={`r${i}`}>
+              {harNr && <td style={{ ...celle, fontVariantNumeric: "tabular-nums" }}>{r.nr ?? ""}</td>}
               <td style={celle}>{r.dato}</td>
               <td style={celle}>{r.sted}</td>
               <td style={{ ...celle, height: 18 }}>&nbsp;</td>
@@ -12266,6 +12288,7 @@ function TimeOgKmSkema({ emp, dage, instances, ugeLabel }) {
           ))}
           {Array.from({ length: blanke }).map((_, i) => (
             <tr key={`b${i}`}>
+              {harNr && <td style={celle}>&nbsp;</td>}
               <td style={{ ...celle, height: 18 }}>&nbsp;</td>
               <td style={celle}>&nbsp;</td>
               <td style={celle}>&nbsp;</td>
@@ -12273,6 +12296,7 @@ function TimeOgKmSkema({ emp, dage, instances, ugeLabel }) {
             </tr>
           ))}
           <tr>
+            {harNr && <td style={celle}>&nbsp;</td>}
             <td style={celle}>&nbsp;</td>
             <td style={celle}>&nbsp;</td>
             <td style={{ ...celle, fontWeight: 700 }}>I alt:</td>
@@ -12283,8 +12307,300 @@ function TimeOgKmSkema({ emp, dage, instances, ugeLabel }) {
 
       <div style={{ fontSize: 9.5, marginTop: 8 }}>
         Udfyldes fra den 20. i måneden til den 19. i næste — afleveres eller sendes pr.
-        mobil til 61608720 den 20. i hver måned.
+        mobil til 61608720 den 20. i hver måned.{harNr ? " Tilføjer du en linje, så skriv nummeret fra planen i første kolonne, hvis du kender det." : ""}
       </div>
+    </div>
+  );
+}
+
+// ── Papirskema: indlæs de udfyldte skemaer (5.10.2026, Jonn) ───────────────────
+//
+// En midlertidig løsning, til alle er på Worklist. Medarbejderen får et udprintet skema med
+// et nummer pr. linje (opgave_nr), skriver timer og kilometer på, og kontoret indlæser det her.
+//
+//   Tid: lægges på opgaven med append_time_log og går til løn og fakturering som al anden
+//        registreret tid. Nøglen «papir:medarbejder:opgave» gør, at samme linje aldrig kan
+//        indlæses to gange, heller ikke ved dobbeltklik eller et nyt forsøg efter en fejl.
+//   Km:  det er ALTID systemets kilometer, der gælder. Papirets tal gemmes kun, så kontoret
+//        kan se afvigelserne og tage snakken med medarbejderen. De når aldrig løn.
+//
+// Tabellen papirskema_linjer og kolonnen opgave_nr kommer med migrationen i overdragelse/sql.
+// Findes tabellen ikke endnu, står der en forklaring i stedet for en knap, der fejler.
+const DAGE_ALLE = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+function isoLokal(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+const PAPIR_KORT = { background: "#fff", border: "1px solid #E2E8F0", borderRadius: 12, padding: "16px 18px" };
+function PapirskemaView({ instances, employees, onTidIndlaest }) {
+  const [empId, setEmpId] = useState("");
+  const [dato, setDato] = useState(() => isoLokal(new Date()));
+  const [felter, setFelter] = useState({});       // opgave-id -> { timer, km }
+  const [ekstra, setEkstra] = useState([]);       // opgave-id'er, tilføjet med nummer
+  const [nrInd, setNrInd] = useState("");
+  const [udfoert, setUdfoert] = useState(true);
+  const [kmRaekker, setKmRaekker] = useState([]);
+  const [klar, setKlar] = useState(null);         // null: tjekker · true/false: tabellen findes
+  const [arbejder, setArbejder] = useState(false);
+  const [besked, setBesked] = useState(null);     // { slags: "ok" | "fejl", tekst }
+
+  const uge = useMemo(() => {
+    const d = new Date(dato);
+    return isNaN(d) ? null : isoWeekInfo(d);
+  }, [dato]);
+  const mandag = uge ? mondayOfWeek(uge.week, uge.year) : null;
+
+  useEffect(() => {
+    let afbrudt = false;
+    supabase.from("papirskema_linjer").select("id").limit(1).then(({ error }) => { if (!afbrudt) setKlar(!error); });
+    return () => { afbrudt = true; };
+  }, []);
+
+  // Systemets kilometer for ugen. Hentes igen, når medarbejder eller uge skifter.
+  useEffect(() => {
+    if (!empId || !mandag) { setKmRaekker([]); return; }
+    let afbrudt = false;
+    const slut = new Date(mandag); slut.setDate(slut.getDate() + 6);
+    supabase.from("km_log").select("employee_id, work_date, to_instance_id, km")
+      .eq("employee_id", empId).gte("work_date", isoLokal(mandag)).lte("work_date", isoLokal(slut))
+      .then(({ data }) => { if (!afbrudt) setKmRaekker(data || []); });
+    return () => { afbrudt = true; };
+  }, [empId, uge?.week, uge?.year]);  // eslint-disable-line react-hooks/exhaustive-deps
+
+  const km = useMemo(() => systemKm(kmRaekker, empId), [kmRaekker, empId]);
+
+  const raekker = useMemo(() => {
+    if (!empId || !uge) return [];
+    const ugensOpgaver = instances.filter((i) => i.year === uge.year && i.week === uge.week);
+    const liste = skemaOpgaver(ugensOpgaver, empId, DAGE_ALLE);
+    const har = new Set(liste.map((t) => t.id));
+    for (const id of ekstra) { const t = instances.find((i) => i.id === id); if (t && !har.has(id)) liste.push(t); }
+    return liste.map((t) => {
+      const f = felter[t.id] || {};
+      const id = opgaveIdentitet(t);
+      const minutter = laesTimer(f.timer);
+      const kmPapir = laesKm(f.km);
+      const kmSys = km.pr_opgave.has(t.id) ? km.pr_opgave.get(t.id) : null;
+      return {
+        t, nr: t.opgave_nr ?? null, dato: instanceDateString(t),
+        sted: [id.primaer || t.title, id.sekundaer].filter(Boolean).join(", "),
+        indlaest: erIndlaest(t, empId),
+        timerTekst: f.timer || "", kmTekst: f.km || "",
+        minutter, timerFejl: !!(f.timer || "").trim() && minutter === null,
+        kmPapir, kmFejl: Number.isNaN(kmPapir), kmSys,
+        afv: kmAfvigelse(kmPapir, kmSys),
+      };
+    });
+  }, [instances, empId, uge, ekstra, felter, km]);
+
+  // Dagstotaler: papirets kilometer står som regel for hele dagen, så dagen er det rigtige
+  // sted at sammenligne, når rækkerne ikke har en tur hver.
+  const dage = useMemo(() => {
+    const m = new Map();
+    for (const r of raekker) {
+      const d = m.get(r.dato) || { dato: r.dato, papir: null, harKm: false };
+      if (typeof r.kmPapir === "number" && !Number.isNaN(r.kmPapir)) { d.papir = (d.papir || 0) + r.kmPapir; d.harKm = true; }
+      m.set(r.dato, d);
+    }
+    return [...m.values()].sort((a, b) => a.dato.localeCompare(b.dato)).map((d) => {
+      const sys = km.pr_dag.has(d.dato) ? km.pr_dag.get(d.dato) : null;
+      return { ...d, system: sys, afv: kmAfvigelse(d.harKm ? d.papir : null, sys) };
+    });
+  }, [raekker, km]);
+
+  const attGodkende = raekker.filter((r) => !r.indlaest && r.minutter);
+  const afvigelser = [
+    ...raekker.filter((r) => r.afv.afviger).map((r) => ({ tekst: `${r.sted}: skrev ${r.kmPapir} km, systemet ${r.kmSys} km (${r.afv.diff > 0 ? "+" : ""}${r.afv.diff})` })),
+    ...dage.filter((d) => d.afv.afviger).map((d) => ({ tekst: `Hele ${new Date(d.dato).toLocaleDateString("da-DK", { weekday: "long", day: "numeric", month: "short" })}: skrev ${Math.round(d.papir * 10) / 10} km, systemet ${d.system} km (${d.afv.diff > 0 ? "+" : ""}${d.afv.diff})` })),
+  ];
+
+  const saet = (id, felt, v) => setFelter((p) => ({ ...p, [id]: { ...(p[id] || {}), [felt]: v } }));
+
+  function tilfoejNr() {
+    const nr = nrInd.trim().replace(/^#/, "");
+    if (!nr) return;
+    const t = instances.find((i) => String(i.opgave_nr) === nr);
+    if (!t) { setBesked({ slags: "fejl", tekst: `Ingen opgave har nummer ${nr}.` }); return; }
+    setEkstra((p) => (p.includes(t.id) ? p : [...p, t.id]));
+    setNrInd(""); setBesked(null);
+  }
+
+  async function godkend() {
+    if (!attGodkende.length) return;
+    setArbejder(true); setBesked(null);
+    const { data: bruger } = await supabase.auth.getUser();
+    const af = bruger?.user?.email || null;
+    let ok = 0; const fejl = [];
+    for (const r of attGodkende) {
+      const { data: log, error } = await supabase.rpc("append_time_log", {
+        p_instance_id: r.t.id, p_minutes: r.minutter, p_emp_id: empId,
+        p_note: `Fra papirskema${r.nr ? ` (nr. ${r.nr})` : ""}`, p_klient_id: klientNoegle(empId, r.t.id),
+      });
+      if (error) { fejl.push(`${r.sted}: ${error.message}`); continue; }
+      onTidIndlaest(r.t.id, log, udfoert);
+      const { error: e2 } = await supabase.from("papirskema_linjer").upsert({
+        employee_id: empId, instance_id: r.t.id, opgave_nr: r.nr, dato: r.dato || null, minutter: r.minutter,
+        km_papir: typeof r.kmPapir === "number" && !Number.isNaN(r.kmPapir) ? r.kmPapir : null,
+        km_system: r.kmSys, afvigelse_km: r.afv.diff, afviger: r.afv.afviger, godkendt_af: af,
+      }, { onConflict: "employee_id,instance_id" });
+      if (e2) fejl.push(`${r.sted}: tiden er gemt, men afvigelsen kunne ikke gemmes (${e2.message})`);
+      ok++;
+    }
+    setArbejder(false);
+    setBesked(fejl.length
+      ? { slags: "fejl", tekst: `${ok} linjer er indlæst. ${fejl.length} gik galt:\n${fejl.join("\n")}` }
+      : { slags: "ok", tekst: `${ok} ${ok === 1 ? "linje er" : "linjer er"} indlæst.` });
+  }
+
+  const celle = { padding: "7px 8px", borderBottom: "1px solid #E2E8F0", fontSize: 13, verticalAlign: "middle", textAlign: "left" };
+  const hoved = { ...celle, fontSize: 11.5, fontWeight: 700, color: "#475569", background: "#F8FAFC", position: "sticky", top: 0 };
+  const lille = { width: 84, padding: "6px 8px", borderRadius: 7, border: "1px solid #CBD5E1", fontSize: 13, fontFamily: "inherit" };
+  const roed = "#B91C1C";
+
+  if (klar === false) {
+    return (
+      <div style={{ ...PAPIR_KORT, maxWidth: 720 }}>
+        <h2 style={{ margin: "0 0 8px", fontSize: 17 }}>Papirskema</h2>
+        <div style={{ ...styles.hint, color: "#92400E", fontSize: 13.5, lineHeight: 1.5 }}>
+          Databasen er ikke gjort klar til papirskemaer endnu. Tabellen <b>papirskema_linjer</b> mangler, så tid og afvigelser ville ikke kunne gemmes ordentligt.
+          Migrationen ligger i <code>overdragelse/sql/papirskema-2026-10-05.sql</code> og skal køres uden for arbejdstid.
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 14, maxWidth: 1000 }}>
+      <div style={PAPIR_KORT}>
+        <h2 style={{ margin: "0 0 4px", fontSize: 17 }}>Papirskema</h2>
+        <div style={{ ...styles.hint, marginTop: 0 }}>Indlæs de udfyldte time- og kørselsskemaer. Tiden lægges på opgaven; kilometerne sammenlignes med systemets.</div>
+        <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end" }}>
+          <div style={{ flex: "1 1 220px" }}>
+            <label style={styles.label} htmlFor="ps-emp">Medarbejder</label>
+            <select id="ps-emp" style={styles.input} value={empId} onChange={(e) => { setEmpId(e.target.value); setFelter({}); setEkstra([]); setBesked(null); }}>
+              <option value="">Vælg medarbejder</option>
+              {employees.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
+            </select>
+          </div>
+          <div style={{ flex: "0 1 200px" }}>
+            <label style={styles.label} htmlFor="ps-dato">En dag i ugen</label>
+            <input id="ps-dato" type="date" style={styles.input} value={dato} onChange={(e) => { setDato(e.target.value); setFelter({}); setEkstra([]); setBesked(null); }} />
+          </div>
+          {uge && <div style={{ fontSize: 13.5, fontWeight: 600, color: "#334155", paddingBottom: 9 }}>Uge {uge.week} · {uge.year}</div>}
+        </div>
+      </div>
+
+      {empId && (
+        <div style={PAPIR_KORT}>
+          {raekker.length === 0 ? (
+            <div style={styles.hint}>Medarbejderen har ingen opgaver i den uge.</div>
+          ) : (
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 760 }}>
+                <thead>
+                  <tr>
+                    <th style={{ ...hoved, width: 60 }}>Nr.</th>
+                    <th style={{ ...hoved, width: 62 }}>Dato</th>
+                    <th style={hoved}>Arbejdssted</th>
+                    <th style={{ ...hoved, width: 70 }}>Planlagt</th>
+                    <th style={{ ...hoved, width: 100 }}>Timer</th>
+                    <th style={{ ...hoved, width: 84 }}>Km (papir)</th>
+                    <th style={{ ...hoved, width: 84 }}>Km (system)</th>
+                    <th style={{ ...hoved, width: 96 }}>Afvigelse</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {raekker.map((r, i) => {
+                    const nyDag = i === 0 || raekker[i - 1].dato !== r.dato;
+                    const dag = dage.find((d) => d.dato === r.dato);
+                    return (
+                      <React.Fragment key={r.t.id}>
+                        <tr style={r.indlaest ? { background: "#F0FDF4" } : undefined}>
+                          <td style={{ ...celle, fontVariantNumeric: "tabular-nums", color: "#64748B" }}>{r.nr ?? ""}</td>
+                          <td style={celle}>{r.dato ? `${r.dato.slice(8, 10)}.${r.dato.slice(5, 7)}` : ""}</td>
+                          <td style={celle}>{r.sted}{r.t.assignees?.includes(empId) ? "" : <span style={{ color: roed }}> · ikke på hendes plan</span>}</td>
+                          <td style={celle}>{fmtMin(r.t.duration || 0)}</td>
+                          <td style={celle}>
+                            {r.indlaest ? <span style={{ color: "#166534", fontWeight: 600 }}>Indlæst ✓</span> : (
+                              <div>
+                                <input aria-label={`Timer, ${r.sted}`} style={{ ...lille, width: 84, borderColor: r.timerFejl ? roed : "#CBD5E1" }}
+                                  value={r.timerTekst} placeholder="fx 2,5" onChange={(e) => saet(r.t.id, "timer", e.target.value)} />
+                                {r.minutter ? <div style={{ fontSize: 11, color: "#64748B" }}>= {fmtMin(r.minutter)}</div>
+                                  : r.timerFejl ? <div style={{ fontSize: 11, color: roed }}>kan ikke læses</div> : null}
+                              </div>
+                            )}
+                          </td>
+                          <td style={celle}>
+                            {r.indlaest ? "" : <input aria-label={`Kilometer, ${r.sted}`} style={{ ...lille, borderColor: r.kmFejl ? roed : "#CBD5E1" }}
+                              value={r.kmTekst} placeholder="km" onChange={(e) => saet(r.t.id, "km", e.target.value)} />}
+                          </td>
+                          <td style={{ ...celle, color: "#475569" }}>{r.kmSys === null ? "–" : r.kmSys}</td>
+                          <td style={{ ...celle, fontWeight: 600, color: r.afv.afviger ? roed : "#64748B" }}>
+                            {r.afv.status === "afviger" || r.afv.status === "ok" ? `${r.afv.diff > 0 ? "+" : ""}${r.afv.diff} km` : ""}
+                          </td>
+                        </tr>
+                        {dag && (i === raekker.length - 1 || raekker[i + 1].dato !== r.dato) && dag.harKm && (
+                          <tr style={{ background: "#F8FAFC" }}>
+                            <td style={celle} />
+                            <td style={{ ...celle, fontSize: 12, color: "#475569" }} colSpan={4}>Hele dagen, papir mod system</td>
+                            <td style={{ ...celle, fontWeight: 600 }}>{Math.round(dag.papir * 10) / 10}</td>
+                            <td style={{ ...celle, color: "#475569" }}>{dag.system === null ? "–" : dag.system}</td>
+                            <td style={{ ...celle, fontWeight: 700, color: dag.afv.afviger ? roed : "#64748B" }}>
+                              {dag.afv.diff === null ? "" : `${dag.afv.diff > 0 ? "+" : ""}${dag.afv.diff} km`}
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          <div style={{ display: "flex", gap: 8, alignItems: "flex-end", flexWrap: "wrap", marginTop: 14 }}>
+            <div>
+              <label style={{ ...styles.label, marginTop: 0 }} htmlFor="ps-nr">Tilføj linje med nummer</label>
+              <input id="ps-nr" style={{ ...styles.input, width: 140 }} value={nrInd} placeholder="fx 18503"
+                onChange={(e) => setNrInd(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") tilfoejNr(); }} />
+            </div>
+            <button type="button" style={styles.secondaryBtn} onClick={tilfoejNr}>Tilføj</button>
+          </div>
+        </div>
+      )}
+
+      {afvigelser.length > 0 && (
+        <div style={{ background: "#FEF2F2", border: "1.5px solid #FECACA", borderRadius: 12, padding: "13px 15px" }}>
+          <div style={{ fontWeight: 700, fontSize: 14, color: roed, marginBottom: 6 }}>
+            {afvigelser.length === 1 ? "Én afvigelse i kilometer" : `${afvigelser.length} afvigelser i kilometer`}
+          </div>
+          <div style={{ fontSize: 13, color: "#7F1D1D", lineHeight: 1.6 }}>
+            {afvigelser.map((a, i) => <div key={i}>{a.tekst}</div>)}
+          </div>
+          <div style={{ fontSize: 12, color: "#7F1D1D", marginTop: 8 }}>Systemets kilometer er dem, der gælder. Afvigelsen gemmes, så I kan tage snakken.</div>
+        </div>
+      )}
+
+      {empId && raekker.length > 0 && (
+        <div style={{ ...PAPIR_KORT, display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
+          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13.5 }}>
+            <input type="checkbox" checked={udfoert} onChange={(e) => setUdfoert(e.target.checked)} />
+            Sæt opgaverne til udført
+          </label>
+          <button type="button" style={{ ...styles.primaryBtn, opacity: attGodkende.length && !arbejder ? 1 : 0.5 }}
+            disabled={!attGodkende.length || arbejder || klar !== true} onClick={godkend}>
+            {arbejder ? "Gemmer…" : `Godkend ${attGodkende.length || ""} ${attGodkende.length === 1 ? "linje" : "linjer"}`}
+          </button>
+          <span style={styles.hint}>
+            {attGodkende.length ? `${fmtMin(attGodkende.reduce((s, r) => s + r.minutter, 0))} lægges på opgaverne.` : "Skriv timer ud for de linjer, der skal indlæses."}
+          </span>
+        </div>
+      )}
+
+      {besked && (
+        <div style={{ whiteSpace: "pre-line", fontSize: 13.5, padding: "11px 14px", borderRadius: 10,
+                      background: besked.slags === "ok" ? "#F0FDF4" : "#FEF2F2", color: besked.slags === "ok" ? "#166534" : "#7F1D1D",
+                      border: `1px solid ${besked.slags === "ok" ? "#BBF7D0" : "#FECACA"}` }}>{besked.tekst}</div>
+      )}
     </div>
   );
 }

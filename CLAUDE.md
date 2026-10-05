@@ -285,6 +285,12 @@ for den anden. Derfor (Jonns beslutning 3.10.2026):
   public` gør det ikke.
 - Ændrer du en regel, der afgør **hvad der bliver oprettet**, så husk, at en browserfane
   kører den kode, den hentede, og ikke den, der ligger ude nu. Se `src/nyversion.js`.
+- **Opgavenummeret (`instances.opgave_nr`) tildeles af databasen og skrives aldrig af appen.**
+  Det står med vilje ikke i `syncInstance`: nummeret er trykt på udleverede papirskemaer, og
+  en skrivning, der overskrev det, ville gøre et udfyldt skema umuligt at knytte til sin opgave.
+  Papirskemaet (Økonomi → Papirskema, `src/papirskema.js`) lægger tiden på opgaven gennem
+  `append_time_log` og gemmer papirets kilometer i `papirskema_linjer`; det er altid
+  systemets kilometer, der gælder.
 - Drift-siden viser byggetidspunktet nederst. Er stemplet ældre, end du forventer, er
   sidste push ikke gået igennem hos Netlify.
 
