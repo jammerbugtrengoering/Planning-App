@@ -5618,7 +5618,9 @@ function PlanningApp({ session, onSignOut }) {
       });
       if (error) { notify("Kunne ikke oprette mødet: " + error.message); return; }
       setGenindlaes((n) => n + 1);
-      notify(`Tilbudsmøde oprettet for ${emp.name || "medarbejderen"} — tilbuddet ligger under Tilbud`);
+      notify(`Tilbudsmøde oprettet for ${emp.name || "medarbejderen"} — tilbuddet er åbnet, så det kan forberedes`);
+      // Tilbuddet åbnes med det samme, så forberedelsen (opgavelisten) kan begynde, mens kunden stadig er i tankerne.
+      if (data?.tilbudId) { setAabnTilbudId(data.tilbudId); setView("tilbud"); }
       return data;
     }
 
@@ -18333,8 +18335,10 @@ function ActivityModal({ employees, onClose, onSave }) {
     onClose();
   }
 
+  // persistent: et tryk ved siden af lukkede vinduet uden at gemme, og det udfyldte var væk.
+  // Vinduet lukkes kun med X eller Annuller.
   return (
-    <Modal onClose={onClose} title="Anden aktivitet">
+    <Modal onClose={onClose} title="Anden aktivitet" persistent>
       <div style={styles.hint}>
         Opretter en enkeltstående aktivitet (fx kundebesøg) i kalenderen. Aktiviteten optager medarbejderens
         kapacitet ligesom en almindelig opgave, men indgår ikke i fakturering eller rapporter.
