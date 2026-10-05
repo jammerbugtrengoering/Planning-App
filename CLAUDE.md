@@ -30,6 +30,9 @@ Rytme, interval, startdato, udløb, udeladte dage. **Fire ting, og de hænger sa
    hver mulig værdi igennem. Skriv aldrig en intervaltekst i hånden. En browserfane med den
    gamle kode kender kun `uge`, `14_dage`, `4_uger`, `6_uger` og `3_maaned` — de andre
    falder tilbage på hver uge, indtil fanen er genindlæst (se `src/nyversion.js`).
+   **Databasen har en egen kontrol, `service_templates_plan_interval_check`** (regex, ikke en liste, siden 5.10.2026).
+   Ændres reglen i `ugerFra`/`maanederFra`, skal kontrollen ændres med (`overdragelse/sql/plan-interval-regel-2026-10-05.sql`),
+   ellers afviser databasen værdien, og «Gem» ser ud til at gøre intet.
 3. **`aftalerytme.test.mjs`.** Filens egen første sætning beder om det. Kør
    `node aftalerytme.test.mjs`.
 4. **Hjælpeteksten** i `MODULE_HELP` — og skriv, hvad rytmen gør ved årets besøg, ikke
