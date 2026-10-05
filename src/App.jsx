@@ -11514,15 +11514,17 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
   // Grunden til, at «Godkend og planlæg» er slået fra. Den stod før kun som tooltip, og knappen så ud som en almindelig,
   // aktiv knap — så et tryk gjorde «intet». 5.10.2026: en kladde uden kompetencekrav (indlæst uden) kunne ikke godkendes,
   // og ingen kunne se hvorfor. Nu står grunden i klar tekst ved knappen.
-  const blokeretGrund =
-    !title.trim() ? "Aftalen mangler en titel"
-    : manglerDineroKunde ? (KUNDER_I_DINERO() ? "Vælg kunden i Dinero-listen først" : "Vælg kunden i listen først")
-    : konkretDobbelt ? "Den samme dato står to gange på listen"
-    : konkretFortid ? "En af datoerne er passeret — ret eller fjern den"
-    : (type === "fixed" && !erKonkret && !!startDate && startDate < todayIso()) ? "Startdatoen er passeret — ret den til i dag eller senere"
-    : manglerDage ? (planInterval === "konkrete_datoer" ? "Tilføj mindst én dato" : "Vælg mindst én ugedag")
-    : requiredSkills.length === 0 ? "Tilføj mindst ét kompetencekrav (knappen «Tilføj kompetencekrav»)"
-    : "";
+  // Alle ting, der mangler — ikke kun den første. Vises som popup, når man trykker på «Godkend og planlæg».
+  const mangler = [
+    !title.trim() && "Aftalen mangler en titel",
+    manglerDineroKunde && (KUNDER_I_DINERO() ? "Vælg kunden i Dinero-listen" : "Vælg kunden i listen"),
+    konkretDobbelt && "Den samme dato står to gange på listen",
+    konkretFortid && "En af datoerne er passeret — ret eller fjern den",
+    (type === "fixed" && !erKonkret && !!startDate && startDate < todayIso()) && "Startdatoen er passeret — ret den til i dag eller senere",
+    manglerDage && (planInterval === "konkrete_datoer" ? "Tilføj mindst én dato" : "Vælg mindst én ugedag"),
+    requiredSkills.length === 0 && "Tilføj mindst ét kompetencekrav (knappen «Tilføj kompetencekrav»)",
+  ].filter(Boolean);
+  const blokeretGrund = mangler.join(" · ");
   async function gemEnGang(nyttelast) {
     if (gemmer) return;
     setGemmer(true);
@@ -12180,11 +12182,11 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
 
       <div style={{ ...styles.modalActions, position: "sticky", bottom: 0, zIndex: 5, background: "#F8FAFC", borderTop: "1px solid #E2E8F0", padding: "12px 84px 12px 18px", margin: "0 -18px -16px" }}>
         {venteBesked && <div style={{ flex: 1, fontSize: 12.5, color: "#1D4ED8", lineHeight: 1.4 }}>{venteBesked}</div>}
-        {!venteBesked && blokeretGrund && <div role="alert" style={{ flex: 1, fontSize: 13, fontWeight: 600, color: "#B91C1C", lineHeight: 1.4 }}>Kan ikke godkendes endnu: {blokeretGrund}</div>}
+        {!venteBesked && blokeretGrund && <div role="alert" style={{ flex: 1, fontSize: 13, fontWeight: 600, color: "#B91C1C", lineHeight: 1.4 }}>Mangler: {blokeretGrund}</div>}
         <button style={styles.secondaryBtn} disabled={gemmer} onClick={onClose}>Annuller</button>
         <button
-          style={{ ...styles.primaryBtn, opacity: gemmer || blokeretGrund ? 0.5 : 1, cursor: blokeretGrund ? "not-allowed" : "pointer" }}
-          disabled={gemmer || !title.trim() || manglerDineroKunde || manglerDage || konkretDobbelt || konkretFortid || requiredSkills.length === 0 || (type === "fixed" && !erKonkret && !!startDate && startDate < todayIso())}
+          style={{ ...styles.primaryBtn, opacity: gemmer || blokeretGrund ? 0.6 : 1 }}
+          disabled={gemmer}
           // En slaaet fra knap uden forklaring er det samme som ingen besked. Her
           // staar grunden, naar man holder musen over — og for startdatoen staar den
           // ogsaa i sidepanelet, hvor man ikke skal lede efter den.
@@ -12199,6 +12201,10 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
             : !title.trim() ? "Aftalen mangler en titel"
             : undefined}
           onClick={() => {
+            if (mangler.length) {
+              window.alert("Aftalen kan ikke gemmes endnu. Det mangler:\n\n" + mangler.map((x) => "• " + x).join("\n"));
+              return;
+            }
             // Paa Nexus og AEldrelov er kunden den der faar REGNINGEN — kommunen.
             // Arbejdet foregaar hjemme hos en borger, og borgerens navn staar i
             // fakturabeskrivelsen. Er den tom, ser medarbejderen kun en adresse i
