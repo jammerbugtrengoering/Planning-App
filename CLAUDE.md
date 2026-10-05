@@ -22,9 +22,14 @@ Rytme, interval, startdato, udløb, udeladte dage. **Fire ting, og de hænger sa
 1. **`src/aftalerytme.js`** er reglen. Ikke App.jsx. Funktionen `aftaleKoererPaaDag`
    afgør både hvilke opgaver der bliver **oprettet**, og hvilke der bliver **ryddet væk**
    igen. Retter du kun App.jsx, bliver opgaverne dannet ét sted og fjernet et andet.
-2. **Tabellen `UGEINTERVAL` i samme fil.** Står din nye værdi ikke i den, falder reglen
-   tilbage på `|| 1` — altså **hver uge**, uden fejl og uden advarsel. Sker det på en
-   aftale, der skulle køre to gange om året, bliver det til 26 besøg.
+2. **`ugerFra`/`maanederFra`/`intervalNoegle` i samme fil** (siden 5.10.2026 en regel i
+   stedet for en tabel: `N_uger` 1-52, `N_maaned` 1-12, plus de gamle `uge` og `14_dage`).
+   Står en værdi ikke i reglen, falder den tilbage på `|| 1` — altså **hver uge**, uden fejl
+   og uden advarsel. Sker det på en aftale, der skulle køre to gange om året, bliver det til
+   26 besøg. **Formularen skriver kun værdier gennem `intervalNoegle()`**, og testen kører
+   hver mulig værdi igennem. Skriv aldrig en intervaltekst i hånden. En browserfane med den
+   gamle kode kender kun `uge`, `14_dage`, `4_uger`, `6_uger` og `3_maaned` — de andre
+   falder tilbage på hver uge, indtil fanen er genindlæst (se `src/nyversion.js`).
 3. **`aftalerytme.test.mjs`.** Filens egen første sætning beder om det. Kør
    `node aftalerytme.test.mjs`.
 4. **Hjælpeteksten** i `MODULE_HELP` — og skriv, hvad rytmen gør ved årets besøg, ikke

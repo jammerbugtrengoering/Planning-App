@@ -11,10 +11,55 @@
 const DAG_TIL_INDEKS = { Mon: 0, Tue: 1, Wed: 2, Thu: 3, Fri: 4, Sat: 5, Sun: 6 };
 export const DAG_FRA_INDEKS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
-// 'maaned' står stadig i listen, fordi der kan ligge gamle rækker med den værdi.
-// De behandles som fire uger — det samme som den knap, de nu svarer til.
-const UGEINTERVAL = { uge: 1, "14_dage": 2, "4_uger": 4, "6_uger": 6, maaned: 4 };
-const MAANEDSINTERVAL = { "3_maaned": 3 };
+// Intervallet står i databasen som en tekst, og NU kan antallet vælges frit (5.10.2026):
+//   uge, 14_dage, N_uger   hver N. uge, 1-52. «uge» og «14_dage» er de gamle navne for 1
+//                          og 2 og bliver ved at blive skrevet, så en browserfane med den
+//                          gamle kode stadig forstår de to hyppigste rytmer.
+//   N_maaned               hver N. måned, 1-12, efter kalenderen.
+//   maaned                 gammel værdi, behandles som fire uger.
+//
+// Står en ukendt værdi her, falder reglen tilbage på «hver uge» uden fejl og uden
+// advarsel — det er den fælde, CLAUDE.md beskriver. Derfor går ALT, hvad formularen kan
+// skrive, gennem intervalNoegle() herunder, og testen kører hver mulig værdi igennem.
+const GAMLE_UGER = { uge: 1, "14_dage": 2, maaned: 4 };
+
+// Uger mellem besøgene, eller null hvis intervallet ikke tælles i uger.
+export function ugerFra(planInterval) {
+  if (Object.hasOwn(GAMLE_UGER, planInterval)) return GAMLE_UGER[planInterval];
+  const m = /^(\d{1,2})_uger$/.exec(String(planInterval || ""));
+  const n = m ? Number(m[1]) : 0;
+  return n >= 1 && n <= 52 ? n : null;
+}
+
+// Måneder mellem besøgene, eller null hvis intervallet ikke tælles i måneder.
+export function maanederFra(planInterval) {
+  const m = /^(\d{1,2})_maaned$/.exec(String(planInterval || ""));
+  const n = m ? Number(m[1]) : 0;
+  return n >= 1 && n <= 12 ? n : null;
+}
+
+// Fra formularens valg til den tekst, der gemmes. art: "uger" | "maaneder".
+export function intervalNoegle(art, n) {
+  const antal = Math.round(Number(n)) || 1;
+  if (art === "maaneder") return `${Math.min(12, Math.max(1, antal))}_maaned`;
+  const uger = Math.min(52, Math.max(1, antal));
+  return uger === 1 ? "uge" : uger === 2 ? "14_dage" : `${uger}_uger`;
+}
+
+// Den modsatte vej: fra den gemte tekst til formularens valg.
+export function intervalValg(planInterval) {
+  if (planInterval === KONKRETE) return { art: "datoer", n: 1 };
+  const m = maanederFra(planInterval);
+  if (m) return { art: "maaneder", n: m };
+  return { art: "uger", n: ugerFra(planInterval) || 1 };
+}
+
+// Uger mellem to besøg som tal, til overslag. Et kvartal er 13 uger.
+export function ugerMellemBesoeg(planInterval) {
+  const m = maanederFra(planInterval);
+  if (m) return (m * 52) / 12;
+  return ugerFra(planInterval) || 1;
+}
 
 export function mandagIUgen(dato) {
   const d = new Date(dato.getFullYear(), dato.getMonth(), dato.getDate());
@@ -34,7 +79,7 @@ export function isoDato(d) {
 
 // Rammer aftalens kadence denne uge? Dage og datoer afgøres separat nedenfor.
 function ugenPasser(tpl, ugensMandag) {
-  const intervalMaaneder = MAANEDSINTERVAL[tpl.planInterval];
+  const intervalMaaneder = maanederFra(tpl.planInterval);
   if (intervalMaaneder) {
     // «Hver 3. måned» planlægges efter KALENDERMÅNED — et kvartalsbesøg hører til en
     // bestemt tid på året, ikke til hver trettende uge. Uden startdato findes der
@@ -59,7 +104,7 @@ function ugenPasser(tpl, ugensMandag) {
     }
     return false;
   }
-  const uger = UGEINTERVAL[tpl.planInterval] || 1;
+  const uger = ugerFra(tpl.planInterval) || 1;
   if (uger === 1) return true;
   const anker = tpl.startDate ? mandagIUgen(new Date(tpl.startDate)) : ugensMandag;
   // Math.round og ikke heltalsdivision: mellem to mandage kan der ligge et
@@ -182,7 +227,7 @@ export function nyStartdatoHvisPasseret(tpl, idag = new Date()) {
   const imorgen = new Date(nu);
   imorgen.setDate(imorgen.getDate() + 1);
 
-  const maaneder = MAANEDSINTERVAL[tpl.planInterval];
+  const maaneder = maanederFra(tpl.planInterval);
   if (maaneder) {
     // Samme dag i måneden. Rammer datoen ikke i en kort måned (den 31.), tages
     // sidste dag i måneden — samme regel som ugenPasser bruger.
@@ -198,7 +243,7 @@ export function nyStartdatoHvisPasseret(tpl, idag = new Date()) {
     return isoDato(imorgen);
   }
 
-  const uger = UGEINTERVAL[tpl.planInterval] || 1;
+  const uger = ugerFra(tpl.planInterval) || 1;
   if (uger === 1) return isoDato(imorgen);
 
   const anker = mandagIUgen(startDag);
@@ -210,4 +255,53 @@ export function nyStartdatoHvisPasseret(tpl, idag = new Date()) {
     d.setDate(d.getDate() + 1);
   }
   return isoDato(imorgen);
+}
+
+// ── Overblik til formularen ─────────────────────────────────────────────────
+// Besøgene regnes af SAMME regel, som danner opgaverne (aftaleKoererPaaDag), og ikke af en
+// kopi i formularen. En kopi kunne vise 26 besøg, mens appen dannede 6.
+// Returnerer { antal, foerste: ["YYYY-MM-DD", ...] }.
+export function besoegIPeriode(tpl, maksFoerste = 4) {
+  const t = { ...tpl, status: "aktiv", excludedDays: [] };
+  if (t.planInterval === KONKRETE) {
+    const liste = rensKonkreteDatoer(t.konkreteDatoer);
+    return { antal: liste.length, foerste: liste.slice(0, maksFoerste).map((d) => d.dato) };
+  }
+  if (!t.startDate || !t.expiryDate) return { antal: 0, foerste: [] };
+  const slut = new Date(t.expiryDate);
+  let mandag = mandagIUgen(new Date(t.startDate));
+  const foerste = [];
+  let antal = 0;
+  // Op til tre år, så en forkert slutdato ikke kan hænge formularen.
+  for (let u = 0; u < 160 && mandag <= slut; u++) {
+    for (const dag of DAG_FRA_INDEKS) {
+      if (!aftaleKoererPaaDag(t, mandag, dag)) continue;
+      antal++;
+      if (foerste.length < maksFoerste) {
+        const d = new Date(mandag);
+        d.setDate(d.getDate() + DAG_TIL_INDEKS[dag]);
+        foerste.push(isoDato(d));
+      }
+    }
+    mandag = new Date(mandag);
+    mandag.setDate(mandag.getDate() + 7);
+  }
+  return { antal, foerste };
+}
+
+const DAGENAVN = { Mon: "mandag", Tue: "tirsdag", Wed: "onsdag", Thu: "torsdag", Fri: "fredag", Sat: "lørdag", Sun: "søndag" };
+
+// «Hver 4. uge på tirsdag» — sætningen under valgene. Samme tekst på formular og i test.
+export function beskrivRytme(planInterval, dage, startDate) {
+  const valg = intervalValg(planInterval);
+  if (valg.art === "datoer") return "Kun de datoer, du har valgt. Ugedage og slutdato bruges ikke.";
+  const navne = (dage || []).map((d) => DAGENAVN[d]).filter(Boolean);
+  const dagetekst = navne.length < 2 ? navne.join("") : navne.slice(0, -1).join(", ") + " og " + navne[navne.length - 1];
+  if (valg.art === "maaneder") {
+    const dato = startDate ? new Date(startDate).getDate() : null;
+    const hver = valg.n === 1 ? "hver måned" : `hver ${valg.n}. måned`;
+    return `Gentages ${hver}${dato ? `, i den uge hvor den ${dato}. falder` : ""}${dagetekst ? `, på ${dagetekst}` : ""}.`;
+  }
+  const hver = valg.n === 1 ? "hver uge" : `hver ${valg.n}. uge`;
+  return `Gentages ${hver}${dagetekst ? ` på ${dagetekst}` : ""}.`;
 }

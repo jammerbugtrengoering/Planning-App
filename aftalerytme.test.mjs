@@ -5,7 +5,8 @@
 // rydder appen enten opgaver væk, der skulle være der, eller lader opgaver stå, der
 // ikke skulle. Begge dele rammer en rigtig medarbejders dag.
 
-import { aftaleKoererPaaDag, mandagIUgen, isoDato, nyStartdatoHvisPasseret, rensKonkreteDatoer, konkretDato } from "./src/aftalerytme.js";
+import { aftaleKoererPaaDag, mandagIUgen, isoDato, nyStartdatoHvisPasseret, rensKonkreteDatoer, konkretDato,
+  ugerFra, maanederFra, intervalNoegle, intervalValg, ugerMellemBesoeg, besoegIPeriode, beskrivRytme, KONKRETE } from "./src/aftalerytme.js";
 
 let fejl = 0, koert = 0;
 function er(hvad, faktisk, forventet) {
@@ -191,6 +192,64 @@ er("isoDato er lokal i vintertid", isoDato(new Date(2026, 0, 8)), "2026-01-08");
     ["2026-10-01||60", "2026-11-02|09:00|null"]);
   er("konkret: startdato flyttes ikke", nyStartdatoHvisPasseret({ ...k, startDate: "2026-09-01" }, new Date(2026, 9, 1)), null);
   er("konkret: andre rytmer kender ikke listen", konkretDato({ ...k, planInterval: "uge" }, "2026-10-14"), null);
+}
+
+// ── Frit valgt antal uger og måneder (5.10.2026) ────────────────────────────
+// Beskytter mod den fælde, CLAUDE.md beskriver: en værdi, reglen ikke kender, bliver
+// til «hver uge» uden fejl. Hver værdi, formularen kan skrive, skal derfor kunne læses
+// tilbage som præcis det antal, den blev skrevet med.
+{
+  for (let n = 1; n <= 52; n++) {
+    const nk = intervalNoegle("uger", n);
+    er(`uger ${n} læses tilbage`, ugerFra(nk), n);
+    er(`uger ${n} er ikke en måned`, maanederFra(nk), null);
+    er(`uger ${n}: valget gendannes`, intervalValg(nk), { art: "uger", n });
+  }
+  for (let n = 1; n <= 12; n++) {
+    const nk = intervalNoegle("maaneder", n);
+    er(`måneder ${n} læses tilbage`, maanederFra(nk), n);
+    er(`måneder ${n} er ikke uger`, ugerFra(nk), null);
+    er(`måneder ${n}: valget gendannes`, intervalValg(nk), { art: "maaneder", n });
+  }
+  // De gamle navne bevares for 1 og 2 uger og for de kendte værdier, så en gammel fane forstår dem.
+  er("1 uge gemmes som «uge»", intervalNoegle("uger", 1), "uge");
+  er("2 uger gemmes som «14_dage»", intervalNoegle("uger", 2), "14_dage");
+  er("4 uger gemmes som «4_uger»", intervalNoegle("uger", 4), "4_uger");
+  er("3 måneder gemmes som «3_maaned»", intervalNoegle("maaneder", 3), "3_maaned");
+  er("ud over grænserne klemmes tallet", [intervalNoegle("uger", 99), intervalNoegle("maaneder", 99), intervalNoegle("uger", 0)], ["52_uger", "12_maaned", "uge"]);
+  er("ukendt tekst er ikke en rytme", [ugerFra("3_dage"), maanederFra("13_maaned"), ugerFra("0_uger"), ugerFra(undefined)], [null, null, null, null]);
+  er("konkrete datoer har sit eget valg", intervalValg(KONKRETE).art, "datoer");
+  er("kvartal er 13 uger mellem besøg", ugerMellemBesoeg("3_maaned"), 13);
+  er("14_dage er 2 uger mellem besøg", ugerMellemBesoeg("14_dage"), 2);
+
+  // Hver 3. uge: kadencen tælles fra startdatoens mandag.
+  const treUger = { days: ["Tue"], planInterval: intervalNoegle("uger", 3), startDate: "2026-10-06", status: "aktiv" };
+  er("hver 3. uge: første", aftaleKoererPaaDag(treUger, man(2026, 10, 5), "Tue"), true);
+  er("hver 3. uge: efter 1", aftaleKoererPaaDag(treUger, man(2026, 10, 12), "Tue"), false);
+  er("hver 3. uge: efter 2", aftaleKoererPaaDag(treUger, man(2026, 10, 19), "Tue"), false);
+  er("hver 3. uge: efter 3", aftaleKoererPaaDag(treUger, man(2026, 10, 26), "Tue"), true);
+  // Hver 12. måned: ét besøg om året, samme uge hvert år.
+  const aarlig = { days: ["Wed"], planInterval: intervalNoegle("maaneder", 12), startDate: "2026-03-04", status: "aktiv" };
+  er("hver 12. måned: første", aftaleKoererPaaDag(aarlig, man(2026, 3, 2), "Wed"), true);
+  er("hver 12. måned: et halvt år efter", aftaleKoererPaaDag(aarlig, man(2026, 9, 7), "Wed"), false);
+  er("hver 12. måned: året efter", aftaleKoererPaaDag(aarlig, man(2027, 3, 1), "Wed"), true);
+  // Ny startdato holder rytmen for et vilkårligt antal uger.
+  const flyt = nyStartdatoHvisPasseret({ startDate: "2026-09-08", planInterval: "3_uger" }, new Date(2026, 9, 1));
+  er("hver 3. uge: flyttet startdato ligger i de samme uger", ((Math.round((mandagIUgen(new Date(flyt)) - mandagIUgen(new Date("2026-09-08"))) / 6048e5)) % 3), 0);
+
+  // Overblikket skal tælle det samme, som reglen danner.
+  const ov = besoegIPeriode({ days: ["Tue"], planInterval: "4_uger", startDate: "2026-10-06", expiryDate: "2028-10-05" });
+  er("overblik: 27 besøg på to år hver 4. uge (første og sidste tæller med)", ov.antal, 27);
+  er("overblik: de første datoer", ov.foerste, ["2026-10-06", "2026-11-03", "2026-12-01", "2026-12-29"]);
+  er("overblik: onsdag og fredag hver uge, én måned",
+     besoegIPeriode({ days: ["Wed", "Fri"], planInterval: "uge", startDate: "2026-10-05", expiryDate: "2026-10-18" }).foerste,
+     ["2026-10-07", "2026-10-09", "2026-10-14", "2026-10-16"]);
+  er("overblik: uden slutdato intet", besoegIPeriode({ days: ["Tue"], planInterval: "uge", startDate: "2026-10-06" }).antal, 0);
+  er("overblik: konkrete datoer tælles på listen",
+     besoegIPeriode({ planInterval: KONKRETE, konkreteDatoer: [{ dato: "2026-11-03" }, { dato: "2026-12-15" }] }).antal, 2);
+  er("tekst: hver 4. uge på tirsdag", beskrivRytme("4_uger", ["Tue"], "2026-10-06"), "Gentages hver 4. uge på tirsdag.");
+  er("tekst: onsdag og fredag", beskrivRytme("uge", ["Wed", "Fri"], "2026-10-07"), "Gentages hver uge på onsdag og fredag.");
+  er("tekst: hver 12. måned", beskrivRytme("12_maaned", ["Wed"], "2026-03-04"), "Gentages hver 12. måned, i den uge hvor den 4. falder, på onsdag.");
 }
 
 if (fejl > 0) {

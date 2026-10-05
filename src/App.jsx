@@ -8,7 +8,8 @@ import { fakturerbareMinutter, registreredeMinutter, oplaeringsFolk, erUnderOpla
          fordelingen, harFordeling } from "./opgavetid.js";
 import { supabase } from "./supabaseClient";
 import { FIRMA, useFirma, brugTitel, opdaterFirma, farveHex, harModul, KUNDEUDGAVE, hentFirmaEfterSlug, slugFraAdresse, genhentFirma } from "./firma";
-import { aftaleKoererPaaDag, DAG_FRA_INDEKS, nyStartdatoHvisPasseret, KONKRETE, rensKonkreteDatoer, konkretDato } from "./aftalerytme";
+import { aftaleKoererPaaDag, DAG_FRA_INDEKS, nyStartdatoHvisPasseret, KONKRETE, rensKonkreteDatoer, konkretDato,
+  intervalNoegle, intervalValg, ugerMellemBesoeg, besoegIPeriode, beskrivRytme } from "./aftalerytme";
 import { holdOejeMedNyVersion } from "./nyversion";
 import { filtrerUgevalg } from "./ugevalg";
 import { portefoeljeTal, aarMedBesoeg } from "./portefoelje";
@@ -2237,9 +2238,10 @@ const MODULE_HELP = {
     { h: "Sådan læses den", p: ["Kontraktsum er forventet omsætning over hele perioden ud fra planlagte timer.",
         "Realiseret er hvad der faktisk er registreret.", "Dage tilbage viser hvor længe der er til aftalen udløber."] },
     { h: "Gentagelse", p: [
-        "En aftale kan gentages hver uge, hver 14. dag, hver 4. uge, hver 6. uge eller hver 3. måned. Kadencen tælles fra startdatoen.",
+        "Under «Plan parametre» vælger du først, om aftalen gentages ugentligt, månedligt eller på bestemte datoer. Ved Ugentligt og Månedligt skriver du selv antallet: hver uge, hver 2. uge, hver 3. uge og så videre op til hver 52. uge — eller hver måned, hver 3. måned og så videre op til hver 12. måned. Kadencen tælles fra startdatoen.",
+        "Under valgene står en sætning og et antal besøg, fx «Gentages hver 4. uge på tirsdag» og «27 besøg i alt». Tallet regnes af den samme regel, der opretter opgaverne, så tjek det, før du godkender: står der 26 besøg, hvor du ventede 6, er rytmen ikke den, du tror.",
         "«Hver 4. uge» er ikke det samme som en gang om måneden. Det giver 13 besøg om året i stedet for 12, og dagen vandrer gennem kalenderen — et besøg den 5. bliver med tiden den 28. Til gengæld ligger det altid på den samme ugedag, og det er sådan, rengøring aftales i praksis.",
-        "Vil du have en fast dato i måneden i stedet, findes den mulighed ikke længere. Sig til, hvis I får brug for den."] }, { h: "Under udarbejdelse", p: ["Er du ikke færdig med en ny aftale, så tryk «Gem som kladde» i stedet for «Gem og planlæg».", "En kladde opretter ingen opgaver. Den ligger og venter, og du kan rette alle felter i den så mange gange du vil.", "Find den igen med filteret «Under udarbejdelse» øverst her på siden. Tallet i knappen viser hvor mange der ligger.", "Tryk «Åbn og godkend» for at rette videre. Inde i aftalen vælger du så «Gem kladde» hvis du stadig ikke er færdig, eller «Godkend og planlæg» når den er klar.", "«Gem kladde» findes kun på nye aftaler og kladder. Retter du en aftale, der allerede kører, gemmer du med «Godkend og planlæg» — en aftale, der kører, kan ikke laves om til en kladde, for så ville alle dens kommende opgaver blive slettet.", "Først ved godkendelsen oprettes opgaverne — fra startdatoen og frem til udløbsdatoen. Det kan være mange på én gang, så tjek datoerne inden du godkender.", "Er startdatoen løbet fra kladden, mens den lå i bunken, flytter appen den frem, når du åbner den — og siger det med blåt øverst i kolonnen til højre, med både den gamle og den nye dato.", "Den nye dato er ikke altid i morgen. Startdatoen er nemlig ankeret for rytmen: for «hver 14. dag» tæller systemet uger fra startdatoens mandag, så flytter man datoen én uge, skifter aftalen fra lige til ulige uger. Derfor vælges den første dag fra i morgen, der holder aftalen i de samme uger som før. Passer det ikke, retter du den selv.", "Datoerne kommer fra kladden. Indtil 21. september 2026 stod der «i dag» og «i dag + 1 år» uanset hvad, så en kladde med toårig løbetid blev etårig ved godkendelsen — uden at nogen fik det at vide.", "Er kladden lavet ved en indlæsning, står der en gul «Bemærkning til kontoret» med det, indlæsningen ikke kunne afgøre — manglende kundenavn, en gættet kontrakttype, noter fra det ark den kom fra. Læs den, ret det den peger på, og godkend så.", "På en bred skærm står bemærkningen i en kolonne til højre, og den bliver hængende, mens du bladrer ned gennem felterne. Den hørte før nederst, altså længst væk fra det, den handler om. Er skærmen for smal til to kolonner, står den øverst i stedet.", "Ligner kladden en aftale, der allerede findes, står advarslen øverst i den samme kolonne — med hvilken aftale, hvilken dag og hvor længe. Den regnes ud fra det, der står i felterne lige nu, så retter du adressen eller dagen, forsvinder den af sig selv.", "Feltet vises kun, så længe aftalen er en kladde. Når den er godkendt, er noten gjort op, og feltet forsvinder — teksten bliver stående i databasen, men skal ikke stå og fylde bagefter."] }, { h: "Del kladdebunken op", p: [
+        "Skal besøgene ligge sjældnere end hver 12. måned, eller uden fast rytme — fx hver 15. måned — så vælg «Bestemte datoer» og skriv datoerne ind én for én."] }, { h: "Under udarbejdelse", p: ["Er du ikke færdig med en ny aftale, så tryk «Gem som kladde» i stedet for «Gem og planlæg».", "En kladde opretter ingen opgaver. Den ligger og venter, og du kan rette alle felter i den så mange gange du vil.", "Find den igen med filteret «Under udarbejdelse» øverst her på siden. Tallet i knappen viser hvor mange der ligger.", "Tryk «Åbn og godkend» for at rette videre. Inde i aftalen vælger du så «Gem kladde» hvis du stadig ikke er færdig, eller «Godkend og planlæg» når den er klar.", "«Gem kladde» findes kun på nye aftaler og kladder. Retter du en aftale, der allerede kører, gemmer du med «Godkend og planlæg» — en aftale, der kører, kan ikke laves om til en kladde, for så ville alle dens kommende opgaver blive slettet.", "Først ved godkendelsen oprettes opgaverne — fra startdatoen og frem til udløbsdatoen. Det kan være mange på én gang, så tjek datoerne inden du godkender.", "Er startdatoen løbet fra kladden, mens den lå i bunken, flytter appen den frem, når du åbner den — og siger det med blåt øverst i kolonnen til højre, med både den gamle og den nye dato.", "Den nye dato er ikke altid i morgen. Startdatoen er nemlig ankeret for rytmen: for «hver 14. dag» tæller systemet uger fra startdatoens mandag, så flytter man datoen én uge, skifter aftalen fra lige til ulige uger. Derfor vælges den første dag fra i morgen, der holder aftalen i de samme uger som før. Passer det ikke, retter du den selv.", "Datoerne kommer fra kladden. Indtil 21. september 2026 stod der «i dag» og «i dag + 1 år» uanset hvad, så en kladde med toårig løbetid blev etårig ved godkendelsen — uden at nogen fik det at vide.", "Er kladden lavet ved en indlæsning, står der en gul «Bemærkning til kontoret» med det, indlæsningen ikke kunne afgøre — manglende kundenavn, en gættet kontrakttype, noter fra det ark den kom fra. Læs den, ret det den peger på, og godkend så.", "På en bred skærm står bemærkningen i en kolonne til højre, og den bliver hængende, mens du bladrer ned gennem felterne. Den hørte før nederst, altså længst væk fra det, den handler om. Er skærmen for smal til to kolonner, står den øverst i stedet.", "Ligner kladden en aftale, der allerede findes, står advarslen øverst i den samme kolonne — med hvilken aftale, hvilken dag og hvor længe. Den regnes ud fra det, der står i felterne lige nu, så retter du adressen eller dagen, forsvinder den af sig selv.", "Feltet vises kun, så længe aftalen er en kladde. Når den er godkendt, er noten gjort op, og feltet forsvinder — teksten bliver stående i databasen, men skal ikke stå og fylde bagefter."] }, { h: "Del kladdebunken op", p: [
         "Vælger du «Under udarbejdelse», kommer der to filtre mere frem, som kun findes dér.",
         "Det ene deler bunken i dem, der ser ud som dubletter, og dem der ikke gør. Tag dubletterne først — det er dem, der enten skal slettes eller lægges sammen med en aftale, der allerede kører, og de fylder mest.",
         "Det andet er en liste med medarbejdere. Listen viser kun dem, der faktisk har kladder, og tallet siger hvor mange. Så kan du tage én medarbejders ruteplan ad gangen og få alle spørgsmålene afklaret med hende på én gang.",
@@ -2279,7 +2281,7 @@ const MODULE_HELP = {
         "Brug det til noget, der ikke skulle have været der: en dublet, en fejlindlæsning. Skal en rigtig aftale stoppe, er «Markér som udgået» det rigtige — den beholder historikken og det, der er faktureret.",
         "En aftale, der HAR opgaver, bliver ikke slettet. Sletningen springer den over og siger det, for en sletning ville efterlade opgaverne som løse uden aftale. Brug «udgået» på dem."] },
     { h: "Konkrete datoer", p: ["Til opgaver uden fast rytme — fx sommerhuse, hvor datoerne kommer fra kunden. Hver dato har sit eget klokkeslæt og sin egen opgavetid.", "Opgavetiden udfyldes med aftalens varighed, når du trykker «+ Tilføj dato», og kan rettes for den enkelte dato — fx en længere slutrengøring.", "Ugedagene skjules, så længe «Konkrete datoer» er valgt. Skifter du tilbage til en fast rytme, kommer de igen, som de var.", "Start- og udløbsdato sættes af sig selv til første og sidste dato på listen. «+ Tilføj dato» foreslår ugen efter den sidste dato med samme klokkeslæt.", "Listen kan rettes løbende — også på en godkendt aftale: en ny dato får en opgave, en fjernet dato får sin kommende opgave slettet, og et nyt klokkeslæt eller en ny opgavetid rettes på opgaven. Udførte opgaver og opgaver med registreret tid røres ikke.", "På en ny aftale eller en kladde må ingen dato være passeret, og den samme dato må ikke stå to gange.", "I aftalelisten står «📅 Konkrete datoer (antal) · næste dato» i stedet for ugedagene. Hold musen over for at se alle datoer. Kontraktsummen er summen af besøgene på listen."] },
-  ], warn: "«Hver 3. måned» følger kalenderen: besøget lander i den uge, der indeholder samme dato som startdatoen — altså fire besøg om året på samme tid. Er startdatoen den 31., rammes sidste dag i korte måneder, så intet kvartal springes over. «Hver 4. uge» og «Hver 6. uge» tæller derimod i uger og vandrer gennem kalenderen — 13 henholdsvis 8-9 besøg om året, altid på samme ugedag." },
+  ], warn: "«Månedligt» følger kalenderen: besøget lander i den uge, der indeholder samme dato som startdatoen — hver 3. måned giver altså fire besøg om året på samme tid. Er startdatoen den 31., rammes sidste dag i korte måneder, så intet kvartal springes over. «Ugentligt» med flere uger imellem tæller derimod i uger og vandrer gennem kalenderen — hver 4. uge giver 13 besøg om året, hver 6. uge 8-9, altid på samme ugedag." },
 
   drift: { title: "Drift", intro: "Kører løsningen, og er der noget, nogen skal tage fat i?", blocks: [
     { h: "Siden kan ikke sige, at noget er nede", p: [
@@ -11256,6 +11258,8 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
   // en kadence, og den foerste der aabner den, kommer til at vaelge en ny i blinde.
   const [planInterval, setPlanInterval] = useState(
     copyFrom?.planInterval === "maaned" ? "4_uger" : (copyFrom?.planInterval || "uge"));
+  // Formularens valg (art + antal), afledt af den gemte tekst. Se aftalerytme.js.
+  const rytmeValg = intervalValg(planInterval);
   const [title, setTitle] = useState(copyFrom ? (editId ? copyFrom.title : `Kopi af ${copyFrom.title}`) : "");
   const [duration, setDuration] = useState(copyFrom?.duration || 60);
   const [requiredSkills, setRequiredSkills] = useState(copyFrom?.requiredSkills || [{ skill: skills[0] ?? "", minLevel: 1 }]);
@@ -11780,16 +11784,58 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
           <input type="date" min={todayIso()} style={styles.input} value={startDate} onChange={(e) => setStartDate(e.target.value)} />{startDate && startDate < todayIso() && (<div style={{ ...styles.hint, color: "#B91C1C" }}>Startdatoen kan ikke ligge i fortiden — vælg dags dato eller senere.</div>)}
           <label style={styles.label}>Udløbsdato (aftalen gælder til og med)</label>
           <input type="date" style={styles.input} value={expiryDate} onChange={(e) => setExpiryDate(e.target.value)} />
+          {startDate && (
+            <div style={{ display: "flex", gap: 8, margin: "-4px 0 8px" }}>
+              {[1, 2].map((aar) => (
+                <button key={aar} type="button" style={{ ...styles.secondaryBtn, padding: "5px 12px", fontSize: 13 }}
+                  onClick={() => {
+                    // Ét år fra start er dagen FØR årsdagen: 6.10.2026 + 1 år slutter 5.10.2027.
+                    const [y, m, d] = startDate.split("-").map(Number);
+                    const e = new Date(y + aar, m - 1, d - 1);
+                    setExpiryDate(`${e.getFullYear()}-${String(e.getMonth() + 1).padStart(2, "0")}-${String(e.getDate()).padStart(2, "0")}`);
+                  }}>{aar} år</button>
+              ))}
+            </div>
+          )}
           </>)}
+          {/* Plan parametre (5.10.2026): tre valg og et tal i stedet for seks faste knapper.
+              Tallet er antal uger (1-52) eller måneder (1-12); alt andet — fx hver 15.
+              måned — er «Bestemte datoer». Intervallet gemmes stadig som den samme tekst i
+              planInterval; intervalNoegle()/intervalValg() i src/aftalerytme.js er eneste vej
+              ind og ud, så formularen aldrig kan skrive en værdi, reglen ikke kender. */}
           <label style={styles.label}>Plan parametre</label>
           <div style={styles.typePicker}>
-            {[["uge","Hver uge"],["14_dage","Hver 14. dag"],["4_uger","Hver 4. uge"],["6_uger","Hver 6. uge"],["3_maaned","Hver 3. måned"],["konkrete_datoer","Konkrete datoer"]].map(([k,l]) => (
-              <button key={k} type="button" onClick={() => setPlanInterval(k)}
-                style={planInterval === k ? { ...styles.typePickBtn, borderColor:"var(--farve)", color:"var(--farve)", background:"var(--farve-lys)" } : styles.typePickBtn}>
+            {[["uger","Ugentligt"],["maaneder","Månedligt"],["datoer","Bestemte datoer"]].map(([art,l]) => (
+              <button key={art} type="button"
+                onClick={() => { if (rytmeValg.art !== art) setPlanInterval(art === "datoer" ? KONKRETE : intervalNoegle(art, 1)); }}
+                style={rytmeValg.art === art ? { ...styles.typePickBtn, borderColor:"var(--farve)", color:"var(--farve)", background:"var(--farve-lys)" } : styles.typePickBtn}>
                 {l}
               </button>
             ))}
           </div>
+          {rytmeValg.art !== "datoer" && (
+            <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "10px 0 2px", flexWrap: "wrap" }}>
+              <span style={{ fontSize: 13.5, color: "#5B5B60", fontWeight: 600 }}>Hver</span>
+              <button type="button" aria-label="Ét mindre" disabled={rytmeValg.n <= 1}
+                style={{ ...styles.secondaryBtn, padding: "7px 12px" }}
+                onClick={() => setPlanInterval(intervalNoegle(rytmeValg.art, rytmeValg.n - 1))}>−</button>
+              <input type="number" min="1" max={rytmeValg.art === "maaneder" ? 12 : 52}
+                aria-label={rytmeValg.art === "maaneder" ? "Antal måneder mellem besøg" : "Antal uger mellem besøg"}
+                style={{ ...styles.input, width: 72, marginBottom: 0, textAlign: "center", fontWeight: 600 }}
+                value={rytmeValg.n}
+                onChange={(e) => { const v = Number(e.target.value); if (v >= 1) setPlanInterval(intervalNoegle(rytmeValg.art, v)); }} />
+              <button type="button" aria-label="Ét mere"
+                disabled={rytmeValg.n >= (rytmeValg.art === "maaneder" ? 12 : 52)}
+                style={{ ...styles.secondaryBtn, padding: "7px 12px" }}
+                onClick={() => setPlanInterval(intervalNoegle(rytmeValg.art, rytmeValg.n + 1))}>+</button>
+              <span style={{ fontSize: 13.5, color: "#5B5B60" }}>
+                {rytmeValg.art === "maaneder" ? (rytmeValg.n === 1 ? "måned" : "måneder") : (rytmeValg.n === 1 ? "uge" : "uger")}
+              </span>
+            </div>
+          )}
+          {rytmeValg.art === "maaneder" && (
+            <div style={styles.hint}>Højst 12 måneder. Skal besøgene ligge sjældnere eller uregelmæssigt, så brug «Bestemte datoer».</div>
+          )}
           {/* Konkrete datoer (1.10.2026, Jonn): ugedagene skjules, saa laenge rytmen er
               valgt - de bruges ikke, og et felt, der intet betyder, bliver udfyldt
               alligevel. Valget af ugedage huskes og kommer igen, hvis man skifter
@@ -11857,7 +11903,7 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
             </div>
           )}
           {planInterval !== "konkrete_datoer" && (<>
-          <label style={styles.label}>Ugedage (gentages hver uge)</label>
+          <label style={styles.label}>{rytmeValg.art === "maaneder" ? "Ugedag" : "Ugedage"}</label>
           <div style={styles.skillPicker}>
             {ALL_DAYS.map((d) => <button key={d.key} type="button" onClick={() => toggleDay(d.key)} style={days.includes(d.key) ? styles.skillPickBtnActive : styles.skillPickBtn}>{d.label}</button>)}
           </div>
@@ -11886,6 +11932,31 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
               <div style={styles.hint}>Kræver en bestemt dag mere tid — fx hovedrengøring om onsdagen — så skriv minutter i det sidste felt. Står det tomt, bruges aftalens normale varighed.</div>
             </div>
           )}
+          {rytmeValg.art === "maaneder" && (
+            <div style={styles.hint}>Besøget lægges på den valgte ugedag i den uge, hvor datoen i startdatoen falder — samme dato hver gang.</div>
+          )}
+          {/* Sammendraget regnes af den regel, der danner opgaverne (besoegIPeriode), så
+              formularen og planen aldrig kan vise to forskellige antal. Det er det, der
+              fanger en rytme, der ikke er den, man tror: 26 besøg i stedet for 6. */}
+          <div style={{ marginTop: 12, background: "#F8F5FB", border: "1px solid #E4E0EA", borderRadius: 12, padding: "12px 14px" }}>
+            <div style={{ fontWeight: 600, fontSize: 13.5, color: "#1F2433" }}>{beskrivRytme(planInterval, days, startDate)}</div>
+            {!startDate || !expiryDate ? (
+              <div style={{ fontSize: 13, color: "#667085", marginTop: 4 }}>Vælg start- og udløbsdato for at se besøgene.</div>
+            ) : days.length === 0 ? (
+              <div style={{ fontSize: 13, color: "#B91C1C", marginTop: 4 }}>Vælg mindst én ugedag.</div>
+            ) : expiryDate < startDate ? (
+              <div style={{ fontSize: 13, color: "#B91C1C", marginTop: 4 }}>Udløbsdatoen ligger før startdatoen.</div>
+            ) : (() => {
+              const ov = besoegIPeriode({ planInterval, days, startDate, expiryDate }, 4);
+              const kort = (d) => new Date(d).toLocaleDateString("da-DK", { day: "numeric", month: "short" });
+              return (
+                <div style={{ fontSize: 13, color: "#667085", marginTop: 4 }}>
+                  {ov.antal > 0 ? <>Første besøg: {ov.foerste.map(kort).join(", ")}{ov.antal > ov.foerste.length ? " …" : ""} · </> : null}
+                  <b style={{ color: ov.antal > 0 ? "#1B7A46" : "#B91C1C" }}>{ov.antal} {ov.antal === 1 ? "besøg" : "besøg"}</b> i alt
+                </div>
+              );
+            })()}
+          </div>
           </>)}
         </>
       )}
@@ -13246,7 +13317,7 @@ function ContractsView({ templates: alleTemplates, instances, pricing, employees
         : ((d.min || tpl.duration || 0) / 60) * rate), 0);
       return { sum, weeks: liste.length, wholePeriod: true };
     }
-  const pr = { uge: 1, "14_dage": 2, "4_uger": 4, "6_uger": 6, maaned: 4, "3_maaned": 13 }[tpl.planInterval] || 1;
+  const pr = ugerMellemBesoeg(tpl.planInterval);
     if (start && expiry) {
       const weeks = Math.max(1, Math.round((expiry - start) / (1000 * 60 * 60 * 24 * 7)));
       return { sum: (weeklyValue * weeks) / pr, weeks, wholePeriod: true };
