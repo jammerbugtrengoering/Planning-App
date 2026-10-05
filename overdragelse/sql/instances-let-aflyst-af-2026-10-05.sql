@@ -1,0 +1,6 @@
+-- Kørt som migration «instances_let_aflyst_af» mod Jammerbugts database (5.10.2026).
+-- Hvorfor: instances_let_mangler() meldte, at aflyst_af ikke var i visningen. Planlæggerens app
+-- henter fra visningen, så feltet (hvem der aflyste opgaven) var usynligt for den. Kolonnen står
+-- sidst (efter opgave_nr), så create or replace er tilladt. Ingen rækker røres.
+-- Selve udtrykket står i papirskema-2026-10-05.sql; den her fil tilføjer kun aflyst_af i slutningen
+-- af kolonnelisten og gentager alter view ... security_invoker = true.

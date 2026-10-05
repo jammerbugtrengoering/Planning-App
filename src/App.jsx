@@ -2379,6 +2379,7 @@ const MODULE_HELP = {
         "Skriv timerne ud for hver linje, som medarbejderen har skrevet dem: «2», «2,5», «2:30» eller «90 min». Skærmen viser minutterne ved siden af, så du kan se, hvordan tallet blev læst.",
         "Skriv også kilometerne. De bruges kun til at sammenligne — det er altid systemets egne kilometer, der gælder.",
         "Linjerne er ugeplanen, som den ser ud lige nu. Er en opgave flyttet, aflyst eller givet til en anden, efter skemaet blev trykt, og står den stadig på papiret, så vælg den under «Vælg en opgave fra ugen» (søg på kunde, adresse, nummer eller medarbejder), eller skriv dens nummer. Så kan du skrive timer og km ud for den, der står håndskrevet.",
+        "Under linjerne står «Sæt opgaverne til udført» og «Sæt som fakturagrundlag». Fakturagrundlag er slået fra, til du selv vælger det: det er det, der gør tiden til en regning til kunden.",
         "Tryk «Godkend». Tiden lægges på opgaven og kommer med under Løn data og i faktureringen som al anden registreret tid — fluebenet til løn sætter du dér, som du plejer. En linje, der er indlæst, kan ikke indlæses to gange."] },
     { h: "Afvigelser i kilometer", p: ["Er det, medarbejderen skrev, mere end 1,5 km og 15 % fra det, systemet har regnet, står linjen med rødt og en forskel i kilometer. Det er dem, du tager en snak om.",
         "Systemets kilometer regnes pr. opgave (turen hen til opgaven) og pr. dag. Papirets kilometer står som regel for hele dagen, så kig på dagslinjen under hver dag, før du trækker en konklusion.",
@@ -6562,7 +6563,7 @@ function PlanningApp({ session, onSignOut }) {
       {view === "kundetimer" && (<CustomerHoursView instances={instances} />)}
       {view === "medExport" && (<EmployeeExportView instances={instances} employees={employees} satsHistorik={satsHistorik} />)}
       {view === "papirskema" && (isAdminUser
-        ? <PapirskemaView instances={instances} employees={aktiveEmployees} onTidIndlaest={papirTidIndlaest} />
+        ? <PapirskemaView instances={instances} employees={aktiveEmployees} onTidIndlaest={papirTidIndlaest} onFakturagrundlag={saetFakturagrundlagFlere} />
         : <div style={styles.hint}>Kun planlæggere kan indlæse skemaer.</div>)}
       {view === "inventory" && (
         <InventoryView supabase={supabase} employees={employees} currentUserName={currentEmployeeForAuth?.name || null} onInventoryChanged={loadProductUsage} />
@@ -12331,7 +12332,7 @@ function isoLokal(d) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 const PAPIR_KORT = { background: "#fff", border: "1px solid #E2E8F0", borderRadius: 12, padding: "16px 18px" };
-function PapirskemaView({ instances, employees, onTidIndlaest }) {
+function PapirskemaView({ instances, employees, onTidIndlaest, onFakturagrundlag }) {
   const [empId, setEmpId] = useState("");
   const [dato, setDato] = useState(() => isoLokal(new Date()));
   const [felter, setFelter] = useState({});       // opgave-id -> { timer, km }
@@ -12339,6 +12340,7 @@ function PapirskemaView({ instances, employees, onTidIndlaest }) {
   const [nrInd, setNrInd] = useState("");
   const [soeg, setSoeg] = useState("");
   const [udfoert, setUdfoert] = useState(true);
+  const [fakturagrundlag, setFakturagrundlag] = useState(false);
   const [kmRaekker, setKmRaekker] = useState([]);
   const [klar, setKlar] = useState(null);         // null: tjekker · true/false: tabellen findes
   const [arbejder, setArbejder] = useState(false);
@@ -12454,7 +12456,7 @@ function PapirskemaView({ instances, employees, onTidIndlaest }) {
     setArbejder(true); setBesked(null);
     const { data: bruger } = await supabase.auth.getUser();
     const af = bruger?.user?.email || null;
-    let ok = 0; const fejl = [];
+    let ok = 0; const fejl = []; const indlaeste = [];
     for (const r of attGodkende) {
       const { data: log, error } = await supabase.rpc("append_time_log", {
         p_instance_id: r.t.id, p_minutes: r.minutter, p_emp_id: empId,
@@ -12468,8 +12470,12 @@ function PapirskemaView({ instances, employees, onTidIndlaest }) {
         km_system: r.kmSys, afvigelse_km: r.afv.diff, afviger: r.afv.afviger, godkendt_af: af,
       }, { onConflict: "employee_id,instance_id" });
       if (e2) fejl.push(`${r.sted}: tiden er gemt, men afvigelsen kunne ikke gemmes (${e2.message})`);
+      indlaeste.push(r.t.id);
       ok++;
     }
+    // Fakturagrundlag sættes som ét samlet kald, og kun på de linjer, der faktisk blev indlæst.
+    // Det er et valg pr. gang og slået fra som udgangspunkt: det er det, der gør tiden til en regning.
+    if (fakturagrundlag && indlaeste.length) await onFakturagrundlag(indlaeste, true);
     setArbejder(false);
     setBesked(fejl.length
       ? { slags: "fejl", tekst: `${ok} linjer er indlæst. ${fejl.length} gik galt:\n${fejl.join("\n")}` }
@@ -12582,6 +12588,42 @@ function PapirskemaView({ instances, employees, onTidIndlaest }) {
             </div>
           )}
 
+          {afvigelser.length > 0 && (
+            <div style={{ background: "#FEF2F2", border: "1.5px solid #FECACA", borderRadius: 12, padding: "13px 15px", marginTop: 12 }}>
+              <div style={{ fontWeight: 700, fontSize: 14, color: roed, marginBottom: 6 }}>
+                {afvigelser.length === 1 ? "Én afvigelse i kilometer" : `${afvigelser.length} afvigelser i kilometer`}
+              </div>
+              <div style={{ fontSize: 13, color: "#7F1D1D", lineHeight: 1.6 }}>
+                {afvigelser.map((a, i) => <div key={i}>{a.tekst}</div>)}
+              </div>
+              <div style={{ fontSize: 12, color: "#7F1D1D", marginTop: 8 }}>Systemets kilometer er dem, der gælder. Afvigelsen gemmes, så I kan tage snakken.</div>
+            </div>
+          )}
+
+          {/* Handlingerne står lige under linjerne, hvor man har indtastet — ikke nederst på siden. */}
+          <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", marginTop: 12, paddingTop: 12, borderTop: "1px solid #E2E8F0" }}>
+            <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13.5 }}>
+              <input type="checkbox" checked={udfoert} onChange={(e) => setUdfoert(e.target.checked)} />
+              Sæt opgaverne til udført
+            </label>
+            <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13.5 }}>
+              <input type="checkbox" checked={fakturagrundlag} onChange={(e) => setFakturagrundlag(e.target.checked)} />
+              Sæt som fakturagrundlag
+            </label>
+            <button type="button" style={{ ...styles.primaryBtn, opacity: attGodkende.length && !arbejder ? 1 : 0.5 }}
+              disabled={!attGodkende.length || arbejder || klar !== true} onClick={godkend}>
+              {arbejder ? "Gemmer…" : `Godkend ${attGodkende.length || ""} ${attGodkende.length === 1 ? "linje" : "linjer"}`}
+            </button>
+            <span style={styles.hint}>
+              {attGodkende.length ? `${fmtMin(attGodkende.reduce((s, r) => s + r.minutter, 0))} lægges på opgaverne.` : "Skriv timer ud for de linjer, der skal indlæses."}
+            </span>
+          </div>
+          {besked && (
+            <div style={{ whiteSpace: "pre-line", fontSize: 13.5, padding: "11px 14px", borderRadius: 10, marginTop: 10,
+                          background: besked.slags === "ok" ? "#F0FDF4" : "#FEF2F2", color: besked.slags === "ok" ? "#166534" : "#7F1D1D",
+                          border: `1px solid ${besked.slags === "ok" ? "#BBF7D0" : "#FECACA"}` }}>{besked.tekst}</div>
+          )}
+
           <div style={{ ...styles.hint, marginTop: 12 }}>
             Linjerne er ugeplanen, som den ser ud lige nu. Er en opgave flyttet, aflyst eller givet til en anden, efter skemaet blev
             trykt, så vælg den herunder og skriv det, der står på papiret.
@@ -12625,39 +12667,6 @@ function PapirskemaView({ instances, employees, onTidIndlaest }) {
         </div>
       )}
 
-      {afvigelser.length > 0 && (
-        <div style={{ background: "#FEF2F2", border: "1.5px solid #FECACA", borderRadius: 12, padding: "13px 15px" }}>
-          <div style={{ fontWeight: 700, fontSize: 14, color: roed, marginBottom: 6 }}>
-            {afvigelser.length === 1 ? "Én afvigelse i kilometer" : `${afvigelser.length} afvigelser i kilometer`}
-          </div>
-          <div style={{ fontSize: 13, color: "#7F1D1D", lineHeight: 1.6 }}>
-            {afvigelser.map((a, i) => <div key={i}>{a.tekst}</div>)}
-          </div>
-          <div style={{ fontSize: 12, color: "#7F1D1D", marginTop: 8 }}>Systemets kilometer er dem, der gælder. Afvigelsen gemmes, så I kan tage snakken.</div>
-        </div>
-      )}
-
-      {empId && raekker.length > 0 && (
-        <div style={{ ...PAPIR_KORT, display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
-          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13.5 }}>
-            <input type="checkbox" checked={udfoert} onChange={(e) => setUdfoert(e.target.checked)} />
-            Sæt opgaverne til udført
-          </label>
-          <button type="button" style={{ ...styles.primaryBtn, opacity: attGodkende.length && !arbejder ? 1 : 0.5 }}
-            disabled={!attGodkende.length || arbejder || klar !== true} onClick={godkend}>
-            {arbejder ? "Gemmer…" : `Godkend ${attGodkende.length || ""} ${attGodkende.length === 1 ? "linje" : "linjer"}`}
-          </button>
-          <span style={styles.hint}>
-            {attGodkende.length ? `${fmtMin(attGodkende.reduce((s, r) => s + r.minutter, 0))} lægges på opgaverne.` : "Skriv timer ud for de linjer, der skal indlæses."}
-          </span>
-        </div>
-      )}
-
-      {besked && (
-        <div style={{ whiteSpace: "pre-line", fontSize: 13.5, padding: "11px 14px", borderRadius: 10,
-                      background: besked.slags === "ok" ? "#F0FDF4" : "#FEF2F2", color: besked.slags === "ok" ? "#166534" : "#7F1D1D",
-                      border: `1px solid ${besked.slags === "ok" ? "#BBF7D0" : "#FECACA"}` }}>{besked.tekst}</div>
-      )}
     </div>
   );
 }
