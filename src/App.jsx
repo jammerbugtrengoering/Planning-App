@@ -2221,6 +2221,12 @@ const MODULE_HELP = {
         "På iPhone kan du markere teksten og bruge Omskriv eller Korrekturlæs. Det sker på telefonen, og teksten sendes ingen steder hen.",
         "Der kan lægges op til 10 billeder på tilbuddet. De er interne som udgangspunkt — sæt fluebenet «Vis billederne i tilbuddet kunden får» hvis de skal med i PDF'en.",
         "Tænk over det flueben. Billeder af snavs i kundens egne lokaler kan læses som en kritik. Brug det når billederne understøtter prisen: arealer, antal vinduer, adgangsforhold."] },
+    { h: "Godkend for kunden", p: [
+        "Har kunden ikke en mail — fx nogle borgere — kan du godkende tilbuddet for dem. Tryk «Godkend for kunden» nederst, skriv hvem der har sagt ja, og vælg hvordan: på telefon, på stedet, pr. brev eller på anden måde.",
+        "Der dannes en ny PDF af tilbuddet, som det står lige nu, og den registreres som godkendt af kontoret med dit navn, tidspunktet og din note. Derefter er det som om kunden selv havde accepteret: der oprettes en aftale i kladde, og tilbuddet låses.",
+        "Det kræver, at du er planlægger. Godkendelsen kan ikke fortrydes, så tjek pris og referat først."] },
+    { h: "Opgavelisterne", p: [
+        "De tre lister — før, under og efter mødet — rettes under Opsætning → Tjeklister, øverst i det grønne afsnit «Tilbudslister». Hvert nyt tilbud får en kopi; et tilbud, der allerede er oprettet, beholder sine egne punkter."] },
     { h: "Send og accept", p: [
         "«Dan og se PDF» viser dokumentet som kunden får det. «Send til kunden» mailer et link.",
         "PDF'en dannes forfra hver gang du sender. Ellers kunne kunden få et link til en ældre udgave end den der står i systemet.",
@@ -2709,6 +2715,9 @@ function PlanningApp({ session, onSignOut }) {
   const [budgets, setBudgets] = useState([]); // [{id, contract_type, year, month, amount}]
   const [templates, setTemplates] = useState([]);
   const [checklistTemplates, setChecklistTemplates] = useState([]);
+  // De tre tjeklister, der kun bruges på tilbud (før/under/efter mødet). Holdes ude af checklistTemplates, så de aldrig
+  // dukker op, hvor man vælger tjekliste til en aftale eller opgave — og aldrig bygges ind i opgavernes tjeklister.
+  const [tilbudsLister, setTilbudsLister] = useState([]);
   // Taelles op naar noget er oprettet i databasen udenom den almindelige tilstand —
   // saa henter effekten nedenfor alt forfra. loadAll ligger inde i effekten.
   const [genindlaes, setGenindlaes] = useState(0);
@@ -3193,11 +3202,13 @@ function PlanningApp({ session, onSignOut }) {
       // Checklist-skabeloner – saml items ind
       let clMapped = [];
       if (clData?.length) {
-        clMapped = clData.map((cl) => ({
-          id: cl.id, name: cl.name,
+        const alle = clData.map((cl) => ({
+          id: cl.id, name: cl.name, tilbudFase: cl.tilbud_fase || null,
           items: (clItemsData || []).filter((i) => i.checklist_template_id === cl.id)
             .map((i) => ({ text: i.text, description: i.description, videoUrl: i.video_url })),
         }));
+        clMapped = alle.filter((c) => !c.tilbudFase);
+        setTilbudsLister(alle.filter((c) => c.tilbudFase).sort((x, y) => ["foer", "under", "efter"].indexOf(x.tilbudFase) - ["foer", "under", "efter"].indexOf(y.tilbudFase)));
         setChecklistTemplates(clMapped);
       }
 
@@ -5743,6 +5754,13 @@ function PlanningApp({ session, onSignOut }) {
     }));
   }
   function saveChecklistTemplate(tpl) {
+    // Tilbudslisterne er ikke knyttet til aftaler eller opgaver: kun navn og punkter gemmes, og kun nye tilbud
+    // får de rettede punkter (et tilbud har sin egen kopi).
+    if (tpl.tilbudFase) {
+      setTilbudsLister((prev) => prev.map((c) => (c.id === tpl.id ? tpl : c)));
+      syncChecklistTemplate(tpl);
+      return;
+    }
     // Genopbyg tjeklisten paa alle skabeloner og paa alle IKKE-udfoerte opgaver der
     // bruger den, saa en redigering slaar igennem med det samme - uden at nulstille
     // punkter der allerede er afkrydset paa opgaver i gang. Udfoerte opgaver
@@ -6457,7 +6475,7 @@ function PlanningApp({ session, onSignOut }) {
           onEmployeeAreasChange={setEmployeeAreas} />
       )}
       {view === "checklists" && (
-        <ChecklistsView checklistTemplates={checklistTemplates} onSave={saveChecklistTemplate} onDelete={deleteChecklistTemplate} />
+        <ChecklistsView checklistTemplates={checklistTemplates} tilbudsLister={tilbudsLister} onSave={saveChecklistTemplate} onDelete={deleteChecklistTemplate} />
       )}
 
       {/* Ét sted og ikke fem. Siderne herunder regner paa HELE opgavebunken, og
@@ -7842,7 +7860,7 @@ function StarLevel({ level }) {
 }
 
 // ---------- Checklists (tasklist templates) ----------
-function ChecklistsView({ checklistTemplates, onSave, onDelete }) {
+function ChecklistsView({ checklistTemplates, tilbudsLister = [], onSave, onDelete }) {
   const [editing, setEditing] = useState(null);
   const [showModal, setShowModal] = useState(false);
   return (
@@ -7850,6 +7868,32 @@ function ChecklistsView({ checklistTemplates, onSave, onDelete }) {
       <div style={styles.toolbar}>
         <button style={styles.primaryBtn} onClick={() => { setEditing(null); setShowModal(true); }}><Plus size={16} /> Ny tjekliste</button>
       </div>
+      {tilbudsLister.length > 0 && (
+        <div style={{ marginBottom: 22 }}>
+          <div style={{ fontWeight: 700, fontSize: 14, color: "#166534", marginBottom: 2 }}>Tilbudslister — bruges kun på tilbud</div>
+          <div style={{ fontSize: 12.5, color: "#64748B", marginBottom: 10, lineHeight: 1.5 }}>
+            Før, under og efter kundemødet. Hvert nyt tilbud får en kopi af punkterne, så en rettelse her rammer kun tilbud, der
+            oprettes bagefter. Listerne kan ikke vælges på aftaler eller opgaver og kan ikke slettes.
+          </div>
+          <div style={styles.empGrid}>
+            {tilbudsLister.map((c) => (
+              <div key={c.id} style={{ ...styles.empCard, borderColor: "#BBF7D0" }}>
+                <div style={styles.empCardTop}>
+                  <span style={{ ...styles.avatar, background: "#16A34A", width: 34, height: 34 }}><ListChecks size={16} /></span>
+                  <div style={{ flex: 1 }}>
+                    <div style={styles.empName}>{c.name}</div>
+                    <div style={styles.empLoad}>{c.items.length} punkter</div>
+                  </div>
+                  <button style={styles.iconBtnGhostInline} onClick={() => { setEditing(c); setShowModal(true); }}><Pencil size={14} /></button>
+                </div>
+                <ol style={styles.checklistPreviewList}>
+                  {c.items.map((it, i) => <li key={i} style={styles.checklistPreviewItem}>{it.text}</li>)}
+                </ol>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
       <div style={styles.empGrid}>
         {checklistTemplates.map((c) => (
           <div key={c.id} style={styles.empCard}>
@@ -7878,7 +7922,7 @@ function ChecklistsView({ checklistTemplates, onSave, onDelete }) {
         <ChecklistModal
           checklist={editing}
           onClose={() => { setShowModal(false); setEditing(null); }}
-          onSave={(c) => { onSave(c); setShowModal(false); setEditing(null); }}
+          onSave={(c) => { onSave(editing?.tilbudFase ? { ...c, tilbudFase: editing.tilbudFase } : c); setShowModal(false); setEditing(null); }}
         />
       )}
     </div>
@@ -17125,6 +17169,11 @@ function TilbudOpgaveliste({ supabase, tilbudId, opgaver, setOpgaver, employees,
 function TilbudEditor({ supabase, checklistTemplates, pricing, currentUserName, tilbud, onLuk, employees }) {
   const nyt = !tilbud;
   const [opgaver, setOpgaver] = useState(tilbud?.opgaveliste || []);
+  // Godkendelse på kundens vegne (5.10.2026): borgere uden mail kan ikke trykke «Accepter» i et link.
+  const [godkendAaben, setGodkendAaben] = useState(false);
+  const [gNavn, setGNavn] = useState("");
+  const [gMaade, setGMaade] = useState("telefon");
+  const [gNote, setGNote] = useState("");
   const [id] = useState(() => tilbud?.id || uid("til"));
   const [titel, setTitel] = useState(tilbud?.titel || "");
   const [kundeNavn, setKundeNavn] = useState(tilbud?.kunde_navn || "");
@@ -17355,6 +17404,33 @@ function TilbudEditor({ supabase, checklistTemplates, pricing, currentUserName, 
     setBesked(mailFejl
       ? `Tilbuddet er sendt-markeret, men mailen kunne ikke afsendes. Send linket manuelt: ${link}`
       : `Tilbuddet er sendt til ${email.trim()}.`);
+  }
+
+  // Samme resultat som kundens eget accepter (aftale i kladde, tilbuddet låses), men underskriften mærkes «godkendt af
+  // kontoret» med hvem, hvordan og en note. PDF'en dannes forfra først, så det er netop det dokument, der står i
+  // systemet, der er godkendt — databasen afviser, hvis der ingen PDF er.
+  async function godkendForKunden() {
+    setFejl(""); setBesked("");
+    const navn = (gNavn || kontakt || kundeNavn).trim();
+    if (!navn) { setFejl("Skriv navnet på den, der har sagt ja."); return; }
+    if (!window.confirm(
+      `Godkend tilbuddet for ${kundeNavn.trim() || "kunden"}?\n\n`
+      + `Der dannes en ny PDF af tilbuddet, som det står nu, og den noteres som godkendt af ${navn} `
+      + `(${{ telefon: "på telefon", paa_stedet: "på stedet", brev: "pr. brev", andet: "på anden måde" }[gMaade]}) — registreret af dig. `
+      + `Der oprettes en aftale i kladde, og tilbuddet kan derefter ikke rettes.\n\nVil du fortsætte?`)) return;
+    setArbejder("godkender");
+    if (!(await gem())) { setArbejder(""); return; }
+    const { data: pdfSvar, error: pdfFejl } = await supabase.functions.invoke("tilbud-pdf", { body: { tilbudId: id } });
+    if (pdfFejl || pdfSvar?.error) { setArbejder(""); setFejl(pdfSvar?.error || pdfFejl.message); return; }
+    const { data, error } = await supabase.rpc("godkend_tilbud_for_kunden", {
+      p_tilbud_id: id, p_kundens_navn: navn, p_maade: gMaade, p_note: gNote.trim() || null,
+    });
+    setArbejder("");
+    if (error) { setFejl(error.message); return; }
+    setStatus("accepteret"); setGodkendAaben(false);
+    setBesked(data?.grund === "allerede"
+      ? "Tilbuddet var allerede godkendt."
+      : "Tilbuddet er godkendt for kunden. Der er oprettet en aftale i kladde under Aftaler — sæt ugedage og startdato der.");
   }
 
   const kladdeEllerSendt = status === "kladde" || status === "sendt";
@@ -17651,7 +17727,40 @@ function TilbudEditor({ supabase, checklistTemplates, pricing, currentUserName, 
               {arbejder === "sender" ? "Sender…" : status === "sendt" ? "Send igen" : "Send til kunden"}
             </button>
           )}
+          {kladdeEllerSendt && !nyt && (
+            <button style={styles.secondaryBtn} disabled={!!arbejder}
+              onClick={() => { setGodkendAaben((v) => !v); if (!gNavn) setGNavn(kontakt || kundeNavn); }}>
+              Godkend for kunden
+            </button>
+          )}
         </div>
+
+        {godkendAaben && kladdeEllerSendt && (
+          <div style={{ background: "#FFFBEB", border: "1.5px solid #FDE68A", borderRadius: 12, padding: "14px 16px", marginBottom: 30 }}>
+            <div style={{ fontWeight: 700, fontSize: 14, color: "#92400E", marginBottom: 4 }}>Godkend på kundens vegne</div>
+            <div style={{ fontSize: 12.5, color: "#78350F", lineHeight: 1.5, marginBottom: 10 }}>
+              Til kunder uden mail. Kunden har sagt ja, og du registrerer det her. Det står på tilbuddet, hvem i kontoret der har godkendt, og hvordan.
+            </div>
+            <label style={styles.label}>Hvem har sagt ja?</label>
+            <input style={styles.input} value={gNavn} onChange={(e) => setGNavn(e.target.value)} placeholder="Navn på kunden eller borgeren" />
+            <label style={styles.label}>Hvordan sagde kunden ja?</label>
+            <select style={styles.input} value={gMaade} onChange={(e) => setGMaade(e.target.value)}>
+              <option value="telefon">På telefon</option>
+              <option value="paa_stedet">På stedet, ved mødet</option>
+              <option value="brev">Pr. brev</option>
+              <option value="andet">På anden måde</option>
+            </select>
+            <label style={styles.label}>Note (valgfri)</label>
+            <textarea style={{ ...styles.input, minHeight: 60 }} value={gNote} onChange={(e) => setGNote(e.target.value)}
+              placeholder="Fx «Ringede tilbage tirsdag og accepterede prisen»" />
+            <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+              <button style={styles.primaryBtn} disabled={!!arbejder} onClick={godkendForKunden}>
+                {arbejder === "godkender" ? "Godkender…" : "Godkend tilbuddet"}
+              </button>
+              <button style={styles.secondaryBtn} disabled={!!arbejder} onClick={() => setGodkendAaben(false)}>Annuller</button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
