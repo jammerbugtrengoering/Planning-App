@@ -2221,6 +2221,9 @@ const MODULE_HELP = {
         "På iPhone kan du markere teksten og bruge Omskriv eller Korrekturlæs. Det sker på telefonen, og teksten sendes ingen steder hen.",
         "Der kan lægges op til 10 billeder på tilbuddet. De er interne som udgangspunkt — sæt fluebenet «Vis billederne i tilbuddet kunden får» hvis de skal med i PDF'en.",
         "Tænk over det flueben. Billeder af snavs i kundens egne lokaler kan læses som en kritik. Brug det når billederne understøtter prisen: arealer, antal vinduer, adgangsforhold."] },
+    { h: "Underskrift på skærmen", p: [
+        "Tryk «Underskriv med kunden», og lad kunden skrive sit navn og skrive under i feltet — med finger på en tablet eller telefon, eller med musen. Tilbuddet godkendes, underskriften sættes ind på en ekstra side i PDF'en, og kunden får den underskrevne PDF på mail, hvis der er en adresse.",
+        "Den oprindelige PDF røres ikke. Den underskrevne er en separat fil, og fingeraftrykket af den oprindelige gemmes, så man kan bevise, hvad kunden skrev under på. Kom mailen ikke afsted, kan du trykke «Dan underskrevet PDF» igen, eller «Se underskrevet PDF» og sende den selv."] },
     { h: "Godkend for kunden", p: [
         "Har kunden ikke en mail — fx nogle borgere — kan du godkende tilbuddet for dem. Tryk «Godkend for kunden» nederst, skriv hvem der har sagt ja, og vælg hvordan: på telefon, på stedet, pr. brev eller på anden måde.",
         "Der dannes en ny PDF af tilbuddet, som det står lige nu, og den registreres som godkendt af kontoret med dit navn, tidspunktet og din note. Derefter er det som om kunden selv havde accepteret: der oprettes en aftale i kladde, og tilbuddet låses.",
@@ -2475,6 +2478,7 @@ const MODULE_HELP = {
         "Navn, adresse, telefon, e-mail og kontaktperson. Aftale, tider, priser og fakturaer.",
         "Noter og billeder fra besøget. Adgangsforhold, herunder nøgleboks- og alarmkoder.",
         "Ved accept af et tilbud gemmes desuden IP-adresse og browser sammen med underskriften. Kunden får det oplyst på accept-siden, inden hun trykker.",
+        "Underskriver kunden på telefonen eller skærmen, gemmes billedet af underskriften, kundens navn, hvem hos os der var til stede, og tidspunktet — i stedet for IP-adresse og browser. Godkender kontoret for en kunde uden mail, gemmes hvem i kontoret, hvordan kunden sagde ja (telefon, på stedet, brev), og en note. Det underskrevne tilbud (PDF) ligger i en privat mappe og mailes til kunden, hvis vi har en adresse.",
         "Henvendelser fra «Bliv ringet op» (QR-koden i pjecen): navn, telefon, hvornår vi må ringe, og det borgeren selv vælger at skrive — adresse, om hun får hjælp fra kommunen, hvad hun er interesseret i, og en besked. Ingen IP-adresse. Slettes automatisk 6 måneder efter, at den er afsluttet, og senest efter 12 måneder.",
         "På Nexus- og ældrelovsopgaver er det kommunen der er dataansvarlig. Spørger en borger om indsigt i sine oplysninger, skal hun henvises til kommunen — vi udfører alene arbejdet efter kommunens instruks."] },
     { h: "Det systemet ikke indeholder", p: [
@@ -17166,10 +17170,85 @@ function TilbudOpgaveliste({ supabase, tilbudId, opgaver, setOpgaver, employees,
   );
 }
 
+// Underskriftsfelt (5.10.2026): kunden skriver med fingeren eller musen. touch-action: none forhindrer, at siden ruller, mens man
+// tegner. Lærredet skaleres med skærmens pixeltæthed, ellers bliver stregen sløret. Forælderen henter billedet gennem padRef.
+function Underskriftsfelt({ padRef, hoejde = 170 }) {
+  const laerred = useRef(null);
+  const tegner = useRef(false);
+  const harTegnet = useRef(false);
+  const [tom, setTom] = useState(true);
+
+  useEffect(() => {
+    const c = laerred.current;
+    if (!c) return;
+    const r = window.devicePixelRatio || 1;
+    const b = c.getBoundingClientRect();
+    c.width = Math.round(b.width * r);
+    c.height = Math.round(b.height * r);
+    const g = c.getContext("2d");
+    g.scale(r, r);
+    g.lineWidth = 2.6; g.lineCap = "round"; g.lineJoin = "round"; g.strokeStyle = "#111";
+    padRef.current = {
+      tom: () => !harTegnet.current,
+      tilBlob: () => new Promise((svar) => c.toBlob(svar, "image/png")),
+    };
+  }, [padRef]);
+
+  const punkt = (e) => {
+    const b = laerred.current.getBoundingClientRect();
+    return [e.clientX - b.left, e.clientY - b.top];
+  };
+  function ned(e) {
+    e.preventDefault();
+    laerred.current.setPointerCapture?.(e.pointerId);
+    const g = laerred.current.getContext("2d");
+    const [x, y] = punkt(e);
+    tegner.current = true;
+    g.beginPath(); g.moveTo(x, y);
+    g.lineTo(x + 0.01, y + 0.01); g.stroke();
+  }
+  function bevaeg(e) {
+    if (!tegner.current) return;
+    e.preventDefault();
+    const g = laerred.current.getContext("2d");
+    const [x, y] = punkt(e);
+    g.lineTo(x, y); g.stroke();
+    if (!harTegnet.current) { harTegnet.current = true; setTom(false); }
+  }
+  function op() { tegner.current = false; }
+  function ryd() {
+    const c = laerred.current;
+    c.getContext("2d").clearRect(0, 0, c.width, c.height);
+    harTegnet.current = false; setTom(true);
+  }
+
+  return (
+    <div>
+      <div style={{ position: "relative", background: "#fff", border: "2px solid #94A3B8", borderRadius: 10, height: hoejde }}>
+        <canvas ref={laerred} aria-label="Felt til underskrift"
+          style={{ width: "100%", height: "100%", touchAction: "none", display: "block", borderRadius: 8 }}
+          onPointerDown={ned} onPointerMove={bevaeg} onPointerUp={op} onPointerCancel={op} onPointerLeave={op} />
+        {tom && <div style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: "#94A3B8",
+                              fontSize: 14, pointerEvents: "none" }}>Skriv under her</div>}
+        <div style={{ position: "absolute", left: 12, right: 12, bottom: 26, borderBottom: "1px solid #CBD5E1", pointerEvents: "none" }} />
+      </div>
+      <button type="button" onClick={ryd}
+        style={{ background: "none", border: "none", color: "#4F46E5", fontSize: 13.5, padding: "8px 0", cursor: "pointer" }}>
+        Ryd og start forfra
+      </button>
+    </div>
+  );
+}
+
 function TilbudEditor({ supabase, checklistTemplates, pricing, currentUserName, tilbud, onLuk, employees }) {
   const nyt = !tilbud;
   const [opgaver, setOpgaver] = useState(tilbud?.opgaveliste || []);
   // Godkendelse på kundens vegne (5.10.2026): borgere uden mail kan ikke trykke «Accepter» i et link.
+  // Underskrift på skærmen (5.10.2026).
+  const [skrivAaben, setSkrivAaben] = useState(false);
+  const [skrivNavn, setSkrivNavn] = useState("");
+  const [underskrevetSti, setUnderskrevetSti] = useState(tilbud?.pdf_underskrevet_sti || "");
+  const padRef = useRef(null);
   const [godkendAaben, setGodkendAaben] = useState(false);
   const [gNavn, setGNavn] = useState("");
   const [gMaade, setGMaade] = useState("telefon");
@@ -17431,6 +17510,54 @@ function TilbudEditor({ supabase, checklistTemplates, pricing, currentUserName, 
     setBesked(data?.grund === "allerede"
       ? "Tilbuddet var allerede godkendt."
       : "Tilbuddet er godkendt for kunden. Der er oprettet en aftale i kladde under Aftaler — sæt ugedage og startdato der.");
+  }
+
+  // Rækkefølgen er vigtig: PDF'en dannes først (fingeraftryk), så gemmes underskriften og tilbuddet låses, og først
+  // DEREFTER lægges underskriften ind i en ny udgave af PDF'en og mailes til kunden.
+  async function underskriv() {
+    setFejl(""); setBesked("");
+    const navn = (skrivNavn || kontakt || kundeNavn).trim();
+    if (!navn) { setFejl("Skriv kundens navn."); return; }
+    if (!padRef.current || padRef.current.tom()) { setFejl("Kunden skal skrive under i feltet."); return; }
+    if (!window.confirm(
+      `Kunden godkender tilbuddet for ${kundeNavn.trim() || "kunden"} med sin underskrift. `
+      + `Der oprettes en aftale i kladde, og tilbuddet kan derefter ikke rettes.\n\nVil du fortsætte?`)) return;
+    setArbejder("underskriver");
+    if (!(await gem())) { setArbejder(""); return; }
+    const { data: pdfSvar, error: pdfFejl } = await supabase.functions.invoke("tilbud-pdf", { body: { tilbudId: id } });
+    if (pdfFejl || pdfSvar?.error) { setArbejder(""); setFejl(pdfSvar?.error || pdfFejl.message); return; }
+    const blob = await padRef.current.tilBlob();
+    const sti = `${id}/signatur-${Date.now()}.png`;
+    const { error: upFejl } = await supabase.storage.from("tilbud").upload(sti, blob, { contentType: "image/png", upsert: false });
+    if (upFejl) { setArbejder(""); setFejl("Underskriften kunne ikke gemmes: " + upFejl.message); return; }
+    const { error } = await supabase.rpc("godkend_tilbud_med_underskrift", {
+      p_tilbud_id: id, p_kundens_navn: navn, p_signatur_sti: sti, p_note: null,
+    });
+    if (error) { setArbejder(""); setFejl(error.message); return; }
+    setStatus("accepteret"); setSkrivAaben(false);
+    await danUnderskrevetPdf(true);
+  }
+
+  // Danner den underskrevne PDF og mailer den. Kaldes efter underskriften, og kan kaldes igen, hvis den gik galt.
+  async function danUnderskrevetPdf(efterUnderskrift = false) {
+    setArbejder("underskriver");
+    const { data, error } = await supabase.functions.invoke("tilbud-underskriv", { body: { tilbudId: id } });
+    setArbejder("");
+    if (error || data?.error) {
+      setFejl("Underskriften er gemt, men den underskrevne PDF kunne ikke dannes: " + (data?.error || error.message));
+      return;
+    }
+    setUnderskrevetSti(data.sti);
+    setBesked((efterUnderskrift ? "Tilbuddet er underskrevet og godkendt. " : "Den underskrevne PDF er dannet. ")
+      + (data.mail === "sendt" ? `Kunden har fået den på mail (${email.trim()}).`
+        : data.mail === "fejlede" ? "Mailen til kunden kunne ikke sendes — send PDF'en manuelt."
+        : "Kunden har ingen mail — print PDF'en eller vis den på skærmen.")
+      + " Der er oprettet en aftale i kladde under Aftaler.");
+  }
+
+  async function visUnderskrevetPdf() {
+    const { data: sign } = await supabase.storage.from("tilbud").createSignedUrl(underskrevetSti, 600);
+    if (sign?.signedUrl) window.open(sign.signedUrl, "_blank");
   }
 
   const kladdeEllerSendt = status === "kladde" || status === "sendt";
@@ -17728,12 +17855,40 @@ function TilbudEditor({ supabase, checklistTemplates, pricing, currentUserName, 
             </button>
           )}
           {kladdeEllerSendt && !nyt && (
+            <button style={styles.primaryBtn} disabled={!!arbejder}
+              onClick={() => { setSkrivAaben((v) => !v); if (!skrivNavn) setSkrivNavn(kontakt || kundeNavn); }}>
+              Underskriv med kunden
+            </button>
+          )}
+          {kladdeEllerSendt && !nyt && (
             <button style={styles.secondaryBtn} disabled={!!arbejder}
               onClick={() => { setGodkendAaben((v) => !v); if (!gNavn) setGNavn(kontakt || kundeNavn); }}>
               Godkend for kunden
             </button>
           )}
+          {status === "accepteret" && (underskrevetSti
+            ? <button style={styles.secondaryBtn} onClick={visUnderskrevetPdf}>Se underskrevet PDF</button>
+            : <button style={styles.secondaryBtn} disabled={!!arbejder} onClick={() => danUnderskrevetPdf(false)}>Dan underskrevet PDF</button>)}
         </div>
+
+        {skrivAaben && kladdeEllerSendt && (
+          <div style={{ background: "#F8FAFC", border: "1.5px solid #CBD5E1", borderRadius: 12, padding: "14px 16px", marginBottom: 20, maxWidth: 520 }}>
+            <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 4 }}>Kundens underskrift</div>
+            <div style={{ fontSize: 12.5, color: "#64748B", lineHeight: 1.5, marginBottom: 10 }}>
+              Kunden godkender tilbuddet ved at skrive under — med finger på en tablet eller telefon, eller med musen. Underskriften sættes ind i PDF'en,
+              og kunden får den på mail, hvis der er en adresse.
+            </div>
+            <label style={styles.label}>Kundens navn</label>
+            <input style={styles.input} value={skrivNavn} onChange={(e) => setSkrivNavn(e.target.value)} />
+            <Underskriftsfelt padRef={padRef} />
+            <div style={{ display: "flex", gap: 8 }}>
+              <button style={styles.primaryBtn} disabled={!!arbejder} onClick={underskriv}>
+                {arbejder === "underskriver" ? "Gemmer…" : "Godkend tilbuddet"}
+              </button>
+              <button style={styles.secondaryBtn} disabled={!!arbejder} onClick={() => setSkrivAaben(false)}>Annuller</button>
+            </div>
+          </div>
+        )}
 
         {godkendAaben && kladdeEllerSendt && (
           <div style={{ background: "#FFFBEB", border: "1.5px solid #FDE68A", borderRadius: 12, padding: "14px 16px", marginBottom: 30 }}>
