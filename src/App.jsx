@@ -11293,6 +11293,9 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
     copyFrom?.planInterval === "maaned" ? "4_uger" : (copyFrom?.planInterval || "uge"));
   // Formularens valg (art + antal), afledt af den gemte tekst. Se aftalerytme.js.
   const rytmeValg = intervalValg(planInterval);
+  // Det, der står i tallet, mens man skriver. Et tal-felt, der altid viser det gemte antal, kan ikke tømmes:
+  // sletter man «1» for at skrive «12», springer feltet straks tilbage til 1, og man ender på 112 → 52.
+  const [antalTekst, setAntalTekst] = useState(null);
   const [title, setTitle] = useState(copyFrom ? (editId ? copyFrom.title : `Kopi af ${copyFrom.title}`) : "");
   const [duration, setDuration] = useState(copyFrom?.duration || 60);
   const [requiredSkills, setRequiredSkills] = useState(copyFrom?.requiredSkills || [{ skill: skills[0] ?? "", minLevel: 1 }]);
@@ -11851,16 +11854,22 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
               <span style={{ fontSize: 13.5, color: "#5B5B60", fontWeight: 600 }}>Hver</span>
               <button type="button" aria-label="Ét mindre" disabled={rytmeValg.n <= 1}
                 style={{ ...styles.secondaryBtn, padding: "7px 12px" }}
-                onClick={() => setPlanInterval(intervalNoegle(rytmeValg.art, rytmeValg.n - 1))}>−</button>
+                onClick={() => { setAntalTekst(null); setPlanInterval(intervalNoegle(rytmeValg.art, rytmeValg.n - 1)); }}>−</button>
               <input type="number" min="1" max={rytmeValg.art === "maaneder" ? 12 : 52}
                 aria-label={rytmeValg.art === "maaneder" ? "Antal måneder mellem besøg" : "Antal uger mellem besøg"}
                 style={{ ...styles.input, width: 72, marginBottom: 0, textAlign: "center", fontWeight: 600 }}
-                value={rytmeValg.n}
-                onChange={(e) => { const v = Number(e.target.value); if (v >= 1) setPlanInterval(intervalNoegle(rytmeValg.art, v)); }} />
+                value={antalTekst ?? rytmeValg.n}
+                onChange={(e) => {
+                  const tekst = e.target.value.replace(/\D/g, "").slice(0, 2);
+                  setAntalTekst(tekst);
+                  const v = Number(tekst);
+                  if (v >= 1) setPlanInterval(intervalNoegle(rytmeValg.art, v));
+                }}
+                onBlur={() => setAntalTekst(null)} />
               <button type="button" aria-label="Ét mere"
                 disabled={rytmeValg.n >= (rytmeValg.art === "maaneder" ? 12 : 52)}
                 style={{ ...styles.secondaryBtn, padding: "7px 12px" }}
-                onClick={() => setPlanInterval(intervalNoegle(rytmeValg.art, rytmeValg.n + 1))}>+</button>
+                onClick={() => { setAntalTekst(null); setPlanInterval(intervalNoegle(rytmeValg.art, rytmeValg.n + 1)); }}>+</button>
               <span style={{ fontSize: 13.5, color: "#5B5B60" }}>
                 {rytmeValg.art === "maaneder" ? (rytmeValg.n === 1 ? "måned" : "måneder") : (rytmeValg.n === 1 ? "uge" : "uger")}
               </span>
