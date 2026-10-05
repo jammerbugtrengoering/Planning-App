@@ -2383,7 +2383,7 @@ const MODULE_HELP = {
         "Under linjerne står «Sæt opgaverne til udført» og «Sæt som fakturagrundlag». Fakturagrundlag er slået fra, til du selv vælger det: det er det, der gør tiden til en regning til kunden.",
         "Tryk «Godkend». Tiden lægges på opgaven og kommer med under Løn data og i faktureringen som al anden registreret tid — fluebenet til løn sætter du dér, som du plejer. En linje, der er indlæst, kan ikke indlæses to gange."] },
     { h: "Afvigelser i kilometer", p: ["Er det, medarbejderen skrev, mere end 1,5 km og 15 % fra det, systemet har regnet, står linjen med rødt og en forskel i kilometer. Det er dem, du tager en snak om.",
-        "Systemets kilometer regnes natten efter, en opgave er udført, og er turen hen til opgaven fra den forrige. Dagens første opgave og opgaver, der ikke er udført endnu, har derfor ingen. Papirets kilometer står som regel for hele dagen og kan godt tælle turen hjemmefra med, så kig på dagslinjen under hver dag, før du trækker en konklusion.",
+        "Systemets kilometer regnes natten efter, en opgave er udført, og er turen hen til opgaven fra den forrige. Turen hjemmefra er ikke med, så dagens første opgave er mærket «Dagens første» og har ingen km. Det har opgaver, der ikke er udført endnu, heller ikke. Papirets kilometer står som regel for hele dagen og kan godt tælle turen hjemmefra med, så kig på dagslinjen under hver dag, før du trækker en konklusion.",
         "Alle afvigelser gemmes sammen med den, der godkendte dem."] },
   ] },
   medExport: { title: "Løn data", intro: "Grundlaget for løn: timer og kørsel pr. medarbejder.", blocks: [
@@ -12404,7 +12404,10 @@ function PapirskemaView({ instances, employees, kmLog, onTidIndlaest, onFakturag
         kmPapir, kmFejl: Number.isNaN(kmPapir), kmSys,
         afv: kmAfvigelse(kmPapir, kmSys),
       };
-    });
+    }).sort((a, b) => (a.dato + String(a.t.scheduledTime || "99:99")).localeCompare(b.dato + String(b.t.scheduledTime || "99:99")))
+      // Dagens første linje (i skemaets rækkefølge) får et mærke: turen hjemmefra regnes ikke med i systemets
+      // km, så den har ingen km at sammenligne med. Mærket gør det til noget, man kan se, og ikke en mangel.
+      .map((r, i, alle) => ({ ...r, foersteIDagen: i === 0 || alle[i - 1].dato !== r.dato }));
   }, [instances, empId, uge, ekstra, felter, km, gemte]);
 
   // Dagstotaler: papirets kilometer står som regel for hele dagen, så dagen er det rigtige
@@ -12604,7 +12607,12 @@ function PapirskemaView({ instances, employees, kmLog, onTidIndlaest, onFakturag
                             {r.indlaest ? "" : <input aria-label={`Kilometer, ${r.sted}`} style={{ ...lille, borderColor: r.kmFejl ? roed : "#CBD5E1" }}
                               value={r.kmTekst} placeholder="km" onChange={(e) => saet(r.t.id, "km", e.target.value)} />}
                           </td>
-                          <td style={{ ...celle, color: "#475569" }}>{r.kmSys === null ? "–" : r.kmSys}</td>
+                          <td style={{ ...celle, color: "#475569" }}>
+                            {r.kmSys !== null ? r.kmSys : r.foersteIDagen
+                              ? <span title="Dagens første opgave: turen hjemmefra regnes ikke med i systemets km, så der er ingen km at sammenligne med."
+                                  style={{ fontSize: 11, fontWeight: 700, color: "#6D28D9", background: "#EDE9FE", borderRadius: 999, padding: "2px 8px", whiteSpace: "nowrap" }}>Dagens første</span>
+                              : "–"}
+                          </td>
                           <td style={{ ...celle, fontWeight: 600, color: r.afv.afviger ? roed : "#64748B" }}>
                             {r.afv.status === "afviger" || r.afv.status === "ok" ? `${r.afv.diff > 0 ? "+" : ""}${r.afv.diff} km` : ""}
                           </td>
@@ -12667,7 +12675,7 @@ function PapirskemaView({ instances, employees, kmLog, onTidIndlaest, onFakturag
           )}
 
           <div style={{ ...styles.hint, marginTop: 12 }}>
-            Systemets km regnes natten efter, en opgave er udført, og er turen hen til opgaven fra den forrige. Dagens første opgave og opgaver, der ikke er udført endnu, har derfor ingen.
+            Systemets km regnes natten efter, en opgave er udført, og er turen hen til opgaven fra den forrige. Turen hjemmefra er ikke med, så dagens første opgave (mærket «Dagens første») har ingen km. Det har opgaver, der ikke er udført endnu, heller ikke.
           </div>
           <div style={{ ...styles.hint, marginTop: 6 }}>
             Linjerne er ugeplanen, som den ser ud lige nu. Er en opgave flyttet, aflyst eller givet til en anden, efter skemaet blev
