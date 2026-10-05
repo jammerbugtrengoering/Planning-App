@@ -2375,14 +2375,14 @@ const MODULE_HELP = {
   ], warn: "Tilbudsmøder og interne blokke som ferie og sygdom tæller ikke med. To medarbejdere på samme besøg er ét besøg, og deres minutter lægges sammen — det er sådan kunden ser det. Undtagen dem der er markeret som oplæring: deres tid er med i lønnen, men hverken i denne liste eller på fakturaen." },
 
   papirskema: { title: "Papirskema", intro: "Indlæs de udfyldte time- og kørselsskemaer, som kommer tilbage på papir.", blocks: [
-    { h: "Sådan gør du", p: ["Vælg medarbejder og en dag i den uge, skemaet gælder. Du ser de samme linjer, som stod på det udprintede skema, med samme nummer i første kolonne.",
+    { h: "Sådan gør du", p: ["Vælg medarbejder og uge — brug pilene eller skriv ugenummeret. Du ser de samme linjer, som stod på det udprintede skema, med samme nummer i første kolonne.",
         "Skriv timerne ud for hver linje, som medarbejderen har skrevet dem: «2», «2,5», «2:30» eller «90 min». Skærmen viser minutterne ved siden af, så du kan se, hvordan tallet blev læst.",
         "Skriv også kilometerne. De bruges kun til at sammenligne — det er altid systemets egne kilometer, der gælder.",
         "Linjerne er ugeplanen, som den ser ud lige nu. Er en opgave flyttet, aflyst eller givet til en anden, efter skemaet blev trykt, og står den stadig på papiret, så vælg den under «Vælg en opgave fra ugen» (søg på kunde, adresse, nummer eller medarbejder), eller skriv dens nummer. Så kan du skrive timer og km ud for den, der står håndskrevet.",
         "Under linjerne står «Sæt opgaverne til udført» og «Sæt som fakturagrundlag». Fakturagrundlag er slået fra, til du selv vælger det: det er det, der gør tiden til en regning til kunden.",
         "Tryk «Godkend». Tiden lægges på opgaven og kommer med under Løn data og i faktureringen som al anden registreret tid — fluebenet til løn sætter du dér, som du plejer. En linje, der er indlæst, kan ikke indlæses to gange."] },
     { h: "Afvigelser i kilometer", p: ["Er det, medarbejderen skrev, mere end 1,5 km og 15 % fra det, systemet har regnet, står linjen med rødt og en forskel i kilometer. Det er dem, du tager en snak om.",
-        "Systemets kilometer regnes pr. opgave (turen hen til opgaven) og pr. dag. Papirets kilometer står som regel for hele dagen, så kig på dagslinjen under hver dag, før du trækker en konklusion.",
+        "Systemets kilometer regnes natten efter, en opgave er udført, og er turen hen til opgaven fra den forrige. Dagens første opgave og opgaver, der ikke er udført endnu, har derfor ingen. Papirets kilometer står som regel for hele dagen og kan godt tælle turen hjemmefra med, så kig på dagslinjen under hver dag, før du trækker en konklusion.",
         "Alle afvigelser gemmes sammen med den, der godkendte dem."] },
   ] },
   medExport: { title: "Løn data", intro: "Grundlaget for løn: timer og kørsel pr. medarbejder.", blocks: [
@@ -6563,7 +6563,7 @@ function PlanningApp({ session, onSignOut }) {
       {view === "kundetimer" && (<CustomerHoursView instances={instances} />)}
       {view === "medExport" && (<EmployeeExportView instances={instances} employees={employees} satsHistorik={satsHistorik} />)}
       {view === "papirskema" && (isAdminUser
-        ? <PapirskemaView instances={instances} employees={aktiveEmployees} onTidIndlaest={papirTidIndlaest} onFakturagrundlag={saetFakturagrundlagFlere} />
+        ? <PapirskemaView instances={instances} employees={aktiveEmployees} kmLog={kmLog} onTidIndlaest={papirTidIndlaest} onFakturagrundlag={saetFakturagrundlagFlere} />
         : <div style={styles.hint}>Kun planlæggere kan indlæse skemaer.</div>)}
       {view === "inventory" && (
         <InventoryView supabase={supabase} employees={employees} currentUserName={currentEmployeeForAuth?.name || null} onInventoryChanged={loadProductUsage} />
@@ -12332,25 +12332,26 @@ function isoLokal(d) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 const PAPIR_KORT = { background: "#fff", border: "1px solid #E2E8F0", borderRadius: 12, padding: "16px 18px" };
-function PapirskemaView({ instances, employees, onTidIndlaest, onFakturagrundlag }) {
+function PapirskemaView({ instances, employees, kmLog, onTidIndlaest, onFakturagrundlag }) {
   const [empId, setEmpId] = useState("");
-  const [dato, setDato] = useState(() => isoLokal(new Date()));
   const [felter, setFelter] = useState({});       // opgave-id -> { timer, km }
   const [ekstra, setEkstra] = useState([]);       // opgave-id'er, tilføjet med nummer
   const [nrInd, setNrInd] = useState("");
   const [soeg, setSoeg] = useState("");
   const [udfoert, setUdfoert] = useState(true);
   const [fakturagrundlag, setFakturagrundlag] = useState(false);
-  const [kmRaekker, setKmRaekker] = useState([]);
   const [klar, setKlar] = useState(null);         // null: tjekker · true/false: tabellen findes
   const [arbejder, setArbejder] = useState(false);
   const [besked, setBesked] = useState(null);     // { slags: "ok" | "fejl", tekst }
 
-  const uge = useMemo(() => {
-    const d = new Date(dato);
-    return isNaN(d) ? null : isoWeekInfo(d);
-  }, [dato]);
-  const mandag = uge ? mondayOfWeek(uge.week, uge.year) : null;
+  // Ugen vælges med numre og pile (5.10.2026): en dato i ugen viste alle ugens dage og gav ingen
+  // måde at bladre på. Uge og år afgøres altid af isoWeekInfo, så uge 53 og årsskiftet går rigtigt.
+  const [uge, setUge] = useState(() => isoWeekInfo(new Date()));
+  const mandag = useMemo(() => mondayOfWeek(uge.week, uge.year), [uge]);
+  const soendag = useMemo(() => { const d = new Date(mandag); d.setDate(d.getDate() + 6); return d; }, [mandag]);
+  const nulstilUge = () => { setFelter({}); setEkstra([]); setBesked(null); };
+  const vaelgUge = (week, year) => { setUge(isoWeekInfo(mondayOfWeek(week, year))); nulstilUge(); };
+  const flytUge = (antal) => { const m = new Date(mandag); m.setDate(m.getDate() + 7 * antal); setUge(isoWeekInfo(m)); nulstilUge(); };
 
   useEffect(() => {
     let afbrudt = false;
@@ -12358,21 +12359,18 @@ function PapirskemaView({ instances, employees, onTidIndlaest, onFakturagrundlag
     return () => { afbrudt = true; };
   }, []);
 
-  // Systemets kilometer for ugen. Hentes igen, når medarbejder eller uge skifter.
-  useEffect(() => {
-    if (!empId || !mandag) { setKmRaekker([]); return; }
-    let afbrudt = false;
-    const slut = new Date(mandag); slut.setDate(slut.getDate() + 6);
-    supabase.from("km_log").select("employee_id, work_date, to_instance_id, km")
-      .eq("employee_id", empId).gte("work_date", isoLokal(mandag)).lte("work_date", isoLokal(slut))
-      .then(({ data }) => { if (!afbrudt) setKmRaekker(data || []); });
-    return () => { afbrudt = true; };
-  }, [empId, uge?.week, uge?.year]);  // eslint-disable-line react-hooks/exhaustive-deps
-
+  // Systemets kilometer for ugen, fra appens egen kørselslog (km_log), som allerede er hentet ved opstart.
+  // En ekstra forespørgsel her gav tomme kilometer uden en fejlmelding.
+  // Hver tur regnes natten efter, opgaven er udført, og hører til opgaven, der køres TIL fra den forrige.
+  // Dagens første opgave har derfor ingen km, og en opgave, der ikke er udført, har ingen endnu.
+  const kmRaekker = useMemo(() => {
+    const fra = isoLokal(mandag), til = isoLokal(soendag);
+    return (kmLog || []).filter((r) => r.work_date >= fra && r.work_date <= til);
+  }, [kmLog, mandag, soendag]);
   const km = useMemo(() => systemKm(kmRaekker, empId), [kmRaekker, empId]);
 
   const raekker = useMemo(() => {
-    if (!empId || !uge) return [];
+    if (!empId) return [];
     const ugensOpgaver = instances.filter((i) => i.year === uge.year && i.week === uge.week);
     const liste = skemaOpgaver(ugensOpgaver, empId, DAGE_ALLE);
     const har = new Set(liste.map((t) => t.id));
@@ -12415,7 +12413,7 @@ function PapirskemaView({ instances, employees, onTidIndlaest, onFakturagrundlag
   // linjer på papiret, som ikke længere står på medarbejderens plan. Dem finder man her,
   // på kunde, adresse eller nummer, og knytter til det, der står håndskrevet.
   const kandidater = useMemo(() => {
-    if (!empId || !uge) return [];
+    if (!empId) return [];
     const har = new Set(raekker.map((r) => r.t.id));
     const q = soeg.trim().toLowerCase().replace(/^#/, "");
     const navn = (id) => employees.find((e) => e.id === id)?.name || "";
@@ -12507,16 +12505,24 @@ function PapirskemaView({ instances, employees, onTidIndlaest, onFakturagrundlag
         <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end" }}>
           <div style={{ flex: "1 1 220px" }}>
             <label style={styles.label} htmlFor="ps-emp">Medarbejder</label>
-            <select id="ps-emp" style={styles.input} value={empId} onChange={(e) => { setEmpId(e.target.value); setFelter({}); setEkstra([]); setBesked(null); }}>
+            <select id="ps-emp" style={styles.input} value={empId} onChange={(e) => { setEmpId(e.target.value); nulstilUge(); }}>
               <option value="">Vælg medarbejder</option>
               {employees.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
             </select>
           </div>
-          <div style={{ flex: "0 1 200px" }}>
-            <label style={styles.label} htmlFor="ps-dato">En dag i ugen</label>
-            <input id="ps-dato" type="date" style={styles.input} value={dato} onChange={(e) => { setDato(e.target.value); setFelter({}); setEkstra([]); setBesked(null); }} />
+          <div>
+            <label style={styles.label} htmlFor="ps-uge">Uge</label>
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <button type="button" aria-label="Forrige uge" style={{ ...styles.secondaryBtn, padding: "9px 12px" }} onClick={() => flytUge(-1)}>‹</button>
+              <input id="ps-uge" type="number" min="1" max="53" style={{ ...styles.input, width: 72, textAlign: "center", fontWeight: 700 }}
+                value={uge.week} onChange={(e) => { const v = Number(e.target.value); if (v >= 1 && v <= 53) vaelgUge(v, uge.year); }} />
+              <button type="button" aria-label="Næste uge" style={{ ...styles.secondaryBtn, padding: "9px 12px" }} onClick={() => flytUge(1)}>›</button>
+              <button type="button" style={{ ...styles.secondaryBtn, padding: "9px 12px" }} onClick={() => { setUge(isoWeekInfo(new Date())); nulstilUge(); }}>Denne uge</button>
+            </div>
           </div>
-          {uge && <div style={{ fontSize: 13.5, fontWeight: 600, color: "#334155", paddingBottom: 9 }}>Uge {uge.week} · {uge.year}</div>}
+          <div style={{ fontSize: 13.5, color: "#334155", paddingBottom: 9, lineHeight: 1.35 }}>
+            <b>{uge.year}</b> · {mandag.toLocaleDateString("da-DK", { day: "numeric", month: "short" })} – {soendag.toLocaleDateString("da-DK", { day: "numeric", month: "short" })}
+          </div>
         </div>
       </div>
 
@@ -12625,6 +12631,9 @@ function PapirskemaView({ instances, employees, onTidIndlaest, onFakturagrundlag
           )}
 
           <div style={{ ...styles.hint, marginTop: 12 }}>
+            Systemets km regnes natten efter, en opgave er udført, og er turen hen til opgaven fra den forrige. Dagens første opgave og opgaver, der ikke er udført endnu, har derfor ingen.
+          </div>
+          <div style={{ ...styles.hint, marginTop: 6 }}>
             Linjerne er ugeplanen, som den ser ud lige nu. Er en opgave flyttet, aflyst eller givet til en anden, efter skemaet blev
             trykt, så vælg den herunder og skriv det, der står på papiret.
           </div>
