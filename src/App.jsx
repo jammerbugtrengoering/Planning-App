@@ -2795,6 +2795,10 @@ function PlanningApp({ session, onSignOut }) {
       return MENU_GRUPPER.some((g) => g.sider.some(([k]) => k === side)) ? side : "uge";
     } catch { return "uge"; }
   });
+  // Anmodningen om at åbne et tilbud ryddes først, når man forlader siden — ikke når tilbuddet er åbnet.
+  // Oprettes et møde, genindlæses hele appen (loading-skærmen afmonterer siden), og så skulle tilbuddet
+  // åbnes igen, når siden kom tilbage. Ryddede vi ved åbning, endte man på listen i stedet for i tilbuddet.
+  useEffect(() => { if (view !== "tilbud") setAabnTilbudId(null); }, [view]);
   const [showAddTask, setShowAddTask] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
   const [showAddBlock, setShowAddBlock] = useState(false);
@@ -6545,7 +6549,7 @@ function PlanningApp({ session, onSignOut }) {
         <TilbudView supabase={supabase} checklistTemplates={checklistTemplates}
           pricing={pricing} currentUserName={currentEmployeeForAuth?.name || ""}
           employees={employees} currentEmployeeId={currentEmployeeForAuth?.id || ""}
-          aabnId={aabnTilbudId} onAabnet={() => setAabnTilbudId(null)} />
+          aabnId={aabnTilbudId} />
       )}
 
       {view === "reports" && (
