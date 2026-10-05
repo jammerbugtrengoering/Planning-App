@@ -2378,7 +2378,7 @@ const MODULE_HELP = {
     { h: "Sådan gør du", p: ["Vælg medarbejder og en dag i den uge, skemaet gælder. Du ser de samme linjer, som stod på det udprintede skema, med samme nummer i første kolonne.",
         "Skriv timerne ud for hver linje, som medarbejderen har skrevet dem: «2», «2,5», «2:30» eller «90 min». Skærmen viser minutterne ved siden af, så du kan se, hvordan tallet blev læst.",
         "Skriv også kilometerne. De bruges kun til at sammenligne — det er altid systemets egne kilometer, der gælder.",
-        "Står der en linje på papiret, som ikke var på skemaet, så skriv dens nummer under «Tilføj linje».",
+        "Linjerne er ugeplanen, som den ser ud lige nu. Er en opgave flyttet, aflyst eller givet til en anden, efter skemaet blev trykt, og står den stadig på papiret, så vælg den under «Vælg en opgave fra ugen» (søg på kunde, adresse, nummer eller medarbejder), eller skriv dens nummer. Så kan du skrive timer og km ud for den, der står håndskrevet.",
         "Tryk «Godkend». Tiden lægges på opgaven og kommer med under Løn data og i faktureringen som al anden registreret tid — fluebenet til løn sætter du dér, som du plejer. En linje, der er indlæst, kan ikke indlæses to gange."] },
     { h: "Afvigelser i kilometer", p: ["Er det, medarbejderen skrev, mere end 1,5 km og 15 % fra det, systemet har regnet, står linjen med rødt og en forskel i kilometer. Det er dem, du tager en snak om.",
         "Systemets kilometer regnes pr. opgave (turen hen til opgaven) og pr. dag. Papirets kilometer står som regel for hele dagen, så kig på dagslinjen under hver dag, før du trækker en konklusion.",
@@ -12337,6 +12337,7 @@ function PapirskemaView({ instances, employees, onTidIndlaest }) {
   const [felter, setFelter] = useState({});       // opgave-id -> { timer, km }
   const [ekstra, setEkstra] = useState([]);       // opgave-id'er, tilføjet med nummer
   const [nrInd, setNrInd] = useState("");
+  const [soeg, setSoeg] = useState("");
   const [udfoert, setUdfoert] = useState(true);
   const [kmRaekker, setKmRaekker] = useState([]);
   const [klar, setKlar] = useState(null);         // null: tjekker · true/false: tabellen findes
@@ -12406,6 +12407,30 @@ function PapirskemaView({ instances, employees, onTidIndlaest }) {
       return { ...d, system: sys, afv: kmAfvigelse(d.harKm ? d.papir : null, sys) };
     });
   }, [raekker, km]);
+
+  // Opgaver, man kan vælge til: ugens øvrige opgaver, uanset hvem de ligger hos nu. Planen
+  // ændrer sig, efter skemaet er trykt — sygdom, flyttede og aflyste opgaver — og så står der
+  // linjer på papiret, som ikke længere står på medarbejderens plan. Dem finder man her,
+  // på kunde, adresse eller nummer, og knytter til det, der står håndskrevet.
+  const kandidater = useMemo(() => {
+    if (!empId || !uge) return [];
+    const har = new Set(raekker.map((r) => r.t.id));
+    const q = soeg.trim().toLowerCase().replace(/^#/, "");
+    const navn = (id) => employees.find((e) => e.id === id)?.name || "";
+    return instances
+      .filter((i) => i.year === uge.year && i.week === uge.week && !i.deleted_at && !har.has(i.id)
+                   && !["sygdom", "ferie", "aktivitet", "blok"].includes(i.type))
+      .map((i) => {
+        const id = opgaveIdentitet(i);
+        const hos = (i.assignees || []).map(navn).filter(Boolean);
+        const aflyst = !!i.aflyst_grund;
+        return { t: i, sted: [id.primaer || i.title, id.sekundaer].filter(Boolean).join(", "), hos, aflyst,
+                 tekst: [i.opgave_nr, id.primaer, id.sekundaer, id.daempet, i.title, ...hos].join(" ").toLowerCase() };
+      })
+      .filter((k) => !q || k.tekst.includes(q))
+      .sort((a, b) => (instanceDateString(a.t) + String(a.t.scheduledTime || "99:99")).localeCompare(instanceDateString(b.t) + String(b.t.scheduledTime || "99:99")))
+      .slice(0, 12);
+  }, [instances, employees, raekker, soeg, empId, uge]);
 
   const attGodkende = raekker.filter((r) => !r.indlaest && r.minutter);
   const afvigelser = [
@@ -12557,13 +12582,45 @@ function PapirskemaView({ instances, employees, onTidIndlaest }) {
             </div>
           )}
 
-          <div style={{ display: "flex", gap: 8, alignItems: "flex-end", flexWrap: "wrap", marginTop: 14 }}>
+          <div style={{ ...styles.hint, marginTop: 12 }}>
+            Linjerne er ugeplanen, som den ser ud lige nu. Er en opgave flyttet, aflyst eller givet til en anden, efter skemaet blev
+            trykt, så vælg den herunder og skriv det, der står på papiret.
+          </div>
+          <div style={{ display: "flex", gap: 8, alignItems: "flex-end", flexWrap: "wrap", marginTop: 8 }}>
             <div>
-              <label style={{ ...styles.label, marginTop: 0 }} htmlFor="ps-nr">Tilføj linje med nummer</label>
+              <label style={{ ...styles.label, marginTop: 0 }} htmlFor="ps-nr">Tilføj med nummer</label>
               <input id="ps-nr" style={{ ...styles.input, width: 140 }} value={nrInd} placeholder="fx 18503"
                 onChange={(e) => setNrInd(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") tilfoejNr(); }} />
             </div>
             <button type="button" style={styles.secondaryBtn} onClick={tilfoejNr}>Tilføj</button>
+          </div>
+          <div style={{ marginTop: 12 }}>
+            <label style={{ ...styles.label, marginTop: 0 }} htmlFor="ps-soeg">Vælg en opgave fra ugen</label>
+            <input id="ps-soeg" style={{ ...styles.input, maxWidth: 420 }} value={soeg} placeholder="Søg på kunde, adresse, nummer eller medarbejder"
+              onChange={(e) => setSoeg(e.target.value)} />
+            {kandidater.length === 0 ? (
+              <div style={styles.hint}>{soeg.trim() ? "Ingen opgaver i ugen passer til søgningen." : "Der er ingen andre opgaver i ugen."}</div>
+            ) : (
+              <div style={{ marginTop: 6, border: "1px solid #E2E8F0", borderRadius: 10, overflow: "hidden", maxWidth: 760 }}>
+                {kandidater.map((k) => {
+                  const d = instanceDateString(k.t);
+                  return (
+                    <button key={k.t.id} type="button"
+                      onClick={() => { setEkstra((p) => (p.includes(k.t.id) ? p : [...p, k.t.id])); setBesked(null); }}
+                      style={{ display: "flex", gap: 10, alignItems: "baseline", width: "100%", textAlign: "left", padding: "8px 11px",
+                               border: "none", borderBottom: "1px solid #F1F5F9", background: "#fff", cursor: "pointer", fontSize: 13, fontFamily: "inherit" }}>
+                      <span style={{ width: 52, color: "#64748B", fontVariantNumeric: "tabular-nums" }}>{k.t.opgave_nr ?? ""}</span>
+                      <span style={{ width: 44, color: "#64748B" }}>{d ? `${d.slice(8, 10)}.${d.slice(5, 7)}` : ""}</span>
+                      <span style={{ flex: 1, minWidth: 0 }}>{k.sted}</span>
+                      <span style={{ color: k.aflyst ? "#B91C1C" : "#64748B", fontSize: 12 }}>
+                        {k.aflyst ? "aflyst" : k.hos.length ? k.hos.join(", ") : "ikke tildelt"}
+                      </span>
+                      <span style={{ color: "var(--farve)", fontWeight: 600, fontSize: 12 }}>Tilføj</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
       )}
