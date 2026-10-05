@@ -6,3 +6,9 @@
 delete from public.service_templates t
  where t.status = 'slettes'
    and t.id in (select id from public.kopi_slettede_aftaler_20261005);
+
+-- Del 2 (5.10.2026, Jonn): aftalen «Rengøring ift bevilling» (Jammerbugt Kommune) slettes med ALLE 26 opgaver, også den
+-- udførte opgave med 35 min (uge 37, medarbejder eb32ablk) — Jonns eksplicitte beslutning. Kopier: kopi_bevilling_opgaver_20261005
+-- (26 rækker) og kopi_bevilling_aftale_20261005. Kør i Supabase SQL Editor (delete hænger i Claudes værktøj):
+delete from public.instances where template_id = 'tplf3efcb0a3b25410e';
+delete from public.service_templates where id = 'tplf3efcb0a3b25410e';
