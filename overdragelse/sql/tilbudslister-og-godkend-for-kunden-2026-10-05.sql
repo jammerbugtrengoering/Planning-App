@@ -76,3 +76,6 @@ alter table public.checklist_templates add column tilbud_fase text check (tilbud
 --    min_mus, gem_mus_forberedelse. udviklingsoensker: mine_udviklingsoensker / tilfoej / traek (medarbejder); HR læser og retter tabellen direkte. mine_kompetencer().
 --  * Udløser mus_status_fra_aktivitet_trg på instances (after update of status → udført/aflyst): samtalen afholdt/aflyst, employee_hr.mus_sidst sættes, mus_naeste tømmes. Testet i en migration, der rullede tilbage.
 --  * mine_datoer(): næste MUS er den planlagte aktivitet, ellers kortets dato. kontor_indbakke: mus_forfalden springer over, når en MUS er booket; ny linje 'udviklingsoenske'.
+-- personalemappen_8a-8c: kvittering for haandbog. haandbog_dokumenter + kraever_kvittering, version, version_udgivet; haandbog_kvitteringer (employee_id, dokument_id, version).
+--   gem_haandbog (kalder gem_haandbog_dokument og sætter flag/version), kvitter_haandbog, mine_haandbog_kvittering (medarbejder), haandbog_kvittering_status (HR),
+--   og linjen 'haandbog_ikke_kvitteret' i kontor_indbakke (14 dage efter version_udgivet). Ny navn og ikke et overload, fordi PostgREST ikke kan vælge mellem to overload med standardværdier.

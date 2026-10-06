@@ -1873,6 +1873,7 @@ const MODULE_HELP = {
         "Auto-slut: «Rettelse af tid» er en medarbejder, der vil rette en systemlukket opgave til mindre end planlagt. «Godkend» — hendes løn følger rettelsen; «Afvis» — den planlagte tid står. Fakturaen røres ikke. «Glemmer at afslutte» betyder, at hun har mange systemlukninger i lønperioden.",
         "«Aftal næste besøg»: en aftale med rytmen «Aftales ved besøget» har ingen opgave i planen, og besøget er udført uden at næste er aftalt. Der står «Kontakt kunden for næste besøgsdato — sidste besøg var d. …». Ring til kunden, tryk «Åbn», skriv den aftalte dato og tryk «Opret besøg». Det samme kan gøres fra aftalen under Aftaler: «Aftal næste besøg». «Husk om en uge» skjuler linjen i syv dage, og så kommer den igen, til der er en dato.",
         "Personalemappen (kun HR-administratorer): «Dokument ikke kvitteret» står, når en medarbejder ikke har kvitteret for et dokument 4 dage efter, det blev lagt ind. «Bevis udløber snart» eller «er udløbet» står for dokumenter med en slutdato inden 60 dage. «MUS er forfalden» står, når næste samtale er passeret, eller der ikke har været en i 12 måneder. Linjerne forsvinder, når sagen er klaret; «Set ✓» skjuler dem for altid. De kommer ikke med i morgenmailen, fordi de nævner HR-oplysninger.",
+        "«Håndbog ikke læst af alle»: et dokument, der kræver kvittering, og som ikke alle har kvitteret for 14 dage efter udgivelsen eller sidste nye version. Linjen står, til alle har kvitteret; «Set ✓» skjuler den for altid.",
         "«Anmodning om ferie» eller «fri»: en medarbejder har bedt om fri i sin Personalemappen-app. Linjen står, til du har godkendt eller afvist under Personalemappen → Ferie og fravær. Den haster, hvis første dag er inden for to uger, eller hvis anmodningen er sendt med kort varsel.",
         "Alle planlæggere ser den samme liste og får de samme beskeder: push på telefonen, når noget haster (kræver Worklist på telefonen med beskeder slået til), og en mail kl. 7 med alt, der venter."] },
     { h: "Aflys en opgave", p: [
@@ -2043,7 +2044,7 @@ const MODULE_HELP = {
         "«Afvis» ændrer ikke planen. Skriv en begrundelse. Sygdom er ikke en anmodning og meldes som hidtil på telefonen."] },
   ] },
   haandbog: { title: "Håndbog og politikker", intro: "Personalehåndbogen og politikkerne, som medarbejderne læser i Personalemappen-appen.", blocks: [
-    { h: "Ret teksten", p: ["Vælg et dokument øverst. Du ser det først, som medarbejderne gør; tryk «Rediger» for at ændre det, og «Tilbage til visning» eller «Annuller», når du er færdig. Hvert afsnit har en overskrift og en tekst. Du kan flytte afsnit op og ned, fjerne dem og tilføje nye.",
+    { h: "Ret teksten", p: ["Vælg et dokument øverst. Sæt flueben ved «Medarbejderne skal kvittere», hvis alle skal bekræfte, at de har læst det; så ser du her, hvem der mangler, og klokken minder dig om det efter 14 dage. Er ændringen væsentlig, så sæt også «ny version», så alle kvitterer igen. Du ser det først, som medarbejderne gør; tryk «Rediger» for at ændre det, og «Tilbage til visning» eller «Annuller», når du er færdig. Hvert afsnit har en overskrift og en tekst. Du kan flytte afsnit op og ned, fjerne dem og tilføje nye.",
         "Tryk «Gem og vis for medarbejderne». Der er intet kladdetrin: det, du gemmer, kan medarbejderne læse med det samme.",
         "«Nyt dokument» laver fx en syge- og fraværspolitik. Skriv ikke navne på medarbejdere eller kunder i teksten, og læg ikke personlige oplysninger ind her."] },
   ] },
@@ -3902,7 +3903,7 @@ function PlanningApp({ session, onSignOut }) {
     }
     // Personalemappen: HR-linjerne (kun HR-administratorer får dem) peger på medarbejderlisten dér.
     if (l.art === "fravaer_anmodning") { setView("fravaer"); return; }
-    if (l.art === "ikke_kvitteret" || l.art === "bevis_udloeber" || l.art === "mus_forfalden" || l.art === "udviklingsoenske") { setView("personalemappen"); return; }
+    if (l.art === "ikke_kvitteret" || l.art === "bevis_udloeber" || l.art === "mus_forfalden" || l.art === "udviklingsoenske" || l.art === "haandbog_ikke_kvitteret") { setView("personalemappen"); return; }
     if (l.art === "produktbestilling" || l.art === "udlevering") { setView("inventory"); return; }
     if (l.art === "drift") { setView("drift"); return; }
     if (l.art === "systemlukninger") { setView("reports"); return; }
@@ -15477,6 +15478,37 @@ function FravaerView({ onAfgoer, beroerte }) {
   );
 }
 
+// Hvem har kvitteret for den nuværende version af et håndbogsdokument? Medarbejdere uden login og fratrådte tæller ikke med; de kan ikke kvittere.
+function HaandbogKvitteringer({ dok }) {
+  const [liste, setListe] = useState(null);
+  const [vis, setVis] = useState(false);
+  useEffect(() => {
+    let afbrudt = false;
+    supabase.rpc("haandbog_kvittering_status", { p_dokument_id: dok.id }).then(({ data }) => { if (!afbrudt) setListe(data || []); });
+    return () => { afbrudt = true; };
+  }, [dok.id, dok.version]);
+  if (liste === null) return null;
+  const mangler = liste.filter((x) => !x.kvitteret_tid);
+  return (
+    <div style={{ background: mangler.length ? "#FEF3C7" : "#F0FDF4", borderRadius: 10, padding: "10px 12px", marginBottom: 14, fontSize: 13.5 }}>
+      <div style={{ fontWeight: 700, color: mangler.length ? "#92400E" : "#166534" }}>
+        {liste.length - mangler.length} af {liste.length} har kvitteret{dok.version > 1 ? ` (version ${dok.version})` : ""}
+      </div>
+      <button type="button" onClick={() => setVis((v) => !v)} style={{ border: "none", background: "transparent", color: "var(--farve)", fontWeight: 700, cursor: "pointer", padding: 0, fontFamily: "inherit", fontSize: 13 }}>
+        {vis ? "Skjul navne" : "Vis navne"}
+      </button>
+      {vis && (
+        <div style={{ marginTop: 6 }}>
+          {mangler.length > 0 && <div><b>Mangler:</b> {mangler.map((x) => x.navn).join(", ")}</div>}
+          {liste.filter((x) => x.kvitteret_tid).map((x) => (
+            <div key={x.employee_id} style={{ color: "#475467" }}>{x.navn} · {new Date(x.kvitteret_tid).toLocaleDateString("da-DK")}</div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function HaandbogView() {
   const [dokumenter, setDokumenter] = useState(null);
   const [valgt, setValgt] = useState(null);     // id
@@ -15499,7 +15531,7 @@ function HaandbogView() {
     const id = vaelg || liste[0]?.id || null;
     setValgt(id);
     const dok = liste.find((x) => x.id === id);
-    setKladde(dok ? { id: dok.id, titel: dok.titel, underskrift: dok.underskrift || "", ny: false,
+    setKladde(dok ? { id: dok.id, titel: dok.titel, underskrift: dok.underskrift || "", ny: false, kraever: !!dok.kraever_kvittering, nyVersion: false,
       afsnit: dok.afsnit.map((y) => ({ k: y.id, overskrift: y.overskrift, tekst: y.tekst })) } : null);
     setAendret(false);
     setRedigerer(false);
@@ -15514,7 +15546,7 @@ function HaandbogView() {
     if (aendret && !window.confirm("Du har rettelser, der ikke er gemt. Fortsæt alligevel?")) return;
     const id = uid("hb");
     setValgt(id);
-    setKladde({ id, titel: "", underskrift: "", ny: true, afsnit: [{ k: uid("a"), overskrift: "", tekst: "" }] });
+    setKladde({ id, titel: "", underskrift: "", ny: true, kraever: false, nyVersion: false, afsnit: [{ k: uid("a"), overskrift: "", tekst: "" }] });
     setAendret(true);
     setRedigerer(true);
   }
@@ -15543,9 +15575,10 @@ function HaandbogView() {
   async function gem() {
     if (!kladde.titel.trim()) { setFejl("Skriv en titel på dokumentet."); return; }
     setGemmer(true); setFejl("");
-    const { error } = await supabase.rpc("gem_haandbog_dokument", {
+    const { error } = await supabase.rpc("gem_haandbog", {
       p_id: kladde.id, p_titel: kladde.titel, p_underskrift: kladde.underskrift,
       p_afsnit: kladde.afsnit.map((a) => ({ overskrift: a.overskrift, tekst: a.tekst })),
+      p_kraever: kladde.kraever, p_ny_version: kladde.kraever && kladde.nyVersion,
     });
     setGemmer(false);
     if (error) { setFejl("Kunne ikke gemmes: " + error.message); return; }
@@ -15579,6 +15612,7 @@ function HaandbogView() {
             </div>
             <button type="button" style={styles.primaryBtn} onClick={() => setRedigerer(true)}>Rediger</button>
           </div>
+          {dok.kraever_kvittering && <HaandbogKvitteringer dok={dok} />}
           {dok.afsnit.length === 0 && <div style={styles.hint}>Dokumentet har ingen afsnit endnu. Tryk «Rediger» for at skrive.</div>}
           <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
             {dok.afsnit.map((a) => (
@@ -15597,6 +15631,16 @@ function HaandbogView() {
           <input style={styles.input} value={kladde.titel} onChange={(e) => ret("titel", e.target.value)} placeholder="Fx Syge- og fraværspolitik" />
           <label style={styles.label}>Underskrift og dato (står nederst)</label>
           <input style={styles.input} value={kladde.underskrift} onChange={(e) => ret("underskrift", e.target.value)} placeholder="Fx Charlotte og Karen, maj 2025" />
+          <label style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: 13.5, margin: "12px 0 4px", cursor: "pointer" }}>
+            <input type="checkbox" checked={kladde.kraever} onChange={(e) => ret("kraever", e.target.checked)} style={{ marginTop: 3 }} />
+            <span>Medarbejderne skal kvittere for at have læst dokumentet</span>
+          </label>
+          {kladde.kraever && !kladde.ny && (
+            <label style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: 13.5, margin: "0 0 4px 22px", cursor: "pointer" }}>
+              <input type="checkbox" checked={kladde.nyVersion} onChange={(e) => ret("nyVersion", e.target.checked)} style={{ marginTop: 3 }} />
+              <span>Det er en væsentlig ændring: alle skal kvittere igen (ny version)</span>
+            </label>
+          )}
           <div style={{ fontWeight: 700, fontSize: 14, margin: "14px 0 6px" }}>Afsnit ({kladde.afsnit.length})</div>
           {kladde.afsnit.map((a, i) => (
             <div key={a.k} style={{ border: "1px solid #E2E8F0", borderRadius: 12, padding: 12, marginBottom: 10, background: "#FAFAFB" }}>
