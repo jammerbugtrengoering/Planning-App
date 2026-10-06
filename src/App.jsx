@@ -7750,12 +7750,26 @@ function StarLevel({ level }) {
 function ChecklistsView({ checklistTemplates, tilbudsLister = [], onSave, onDelete }) {
   const [editing, setEditing] = useState(null);
   const [showModal, setShowModal] = useState(false);
+  // alle | tilbud | en kontrakttype. En type viser de lister, der er mærket med den, og de lister, der gælder alle typer.
+  const [visning, setVisning] = useState("alle");
+  const visteLister = checklistTemplates.filter((c) => visning === "alle" || (visning !== "tilbud" && listeGaelderFor(c, visning)));
+  const visTilbud = visning === "alle" || visning === "tilbud";
   return (
     <div style={styles.page}>
       <div style={styles.toolbar}>
         <button style={styles.primaryBtn} onClick={() => { setEditing(null); setShowModal(true); }}><Plus size={16} /> Ny tjekliste</button>
       </div>
-      {tilbudsLister.length > 0 && (
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }}>
+        {[["alle", "Alle"], ["tilbud", "Tilbud"], ...CONTRACT_TYPES.map((c) => [c.key, c.icon + " " + c.label])].map(([k, l]) => (
+          <button key={k} type="button" onClick={() => setVisning(k)}
+            style={visning === k
+              ? { ...styles.typePickBtn, flex: "none", borderColor: "var(--farve)", color: "var(--farve)", background: "var(--farve-lys)" }
+              : { ...styles.typePickBtn, flex: "none" }}>
+            {l}
+          </button>
+        ))}
+      </div>
+      {visTilbud && tilbudsLister.length > 0 && (
         <div style={{ marginBottom: 22 }}>
           <div style={{ fontWeight: 700, fontSize: 14, color: "#166534", marginBottom: 2 }}>Tilbudslister — bruges kun på tilbud</div>
           <div style={{ fontSize: 12.5, color: "#64748B", marginBottom: 10, lineHeight: 1.5 }}>
@@ -7782,7 +7796,7 @@ function ChecklistsView({ checklistTemplates, tilbudsLister = [], onSave, onDele
         </div>
       )}
       <div style={styles.empGrid}>
-        {checklistTemplates.map((c) => (
+        {visning !== "tilbud" && visteLister.map((c) => (
           <div key={c.id} style={styles.empCard}>
             <div style={styles.empCardTop}>
               <span style={{ ...styles.avatar, background: "var(--farve)", width: 34, height: 34 }}><ListChecks size={16} /></span>
