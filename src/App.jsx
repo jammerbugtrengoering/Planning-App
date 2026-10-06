@@ -10026,6 +10026,20 @@ function DriftView({ isAdminUser, paaSide, aftaler = [], onAabnAftale }) {
   // Ruterne, hvor mindst én adresse blev gættet af reserven (OpenRouteService). Hentes for sig, så Drift-siden kan NAVNGIVE adresserne i stedet for
   // kun at sige «8 ruter» (6.10.2026: der stod «Se adresserne efter», men ingen steder at se dem).
   const [reserveRuter, setReserveRuter] = useState([]);
+  const [genberegner, setGenberegner] = useState(false);
+  async function genberegnReserveRuter() {
+    if (!window.confirm(
+      `Fjern de ${reserveRuter.length} gemte ruter, hvor reserven gættede, så de regnes forfra?\n\n`
+      + `Ruterne slås op igen med de adresser, der står i aftalerne nu, næste gang planen skal bruge dem — det sker, når du åbner de uger, de ligger i. `
+      + `Er en adresse stadig forkert, kommer ruten tilbage på listen her. Der ændres ingen opgaver.`)) return;
+    setGenberegner(true);
+    const { error } = await supabase.from("travel_overrides").delete().in("id", reserveRuter.map((r) => r.id));
+    setGenberegner(false);
+    if (error) { window.alert("Ruterne kunne ikke fjernes: " + error.message); return; }
+    setReserveRuter([]);
+    // Siden skal genindlæses: planens egen kopi af rutetiderne ligger i hukommelsen og ville ellers blive ved med at bruge de gamle tal.
+    window.location.reload();
+  }
   useEffect(() => {
     if (!isAdminUser) return;
     let afbrudt = false;
@@ -10241,6 +10255,13 @@ function DriftView({ isAdminUser, paaSide, aftaler = [], onAabnAftale }) {
               </div>
             );
           })}
+          {/* Genberegn: fjerner de gemte ruter, hvor reserven gættede, så de slås op forfra — med de adresser, der står i aftalerne NU. Rutetallene er afledt
+              af adresserne og kan altid regnes igen; en rute med en adresse, der stadig er forkert, kommer tilbage på listen. */}
+          <button type="button" onClick={genberegnReserveRuter} disabled={genberegner}
+            style={{ marginTop: 10, background: "#fff", border: "1px solid #E2E8F0", borderRadius: 10, padding: "8px 14px", fontSize: 13, fontWeight: 600,
+                     color: "#334155", cursor: "pointer", fontFamily: "inherit", opacity: genberegner ? 0.6 : 1 }}>
+            {genberegner ? "Genberegner…" : `Genberegn de ${reserveRuter.length} ruter`}
+          </button>
           <div style={{ fontSize: 12.5, color: "#64748B", marginTop: 6, lineHeight: 1.5 }}>
             Sådan fikser du det: klik «se på kort». Ligger prikken på den rigtige adresse, er kilometerne i orden, og du kan lade den være.
             Ligger den et helt andet sted, så er adressen stavet forkert eller mangler postnummer — tryk «Åbn aftalen», ret adressen og gem, så slås den nye stavemåde op fra bunden.
