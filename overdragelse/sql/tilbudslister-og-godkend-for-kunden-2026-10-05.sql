@@ -18,3 +18,7 @@ alter table public.checklist_templates add column tilbud_fase text check (tilbud
 -- 3) Ikke gennemført: ryd_oprydningskopier() skulle også rydde kopier fra 5.10 (kopi_slettede_aftaler_20261005,
 --    kopi_bevilling_aftale_20261005, kopi_bevilling_opgaver_20261005) og testtabellen zz_deltest. apply_migration
 --    hang på teksten (den indeholder drop/delete). Gøres i SQL Editor.
+
+-- 6.10.2026: employee_hr (HR-oplysninger, kun administratorer). Migration «employee_hr_tabel». Egen tabel og ikke kolonner på employees,
+-- fordi employees kan læses af alle kolleger. Kolonner: telefon, privat_email, nodkontakt_navn/-relation/-telefon, ansaettelsesform
+-- (fast/timeloenned/vikar/elev/andet), ansat_fra, mus_sidst, mus_naeste. Ingen CPR, ingen helbred, ingen samtalenoter.

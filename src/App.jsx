@@ -2472,6 +2472,7 @@ const MODULE_HELP = {
         "Hjemmeadresse, men kun for dem der har kørsel i arbejdstiden. Den bruges alene til at beregne afstanden til dagens første opgave.",
         "Timeløn og lønhistorik, bonus og kilometersats, weekendtillæg, SH-sats og Danløn-nummer.",
         "Registrerede timer pr. opgave, fravær og fratrædelsesdato.",
+        "HR-oplysninger, som kun administratorer kan se: telefonnummer, privat e-mail, ansættelsesform og ansættelsesdato, datoerne for MUS-samtaler (aldrig indholdet), og en nødkontakt — navn, forhold og telefonnummer på en anden person, som medarbejderen selv har oplyst.",
         "Fravær står som fravær. Systemet gemmer aldrig en årsag — hverken sygdom eller diagnose.",
         "Bliver du spurgt: der er ingen GPS og ingen positionsmåling i Worklist. Kørslen regnes ud fra adresserne på opgaverne, ikke fra hvor telefonen har været. Det er et spørgsmål, medarbejdere stiller, og svaret er entydigt nej."] },
     { h: "Om kunderne og borgerne", p: [
@@ -3530,6 +3531,9 @@ function PlanningApp({ session, onSignOut }) {
   // administratorer, fordi politikken ikke slipper dem ind i tabellen.
   const [satsHistorik, setSatsHistorik] = useState({});
   const [kmSatser, setKmSatser] = useState({}); // { [employee_id]: [{sats, gyldig_fra}, ...] }
+  // HR-oplysninger pr. medarbejder (telefon, nødkontakt, ansættelse, MUS-datoer). Kun administratorer kan læse tabellen; for andre er
+  // objektet tomt. Hentes for sig og ikke i loadAll, så en fejl her aldrig kan vælte opstarten af ugeplanen.
+  const [hrData, setHrData] = useState({});
   const [omkostninger, setOmkostninger] = useState([]); // [{id, aar, maaned, beskrivelse, beloeb}]
   const [kmLog, setKmLog] = useState([]); // [{id, employee_id, work_date, km}]
   const [bonus, setBonus] = useState([]); // [{id, employee_id, aar, kvartal, beloeb, note}]
@@ -3874,6 +3878,17 @@ function PlanningApp({ session, onSignOut }) {
     return true;
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  useEffect(() => {
+    if (loading || !isAdminRef.current) return;
+    let afbrudt = false;
+    supabase.from("employee_hr").select("*").then(({ data, error }) => {
+      if (afbrudt) return;
+      if (error) { console.error("employee_hr kunne ikke hentes:", error.message); return; }
+      setHrData(Object.fromEntries((data || []).map((r) => [r.employee_id, r])));
+    });
+    return () => { afbrudt = true; };
+  }, [loading, genindlaes]);
+
   const syncEmployee = useCallback(async (emp) => {
     const { data: skillRows_db } = await supabase.from("skills").select("id, name");
     const { error: empErr } = await supabase.from("employees").upsert({ id: emp.id, name: emp.name, color: emp.color, is_admin: emp.isAdmin ?? false, weekend_ok: emp.weekendOk ?? false, start_stop: emp.startStop ?? false, start_time: emp.startTime || null, danloen_nr: emp.danloenNr ?? null,
@@ -3916,6 +3931,14 @@ function PlanningApp({ session, onSignOut }) {
       const { error: homeErr } = await supabase.from("employee_home")
         .upsert({ employee_id: emp.id, home_address: emp.homeAddress || null, travel_in_worktime: !!emp.travelInWorktime, updated_at: new Date().toISOString() }, { onConflict: "employee_id" });
       if (dbFail(homeErr, "gemme transportordningen")) return;
+
+      // HR-oplysningerne gemmes samlet. En fuld række hver gang: tomme felter betyder «ikke angivet» og nulstiller bevidst det, der stod.
+      if (emp.hr) {
+        const raekke = { employee_id: emp.id, ...emp.hr, updated_at: new Date().toISOString() };
+        const { error: hrErr } = await supabase.from("employee_hr").upsert(raekke, { onConflict: "employee_id" });
+        if (dbFail(hrErr, "gemme HR-oplysningerne")) return;
+        setHrData((prev) => ({ ...prev, [emp.id]: raekke }));
+      }
     }
     const skillRows = Object.entries(emp.skills || {})
       .map(([name, level]) => {
@@ -6623,7 +6646,7 @@ function PlanningApp({ session, onSignOut }) {
           travelSettings={travelSettings} onClose={() => setVisSimulering(false)}
           onAnvend={anvendSimulering} onRulTilbage={rulSimuleringTilbage} />
       )}
-      {showAddEmp && <EmployeeModal emp={editEmp} onClose={() => { setShowAddEmp(false); setEditEmp(null); }} onSave={saveEmployee} skills={skills} satsHistorik={editEmp ? satsHistorik[editEmp.id] : null} kmSatser={editEmp ? kmSatser[editEmp.id] : null} />}
+      {showAddEmp && <EmployeeModal emp={editEmp} onClose={() => { setShowAddEmp(false); setEditEmp(null); }} onSave={saveEmployee} skills={skills} hr={editEmp ? hrData[editEmp.id] : null} satsHistorik={editEmp ? satsHistorik[editEmp.id] : null} kmSatser={editEmp ? kmSatser[editEmp.id] : null} />}
       {showAddBlock && <BlockModal employees={aktiveEmployees} onClose={() => setShowAddBlock(false)} onSave={addBlock} />}
       {showAddActivity && <ActivityModal employees={aktiveEmployees} onClose={() => setShowAddActivity(false)} onSave={addActivity} />}
       {/* Transporttid ligger under Opsaetning (28.9.2026). Den saettes én gang og
@@ -18893,7 +18916,31 @@ function TravelSettingsForm({ settings, onSave }) {
   );
 }
 
-function EmployeeModal({ emp, onClose, onSave, skills: skillList, satsHistorik, kmSatser }) {
+// Ét kort i stamkortet: farvet hoved og en krop. Samme udseende som de gamle afsnit, men kortene kan nu sættes frit i fanerne.
+function StamKort({ titel, hint, bg, farve, hintFarve, children }) {
+  return (
+    <div style={styles.empSection}>
+      <div style={{ ...styles.empSectionHead, background: bg }}>
+        <div style={{ ...styles.empSectionTitle, color: farve }}>{titel}</div>
+        {hint && <div style={{ ...styles.empSectionHint, color: hintFarve }}>{hint}</div>}
+      </div>
+      <div style={styles.empSectionBody}>{children}</div>
+    </div>
+  );
+}
+
+function EmployeeModal({ emp, onClose, onSave, skills: skillList, satsHistorik, kmSatser, hr }) {
+  const [fane, setFane] = useState("person");
+  // HR-oplysninger (6.10.2026) ligger i employee_hr, kun synlig for administratorer. Datoer som tekst «ÅÅÅÅ-MM-DD», tomt = ikke angivet.
+  const [hrTelefon, setHrTelefon] = useState(hr?.telefon || "");
+  const [hrPrivatEmail, setHrPrivatEmail] = useState(hr?.privat_email || "");
+  const [hrNodNavn, setHrNodNavn] = useState(hr?.nodkontakt_navn || "");
+  const [hrNodRelation, setHrNodRelation] = useState(hr?.nodkontakt_relation || "");
+  const [hrNodTelefon, setHrNodTelefon] = useState(hr?.nodkontakt_telefon || "");
+  const [hrForm, setHrForm] = useState(hr?.ansaettelsesform || "");
+  const [hrAnsatFra, setHrAnsatFra] = useState(hr?.ansat_fra || "");
+  const [hrMusSidst, setHrMusSidst] = useState(hr?.mus_sidst || "");
+  const [hrMusNaeste, setHrMusNaeste] = useState(hr?.mus_naeste || "");
   // Spaerre mod at oprette den samme medarbejder to gange.
   //
   // Id'et dannes med uid("e") INDE i knappens onClick. To tryk giver altsaa to
@@ -18978,23 +19025,85 @@ function EmployeeModal({ emp, onClose, onSave, skills: skillList, satsHistorik, 
 
   return (
     <Modal onClose={onClose} title={emp ? `Rediger ${medSolsikke(emp.name, emp.id)}` : "Ny medarbejder"} persistent bred>
-      {/* Fire afsnit med samme farvesprog som Ny opgave: rosa er personen, groent er
-          hvad hun kan, blaat er tid. Det graa med haengelaas er det som kun
-          administratorer kan se — og det skal se anderledes ud af netop den grund. */}
-      {/* Stamkortet er tre kolonner (5.10.2026), fordi der kommer flere HR-oplysninger til. Hvert afsnit er ét kort i et gitter, der
-          selv går ned til to og én kolonne på smallere skærme — nye afsnit sættes bare ind som endnu et kort. Hver kolonne er sin egen
-          stak, så et langt afsnit i den ene ikke skubber de andre ned. */}
+      {/* Stamkortet er delt i fire faner (6.10.2026), og hver fane er et gitter af kort i op til tre kolonner. Kommer der flere
+          HR-oplysninger, sættes de som et nyt kort i fanen «Ansættelse» — resten af vinduet røres ikke. Alle faner gemmes med
+          den samme knap, så en rettelse i én fane aldrig går tabt, fordi man skiftede fane. */}
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16 }}>
+        {[["person", "Person"], ["ansaettelse", "Ansættelse"], ["planlaegning", "Planlægning"], ["loen", "Løn"]].map(([k, l]) => (
+          <button key={k} type="button" onClick={() => setFane(k)}
+            style={{ padding: "7px 16px", borderRadius: 999, fontSize: 13, fontWeight: 700, cursor: "pointer",
+                     border: fane === k ? "1px solid var(--farve-moerk)" : "1px solid #E2E8F0",
+                     background: fane === k ? "var(--farve-moerk)" : "#fff", color: fane === k ? "#fff" : "#5B5B60" }}>
+            {l}
+          </button>
+        ))}
+      </div>
+
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 16, alignItems: "start" }}>
-      <div>
-      <div style={styles.empSection}>
-        <div style={{ ...styles.empSectionHead, background: "var(--farve-lys)" }}>
-          <div style={{ ...styles.empSectionTitle, color: "var(--farve-moerk)" }}>Personen</div>
-          <div style={{ ...styles.empSectionHint, color: "#B4436F" }}>Navn og hvornår dagen begynder</div>
-        </div>
-        <div style={styles.empSectionBody}>
+
+      {fane === "person" && (<>
+        <StamKort titel="Personen" hint="Hvem hun er, og hvordan hun kontaktes" bg="var(--farve-lys)" farve="var(--farve-moerk)" hintFarve="#B4436F">
           <label style={styles.label}>Navn</label>
           <input style={styles.input} value={name} onChange={(e) => setName(e.target.value)} placeholder="Fulde navn" />
 
+
+          <label style={styles.label}>Telefon</label>
+          <input style={styles.input} type="tel" inputMode="tel" value={hrTelefon} onChange={(e) => setHrTelefon(e.target.value)} placeholder="12 34 56 78" />
+          <label style={styles.label}>Privat e-mail</label>
+          <input style={styles.input} type="email" value={hrPrivatEmail} onChange={(e) => setHrPrivatEmail(e.target.value)} placeholder="Bruges ikke til login" />
+          <div style={styles.hint}>
+            Telefon og privat e-mail kan kun ses af administratorer. Arbejdsmailen, hun logger ind med, står under Medarbejdere.
+          </div>
+        </StamKort>
+        <StamKort titel="Nødkontakt" hint="Den, vi ringer til, hvis der sker noget" bg="#FEF2F2" farve="#B91C1C" hintFarve="#DC2626">
+          <label style={styles.label}>Navn</label>
+          <input style={styles.input} value={hrNodNavn} onChange={(e) => setHrNodNavn(e.target.value)} placeholder="Fx ægtefælle, forælder eller ven" />
+          <label style={styles.label}>Forhold til medarbejderen</label>
+          <input style={styles.input} value={hrNodRelation} onChange={(e) => setHrNodRelation(e.target.value)} placeholder="Fx ægtefælle" />
+          <label style={styles.label}>Telefon</label>
+          <input style={styles.input} type="tel" inputMode="tel" value={hrNodTelefon} onChange={(e) => setHrNodTelefon(e.target.value)} />
+          <div style={styles.hint}>
+            Det er en tredjepersons oplysninger. De bruges kun, hvis der sker noget med medarbejderen, og kun administratorer kan se dem.
+          </div>
+        </StamKort>
+      </>)}
+
+      {fane === "ansaettelse" && (<>
+        <StamKort titel="Ansættelse" hint="Hvordan og hvornår hun er ansat" bg="#F5F3FF" farve="#6D28D9" hintFarve="#7C3AED">
+          <label style={styles.label}>Ansættelsesform</label>
+          <select style={styles.input} value={hrForm} onChange={(e) => setHrForm(e.target.value)}>
+            <option value="">Ikke angivet</option>
+            <option value="fast">Fastansat</option>
+            <option value="timeloenned">Timelønnet</option>
+            <option value="vikar">Vikar</option>
+            <option value="elev">Elev</option>
+            <option value="andet">Andet</option>
+          </select>
+          <label style={styles.label}>Ansat fra</label>
+          <input style={{ ...styles.input, maxWidth: 200 }} type="date" value={hrAnsatFra} onChange={(e) => setHrAnsatFra(e.target.value)} />
+          {emp?.fratraadtDato && (
+            <div style={styles.hint}>Fratrådt {new Date(emp.fratraadtDato).toLocaleDateString("da-DK")}.</div>
+          )}
+          <div style={styles.hint}>
+            Kontrakt, prøvetid og opsigelsesvarsel kommer som næste trin.
+          </div>
+        </StamKort>
+        <StamKort titel="MUS" hint="Medarbejderudviklingssamtalen — kun datoerne" bg="#EFF6FF" farve="#1D4ED8" hintFarve="#3B82F6">
+          <label style={styles.label}>Sidste samtale</label>
+          <input style={{ ...styles.input, maxWidth: 200 }} type="date" value={hrMusSidst} onChange={(e) => setHrMusSidst(e.target.value)} />
+          <label style={styles.label}>Næste samtale</label>
+          <input style={{ ...styles.input, maxWidth: 200 }} type="date" value={hrMusNaeste} onChange={(e) => setHrMusNaeste(e.target.value)} />
+          {hrMusNaeste && hrMusNaeste < todayIso() && (
+            <div style={{ ...styles.hint, color: "#B45309", fontWeight: 600 }}>Datoen for næste samtale er passeret.</div>
+          )}
+          <div style={styles.hint}>
+            Appen gemmer kun datoerne, ikke indholdet af samtalen. Referatet hører til i jeres eget dokumentarkiv og er følsomt.
+          </div>
+        </StamKort>
+      </>)}
+
+      {fane === "planlaegning" && (<>
+        <StamKort titel="Tid" hint="Mødetid og timer til rådighed pr. dag — det loft planlægningen regner med" bg="#EFF6FF" farve="#1D4ED8" hintFarve="#3B82F6">
           <label style={styles.label}>Mødetid</label>
           <input style={styles.input} type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} />
           <div style={styles.hint}>
@@ -19002,99 +19111,6 @@ function EmployeeModal({ emp, onClose, onSave, skills: skillList, satsHistorik, 
             {travelInWorktime && " Da kørslen er en del af hendes arbejdstid, er det tidspunktet hun tager hjemmefra."}
           </div>
 
-          <label style={styles.label}>Medarbejdernummer i Danløn</label>
-          <input style={styles.input} value={danloenNr} maxLength={20}
-            placeholder="Tomt = kommer ikke med i løneksporten"
-            onChange={(e) => setDanloenNr(e.target.value)} />
-          <div style={styles.hint}>
-            Nummeret hun står med i Danløn. Uden det kan hendes timer og kørsel ikke
-            sendes til løn — navne er ikke sikre nok, når to kan hedde det samme.
-          </div>
-
-          {/* Tillaeg. Fluebenet siger OM hun faar det; feltet ved siden af siger
-              hvor meget, og staar det tomt, bruges den faelles sats fra Loenarter.
-              De to er adskilt med vilje - ellers ville en glemt sats se ud som et
-              fravalg, og tillaegget ville stille forsvinde fra hendes loen. */}
-          <label style={styles.label}>Tillæg</label>
-          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13.5,
-                          color: "#334155", cursor: "pointer", minHeight: 36 }}>
-            <input type="checkbox" style={{ width: 16, height: 16, accentColor: "var(--farve)" }}
-              checked={weekendTillaeg} onChange={(e) => setWeekendTillaeg(e.target.checked)} />
-            Weekendtillæg
-            {weekendTillaeg && (
-              <>
-                <input style={{ ...styles.input, width: 74, marginLeft: "auto" }}
-                  value={weekendPctEgen} placeholder="fælles" inputMode="decimal"
-                  onChange={(e) => setWeekendPctEgen(e.target.value)} />
-                <span style={{ color: "#94A3B8" }}>%</span>
-              </>
-            )}
-          </label>
-          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13.5,
-                          color: "#334155", cursor: "pointer", minHeight: 36 }}>
-            <input type="checkbox" style={{ width: 16, height: 16, accentColor: "var(--farve)" }}
-              checked={shBetaling} onChange={(e) => setShBetaling(e.target.checked)} />
-            Søn- og helligdagsbetaling
-            {shBetaling && (
-              <>
-                <input style={{ ...styles.input, width: 74, marginLeft: "auto" }}
-                  value={shPctEgen} placeholder="fælles" inputMode="decimal"
-                  onChange={(e) => setShPctEgen(e.target.value)} />
-                <span style={{ color: "#94A3B8" }}>%</span>
-              </>
-            )}
-          </label>
-          <div style={styles.hint}>
-            Weekendtillægget beregnes af lønnen for hendes timer lørdag og søndag.
-            Søn- og helligdagsbetalingen af hele månedens godkendte løn, tillægget
-            iberegnet. Står procentfeltet tomt, bruges den fælles sats under Lønarter.
-          </div>
-        </div>
-      </div>
-
-      </div>
-      <div>
-      <div style={styles.empSection}>
-        <div style={{ ...styles.empSectionHead, background: "#F0FDFA" }}>
-          <div style={{ ...styles.empSectionTitle, color: "#0F766E" }}>Kan</div>
-          <div style={{ ...styles.empSectionHint, color: "#149285" }}>Kompetencer og niveau — afgør hvilke opgaver hun kommer i betragtning til</div>
-        </div>
-        <div style={styles.empSectionBody}>
-          {synlige.length === 0 && (
-            <div style={styles.hint}>Ingen kompetencer valgt endnu.</div>
-          )}
-          <div style={styles.skillLevelGrid}>
-            {synlige.map((s) => {
-              const current = empSkills[s] || 0;
-              return (
-                <div key={s} style={styles.skillLevelRow}>
-                  <span style={styles.skillLevelName}>{s}</span>
-                  <div style={styles.levelSeg}>
-                    <button type="button" onClick={() => setLevel(s, 0)} style={current === 0 ? styles.levelBtnActiveNone : styles.levelBtn}>Ingen</button>
-                    {LEVELS.map((l) => (
-                      <button key={l.v} type="button" onClick={() => setLevel(s, l.v)} style={current === l.v ? styles.levelBtnActive : styles.levelBtn}>{l.short}</button>
-                    ))}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-          {oevrige.length > 0 && (
-            <button type="button" style={styles.empFoldBtn} onClick={() => setVisAlleKompetencer((v) => !v)}>
-              {visAlleKompetencer
-                ? "Skjul de kompetencer hun ikke har"
-                : `+ Tilføj kompetence — ${oevrige.length} ${oevrige.length === 1 ? "er" : "er"} skjult`}
-            </button>
-          )}
-        </div>
-      </div>
-
-      <div style={styles.empSection}>
-        <div style={{ ...styles.empSectionHead, background: "#EFF6FF" }}>
-          <div style={{ ...styles.empSectionTitle, color: "#1D4ED8" }}>Tid</div>
-          <div style={{ ...styles.empSectionHint, color: "#3B82F6" }}>Timer til rådighed pr. dag — det loft planlægningen regner med</div>
-        </div>
-        <div style={styles.empSectionBody}>
           <div style={styles.capEditRow}>
             {DAYS.map((d) => (
               <div key={d.key} style={styles.capEditBox}>
@@ -19123,17 +19139,36 @@ function EmployeeModal({ emp, onClose, onSave, skills: skillList, satsHistorik, 
           <div style={styles.hint}>
             Uden fluebenet kan hun slet ikke planlægges lørdag og søndag. Weekendarbejde udløser tillæg.
           </div>
-        </div>
-      </div>
-
-      </div>
-      <div>
-      <div style={styles.empSection}>
-        <div style={{ ...styles.empSectionHead, background: "#F1F5F9" }}>
-          <div style={{ ...styles.empSectionTitle, color: "#334155" }}>🔒 Løn og transport</div>
-          <div style={{ ...styles.empSectionHint, color: "#64748B" }}>Kun administratorer kan se og rette dette</div>
-        </div>
-        <div style={styles.empSectionBody}>
+        </StamKort>
+        <StamKort titel="Kan" hint="Kompetencer og niveau — afgør hvilke opgaver hun kommer i betragtning til" bg="#F0FDFA" farve="#0F766E" hintFarve="#149285">
+          {synlige.length === 0 && (
+            <div style={styles.hint}>Ingen kompetencer valgt endnu.</div>
+          )}
+          <div style={styles.skillLevelGrid}>
+            {synlige.map((s) => {
+              const current = empSkills[s] || 0;
+              return (
+                <div key={s} style={styles.skillLevelRow}>
+                  <span style={styles.skillLevelName}>{s}</span>
+                  <div style={styles.levelSeg}>
+                    <button type="button" onClick={() => setLevel(s, 0)} style={current === 0 ? styles.levelBtnActiveNone : styles.levelBtn}>Ingen</button>
+                    {LEVELS.map((l) => (
+                      <button key={l.v} type="button" onClick={() => setLevel(s, l.v)} style={current === l.v ? styles.levelBtnActive : styles.levelBtn}>{l.short}</button>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          {oevrige.length > 0 && (
+            <button type="button" style={styles.empFoldBtn} onClick={() => setVisAlleKompetencer((v) => !v)}>
+              {visAlleKompetencer
+                ? "Skjul de kompetencer hun ikke har"
+                : `+ Tilføj kompetence — ${oevrige.length} ${oevrige.length === 1 ? "er" : "er"} skjult`}
+            </button>
+          )}
+        </StamKort>
+        <StamKort titel="Kørsel og kontrol" hint="Transport, hjemmeadresse og start/stop" bg="#F1F5F9" farve="#334155" hintFarve="#64748B">
           {/* Start/stop-tidsregistrering. Her og ikke ved weekendfeltet: det er et
               kontroltiltag paa den tid, der loennes og faktureres, og det maa kun
               kontoret slaa til. Databasen haandhaever det ogsaa — guard_employees_update
@@ -19153,6 +19188,46 @@ function EmployeeModal({ emp, onClose, onSave, skills: skillList, satsHistorik, 
             før det slås til.</b>
           </div>
           </>)}
+          <button type="button" style={travelInWorktime ? styles.empTjekAktivGroen : styles.empTjek}
+            onClick={() => setTravelInWorktime((v) => !v)}>
+            <span style={travelInWorktime ? styles.empTjekFirkantGroen : styles.empTjekFirkant}>
+              {travelInWorktime && <Check size={11} color="#fff" strokeWidth={3} />}
+            </span>
+            <span style={{ fontSize: 13, color: "#111111" }}>Kørsel er en del af arbejdstiden</span>
+          </button>
+          <div style={styles.hint}>
+            Med fluebenet tæller dagens kørsel i hendes kapacitet — hjemmefra til første opgave,
+            mellem opgaverne, og fra sidste opgave hjem. Uden det afregnes kørslen med kilometerpenge.
+          </div>
+
+          {travelInWorktime && (
+            <>
+              <label style={styles.label}>Hjemmeadresse</label>
+              <input style={styles.input} value={homeAddress} onChange={(e) => setHomeAddress(e.target.value)}
+                placeholder="Vejnavn 1, 9490 Pandrup" />
+              <div style={styles.hint}>
+                Kan kun ses af administratorer og af hende selv. Sendes til rutetjenesten på samme måde
+                som kundernes adresser.
+                {!homeAddress.trim() && <strong style={{ color: "#B45309" }}> Uden adresse slår ordningen ikke til.</strong>}
+              </div>
+            </>
+          )}
+        </StamKort>
+      </>)}
+
+      {fane === "loen" && (<>
+        <StamKort titel="🔒 Løn" hint="Kun administratorer kan se og rette dette" bg="#F1F5F9" farve="#334155" hintFarve="#64748B">
+          <label style={styles.label}>Medarbejdernummer i Danløn</label>
+          <input style={styles.input} value={danloenNr} maxLength={20}
+            placeholder="Tomt = kommer ikke med i løneksporten"
+            onChange={(e) => setDanloenNr(e.target.value)} />
+          <div style={styles.hint}>
+            Nummeret hun står med i Danløn. Uden det kan hendes timer og kørsel ikke
+            sendes til løn — navne er ikke sikre nok, når to kan hedde det samme.
+          </div>
+
+        </StamKort>
+        <StamKort titel="🔒 Satser" hint="Timeløn og kilometersats med gyldighedsdato" bg="#F1F5F9" farve="#334155" hintFarve="#64748B">
           <label style={styles.label}>Timeløn (kr.)</label>
           <input style={{ ...styles.input, maxWidth: 160 }} type="number" min="0" step="1" value={hourlyWage}
             onChange={(e) => setHourlyWage(e.target.value)} placeholder={String(STANDARD_TIMELOEN)} />
@@ -19215,34 +19290,49 @@ function EmployeeModal({ emp, onClose, onSave, skills: skillList, satsHistorik, 
             </div>
           )}
 
-          <button type="button" style={travelInWorktime ? styles.empTjekAktivGroen : styles.empTjek}
-            onClick={() => setTravelInWorktime((v) => !v)}>
-            <span style={travelInWorktime ? styles.empTjekFirkantGroen : styles.empTjekFirkant}>
-              {travelInWorktime && <Check size={11} color="#fff" strokeWidth={3} />}
-            </span>
-            <span style={{ fontSize: 13, color: "#111111" }}>Kørsel er en del af arbejdstiden</span>
-          </button>
+        </StamKort>
+        <StamKort titel="🔒 Tillæg" hint="Weekend og søn- og helligdage" bg="#F1F5F9" farve="#334155" hintFarve="#64748B">
+          {/* Tillaeg. Fluebenet siger OM hun faar det; feltet ved siden af siger
+              hvor meget, og staar det tomt, bruges den faelles sats fra Loenarter.
+              De to er adskilt med vilje - ellers ville en glemt sats se ud som et
+              fravalg, og tillaegget ville stille forsvinde fra hendes loen. */}
+          <label style={styles.label}>Tillæg</label>
+          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13.5,
+                          color: "#334155", cursor: "pointer", minHeight: 36 }}>
+            <input type="checkbox" style={{ width: 16, height: 16, accentColor: "var(--farve)" }}
+              checked={weekendTillaeg} onChange={(e) => setWeekendTillaeg(e.target.checked)} />
+            Weekendtillæg
+            {weekendTillaeg && (
+              <>
+                <input style={{ ...styles.input, width: 74, marginLeft: "auto" }}
+                  value={weekendPctEgen} placeholder="fælles" inputMode="decimal"
+                  onChange={(e) => setWeekendPctEgen(e.target.value)} />
+                <span style={{ color: "#94A3B8" }}>%</span>
+              </>
+            )}
+          </label>
+          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13.5,
+                          color: "#334155", cursor: "pointer", minHeight: 36 }}>
+            <input type="checkbox" style={{ width: 16, height: 16, accentColor: "var(--farve)" }}
+              checked={shBetaling} onChange={(e) => setShBetaling(e.target.checked)} />
+            Søn- og helligdagsbetaling
+            {shBetaling && (
+              <>
+                <input style={{ ...styles.input, width: 74, marginLeft: "auto" }}
+                  value={shPctEgen} placeholder="fælles" inputMode="decimal"
+                  onChange={(e) => setShPctEgen(e.target.value)} />
+                <span style={{ color: "#94A3B8" }}>%</span>
+              </>
+            )}
+          </label>
           <div style={styles.hint}>
-            Med fluebenet tæller dagens kørsel i hendes kapacitet — hjemmefra til første opgave,
-            mellem opgaverne, og fra sidste opgave hjem. Uden det afregnes kørslen med kilometerpenge.
+            Weekendtillægget beregnes af lønnen for hendes timer lørdag og søndag.
+            Søn- og helligdagsbetalingen af hele månedens godkendte løn, tillægget
+            iberegnet. Står procentfeltet tomt, bruges den fælles sats under Lønarter.
           </div>
+        </StamKort>
+      </>)}
 
-          {travelInWorktime && (
-            <>
-              <label style={styles.label}>Hjemmeadresse</label>
-              <input style={styles.input} value={homeAddress} onChange={(e) => setHomeAddress(e.target.value)}
-                placeholder="Vejnavn 1, 9490 Pandrup" />
-              <div style={styles.hint}>
-                Kan kun ses af administratorer og af hende selv. Sendes til rutetjenesten på samme måde
-                som kundernes adresser.
-                {!homeAddress.trim() && <strong style={{ color: "#B45309" }}> Uden adresse slår ordningen ikke til.</strong>}
-              </div>
-            </>
-          )}
-        </div>
-      </div>
-
-      </div>
       </div>
 
       {/* Administrator staar for sig med roed ramme. Fluebenet er i mellemtiden blevet
@@ -19271,6 +19361,10 @@ function EmployeeModal({ emp, onClose, onSave, skills: skillList, satsHistorik, 
           setGemmer(true);
           try {
             await onSave({ id: emp?.id || uid("e"), name: name.trim(), skills: empSkills, color: emp?.color || color, capacity, isAdmin, weekendOk, startStop, startTime: startTime || null, hourlyWage: hourlyWage === "" ? STANDARD_TIMELOEN : Math.max(0, Number(hourlyWage)), wageFrom: satsErAendret || !emp ? wageFrom : null, kmSats: kmSats === "" ? null : Math.max(0, Number(kmSats)), kmSatsFra: kmSats !== "" && (kmSatsErAendret || !emp) ? kmSatsFra : null, homeAddress: homeAddress.trim() || null, travelInWorktime, danloenNr: danloenNr.trim() || null,
+              hr: { telefon: hrTelefon.trim() || null, privat_email: hrPrivatEmail.trim() || null,
+                    nodkontakt_navn: hrNodNavn.trim() || null, nodkontakt_relation: hrNodRelation.trim() || null,
+                    nodkontakt_telefon: hrNodTelefon.trim() || null, ansaettelsesform: hrForm || null,
+                    ansat_fra: hrAnsatFra || null, mus_sidst: hrMusSidst || null, mus_naeste: hrMusNaeste || null },
               weekendTillaeg, shBetaling,
               weekendPctEgen: weekendPctEgen.trim() === "" ? null : Number(weekendPctEgen.replace(",", ".")),
               shPctEgen: shPctEgen.trim() === "" ? null : Number(shPctEgen.replace(",", ".")) });
