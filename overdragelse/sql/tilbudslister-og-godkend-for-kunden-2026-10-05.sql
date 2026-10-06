@@ -84,3 +84,5 @@ alter table public.checklist_templates add column tilbud_fase text check (tilbud
 --   mus_for_opgave(text) (leder/medarbejder på aktiviteten), gem_mus_referat(uuid,text,boolean) (leder eller HR; send markerer samtalen holdt og lukker aktiviteten for begge),
 --   mus_holdt(uuid), min_mus_samtaler() (kladde skjules), svar_mus_referat(uuid,boolean,text) (godkend låser), hr_mus_samtaler(text). Alle lukket for anon.
 --   Redigering af et sendt referat uden at sende igen gør det til kladde. kontor_indbakke: linje 19 'mus_referat' (bemærkninger, eller sendt for over 7 dage siden uden svar).
+-- mus_referat_4-5 (6.10.2026): rollen i mus_for_opgave følger samtalen (leder kun hvis man ER lederen; HR uden for samtalen = 'hr', skrivebeskyttet i Worklist). Før fik en HR-administrator, der selv var medarbejderen, rollen 'leder' og kunne sende sit eget referat.
+--   gem_mus_referat afviser nu, at man skriver referatet til sin egen samtale (medmindre man selv er lederen). HR skriver/retter i planlægningsappen på medarbejderens kort.
