@@ -13751,6 +13751,9 @@ function ContractsView({ templates: alleTemplates, instances, pricing, employees
     return !instances.some((i) => i.templateId === t.id && i.status !== "udført");
   }
   const gjortOpAntal = alleTemplates.filter(erGjortOp).length;
+  // Knappen skal vise ALLE udgaaede. Tidligere stod der kun de gjort op, mens listen viste dem alle:
+  // «2 gjort op» over tre raekker saa ud som en fejl.
+  const udgaaetAntal = alleTemplates.filter((t) => (t.status || "aktiv") === "udgaaet").length;
 
   // Hvilke KLADDER ligger paa samme adresse som en anden aftale? Reglen ligger i
   // src/dubletter.js med sin egen test. Den regnes LIVE og staar ikke i en
@@ -13983,7 +13986,9 @@ function ContractsView({ templates: alleTemplates, instances, pricing, employees
             {/* Tallet paa «Udgåede» er dem, der er lagt til side. Uden det ville de
                 vaere umulige at gaette sig til — en liste, der skjuler noget uden at
                 sige hvor meget, er vaerre end en lang liste. */}
-            {k === "udgaaet" && gjortOpAntal > 0 ? ` (${gjortOpAntal} gjort op)` : ""}
+            {k === "udgaaet" && udgaaetAntal > 0
+              ? (gjortOpAntal > 0 ? ` (${udgaaetAntal}, heraf ${gjortOpAntal} gjort op)` : ` (${udgaaetAntal})`)
+              : ""}
             {/* Tallet skal staa der. En bunke, der venter paa at blive slettet,
                 maa ikke kunne ligge og blive glemt - og statussen er lavet
                 netop til at dele beslutningen og handlingen op. */}
@@ -14042,7 +14047,7 @@ function ContractsView({ templates: alleTemplates, instances, pricing, employees
         <div style={{ fontSize: 12.5, color: "#64748B", marginBottom: 14, lineHeight: 1.5 }}>
           {gjortOpAntal === 1
             ? "Én af dem er gjort op og vises kun her — der er ingen opgaver tilbage på den."
-            : `${gjortOpAntal} af dem er gjort op og vises kun her — der er ingen opgaver tilbage på dem.`}
+            : `${gjortOpAntal} af de ${udgaaetAntal} er gjort op og vises kun her — der er ingen opgaver tilbage på dem.`}
         </div>
       )}
 
