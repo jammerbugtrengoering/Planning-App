@@ -242,7 +242,7 @@ const MENU_GRUPPER = [
   { key: "oekonomi",  navn: "Økonomi",     sider: [["time", "Fakturering"], ["kundetimer", "Kundetimer"], ["reports", "Rapportering"], ["medExport", "Løn data"], ["papirskema", "Papirskema"]] },
   // Personalemappen (6.10.2026): HR-data, kun for HR-administratorer (tabellen hr_administratorer, funktionen er_hr_admin). Planlæggere uden HR-adgang
   // bruger «Medarbejdere» under Opsætning, der kun har planlægningsdata.
-  { key: "personale", navn: "Personalemappen", kunHr: true, sider: [["personalemappen", "Medarbejdere"], ["haandbog", "Håndbog og politikker"]] },
+  { key: "personale", navn: "Personalemappen", kunHr: true, sider: [["personalemappen", "Medarbejdere"], ["fravaer", "Ferie og fravær"], ["haandbog", "Håndbog og politikker"]] },
   { key: "opsaetning", navn: "Opsætning", sider: [["employees", "Medarbejdere"], ["kompetencer", "Kompetencer"], ["omraader", "Områder"], ["startstop", "Start/stop"], ["loenperioder", "Lønperioder"], ["checklists", "Tjeklister"], ["transport", "Transporttid"], ["aflysning", "Aflysning"], ["timepriser", "Timepriser"], ["firma", "Firma"]] },
   // Kun i kundeudgaven (fase 5, 29.9.2026): kundefirmaet bestiller ekstra hjaelp hos
   // Jammerbugt Rengoering. Hos Jammerbugt selv findes siden ikke — der er man den,
@@ -1873,6 +1873,7 @@ const MODULE_HELP = {
         "Auto-slut: «Rettelse af tid» er en medarbejder, der vil rette en systemlukket opgave til mindre end planlagt. «Godkend» — hendes løn følger rettelsen; «Afvis» — den planlagte tid står. Fakturaen røres ikke. «Glemmer at afslutte» betyder, at hun har mange systemlukninger i lønperioden.",
         "«Aftal næste besøg»: en aftale med rytmen «Aftales ved besøget» har ingen opgave i planen, og besøget er udført uden at næste er aftalt. Der står «Kontakt kunden for næste besøgsdato — sidste besøg var d. …». Ring til kunden, tryk «Åbn», skriv den aftalte dato og tryk «Opret besøg». Det samme kan gøres fra aftalen under Aftaler: «Aftal næste besøg». «Husk om en uge» skjuler linjen i syv dage, og så kommer den igen, til der er en dato.",
         "Personalemappen (kun HR-administratorer): «Dokument ikke kvitteret» står, når en medarbejder ikke har kvitteret for et dokument 4 dage efter, det blev lagt ind. «Bevis udløber snart» eller «er udløbet» står for dokumenter med en slutdato inden 60 dage. «MUS er forfalden» står, når næste samtale er passeret, eller der ikke har været en i 12 måneder. Linjerne forsvinder, når sagen er klaret; «Set ✓» skjuler dem for altid. De kommer ikke med i morgenmailen, fordi de nævner HR-oplysninger.",
+        "«Anmodning om ferie» eller «fri»: en medarbejder har bedt om fri i sin Personalemappen-app. Linjen står, til du har godkendt eller afvist under Personalemappen → Ferie og fravær. Den haster, hvis første dag er inden for to uger, eller hvis anmodningen er sendt med kort varsel.",
         "Alle planlæggere ser den samme liste og får de samme beskeder: push på telefonen, når noget haster (kræver Worklist på telefonen med beskeder slået til), og en mail kl. 7 med alt, der venter."] },
     { h: "Aflys en opgave", p: [
         "Åbn opgaven og tryk «🚫 Aflys». Vælg først, hvem der aflyser — kunden eller jer — og så en grund. Skriv evt. en kort forklaring; skriv kun det nødvendige, ingen helbredsdetaljer.",
@@ -2035,6 +2036,12 @@ const MODULE_HELP = {
         "Skal hun tilbage, fjerner du fratrædelsesdatoen under «Redigér» og opretter en ny adgang. Det gamle login kan ikke gendannes."] },
   ], warn: "Weekendarbejde kræver flueben på medarbejderen. Uden det kan hun slet ikke planlægges lørdag og søndag. Med fluebenet er der ingen timegrænse i weekenden — derfor står der Ja/Nej og ikke et timetal." },
 
+  fravaer: { title: "Ferie og fravær", intro: "Medarbejdernes anmodninger om ferie og fri.", blocks: [
+    { h: "Sådan virker det", p: ["Medarbejderen anmoder i sin Personalemappen-app: ferie eller fri, første og sidste dag og evt. en bemærkning. Anmodningen står her og i klokken, til du har svaret.",
+        "Under hver anmodning står, om den er sendt med kort varsel (håndbogen siger 4 uger til ferie og 10 dage til fri), og hvor mange opgaver medarbejderen står på i perioden. Systemet afviser ikke kort varsel; du afgør det.",
+        "«Godkend» lægger ferien i ugeplanen som en almindelig ferieblokering. Medarbejderens opgaver i perioden frigives og kan planlægges om. Skriv gerne en besked til medarbejderen; hun ser svaret i sin app.",
+        "«Afvis» ændrer ikke planen. Skriv en begrundelse. Sygdom er ikke en anmodning og meldes som hidtil på telefonen."] },
+  ] },
   haandbog: { title: "Håndbog og politikker", intro: "Personalehåndbogen og politikkerne, som medarbejderne læser i Personalemappen-appen.", blocks: [
     { h: "Ret teksten", p: ["Vælg et dokument øverst. Du ser det først, som medarbejderne gør; tryk «Rediger» for at ændre det, og «Tilbage til visning» eller «Annuller», når du er færdig. Hvert afsnit har en overskrift og en tekst. Du kan flytte afsnit op og ned, fjerne dem og tilføje nye.",
         "Tryk «Gem og vis for medarbejderne». Der er intet kladdetrin: det, du gemmer, kan medarbejderne læse med det samme.",
@@ -3892,6 +3899,7 @@ function PlanningApp({ session, onSignOut }) {
       setView("contracts"); return;
     }
     // Personalemappen: HR-linjerne (kun HR-administratorer får dem) peger på medarbejderlisten dér.
+    if (l.art === "fravaer_anmodning") { setView("fravaer"); return; }
     if (l.art === "ikke_kvitteret" || l.art === "bevis_udloeber" || l.art === "mus_forfalden") { setView("personalemappen"); return; }
     if (l.art === "produktbestilling" || l.art === "udlevering") { setView("inventory"); return; }
     if (l.art === "drift") { setView("drift"); return; }
@@ -5651,6 +5659,21 @@ function PlanningApp({ session, onSignOut }) {
     notify(`${TYPE_META[blockType]?.label || blockType} registreret for ${emp?.name || "medarbejderen"}`);
   }
 
+  // Ferie og fri (Personalemappen, 6.10.2026): medarbejderen anmoder i sin app, kontoret afgør her. Afgørelsen gemmes i databasen FØRST; først derefter lægges
+  // blokeringen i ugeplanen med den samme funktion som en manuelt oprettet ferie (addBlock), så opgaverne frigives på samme måde. Afvises den, røres planen ikke.
+  async function afgoerFravaer(req, godkend, note) {
+    const { error } = await supabase.rpc("afgoer_fravaer", { p_id: req.id, p_godkend: godkend, p_note: note || null });
+    if (error) { notify("Kunne ikke afgøre anmodningen: " + error.message); return false; }
+    if (godkend) addBlock(req.employee_id, "ferie", req.fra_dato, req.til_dato);
+    else notify("Anmodningen er afvist");
+    return true;
+  }
+  // Hvor mange opgaver medarbejderen står på i perioden (ikke udførte, ikke blokeringer). Vises, før man godkender.
+  function opgaverIPeriode(empId, fra, til) {
+    return instances.filter((t) => !BLOCK_TYPES.includes(t.type) && t.status !== "udført" && (t.assignees || []).includes(empId)
+      && instanceDateString(t) >= fra && instanceDateString(t) <= til).length;
+  }
+
   async function addActivity(payload) {
     const { employeeId, customerName, address, date, time, duration, description,
             kmFra, kmTurRetur, kmAnslaaet } = payload;
@@ -6510,6 +6533,7 @@ function PlanningApp({ session, onSignOut }) {
         />
       )}
       {view === "haandbog" && erHrAdmin && <HaandbogView />}
+      {view === "fravaer" && erHrAdmin && <FravaerView onAfgoer={afgoerFravaer} beroerte={opgaverIPeriode} />}
       {view === "personalemappen" && erHrAdmin && (
         <EmployeesView employees={employees}
           onAdd={() => { setEditEmp(null); setEmpHrAdgang(true); setShowAddEmp(true); }}
@@ -15354,6 +15378,81 @@ function LoenperioderPanel({ supabase }) {
 // Håndbog og politikker (6.10.2026): personalehåndbogen og rygepolitikken, som medarbejderne læser i Personalemappen-appen. Teksten står i databasen
 // (haandbog_dokumenter/haandbog_afsnit), så HR retter den selv. Et dokument gemmes samlet gennem gem_haandbog_dokument: titel, underskrift og alle
 // afsnit i den viste rækkefølge. Der står ingen «udgivet»-trin: det, der gemmes, kan medarbejderne læse med det samme.
+// Ferie og fravær (6.10.2026): anmodninger fra medarbejdernes Personalemappen-app. Godkendes en anmodning, lægges ferien i ugeplanen (se afgoerFravaer i App), og
+// medarbejderen ser svaret i sin app. Kort varsel afvises ikke af systemet; håndbogen siger 4 uger til ferie og 10 dage til fri, og kontoret afgør undtagelser.
+function FravaerView({ onAfgoer, beroerte }) {
+  const [liste, setListe] = useState(null);
+  const [fejl, setFejl] = useState("");
+  const [noter, setNoter] = useState({});
+  const [arbejder, setArbejder] = useState("");
+
+  const hent = useCallback(async () => {
+    const { data, error } = await supabase.from("fravaer_anmodninger").select("*, employees(name)").order("fra_dato", { ascending: true });
+    if (error) { setFejl(error.message); setListe([]); return; }
+    setFejl(""); setListe(data || []);
+  }, []);
+  useEffect(() => { hent(); }, [hent]);
+
+  async function afgoer(r, godkend) {
+    if (!godkend && !(noter[r.id] || "").trim() && !window.confirm("Afvis uden en begrundelse?")) return;
+    setArbejder(r.id);
+    const ok = await onAfgoer(r, godkend, noter[r.id]);
+    setArbejder("");
+    if (ok) hent();
+  }
+  const dag = (d) => new Date(d).toLocaleDateString("da-DK", { weekday: "short", day: "numeric", month: "short", year: "numeric" });
+  const periode = (r) => (r.fra_dato === r.til_dato ? dag(r.fra_dato) : `${dag(r.fra_dato)} – ${dag(r.til_dato)}`);
+  const ventende = (liste || []).filter((r) => r.status === "afventer");
+  const afgjorte = (liste || []).filter((r) => r.status !== "afventer" && r.til_dato >= todayIso()).reverse();
+  const STATUS = { godkendt: ["Godkendt", "#166534"], afvist: ["Afvist", "#B91C1C"], trukket: ["Trukket tilbage", "#64748B"] };
+
+  return (
+    <div style={styles.page}>
+      <div style={{ fontWeight: 700, fontSize: 18, color: "#111111", marginBottom: 4 }}>Ferie og fravær</div>
+      <div style={{ fontSize: 13, color: "#64748B", marginBottom: 14, lineHeight: 1.55 }}>
+        Anmodninger fra medarbejdernes Personalemappen-app. Godkender du, lægges ferien i ugeplanen, og medarbejderens opgaver i perioden frigives. Sygdom meldes som hidtil på telefonen.
+      </div>
+      {fejl && <div style={{ color: "#B91C1C", fontSize: 13, marginBottom: 8 }}>{fejl}</div>}
+      {liste === null && <div style={styles.hint}>Henter…</div>}
+      {liste && ventende.length === 0 && <div style={{ ...styles.hint, marginBottom: 14 }}>Der er ingen anmodninger, der venter på svar.</div>}
+      <div style={{ display: "flex", flexDirection: "column", gap: 10, maxWidth: 760 }}>
+        {ventende.map((r) => {
+          const n = beroerte(r.employee_id, r.fra_dato, r.til_dato);
+          return (
+            <div key={r.id} style={{ background: "#fff", borderRadius: 14, padding: "14px 16px", boxShadow: "0 1px 3px rgba(0,0,0,0.06)", borderLeft: `4px solid ${r.for_sent ? "#D97706" : "var(--farve)"}`, textAlign: "left" }}>
+              <div style={{ fontWeight: 700, fontSize: 15 }}>{r.employees?.name || r.employee_id} · {r.art === "ferie" ? "Ferie" : "Fri"}</div>
+              <div style={{ fontSize: 14, margin: "2px 0" }}>{periode(r)}</div>
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap", fontSize: 12.5, color: "#64748B" }}>
+                <span>Sendt {new Date(r.oprettet).toLocaleDateString("da-DK", { day: "numeric", month: "short" })}</span>
+                {r.for_sent && <span style={{ color: "#B45309", fontWeight: 700 }}>Kort varsel ({r.art === "ferie" ? "under 4 uger" : "under 10 dage"})</span>}
+                <span style={{ color: n > 0 ? "#B45309" : "#64748B", fontWeight: n > 0 ? 700 : 400 }}>{n > 0 ? `${n} ${n === 1 ? "opgave" : "opgaver"} i perioden frigives` : "Ingen opgaver berørt"}</span>
+              </div>
+              {r.note && <div style={{ fontSize: 13.5, marginTop: 6, color: "#334155" }}>«{r.note}»</div>}
+              <input style={{ ...styles.input, marginTop: 10, marginBottom: 8 }} placeholder="Besked til medarbejderen (valgfri)" value={noter[r.id] || ""}
+                onChange={(e) => setNoter((x) => ({ ...x, [r.id]: e.target.value }))} aria-label="Besked til medarbejderen" />
+              <div style={{ display: "flex", gap: 8 }}>
+                <button type="button" style={{ ...styles.primaryBtn, opacity: arbejder === r.id ? 0.6 : 1 }} disabled={arbejder === r.id} onClick={() => afgoer(r, true)}>Godkend</button>
+                <button type="button" style={styles.secondaryBtn} disabled={arbejder === r.id} onClick={() => afgoer(r, false)}>Afvis</button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      {afgjorte.length > 0 && (
+        <div style={{ maxWidth: 760, marginTop: 22 }}>
+          <div style={{ fontWeight: 700, fontSize: 14, color: "#64748B", marginBottom: 6 }}>Afgjort, kommende</div>
+          {afgjorte.map((r) => (
+            <div key={r.id} style={{ display: "flex", gap: 10, justifyContent: "space-between", flexWrap: "wrap", padding: "8px 0", borderTop: "1px solid #E2E8F0", fontSize: 14 }}>
+              <span><b>{r.employees?.name || r.employee_id}</b> · {r.art === "ferie" ? "Ferie" : "Fri"} · {periode(r)}</span>
+              <span style={{ fontWeight: 700, color: STATUS[r.status]?.[1] }}>{STATUS[r.status]?.[0]}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function HaandbogView() {
   const [dokumenter, setDokumenter] = useState(null);
   const [valgt, setValgt] = useState(null);     // id

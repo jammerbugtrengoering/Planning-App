@@ -67,3 +67,6 @@ alter table public.checklist_templates add column tilbud_fase text check (tilbud
 -- personalemappen_5a-5d: haandbog_dokumenter + haandbog_afsnit (alle medarbejdere læser, HR-administratorer skriver), gem_haandbog_dokument(id, titel, underskrift, afsnit jsonb),
 --   og håndbogen (maj 2025) og rygepolitikken (feb. 2026) lagt ind uændret. FÆLDE: apply_migration hænger, hvis ordet «delete» står i en funktionstekst (og ved DROP/DELETE);
 --   i gem_haandbog_dokument står sletningen som streng ('de' || 'lete ...'). Samme symptom som 6.10 med DROP POLICY.
+-- personalemappen_6a-6c: fravaer_anmodninger (ferie/fridag; status afventer/godkendt/afvist/trukket; for_sent efter håndbogen: ferie < 28 dage, fri < 10 dage),
+--   anmod_fravaer / traek_fravaer / mine_fravaer (medarbejderen) og afgoer_fravaer (HR-administrator), og linjen 'fravaer_anmodning' i kontor_indbakke.
+--   Godkendelsen lægger blokeringen i ugeplanen i APPEN (addBlock) efter at databasen har gemt afgørelsen. Sygdom er ikke en anmodning.
