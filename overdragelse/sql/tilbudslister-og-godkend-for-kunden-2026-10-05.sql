@@ -37,3 +37,13 @@ alter table public.checklist_templates add column tilbud_fase text check (tilbud
 -- loen_varsel_behandl brugte «en måned tilbage» som periodestart; de er omskrevet med replace() til loen_periode_start.
 -- Migrationer: loen_hverdag_foer_1_kolonne_og_helligdage, loen_hverdag_foer_2_periodefunktioner.
 -- Rulles tilbage ved at sætte loen_hverdag_foer = false (så er alt som før).
+
+-- 6.10.2026 (Jonn): rytmen «Aftales ved besøget» (plan_interval = 'ved_besoeg'). Migrationer: ved_besoeg_1_interval_kontrol,
+-- ved_besoeg_2_opret_naeste_besoeg, ved_besoeg_3_klokken.
+--  * service_templates_plan_interval_check kender nu ved_besoeg (ellers afviser databasen «Gem»).
+--  * naeste_besoeg_kerne / opret_naeste_besoeg(p_instance_id, p_dato, p_tid): kopierer opgaven, medarbejderen står på, til en ny dato.
+--    Genopliver en ryddet plads (deleted_at) i stedet for at indsætte: bloker_opgaver_paa_opsagt_aftale dropper ellers indsættelsen uden fejl.
+--    Testet i en migration, der rullede tilbage (genoplivet plads + ny række + ingen dublet).
+--  * kontor_udsaet: «Husk om en uge» på klokken (kontor_kvitter gør intet, hvis rækken findes).
+--  * kontor_indbakke: ny linje 'naeste_besoeg' — aftale med ved_besoeg, status aktiv, ingen åben opgave, sidste besøg før i dag, ikke udsat inden for 7 dage.
+-- Punktets tekst «Aftal næste besøg med kunden» står i src/aftalerytme.js (NAESTE_BESOEG_TEKST), i Worklist og i naeste_besoeg_kerne (c_tekst).

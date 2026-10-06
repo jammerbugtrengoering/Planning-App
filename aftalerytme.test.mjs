@@ -6,7 +6,7 @@
 // ikke skulle. Begge dele rammer en rigtig medarbejders dag.
 
 import { aftaleKoererPaaDag, mandagIUgen, isoDato, nyStartdatoHvisPasseret, rensKonkreteDatoer, konkretDato,
-  ugerFra, maanederFra, intervalNoegle, intervalValg, ugerMellemBesoeg, besoegIPeriode, beskrivRytme, KONKRETE } from "./src/aftalerytme.js";
+  ugerFra, maanederFra, intervalNoegle, intervalValg, ugerMellemBesoeg, besoegIPeriode, beskrivRytme, KONKRETE, VED_BESOEG } from "./src/aftalerytme.js";
 
 let fejl = 0, koert = 0;
 function er(hvad, faktisk, forventet) {
@@ -250,6 +250,25 @@ er("isoDato er lokal i vintertid", isoDato(new Date(2026, 0, 8)), "2026-01-08");
   er("tekst: hver 4. uge på tirsdag", beskrivRytme("4_uger", ["Tue"], "2026-10-06"), "Gentages hver 4. uge på tirsdag.");
   er("tekst: onsdag og fredag", beskrivRytme("uge", ["Wed", "Fri"], "2026-10-07"), "Gentages hver uge på onsdag og fredag.");
   er("tekst: hver 12. måned", beskrivRytme("12_maaned", ["Wed"], "2026-03-04"), "Gentages hver 12. måned, i den uge hvor den 4. falder, på onsdag.");
+}
+
+// ── «Aftales ved besøget» (6.10.2026) ───────────────────────────────────────
+// Reglen kender kun første besøg; resten oprettes i hånden. Falder den tilbage på «hver uge», danner planen en opgave om ugen
+// hos en kunde, der selv bestemmer datoen. Databasens kontrol skal kende værdien (ved_besoeg).
+{
+  er("formularen skriver ved_besoeg", intervalNoegle("besoeg", 1), "ved_besoeg");
+  er("ved_besoeg læses tilbage som eget valg", intervalValg(VED_BESOEG), { art: "besoeg", n: 1 });
+  er("ved_besoeg er hverken uger eller måneder", [ugerFra(VED_BESOEG), maanederFra(VED_BESOEG)], [null, null]);
+  const vb = { days: ["Wed"], planInterval: VED_BESOEG, startDate: "2026-10-14", status: "aktiv" };
+  er("første besøg dannes på startdatoen", aftaleKoererPaaDag(vb, man(2026, 10, 12), "Wed"), true);
+  er("ikke dagen før", aftaleKoererPaaDag(vb, man(2026, 10, 12), "Tue"), false);
+  er("ikke ugen efter", aftaleKoererPaaDag(vb, man(2026, 10, 19), "Wed"), false);
+  er("ikke ugen før", aftaleKoererPaaDag(vb, man(2026, 10, 5), "Wed"), false);
+  er("uden startdato dannes intet", aftaleKoererPaaDag({ ...vb, startDate: null }, man(2026, 10, 12), "Wed"), false);
+  er("en kladde danner intet", aftaleKoererPaaDag({ ...vb, status: "kladde" }, man(2026, 10, 12), "Wed"), false);
+  er("overblik: ét besøg", besoegIPeriode({ ...vb, expiryDate: "2027-10-13" }).antal, 1);
+  er("passeret startdato flyttes ikke", nyStartdatoHvisPasseret(vb, new Date(2026, 11, 1)), null);
+  er("tekst", beskrivRytme(VED_BESOEG, [], "2026-10-14"), "Første besøg er startdatoen. Næste besøg aftales ved hvert besøg.");
 }
 
 if (fejl > 0) {

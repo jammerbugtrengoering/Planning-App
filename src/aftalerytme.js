@@ -40,6 +40,7 @@ export function maanederFra(planInterval) {
 
 // Fra formularens valg til den tekst, der gemmes. art: "uger" | "maaneder".
 export function intervalNoegle(art, n) {
+  if (art === "besoeg") return VED_BESOEG;
   const antal = Math.round(Number(n)) || 1;
   if (art === "maaneder") return `${Math.min(12, Math.max(1, antal))}_maaned`;
   const uger = Math.min(52, Math.max(1, antal));
@@ -49,6 +50,7 @@ export function intervalNoegle(art, n) {
 // Den modsatte vej: fra den gemte tekst til formularens valg.
 export function intervalValg(planInterval) {
   if (planInterval === KONKRETE) return { art: "datoer", n: 1 };
+  if (planInterval === VED_BESOEG) return { art: "besoeg", n: 1 };
   const m = maanederFra(planInterval);
   if (m) return { art: "maaneder", n: m };
   return { art: "uger", n: ugerFra(planInterval) || 1 };
@@ -119,6 +121,15 @@ function ugenPasser(tpl, ugensMandag) {
 // Ugedage, interval og udløbsdato betyder intet her — listen er hele reglen.
 export const KONKRETE = "konkrete_datoer";
 
+// «Aftales ved besøget» (6.10.2026): næste besøg aftales, mens rengøringen udføres, så aftalen har ingen rytme at danne opgaver af.
+// Reglen kender kun det FØRSTE besøg (startdatoen). De næste opretter medarbejderen ved besøget gennem databasens
+// opret_naeste_besoeg, og de er derfor ikke noget, reglen kan genkende — rydningen i updateTemplate springer aftalen over.
+// Står værdien ikke i databasens kontrol (service_templates_plan_interval_check), afviser den «Gem».
+export const VED_BESOEG = "ved_besoeg";
+// Teksten er også det, Worklist og databasen kender punktet på: ændres den her, skal den ændres i Worklist og i
+// naeste_besoeg_kerne (c_tekst).
+export const NAESTE_BESOEG_TEKST = "Aftal næste besøg med kunden";
+
 // Listen renset: uden tomme linjer, én linje pr. dato, sorteret. Bruges både, når
 // aftalen gemmes, og når opgaverne dannes, så de to aldrig læser listen forskelligt.
 export function rensKonkreteDatoer(liste) {
@@ -152,6 +163,18 @@ export function aftaleKoererPaaDag(tpl, ugensMandag, dagNoegle) {
   // blive ved med at lægge opgaver på en medarbejders plan imens — og det er
   // netop dubletter, statussen er lavet til at rydde.
   if (tpl.status === "kladde" || tpl.status === "slettes") return false;
+
+  if (tpl.planInterval === VED_BESOEG) {
+    // Kun første besøg, på startdatoen. Resten oprettes i hånden, se VED_BESOEG ovenfor.
+    const i = DAG_TIL_INDEKS[dagNoegle];
+    if (i === undefined || !tpl.startDate) return false;
+    const dagDato = new Date(ugensMandag);
+    dagDato.setDate(dagDato.getDate() + i);
+    const dagStr = isoDato(dagDato);
+    if (dagStr !== String(tpl.startDate).slice(0, 10)) return false;
+    if (Array.isArray(tpl.excludedDays) && tpl.excludedDays.includes(dagStr)) return false;
+    return true;
+  }
 
   if (tpl.planInterval === KONKRETE) {
     const i = DAG_TIL_INDEKS[dagNoegle];
@@ -217,7 +240,7 @@ export function nyStartdatoHvisPasseret(tpl, idag = new Date()) {
   if (!tpl || !tpl.startDate) return null;
   // Ved konkrete datoer er startdatoen bare den første dato på listen. Den flyttes
   // ikke: passerede datoer skal rettes eller fjernes på listen.
-  if (tpl.planInterval === KONKRETE) return null;
+  if (tpl.planInterval === KONKRETE || tpl.planInterval === VED_BESOEG) return null;
   const nu = new Date(idag.getFullYear(), idag.getMonth(), idag.getDate());
   const start = new Date(tpl.startDate);
   if (isNaN(start.getTime())) return null;
@@ -295,6 +318,7 @@ const DAGENAVN = { Mon: "mandag", Tue: "tirsdag", Wed: "onsdag", Thu: "torsdag",
 export function beskrivRytme(planInterval, dage, startDate) {
   const valg = intervalValg(planInterval);
   if (valg.art === "datoer") return "Kun de datoer, du har valgt. Ugedage og slutdato bruges ikke.";
+  if (valg.art === "besoeg") return "Første besøg er startdatoen. Næste besøg aftales ved hvert besøg.";
   const navne = (dage || []).map((d) => DAGENAVN[d]).filter(Boolean);
   const dagetekst = navne.length < 2 ? navne.join("") : navne.slice(0, -1).join(", ") + " og " + navne[navne.length - 1];
   if (valg.art === "maaneder") {
