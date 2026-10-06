@@ -242,7 +242,7 @@ const MENU_GRUPPER = [
   { key: "oekonomi",  navn: "Økonomi",     sider: [["time", "Fakturering"], ["kundetimer", "Kundetimer"], ["reports", "Rapportering"], ["medExport", "Løn data"], ["papirskema", "Papirskema"]] },
   // Personalemappen (6.10.2026): HR-data, kun for HR-administratorer (tabellen hr_administratorer, funktionen er_hr_admin). Planlæggere uden HR-adgang
   // bruger «Medarbejdere» under Opsætning, der kun har planlægningsdata.
-  { key: "personale", navn: "Personalemappen", kunHr: true, sider: [["personalemappen", "Medarbejdere"]] },
+  { key: "personale", navn: "Personalemappen", kunHr: true, sider: [["personalemappen", "Medarbejdere"], ["haandbog", "Håndbog og politikker"]] },
   { key: "opsaetning", navn: "Opsætning", sider: [["employees", "Medarbejdere"], ["kompetencer", "Kompetencer"], ["omraader", "Områder"], ["startstop", "Start/stop"], ["loenperioder", "Lønperioder"], ["checklists", "Tjeklister"], ["transport", "Transporttid"], ["aflysning", "Aflysning"], ["timepriser", "Timepriser"], ["firma", "Firma"]] },
   // Kun i kundeudgaven (fase 5, 29.9.2026): kundefirmaet bestiller ekstra hjaelp hos
   // Jammerbugt Rengoering. Hos Jammerbugt selv findes siden ikke — der er man den,
@@ -2035,6 +2035,11 @@ const MODULE_HELP = {
         "Skal hun tilbage, fjerner du fratrædelsesdatoen under «Redigér» og opretter en ny adgang. Det gamle login kan ikke gendannes."] },
   ], warn: "Weekendarbejde kræver flueben på medarbejderen. Uden det kan hun slet ikke planlægges lørdag og søndag. Med fluebenet er der ingen timegrænse i weekenden — derfor står der Ja/Nej og ikke et timetal." },
 
+  haandbog: { title: "Håndbog og politikker", intro: "Personalehåndbogen og politikkerne, som medarbejderne læser i Personalemappen-appen.", blocks: [
+    { h: "Ret teksten", p: ["Vælg et dokument øverst. Hvert afsnit har en overskrift og en tekst. Du kan flytte afsnit op og ned, fjerne dem og tilføje nye.",
+        "Tryk «Gem og vis for medarbejderne». Der er intet kladdetrin: det, du gemmer, kan medarbejderne læse med det samme.",
+        "«Nyt dokument» laver fx en syge- og fraværspolitik. Skriv ikke navne på medarbejdere eller kunder i teksten, og læg ikke personlige oplysninger ind her."] },
+  ] },
   personalemappen: { title: "Personalemappen", intro: "Her ligger medarbejdernes ansættelse, dokumenter, løn og nødkontakt. Kun HR-administratorer kan se siden.", blocks: [
     { h: "Hvem kan se hvad", p: ["Personalemappen vises kun for HR-administratorer. Databasen håndhæver det: ansættelse, dokumenter, nødkontakt, løn og filerne i dokumentarkivet kan kun læses af dem — også selv om en planlægger åbner siden på anden vis.",
         "De øvrige planlæggere bruger «Medarbejdere» under Opsætning. Dér står kun det, planlægningen bruger: navn, kompetencer, område, kapacitet, ugedage, fast tid og adgang til Worklist.",
@@ -6504,6 +6509,7 @@ function PlanningApp({ session, onSignOut }) {
           onOpenAddActivity={() => setShowAddActivity(true)}
         />
       )}
+      {view === "haandbog" && erHrAdmin && <HaandbogView />}
       {view === "personalemappen" && erHrAdmin && (
         <EmployeesView employees={employees}
           onAdd={() => { setEditEmp(null); setEmpHrAdgang(true); setShowAddEmp(true); }}
@@ -15341,6 +15347,125 @@ function LoenperioderPanel({ supabase }) {
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+// Håndbog og politikker (6.10.2026): personalehåndbogen og rygepolitikken, som medarbejderne læser i Personalemappen-appen. Teksten står i databasen
+// (haandbog_dokumenter/haandbog_afsnit), så HR retter den selv. Et dokument gemmes samlet gennem gem_haandbog_dokument: titel, underskrift og alle
+// afsnit i den viste rækkefølge. Der står ingen «udgivet»-trin: det, der gemmes, kan medarbejderne læse med det samme.
+function HaandbogView() {
+  const [dokumenter, setDokumenter] = useState(null);
+  const [valgt, setValgt] = useState(null);     // id
+  const [kladde, setKladde] = useState(null);   // { id, titel, underskrift, afsnit: [{k, overskrift, tekst}], ny }
+  const [aendret, setAendret] = useState(false);
+  const [gemmer, setGemmer] = useState(false);
+  const [fejl, setFejl] = useState("");
+  const [gemtTid, setGemtTid] = useState(null);
+
+  const laes = useCallback(async (vaelg) => {
+    const [{ data: d, error: e1 }, { data: a, error: e2 }] = await Promise.all([
+      supabase.from("haandbog_dokumenter").select("*").order("raekkefoelge"),
+      supabase.from("haandbog_afsnit").select("*").order("raekkefoelge"),
+    ]);
+    if (e1 || e2) { setFejl((e1 || e2).message); return; }
+    const liste = (d || []).map((x) => ({ ...x, afsnit: (a || []).filter((y) => y.dokument_id === x.id) }));
+    setDokumenter(liste);
+    const id = vaelg || liste[0]?.id || null;
+    setValgt(id);
+    const dok = liste.find((x) => x.id === id);
+    setKladde(dok ? { id: dok.id, titel: dok.titel, underskrift: dok.underskrift || "", ny: false,
+      afsnit: dok.afsnit.map((y) => ({ k: y.id, overskrift: y.overskrift, tekst: y.tekst })) } : null);
+    setAendret(false);
+  }, []);
+  useEffect(() => { laes(); }, [laes]);
+
+  function skiftDokument(id) {
+    if (aendret && !window.confirm("Du har rettelser, der ikke er gemt. Skift alligevel?")) return;
+    laes(id);
+  }
+  function nytDokument() {
+    if (aendret && !window.confirm("Du har rettelser, der ikke er gemt. Fortsæt alligevel?")) return;
+    const id = uid("hb");
+    setValgt(id);
+    setKladde({ id, titel: "", underskrift: "", ny: true, afsnit: [{ k: uid("a"), overskrift: "", tekst: "" }] });
+    setAendret(true);
+  }
+  const ret = (felt, v) => { setKladde((k) => ({ ...k, [felt]: v })); setAendret(true); };
+  const retAfsnit = (k, felt, v) => { setKladde((x) => ({ ...x, afsnit: x.afsnit.map((a) => (a.k === k ? { ...a, [felt]: v } : a)) })); setAendret(true); };
+  const flyt = (i, retning) => {
+    setKladde((x) => {
+      const j = i + retning;
+      if (j < 0 || j >= x.afsnit.length) return x;
+      const n = [...x.afsnit]; [n[i], n[j]] = [n[j], n[i]];
+      return { ...x, afsnit: n };
+    });
+    setAendret(true);
+  };
+  const fjern = (k) => {
+    if (!window.confirm("Fjern afsnittet? Det forsvinder for medarbejderne, når du gemmer.")) return;
+    setKladde((x) => ({ ...x, afsnit: x.afsnit.filter((a) => a.k !== k) })); setAendret(true);
+  };
+  const tilfoej = () => { setKladde((x) => ({ ...x, afsnit: [...x.afsnit, { k: uid("a"), overskrift: "", tekst: "" }] })); setAendret(true); };
+
+  async function gem() {
+    if (!kladde.titel.trim()) { setFejl("Skriv en titel på dokumentet."); return; }
+    setGemmer(true); setFejl("");
+    const { error } = await supabase.rpc("gem_haandbog_dokument", {
+      p_id: kladde.id, p_titel: kladde.titel, p_underskrift: kladde.underskrift,
+      p_afsnit: kladde.afsnit.map((a) => ({ overskrift: a.overskrift, tekst: a.tekst })),
+    });
+    setGemmer(false);
+    if (error) { setFejl("Kunne ikke gemmes: " + error.message); return; }
+    setGemtTid(new Date());
+    await laes(kladde.id);
+  }
+
+  const dok = (dokumenter || []).find((x) => x.id === valgt);
+  return (
+    <div style={styles.page}>
+      <div style={{ fontWeight: 700, fontSize: 18, color: "#111111", marginBottom: 4 }}>Håndbog og politikker</div>
+      <div style={{ fontSize: 13, color: "#64748B", marginBottom: 14, lineHeight: 1.55 }}>
+        Det, du retter her, kan medarbejderne læse i Personalemappen-appen, så snart du har gemt. Skriv ikke navne på medarbejdere eller kunder i teksten.
+      </div>
+      {dokumenter === null && !fejl && <div style={styles.hint}>Henter…</div>}
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }}>
+        {(dokumenter || []).map((x) => (
+          <button key={x.id} type="button" onClick={() => skiftDokument(x.id)}
+            style={valgt === x.id ? { ...styles.typePickBtn, flex: "none", borderColor: "var(--farve)", color: "var(--farve)", background: "var(--farve-lys)" } : { ...styles.typePickBtn, flex: "none" }}>
+            {x.titel}
+          </button>
+        ))}
+        <button type="button" style={{ ...styles.secondaryBtn, padding: "6px 12px" }} onClick={nytDokument}><Plus size={14} /> Nyt dokument</button>
+      </div>
+      {kladde && (
+        <div style={{ background: "#fff", borderRadius: 14, padding: "16px 18px", boxShadow: "0 1px 3px rgba(0,0,0,0.06)", maxWidth: 860 }}>
+          <label style={styles.label}>Titel</label>
+          <input style={styles.input} value={kladde.titel} onChange={(e) => ret("titel", e.target.value)} placeholder="Fx Syge- og fraværspolitik" />
+          <label style={styles.label}>Underskrift og dato (står nederst)</label>
+          <input style={styles.input} value={kladde.underskrift} onChange={(e) => ret("underskrift", e.target.value)} placeholder="Fx Charlotte og Karen, maj 2025" />
+          <div style={{ fontWeight: 700, fontSize: 14, margin: "14px 0 6px" }}>Afsnit ({kladde.afsnit.length})</div>
+          {kladde.afsnit.map((a, i) => (
+            <div key={a.k} style={{ border: "1px solid #E2E8F0", borderRadius: 12, padding: 12, marginBottom: 10, background: "#FAFAFB" }}>
+              <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 6 }}>
+                <input style={{ ...styles.input, marginBottom: 0, fontWeight: 700, flex: 1 }} value={a.overskrift} onChange={(e) => retAfsnit(a.k, "overskrift", e.target.value)} placeholder="Overskrift" aria-label="Overskrift" />
+                <button type="button" style={styles.iconBtnGhostInline} disabled={i === 0} onClick={() => flyt(i, -1)} title="Flyt op"><ChevronUp size={15} /></button>
+                <button type="button" style={styles.iconBtnGhostInline} disabled={i === kladde.afsnit.length - 1} onClick={() => flyt(i, 1)} title="Flyt ned"><ChevronDown size={15} /></button>
+                <button type="button" style={{ ...styles.iconBtnGhostInline, color: "#DC2626" }} onClick={() => fjern(a.k)} title="Fjern afsnittet"><Trash2 size={14} /></button>
+              </div>
+              <textarea style={{ ...styles.textarea, minHeight: 90, marginBottom: 0 }} rows={Math.min(14, Math.max(3, String(a.tekst).split("\n").length + 1))}
+                value={a.tekst} onChange={(e) => retAfsnit(a.k, "tekst", e.target.value)} placeholder="Teksten, som medarbejderne læser" aria-label="Tekst" />
+            </div>
+          ))}
+          <button type="button" style={{ ...styles.addSkillBtn, marginBottom: 12 }} onClick={tilfoej}><Plus size={13} /> Tilføj afsnit</button>
+          {fejl && <div style={{ color: "#B91C1C", fontSize: 13, margin: "6px 0" }}>{fejl}</div>}
+          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+            <button type="button" style={{ ...styles.primaryBtn, opacity: gemmer || !aendret ? 0.6 : 1 }} disabled={gemmer || !aendret} onClick={gem}>{gemmer ? "Gemmer…" : "Gem og vis for medarbejderne"}</button>
+            {dok?.opdateret && !aendret && <span style={styles.hint}>Sidst rettet {new Date(dok.opdateret).toLocaleDateString("da-DK", { day: "numeric", month: "long", year: "numeric" })}{gemtTid ? " — gemt" : ""}</span>}
+            {aendret && <span style={{ ...styles.hint, color: "#B45309" }}>Ikke gemt</span>}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

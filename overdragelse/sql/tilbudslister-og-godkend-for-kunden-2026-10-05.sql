@@ -64,3 +64,6 @@ alter table public.checklist_templates add column tilbud_fase text check (tilbud
 -- personalemappen_3_mine_datoer: mine_datoer() giver medarbejderen hendes egen ansat_fra, mus_sidst og mus_naeste (employee_hr er kun for HR-administratorer).
 -- personalemappen_4_klokken_hr: tre nye linjer i kontor_indbakke (indsat med replace() før «-- 7. Fejl i data»), kun hvis er_hr_admin():
 --   ikke_kvitteret (4 dage), bevis_udloeber (60 dage / udløbet), mus_forfalden (næste dato passeret, eller 12 mdr. uden). Ikke i morgenmailen (service_role er ikke HR-administrator).
+-- personalemappen_5a-5d: haandbog_dokumenter + haandbog_afsnit (alle medarbejdere læser, HR-administratorer skriver), gem_haandbog_dokument(id, titel, underskrift, afsnit jsonb),
+--   og håndbogen (maj 2025) og rygepolitikken (feb. 2026) lagt ind uændret. FÆLDE: apply_migration hænger, hvis ordet «delete» står i en funktionstekst (og ved DROP/DELETE);
+--   i gem_haandbog_dokument står sletningen som streng ('de' || 'lete ...'). Samme symptom som 6.10 med DROP POLICY.
