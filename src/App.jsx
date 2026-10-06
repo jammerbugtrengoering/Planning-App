@@ -18977,10 +18977,15 @@ function EmployeeModal({ emp, onClose, onSave, skills: skillList, satsHistorik, 
   const synlige = visAlleKompetencer ? (skillList || []) : valgte;
 
   return (
-    <Modal onClose={onClose} title={emp ? `Rediger ${medSolsikke(emp.name, emp.id)}` : "Ny medarbejder"} persistent>
+    <Modal onClose={onClose} title={emp ? `Rediger ${medSolsikke(emp.name, emp.id)}` : "Ny medarbejder"} persistent bred>
       {/* Fire afsnit med samme farvesprog som Ny opgave: rosa er personen, groent er
           hvad hun kan, blaat er tid. Det graa med haengelaas er det som kun
           administratorer kan se — og det skal se anderledes ud af netop den grund. */}
+      {/* Stamkortet er tre kolonner (5.10.2026), fordi der kommer flere HR-oplysninger til. Hvert afsnit er ét kort i et gitter, der
+          selv går ned til to og én kolonne på smallere skærme — nye afsnit sættes bare ind som endnu et kort. Hver kolonne er sin egen
+          stak, så et langt afsnit i den ene ikke skubber de andre ned. */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(340px, 1fr))", gap: 16, alignItems: "start" }}>
+      <div>
       <div style={styles.empSection}>
         <div style={{ ...styles.empSectionHead, background: "var(--farve-lys)" }}>
           <div style={{ ...styles.empSectionTitle, color: "var(--farve-moerk)" }}>Personen</div>
@@ -19047,6 +19052,8 @@ function EmployeeModal({ emp, onClose, onSave, skills: skillList, satsHistorik, 
         </div>
       </div>
 
+      </div>
+      <div>
       <div style={styles.empSection}>
         <div style={{ ...styles.empSectionHead, background: "#F0FDFA" }}>
           <div style={{ ...styles.empSectionTitle, color: "#0F766E" }}>Kan</div>
@@ -19119,6 +19126,8 @@ function EmployeeModal({ emp, onClose, onSave, skills: skillList, satsHistorik, 
         </div>
       </div>
 
+      </div>
+      <div>
       <div style={styles.empSection}>
         <div style={{ ...styles.empSectionHead, background: "#F1F5F9" }}>
           <div style={{ ...styles.empSectionTitle, color: "#334155" }}>🔒 Løn og transport</div>
@@ -19231,6 +19240,9 @@ function EmployeeModal({ emp, onClose, onSave, skills: skillList, satsHistorik, 
             </>
           )}
         </div>
+      </div>
+
+      </div>
       </div>
 
       {/* Administrator staar for sig med roed ramme. Fluebenet er i mellemtiden blevet
@@ -20782,10 +20794,11 @@ function Efterregulering({ opgave, employees, onOpdateret }) {
   );
 }
 
-function Modal({ title, children, onClose, persistent = false, fullscreen = false }) {
+function Modal({ title, children, onClose, persistent = false, fullscreen = false, bred = false }) {
   return (
     <div style={fullscreen ? { ...styles.overlay, background: "rgba(0,0,0,0.1)" } : styles.overlay} onClick={persistent ? undefined : onClose}>
-      <div style={fullscreen ? { ...styles.modal, width: "100%", height: "100vh", maxHeight: "100vh", borderRadius: 0, maxWidth: "100%" } : styles.modal} onClick={(e) => e.stopPropagation()}>
+      <div style={fullscreen ? { ...styles.modal, width: "100%", height: "100vh", maxHeight: "100vh", borderRadius: 0, maxWidth: "100%" }
+        : bred ? { ...styles.modal, width: "min(1320px, 100%)", maxHeight: "94vh" } : styles.modal} onClick={(e) => e.stopPropagation()}>
         <div style={styles.modalHeader}>
           <span style={styles.modalTitle}>{title}</span>
           <button style={styles.iconBtnGhostInline} onClick={onClose}><X size={16} /></button>
