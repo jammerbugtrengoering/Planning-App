@@ -10016,6 +10016,16 @@ function DriftView({ isAdminUser, paaSide }) {
   const [tal, setTal] = useState(null);
   const [kilder, setKilder] = useState(null);
   const [registerKilde, setRegisterKilde] = useState(null);
+  // Ruterne, hvor mindst én adresse blev gættet af reserven (OpenRouteService). Hentes for sig, så Drift-siden kan NAVNGIVE adresserne i stedet for
+  // kun at sige «8 ruter» (6.10.2026: der stod «Se adresserne efter», men ingen steder at se dem).
+  const [reserveRuter, setReserveRuter] = useState([]);
+  useEffect(() => {
+    if (!isAdminUser) return;
+    let afbrudt = false;
+    supabase.from("travel_overrides").select("id, addr_a, addr_b, km, source, lat_a, lng_a, lat_b, lng_b").ilike("source", "%ors%")
+      .then(({ data }) => { if (!afbrudt) setReserveRuter(data || []); });
+    return () => { afbrudt = true; };
+  }, [isAdminUser]);
   const [register, setRegister] = useState("spoerger");  // spoerger | svarer | svarer_ikke | ukendt_adresse
   const [fejl, setFejl] = useState("");
 
@@ -10191,7 +10201,37 @@ function DriftView({ isAdminUser, paaSide }) {
       knap: "Åbn Medarbejdere", gaa: () => paaSide("employees") },
     kilderIkkeRegister > 0 && { t: `${kilderIkkeRegister} af ${kilderIAlt} ruter er ikke slået op i adresseregistret`,
       s: "Koordinaterne kom fra reserven hos OpenRouteService. Findes adressen ikke i registret, kan reserven finde på et svar — og så er kilometerne opdigtede. Se adresserne efter.",
-      knap: null, gaa: null },
+      knap: null, gaa: null,
+      ekstra: reserveRuter.length > 0 && (
+        <div style={{ marginTop: 8 }}>
+          {reserveRuter.map((r) => {
+            // Kilden skrives som «første+anden» i den rækkefølge, adresserne er gemt: gsearch+ors betyder, at adresse B kom fra reserven.
+            const dele = String(r.source).split("+");
+            const side = (i, adr, lat, lng) => ({ adr, fraReserve: dele[dele.length === 1 ? 0 : i] === "ors", lat, lng });
+            const sider = [side(0, r.addr_a, r.lat_a, r.lng_a), side(1, r.addr_b, r.lat_b, r.lng_b)];
+            return (
+              <div key={r.id} style={{ fontSize: 12.5, padding: "6px 0", borderTop: "1px solid #F1F5F9", color: "#475569" }}>
+                {sider.map((s, i) => (
+                  <div key={i} style={{ display: "flex", gap: 8, alignItems: "baseline", flexWrap: "wrap" }}>
+                    <span style={{ fontWeight: s.fraReserve ? 700 : 400, color: s.fraReserve ? "#B45309" : "#64748B" }}>
+                      {s.fraReserve ? "Ikke i registret: " : "Fundet: "}{s.adr}
+                    </span>
+                    {s.fraReserve && s.lat != null && (
+                      <a href={`https://www.openstreetmap.org/?mlat=${s.lat}&mlon=${s.lng}#map=16/${s.lat}/${s.lng}`} target="_blank" rel="noreferrer"
+                        style={{ color: "#2563EB", fontWeight: 600 }}>se på kort</a>
+                    )}
+                  </div>
+                ))}
+                <div style={{ color: "#94A3B8" }}>Ruten er regnet til {r.km != null ? String(r.km).replace(".", ",") + " km" : "?"}</div>
+              </div>
+            );
+          })}
+          <div style={{ fontSize: 12.5, color: "#64748B", marginTop: 6, lineHeight: 1.5 }}>
+            Sådan fikser du det: klik «se på kort». Ligger prikken på den rigtige adresse, er kilometerne i orden, og du kan lade den være.
+            Ligger den et helt andet sted, så er adressen stavet forkert eller mangler postnummer — ret den i aftalen eller opgaven, så slås den nye stavemåde op fra bunden.
+          </div>
+        </div>
+      ) },
   ].filter(Boolean) : [];
 
   return (
@@ -10370,6 +10410,7 @@ function DriftView({ isAdminUser, paaSide }) {
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontWeight: 600, fontSize: 14 }}>{b.t}</div>
                   <div style={{ fontSize: 13, color: "#64748B" }}>{b.s}</div>
+                  {b.ekstra || null}
                 </div>
                 {b.gaa && (
                   <button type="button" onClick={b.gaa}
