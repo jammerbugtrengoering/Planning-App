@@ -6258,6 +6258,12 @@ function PlanningApp({ session, onSignOut }) {
             <div style={styles.brandTitle}>{firma?.navn || "Jammerbugt Rengøring"}</div>
             <div style={styles.brandSub}>{firma?.undertekst ?? L.sub}</div>
           </div>
+          {/* Genindlæs: installeret som app findes hverken adresselinje eller genindlæs-knap. Står ved logoet (6.10.2026), så den ikke
+              ligner en menu. */}
+          <button type="button" onClick={() => window.location.reload()} title="Opdater siden" aria-label="Opdater siden"
+            style={{ background: "none", border: "none", color: "var(--menu-sub)", cursor: "pointer", padding: 6, marginLeft: 4, display: "inline-flex", alignItems: "center" }}>
+            <RotateCw size={17} />
+          </button>
         </div>
         <nav style={styles.nav}>
           {MENU_GRUPPER.filter((gr) => (!gr.kunAdmin || isAdminUser) && (!gr.kunKunde || KUNDEUDGAVE) && synligeSider(gr).length > 0).map((gr) => {
@@ -6267,15 +6273,19 @@ function PlanningApp({ session, onSignOut }) {
                 style={aktiv ? styles.navBtnActive : styles.navBtn}>{gr.navn}</button>
             );
           })}
-          {!KUNDEUDGAVE && [["SoMe", SOME_APP_URL, "some-app"], ["Dinero", DINERO_URL, "dinero-app"]].map(([navn, url, vinduesnavn]) => (
-            <button key={vinduesnavn} onClick={() => aabnSomApp(url, vinduesnavn)}
-              title={navn + " åbnes i eget vindue"} style={styles.navBtn}>{navn} ↗</button>
-          ))}
-          {/* Genindlaes: installeret som app findes hverken adresselinje eller genindlaes-knap. */}
-          <button type="button" onClick={() => window.location.reload()} title="Opdater siden" aria-label="Opdater siden"
-            style={{ ...styles.navBtn, padding: "8px 10px", display: "inline-flex", alignItems: "center" }}>
-            <RotateCw size={17} />
-          </button>
+          {/* De to eksterne apps er ikoner og ikke menupunkter (6.10.2026): de åbner i eget vindue og hører ikke til rækken af sider.
+              Ikonerne ligger i public/ og er skåret ud af appernes egne logoer. */}
+          {!KUNDEUDGAVE && (
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 8, margin: "0 6px 0 8px", paddingLeft: 12, borderLeft: "1px solid var(--menu-kant)" }}>
+              {[["SoMe", SOME_APP_URL, "some-app", "/ikon-some.png"], ["Dinero", DINERO_URL, "dinero-app", "/ikon-dinero.png"]].map(([navn, url, vinduesnavn, ikon]) => (
+                <button key={vinduesnavn} type="button" onClick={() => aabnSomApp(url, vinduesnavn)}
+                  title={`Åbn ${navn} i eget vindue`} aria-label={`Åbn ${navn} i eget vindue`}
+                  style={{ background: "none", border: "none", padding: 0, cursor: "pointer", display: "block", lineHeight: 0 }}>
+                  <img src={ikon} alt="" style={{ width: 32, height: 32, borderRadius: 8, display: "block" }} />
+                </button>
+              ))}
+            </span>
+          )}
           {/* Sprogvalg og Google Translate fjernet - planlaegningsappen bruges kun paa dansk. */}
           <KontorKlokke isAdminUser={isAdminUser}
             signal={instances.length + ":" + Object.keys(koerendeTider).length + ":" + (bestillinger?.length || 0)}
@@ -7683,7 +7693,7 @@ function EmployeesView({ employees, onAdd, onEdit, onDelete, supabase, skills, o
               {udfoldet.has(e.id) && (
               <div style={styles.empDetaljer}>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
-                <button style={styles.secondaryBtn} onClick={() => onEdit(e)}><Pencil size={14} /> Redigér</button>
+                <button style={styles.primaryBtn} onClick={() => onEdit(e)}>Åbn</button>
               </div>
               <div style={styles.empSkills}>
                 {Object.entries(e.skills || {}).map(([s, lvl]) => (
