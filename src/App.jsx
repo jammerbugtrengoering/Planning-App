@@ -2231,7 +2231,7 @@ const MODULE_HELP = {
     { h: "Opgavelisterne", p: [
         "De tre lister — før, under og efter mødet — rettes under Opsætning → Tjeklister, øverst i det grønne afsnit «Tilbudslister». Hvert nyt tilbud får en kopi; et tilbud, der allerede er oprettet, beholder sine egne punkter."] },
     { h: "Send og accept", p: [
-        "«Dan og se PDF» viser dokumentet som kunden får det. «Send til kunden» mailer et link.",
+        "«Dan og se PDF» viser dokumentet som kunden får det. «Send til kunden» mailer et link. Når tilbuddet er godkendt, kan PDF'en ikke dannes forfra — så står der i stedet «Se underskrevet PDF» (eller «Se tilbuddet», hvis kunden accepterede uden underskrift).",
         "PDF'en dannes forfra hver gang du sender. Ellers kunne kunden få et link til en ældre udgave end den der står i systemet.",
         "Kunden åbner linket, læser tilbuddet og skriver sit navn. Vi gemmer navn, tidspunkt, IP og et fingeraftryk af netop den PDF — så det kan dokumenteres at intet er ændret bagefter.",
         "Et accepteret tilbud kan ikke rettes. Det er dokumentationen for det kunden skrev under på."] },
@@ -17272,6 +17272,15 @@ function TilbudEditor({ supabase, checklistTemplates, pricing, currentUserName, 
   const [gyldigTil, setGyldigTil] = useState(
     tilbud?.gyldig_til || new Date(Date.now() + 30 * 864e5).toISOString().slice(0, 10));
   const [status, setStatus] = useState(tilbud?.status || "kladde");
+  // Findes der en tegnet underskrift på det godkendte tilbud? Så kan den underskrevne PDF dannes igen, hvis den mangler.
+  const [harUnderskrift, setHarUnderskrift] = useState(false);
+  useEffect(() => {
+    if (status !== "accepteret") return;
+    let afbrudt = false;
+    supabase.from("tilbud_signatur").select("id").eq("tilbud_id", id).not("signatur_sti", "is", null).limit(1)
+      .then(({ data }) => { if (!afbrudt) setHarUnderskrift(!!data?.length); });
+    return () => { afbrudt = true; };
+  }, [status, id]);
   const [noegle, setNoegle] = useState(tilbud?.offentlig_noegle || "");
 
   const [fotos, setFotos] = useState(tilbud?.fotos || []);
@@ -17431,6 +17440,7 @@ function TilbudEditor({ supabase, checklistTemplates, pricing, currentUserName, 
   }
 
   async function dannPdf() {
+    if (status === "accepteret") { await visPdf(); return; }
     setFejl(""); setBesked(""); setArbejder("pdf");
     if (!(await gem())) { setArbejder(""); return; }
     const { data, error } = await supabase.functions.invoke("tilbud-pdf", { body: { tilbudId: id } });
@@ -17846,9 +17856,13 @@ function TilbudEditor({ supabase, checklistTemplates, pricing, currentUserName, 
               {arbejder === "gemmer" ? "Gemmer…" : "Gem kladde"}
             </button>
           )}
-          <button style={styles.secondaryBtn} disabled={!!arbejder} onClick={dannPdf}>
-            {arbejder === "pdf" ? "Danner…" : "Dan og se PDF"}
-          </button>
+          {/* Et godkendt tilbud må ikke danne PDF'en forfra: det ville skifte fingeraftrykket, så underskriften ikke længere
+              kan matches mod dokumentet. Derfor er der kun «se» tilbage, når tilbuddet er accepteret. */}
+          {status !== "accepteret" && (
+            <button style={styles.secondaryBtn} disabled={!!arbejder} onClick={dannPdf}>
+              {arbejder === "pdf" ? "Danner…" : "Dan og se PDF"}
+            </button>
+          )}
           {kladdeEllerSendt && (
             <button style={styles.primaryBtn} disabled={!!arbejder} onClick={send}>
               {arbejder === "sender" ? "Sender…" : status === "sendt" ? "Send igen" : "Send til kunden"}
@@ -17868,7 +17882,9 @@ function TilbudEditor({ supabase, checklistTemplates, pricing, currentUserName, 
           )}
           {status === "accepteret" && (underskrevetSti
             ? <button style={styles.secondaryBtn} onClick={visUnderskrevetPdf}>Se underskrevet PDF</button>
-            : <button style={styles.secondaryBtn} disabled={!!arbejder} onClick={() => danUnderskrevetPdf(false)}>Dan underskrevet PDF</button>)}
+            : harUnderskrift
+              ? <button style={styles.secondaryBtn} disabled={!!arbejder} onClick={() => danUnderskrevetPdf(false)}>Dan underskrevet PDF</button>
+              : <button style={styles.secondaryBtn} onClick={visPdf}>Se tilbuddet (PDF)</button>)}
         </div>
 
         {skrivAaben && kladdeEllerSendt && (
