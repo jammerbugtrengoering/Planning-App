@@ -47,3 +47,4 @@ alter table public.checklist_templates add column tilbud_fase text check (tilbud
 --  * kontor_udsaet: «Husk om en uge» på klokken (kontor_kvitter gør intet, hvis rækken findes).
 --  * kontor_indbakke: ny linje 'naeste_besoeg' — aftale med ved_besoeg, status aktiv, ingen åben opgave, sidste besøg før i dag, ikke udsat inden for 7 dage.
 -- Punktets tekst «Aftal næste besøg med kunden» står i src/aftalerytme.js (NAESTE_BESOEG_TEKST), i Worklist og i naeste_besoeg_kerne (c_tekst).
+-- opret_naeste_besoeg_for_aftale(p_template_id, p_dato, p_tid): kontorets vej til samme kerne (naeste_besoeg_kerne), fra klokken og fra aftalekortet.

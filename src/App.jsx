@@ -1868,7 +1868,7 @@ const MODULE_HELP = {
         "Afvigelser har ikke noget andet sted at blive lukket. Tryk «Set ✓», når du har kigget på den. Så forsvinder den for alle planlæggere.",
         "«Registreret efter lønlukning» er en medarbejder, der registrerer en ikke-udført opgave fra en lukket lønperiode. Hendes begrundelse står i linjen. «Godkend» — tiden kommer med i den åbne periode; «Afvis» — ingen løn, kunden faktureres stadig.",
         "Auto-slut: «Rettelse af tid» er en medarbejder, der vil rette en systemlukket opgave til mindre end planlagt. «Godkend» — hendes løn følger rettelsen; «Afvis» — den planlagte tid står. Fakturaen røres ikke. «Glemmer at afslutte» betyder, at hun har mange systemlukninger i lønperioden.",
-        "«Aftal næste besøg»: en aftale med rytmen «Aftales ved besøget» har ingen opgave i planen, og besøget er udført uden at næste er aftalt. Der står «Kontakt kunden for næste besøgsdato — sidste besøg var d. …». Ring til kunden, åbn aftalen og opret opgaven. «Husk om en uge» skjuler linjen i syv dage, og så kommer den igen, til der er en dato.",
+        "«Aftal næste besøg»: en aftale med rytmen «Aftales ved besøget» har ingen opgave i planen, og besøget er udført uden at næste er aftalt. Der står «Kontakt kunden for næste besøgsdato — sidste besøg var d. …». Ring til kunden, tryk «Åbn», skriv den aftalte dato og tryk «Opret besøg». Det samme kan gøres fra aftalen under Aftaler: «Aftal næste besøg». «Husk om en uge» skjuler linjen i syv dage, og så kommer den igen, til der er en dato.",
         "Alle planlæggere ser den samme liste og får de samme beskeder: push på telefonen, når noget haster (kræver Worklist på telefonen med beskeder slået til), og en mail kl. 7 med alt, der venter."] },
     { h: "Aflys en opgave", p: [
         "Åbn opgaven og tryk «🚫 Aflys». Vælg først, hvem der aflyser — kunden eller jer — og så en grund. Skriv evt. en kort forklaring; skriv kun det nødvendige, ingen helbredsdetaljer.",
@@ -2274,7 +2274,7 @@ const MODULE_HELP = {
         "Under «Plan parametre» vælger du først, om aftalen gentages ugentligt, månedligt eller på bestemte datoer. Ved Ugentligt og Månedligt skriver du selv antallet: hver uge, hver 2. uge, hver 3. uge og så videre op til hver 52. uge — eller hver måned, hver 3. måned og så videre op til hver 12. måned. Kadencen tælles fra startdatoen.",
         "Under valgene står en sætning og et antal besøg, fx «Gentages hver 4. uge på tirsdag» og «27 besøg i alt». Tallet regnes af den samme regel, der opretter opgaverne, så tjek det, før du godkender: står der 26 besøg, hvor du ventede 6, er rytmen ikke den, du tror.",
         "«Hver 4. uge» er ikke det samme som en gang om måneden. Det giver 13 besøg om året i stedet for 12, og dagen vandrer gennem kalenderen — et besøg den 5. bliver med tiden den 28. Til gengæld ligger det altid på den samme ugedag, og det er sådan, rengøring aftales i praksis.",
-        "Skal besøgene ligge sjældnere end hver 12. måned, eller uden fast rytme — fx hver 15. måned — så vælg «Bestemte datoer» og skriv datoerne ind én for én."] }, { h: "Aftales ved besøget", p: ["Til kunder, hvor næste besøg aftales, mens rengøringen udføres. Vælg «Aftales ved besøget» under Plan parametre. Startdatoen er det første besøg; der oprettes ingen flere opgaver af sig selv.", "Aftalen får et punkt på opgavens tjekliste: «Aftal næste besøg med kunden». I Worklist skriver medarbejderen datoen (og evt. klokkeslæt) ved punktet, før hun registrerer tiden. Så oprettes næste opgave med de samme medarbejdere, og punktet står på den igen.", "Bliver næste besøg ikke aftalt, står punktet ikke afkrydset. Dagen efter besøget kommer der en linje i klokken til kontoret: «Kontakt kunden for næste besøgsdato — sidste besøg var d. …». Den skjules en uge ad gangen med «Husk om en uge», og forsvinder, når der ligger en opgave på aftalen.", "Kontraktsummen kan ikke regnes ud, for der er ingen rytme at gange med. Listen viser værdien pr. besøg og det realiserede.", "Retter du aftalen senere, bliver de opgaver, der er aftalt undervejs, stående. De ryddes ikke, som ved en fast rytme. Startdatoen må stå i fortiden på en aftale, der kører — den er bare dagen for første besøg, og den skal passe til de opgaver, der allerede er udført og faktureret."] }, { h: "Under udarbejdelse", p: ["Er du ikke færdig med en ny aftale, så tryk «Gem som kladde» i stedet for «Gem og planlæg».", "En kladde opretter ingen opgaver. Den ligger og venter, og du kan rette alle felter i den så mange gange du vil.", "Find den igen med filteret «Under udarbejdelse» øverst her på siden. Tallet i knappen viser hvor mange der ligger.", "Tryk «Åbn og godkend» for at rette videre. Inde i aftalen vælger du så «Gem kladde» hvis du stadig ikke er færdig, eller «Godkend og planlæg» når den er klar.", "«Gem kladde» findes kun på nye aftaler og kladder. Retter du en aftale, der allerede kører, gemmer du med «Godkend og planlæg» — en aftale, der kører, kan ikke laves om til en kladde, for så ville alle dens kommende opgaver blive slettet.", "Først ved godkendelsen oprettes opgaverne — fra startdatoen og frem til udløbsdatoen. Det kan være mange på én gang, så tjek datoerne inden du godkender.", "Er startdatoen løbet fra kladden, mens den lå i bunken, flytter appen den frem, når du åbner den — og siger det med blåt øverst i kolonnen til højre, med både den gamle og den nye dato.", "Den nye dato er ikke altid i morgen. Startdatoen er nemlig ankeret for rytmen: for «hver 14. dag» tæller systemet uger fra startdatoens mandag, så flytter man datoen én uge, skifter aftalen fra lige til ulige uger. Derfor vælges den første dag fra i morgen, der holder aftalen i de samme uger som før. Passer det ikke, retter du den selv.", "Datoerne kommer fra kladden. Indtil 21. september 2026 stod der «i dag» og «i dag + 1 år» uanset hvad, så en kladde med toårig løbetid blev etårig ved godkendelsen — uden at nogen fik det at vide.", "Er kladden lavet ved en indlæsning, står der en gul «Bemærkning til kontoret» med det, indlæsningen ikke kunne afgøre — manglende kundenavn, en gættet kontrakttype, noter fra det ark den kom fra. Læs den, ret det den peger på, og godkend så.", "På en bred skærm står bemærkningen i en kolonne til højre, og den bliver hængende, mens du bladrer ned gennem felterne. Den hørte før nederst, altså længst væk fra det, den handler om. Er skærmen for smal til to kolonner, står den øverst i stedet.", "Ligner kladden en aftale, der allerede findes, står advarslen øverst i den samme kolonne — med hvilken aftale, hvilken dag og hvor længe. Den regnes ud fra det, der står i felterne lige nu, så retter du adressen eller dagen, forsvinder den af sig selv.", "Feltet vises kun, så længe aftalen er en kladde. Når den er godkendt, er noten gjort op, og feltet forsvinder — teksten bliver stående i databasen, men skal ikke stå og fylde bagefter."] }, { h: "Del kladdebunken op", p: [
+        "Skal besøgene ligge sjældnere end hver 12. måned, eller uden fast rytme — fx hver 15. måned — så vælg «Bestemte datoer» og skriv datoerne ind én for én."] }, { h: "Aftales ved besøget", p: ["Til kunder, hvor næste besøg aftales, mens rengøringen udføres. Vælg «Aftales ved besøget» under Plan parametre. Startdatoen er det første besøg; der oprettes ingen flere opgaver af sig selv.", "Aftalen får et punkt på opgavens tjekliste: «Aftal næste besøg med kunden». I Worklist skriver medarbejderen datoen (og evt. klokkeslæt) ved punktet, før hun registrerer tiden. Så oprettes næste opgave med de samme medarbejdere, og punktet står på den igen.", "Bliver næste besøg ikke aftalt, står punktet ikke afkrydset. Dagen efter besøget kommer der en linje i klokken til kontoret: «Kontakt kunden for næste besøgsdato — sidste besøg var d. …». Den skjules en uge ad gangen med «Husk om en uge», og forsvinder, når der ligger en opgave på aftalen. På aftalekortet står næste aftalte besøg, eller «Næste besøg er ikke aftalt» med en knap til at sætte det.", "Kontraktsummen kan ikke regnes ud, for der er ingen rytme at gange med. Listen viser værdien pr. besøg og det realiserede.", "Retter du aftalen senere, bliver de opgaver, der er aftalt undervejs, stående. De ryddes ikke, som ved en fast rytme. Startdatoen må stå i fortiden på en aftale, der kører, så længe du ikke ændrer den — den er bare dagen for første besøg, og den skal passe til de opgaver, der allerede er udført og faktureret. Skifter du den, skal den være i dag eller senere."] }, { h: "Under udarbejdelse", p: ["Er du ikke færdig med en ny aftale, så tryk «Gem som kladde» i stedet for «Gem og planlæg».", "En kladde opretter ingen opgaver. Den ligger og venter, og du kan rette alle felter i den så mange gange du vil.", "Find den igen med filteret «Under udarbejdelse» øverst her på siden. Tallet i knappen viser hvor mange der ligger.", "Tryk «Åbn og godkend» for at rette videre. Inde i aftalen vælger du så «Gem kladde» hvis du stadig ikke er færdig, eller «Godkend og planlæg» når den er klar.", "«Gem kladde» findes kun på nye aftaler og kladder. Retter du en aftale, der allerede kører, gemmer du med «Godkend og planlæg» — en aftale, der kører, kan ikke laves om til en kladde, for så ville alle dens kommende opgaver blive slettet.", "Først ved godkendelsen oprettes opgaverne — fra startdatoen og frem til udløbsdatoen. Det kan være mange på én gang, så tjek datoerne inden du godkender.", "Er startdatoen løbet fra kladden, mens den lå i bunken, flytter appen den frem, når du åbner den — og siger det med blåt øverst i kolonnen til højre, med både den gamle og den nye dato.", "Den nye dato er ikke altid i morgen. Startdatoen er nemlig ankeret for rytmen: for «hver 14. dag» tæller systemet uger fra startdatoens mandag, så flytter man datoen én uge, skifter aftalen fra lige til ulige uger. Derfor vælges den første dag fra i morgen, der holder aftalen i de samme uger som før. Passer det ikke, retter du den selv.", "Datoerne kommer fra kladden. Indtil 21. september 2026 stod der «i dag» og «i dag + 1 år» uanset hvad, så en kladde med toårig løbetid blev etårig ved godkendelsen — uden at nogen fik det at vide.", "Er kladden lavet ved en indlæsning, står der en gul «Bemærkning til kontoret» med det, indlæsningen ikke kunne afgøre — manglende kundenavn, en gættet kontrakttype, noter fra det ark den kom fra. Læs den, ret det den peger på, og godkend så.", "På en bred skærm står bemærkningen i en kolonne til højre, og den bliver hængende, mens du bladrer ned gennem felterne. Den hørte før nederst, altså længst væk fra det, den handler om. Er skærmen for smal til to kolonner, står den øverst i stedet.", "Ligner kladden en aftale, der allerede findes, står advarslen øverst i den samme kolonne — med hvilken aftale, hvilken dag og hvor længe. Den regnes ud fra det, der står i felterne lige nu, så retter du adressen eller dagen, forsvinder den af sig selv.", "Feltet vises kun, så længe aftalen er en kladde. Når den er godkendt, er noten gjort op, og feltet forsvinder — teksten bliver stående i databasen, men skal ikke stå og fylde bagefter."] }, { h: "Del kladdebunken op", p: [
         "Kladderne står efter kontraktsum, med den største øverst — uanset kontrakttype. Så kan du tage de aftaler, der er mest værd, først. De øvrige lister på siden står stadig efter udløbsdato."] }, { h: "Søg og filtrér", p: [
         "Søgefeltet under knapperne leder i kundenavn, fakturabeskrivelse, adresse og opgavetekst på én gang.",
         "At den også leder i fakturabeskrivelsen er med vilje: på Nexus- og Ældrelov-aftaler hedder kunden «Jammerbugt Kommune» på dem alle sammen, og borgerens navn står i fakturabeskrivelsen. Søger du på borgeren, finder du den rigtige aftale — søger du på kommunen, får du dem alle.",
@@ -2826,6 +2826,8 @@ function PlanningApp({ session, onSignOut }) {
   const [showAddBlock, setShowAddBlock] = useState(false);
   const [showAddActivity, setShowAddActivity] = useState(false);
   const [copyPayload, setCopyPayload] = useState(null); /* Redigeres en kladde, ligger dens id her. Er den null, opretter modalen en ny aftale. */ const [editTplId, setEditTplId] = useState(null);
+  // Aftalen, der skal have sat næste besøg (aftaler med «Aftales ved besøget»). Åbnes fra klokken og fra Aftaler.
+  const [naesteBesoegTpl, setNaesteBesoegTpl] = useState(null);
   const [showAddEmp, setShowAddEmp] = useState(false);
   const [editEmp, setEditEmp] = useState(null);
   const [toast, setToast] = useState(null);
@@ -3861,7 +3863,7 @@ function PlanningApp({ session, onSignOut }) {
     }
     if (l.art === "naeste_besoeg") {
       const tpl = templates.find((t) => t.id === l.ref);
-      if (tpl) { setCopyPayload({ ...tpl, type: "fixed", templateDays: tpl.days }); setEditTplId(tpl.id); setShowAddTask(true); return; }
+      if (tpl) { setNaesteBesoegTpl(tpl); return; }
       setView("contracts"); return;
     }
     if (l.art === "produktbestilling" || l.art === "udlevering") { setView("inventory"); return; }
@@ -6553,7 +6555,7 @@ function PlanningApp({ session, onSignOut }) {
       )}
 
       {view === "contracts" && (
-        <ContractsView templates={templates} instances={instances} pricing={pricing} employees={aktiveEmployees} onEditDraft={(tpl) => { setCopyPayload({ ...tpl, type: "fixed", templateDays: tpl.days }); setEditTplId(tpl.id); setShowAddTask(true); }}
+        <ContractsView onNaesteBesoeg={setNaesteBesoegTpl} templates={templates} instances={instances} pricing={pricing} employees={aktiveEmployees} onEditDraft={(tpl) => { setCopyPayload({ ...tpl, type: "fixed", templateDays: tpl.days }); setEditTplId(tpl.id); setShowAddTask(true); }}
             isAdminUser={isAdminUser} onCancelTemplate={(tplId) => setCancelTarget(tplId)}
             startStatus={aftalerStart} onStartBrugt={() => setAftalerStart(null)} />
       )}
@@ -6639,6 +6641,11 @@ function PlanningApp({ session, onSignOut }) {
         <SkillsView supabase={supabase} skills={skills} onSkillsChange={setSkills} />
       )}
 
+      {naesteBesoegTpl && (
+        <NaesteBesoegModal tpl={naesteBesoegTpl} onClose={() => setNaesteBesoegTpl(null)}
+          onAabnAftale={() => { const tpl = naesteBesoegTpl; setNaesteBesoegTpl(null); setCopyPayload({ ...tpl, type: "fixed", templateDays: tpl.days }); setEditTplId(tpl.id); setShowAddTask(true); }}
+          onGemt={(dato) => { setNaesteBesoegTpl(null); notify(`Næste besøg er oprettet den ${new Date(dato).toLocaleDateString("da-DK", { day: "numeric", month: "long" })}`); }} />
+      )}
       {showAddTask && <TaskModal onClose={() => { setShowAddTask(false); setCopyPayload(null); setEditTplId(null); }} onSave={async (p, editId) => {
         if (!editId) return addTask(p);
         // 4.10.2026: «Godkend og planlaeg» paa en eksisterende aftale lod vinduet staa
@@ -11552,7 +11559,7 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
   // aftale, der kører: dér er startdatoen bare dagen for første besøg, der er udført og måske faktureret (6.10.2026), og reglen danner kun den dag —
   // en ryddet plads springes over. Datoen skal stå, som den var, så den passer til de opgaver, der findes.
   const startFortidSpaerrer = type === "fixed" && !erKonkret && !!startDate && startDate < todayIso()
-    && !(planInterval === VED_BESOEG && editId && !erKladde);
+    && !(planInterval === VED_BESOEG && editId && !erKladde && startDate === copyFrom?.startDate);
   const mangler = [
     !title.trim() && "Aftalen mangler en titel",
     manglerDineroKunde && (KUNDER_I_DINERO() ? "Vælg kunden i Dinero-listen" : "Vælg kunden i listen"),
@@ -11884,7 +11891,7 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
               listen. De saettes af sig selv og vises kun til orientering. */}
           {planInterval !== KONKRETE && (<>
           <label style={styles.label}>Startdato (første gang opgaven udføres)</label>
-          <input type="date" min={planInterval === VED_BESOEG && editId && !erKladde ? undefined : todayIso()} style={styles.input} value={startDate} onChange={(e) => setStartDate(e.target.value)} />{startFortidSpaerrer && (<div style={{ ...styles.hint, color: "#B91C1C" }}>Startdatoen kan ikke ligge i fortiden — vælg dags dato eller senere.</div>)}
+          <input type="date" min={planInterval === VED_BESOEG && editId && !erKladde && startDate === copyFrom?.startDate ? undefined : todayIso()} style={styles.input} value={startDate} onChange={(e) => setStartDate(e.target.value)} />{startFortidSpaerrer && (<div style={{ ...styles.hint, color: "#B91C1C" }}>Startdatoen kan ikke ligge i fortiden — vælg dags dato eller senere.</div>)}
           <label style={styles.label}>Udløbsdato (aftalen gælder til og med)</label>
           <input type="date" style={styles.input} value={expiryDate} onChange={(e) => setExpiryDate(e.target.value)} />
           {startDate && (
@@ -13711,7 +13718,67 @@ function CancelTemplateModal({ template, onClose, onConfirm }) {
     </div>
   );
 }
-function ContractsView({ templates: alleTemplates, instances, pricing, employees, isAdminUser, onCancelTemplate, onEditDraft, startStatus, onStartBrugt }) {
+// «Aftales ved besøget»: mærket på aftalekortet viser næste aftalte besøg — eller at det mangler, med en knap til at sætte det.
+function VedBesoegMaerke({ tpl, instances, onAftal }) {
+  const idag = todayIso();
+  const naeste = instances
+    .filter((i) => i.templateId === tpl.id && i.status !== "udført" && i.status !== "aflyst" && instanceDateString(i) >= idag)
+    .map((i) => instanceDateString(i)).sort()[0];
+  return (
+    <>
+      <span style={{ padding: "2px 9px", borderRadius: 999, background: "#EEF2FF", color: "#4338CA", fontSize: 11, fontWeight: 700 }}>Aftales ved besøget</span>
+      {naeste ? (
+        <span style={{ fontWeight: 700, color: "#166534" }}>Næste besøg: {new Date(naeste).toLocaleDateString("da-DK", { weekday: "short", day: "numeric", month: "short" })}</span>
+      ) : (
+        <>
+          <span style={{ fontWeight: 700, color: "#B45309" }}>Næste besøg er ikke aftalt</span>
+          {onAftal && (
+            <button type="button" onClick={onAftal}
+              style={{ padding: "2px 9px", borderRadius: 999, border: "1px solid #C7D2FE", background: "#EEF2FF", color: "#4338CA", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+              Aftal næste besøg
+            </button>
+          )}
+        </>
+      )}
+    </>
+  );
+}
+
+// Kontoret sætter næste besøg, når medarbejderen ikke fik det aftalt. Samme funktion i databasen som medarbejderens (opret_naeste_besoeg).
+function NaesteBesoegModal({ tpl, onClose, onGemt, onAabnAftale }) {
+  const [dato, setDato] = useState("");
+  const [tid, setTid] = useState("");
+  const [gemmer, setGemmer] = useState(false);
+  const [fejl, setFejl] = useState("");
+  async function gem() {
+    if (!dato || gemmer) return;
+    setGemmer(true); setFejl("");
+    const { error } = await supabase.rpc("opret_naeste_besoeg_for_aftale", { p_template_id: tpl.id, p_dato: dato, p_tid: tid || null });
+    setGemmer(false);
+    if (error) { setFejl(error.message); return; }
+    onGemt(dato);
+  }
+  return (
+    <Modal onClose={onClose} title={`Aftal næste besøg: ${tpl.customerName || tpl.title}`} persistent>
+      <div style={{ fontSize: 13.5, color: "#475569", lineHeight: 1.55, marginBottom: 12 }}>
+        Kontakt kunden, og skriv den aftalte dato her. Opgaven oprettes med aftalens medarbejdere og en ny tjekliste, og punktet «Aftal næste besøg»
+        står på den igen. Klokkens påmindelse forsvinder, når opgaven er oprettet.
+      </div>
+      <label style={styles.label}>Dato</label>
+      <input type="date" min={todayIso()} style={styles.input} value={dato} onChange={(e) => setDato(e.target.value)} />
+      <label style={styles.label}>Klokkeslæt (valgfrit)</label>
+      <input type="time" style={styles.input} value={tid} onChange={(e) => setTid(e.target.value)} />
+      {fejl && <div style={{ ...styles.hint, color: "#B91C1C" }}>{fejl}</div>}
+      <div style={styles.modalActions}>
+        <button style={styles.secondaryBtn} onClick={onAabnAftale}>Åbn aftalen</button>
+        <button style={styles.secondaryBtn} onClick={onClose}>Annuller</button>
+        <button style={styles.primaryBtn} disabled={!dato || gemmer} onClick={gem}>{gemmer ? "Opretter…" : "Opret besøg"}</button>
+      </div>
+    </Modal>
+  );
+}
+
+function ContractsView({ templates: alleTemplates, instances, pricing, employees, isAdminUser, onCancelTemplate, onEditDraft, onNaesteBesoeg, startStatus, onStartBrugt }) {
   // startStatus saettes kun, naar man kommer hertil fra en knap paa Drift-siden.
   // Ellers er den null, og saa staar filteret paa «Alle» som altid.
   const [statusFilter, setStatusFilter] = useState(startStatus || "alle");
@@ -14122,7 +14189,7 @@ function ContractsView({ templates: alleTemplates, instances, pricing, employees
                       </span>
                     )}
                   {t.planInterval === KONKRETE ? <KonkreteDatoerMaerke tpl={t} /> : t.planInterval === VED_BESOEG ? (
-                    <span style={{ padding: "2px 9px", borderRadius: 999, background: "#EEF2FF", color: "#4338CA", fontSize: 11, fontWeight: 700 }}>Aftales ved besøget</span>
+                    <VedBesoegMaerke tpl={t} instances={instances} onAftal={isAdminUser && onNaesteBesoeg ? () => onNaesteBesoeg(t) : null} />
                   ) : <DayPills days={t.days} />}
                   {t.start && <span>Fra {t.start.toLocaleDateString("da-DK", { day: "numeric", month: "short", year: "numeric" })}</span>}
                   <span>Til {t.expiry.toLocaleDateString("da-DK", { day: "numeric", month: "short", year: "numeric" })}</span>
@@ -14211,7 +14278,7 @@ function ContractsView({ templates: alleTemplates, instances, pricing, employees
                       </span>
                     )}
                     {t.planInterval === KONKRETE ? <KonkreteDatoerMaerke tpl={t} /> : t.planInterval === VED_BESOEG ? (
-                    <span style={{ padding: "2px 9px", borderRadius: 999, background: "#EEF2FF", color: "#4338CA", fontSize: 11, fontWeight: 700 }}>Aftales ved besøget</span>
+                    <VedBesoegMaerke tpl={t} instances={instances} onAftal={isAdminUser && onNaesteBesoeg ? () => onNaesteBesoeg(t) : null} />
                   ) : <DayPills days={t.days} />}
                     <span style={{ fontWeight: 600, color: "var(--farve-moerk)" }}>{contractIconLabel(t.contractType)}</span>
                   </div>
