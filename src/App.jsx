@@ -2256,12 +2256,7 @@ const MODULE_HELP = {
         "Under valgene står en sætning og et antal besøg, fx «Gentages hver 4. uge på tirsdag» og «27 besøg i alt». Tallet regnes af den samme regel, der opretter opgaverne, så tjek det, før du godkender: står der 26 besøg, hvor du ventede 6, er rytmen ikke den, du tror.",
         "«Hver 4. uge» er ikke det samme som en gang om måneden. Det giver 13 besøg om året i stedet for 12, og dagen vandrer gennem kalenderen — et besøg den 5. bliver med tiden den 28. Til gengæld ligger det altid på den samme ugedag, og det er sådan, rengøring aftales i praksis.",
         "Skal besøgene ligge sjældnere end hver 12. måned, eller uden fast rytme — fx hver 15. måned — så vælg «Bestemte datoer» og skriv datoerne ind én for én."] }, { h: "Under udarbejdelse", p: ["Er du ikke færdig med en ny aftale, så tryk «Gem som kladde» i stedet for «Gem og planlæg».", "En kladde opretter ingen opgaver. Den ligger og venter, og du kan rette alle felter i den så mange gange du vil.", "Find den igen med filteret «Under udarbejdelse» øverst her på siden. Tallet i knappen viser hvor mange der ligger.", "Tryk «Åbn og godkend» for at rette videre. Inde i aftalen vælger du så «Gem kladde» hvis du stadig ikke er færdig, eller «Godkend og planlæg» når den er klar.", "«Gem kladde» findes kun på nye aftaler og kladder. Retter du en aftale, der allerede kører, gemmer du med «Godkend og planlæg» — en aftale, der kører, kan ikke laves om til en kladde, for så ville alle dens kommende opgaver blive slettet.", "Først ved godkendelsen oprettes opgaverne — fra startdatoen og frem til udløbsdatoen. Det kan være mange på én gang, så tjek datoerne inden du godkender.", "Er startdatoen løbet fra kladden, mens den lå i bunken, flytter appen den frem, når du åbner den — og siger det med blåt øverst i kolonnen til højre, med både den gamle og den nye dato.", "Den nye dato er ikke altid i morgen. Startdatoen er nemlig ankeret for rytmen: for «hver 14. dag» tæller systemet uger fra startdatoens mandag, så flytter man datoen én uge, skifter aftalen fra lige til ulige uger. Derfor vælges den første dag fra i morgen, der holder aftalen i de samme uger som før. Passer det ikke, retter du den selv.", "Datoerne kommer fra kladden. Indtil 21. september 2026 stod der «i dag» og «i dag + 1 år» uanset hvad, så en kladde med toårig løbetid blev etårig ved godkendelsen — uden at nogen fik det at vide.", "Er kladden lavet ved en indlæsning, står der en gul «Bemærkning til kontoret» med det, indlæsningen ikke kunne afgøre — manglende kundenavn, en gættet kontrakttype, noter fra det ark den kom fra. Læs den, ret det den peger på, og godkend så.", "På en bred skærm står bemærkningen i en kolonne til højre, og den bliver hængende, mens du bladrer ned gennem felterne. Den hørte før nederst, altså længst væk fra det, den handler om. Er skærmen for smal til to kolonner, står den øverst i stedet.", "Ligner kladden en aftale, der allerede findes, står advarslen øverst i den samme kolonne — med hvilken aftale, hvilken dag og hvor længe. Den regnes ud fra det, der står i felterne lige nu, så retter du adressen eller dagen, forsvinder den af sig selv.", "Feltet vises kun, så længe aftalen er en kladde. Når den er godkendt, er noten gjort op, og feltet forsvinder — teksten bliver stående i databasen, men skal ikke stå og fylde bagefter."] }, { h: "Del kladdebunken op", p: [
-        "Vælger du «Under udarbejdelse», kommer der to filtre mere frem, som kun findes dér.",
-        "Det ene deler bunken i dem, der ser ud som dubletter, og dem der ikke gør. Tag dubletterne først — det er dem, der enten skal slettes eller lægges sammen med en aftale, der allerede kører, og de fylder mest.",
-        "Det andet er en liste med medarbejdere. Listen viser kun dem, der faktisk har kladder, og tallet siger hvor mange. Så kan du tage én medarbejders ruteplan ad gangen og få alle spørgsmålene afklaret med hende på én gang.",
-        "Tallene følger de øvrige filtre. Har du valgt «Erhverv», tæller de kun erhvervskladder.",
-        "De to filtre nulstiller sig selv, når du forlader bunken, så du ikke kommer tilbage og ser 12 af 340 uden at kunne huske hvorfor.",
-        "Markerer du en kladde til sletning, forsvinder den fra bunken med det samme — den er afgjort og skal ikke gennemgås igen. Find den under «Skal slettes», hvor «Fortryd» sætter den tilbage.", "Kladderne står efter kontraktsum, med den største øverst — i alle tre filtre og uanset kontrakttype og medarbejder. Så kan du tage de aftaler, der er mest værd, først. De øvrige lister på siden står stadig efter udløbsdato."] }, { h: "Søg og filtrér", p: [
+        "Kladderne står efter kontraktsum, med den største øverst — uanset kontrakttype. Så kan du tage de aftaler, der er mest værd, først. De øvrige lister på siden står stadig efter udløbsdato."] }, { h: "Søg og filtrér", p: [
         "Søgefeltet under knapperne leder i kundenavn, fakturabeskrivelse, adresse og opgavetekst på én gang.",
         "At den også leder i fakturabeskrivelsen er med vilje: på Nexus- og Ældrelov-aftaler hedder kunden «Jammerbugt Kommune» på dem alle sammen, og borgerens navn står i fakturabeskrivelsen. Søger du på borgeren, finder du den rigtige aftale — søger du på kommunen, får du dem alle.",
         "Adressen er med, fordi det ofte er dét, man husker.",
@@ -2287,13 +2282,6 @@ const MODULE_HELP = {
         "Det siger «ser ud som» og ikke «er». To naboer i samme opgang med samme rengøring på samme dag rammer også — se efter, før du sletter.",
         "Godkender du en kladde med mærket på, spørger systemet først. Det viser hvilken aftale der allerede ligger, hvilken dag og hvor længe — og siger, at arbejdet bliver lagt i planen to gange. Du kan godt svare ja; er det to forskellige kunder på adressen, er det det rigtige svar.",
         "Spørgsmålet kom til 21. september 2026, efter en kladde blev godkendt med mærket på. Den samme rengøring lå så i planen to gange hver anden onsdag to år frem, og medarbejderen havde det samme besøg dobbelt på sin dag."] },
-    { h: "Markér til sletning", p: [
-        "🗑 «Markér til sletning» sætter aftalen til side, uden at slette noget. Den kan findes igen under filteret «Skal slettes», og tallet på knappen siger hvor mange der ligger.",
-        "En markeret aftale danner ingen opgaver. Så snart du har markeret den, opfører den sig som om den var væk — også selvom den står der endnu.",
-        "Sletningen sker ikke af sig selv. Den køres som en samlet omgang, når du har været bunken igennem. Sådan kan beslutningen tages én ad gangen og handlingen udføres én gang.",
-        "«Fortryd» sætter aftalen tilbage til den status, den havde før. Den huskes, så en opsagt aftale ikke kan blive aktiv igen ved et uheld.",
-        "Brug det til noget, der ikke skulle have været der: en dublet, en fejlindlæsning. Skal en rigtig aftale stoppe, er «Markér som udgået» det rigtige — den beholder historikken og det, der er faktureret.",
-        "En aftale, der HAR opgaver, bliver ikke slettet. Sletningen springer den over og siger det, for en sletning ville efterlade opgaverne som løse uden aftale. Brug «udgået» på dem."] },
     { h: "Konkrete datoer", p: ["Til opgaver uden fast rytme — fx sommerhuse, hvor datoerne kommer fra kunden. Hver dato har sit eget klokkeslæt og sin egen opgavetid.", "Opgavetiden udfyldes med aftalens varighed, når du trykker «+ Tilføj dato», og kan rettes for den enkelte dato — fx en længere slutrengøring.", "Ugedagene skjules, så længe «Konkrete datoer» er valgt. Skifter du tilbage til en fast rytme, kommer de igen, som de var.", "Start- og udløbsdato sættes af sig selv til første og sidste dato på listen. «+ Tilføj dato» foreslår ugen efter den sidste dato med samme klokkeslæt.", "Listen kan rettes løbende — også på en godkendt aftale: en ny dato får en opgave, en fjernet dato får sin kommende opgave slettet, og et nyt klokkeslæt eller en ny opgavetid rettes på opgaven. Udførte opgaver og opgaver med registreret tid røres ikke.", "På en ny aftale eller en kladde må ingen dato være passeret, og den samme dato må ikke stå to gange.", "I aftalelisten står «📅 Konkrete datoer (antal) · næste dato» i stedet for ugedagene. Hold musen over for at se alle datoer. Kontraktsummen er summen af besøgene på listen."] },
   ], warn: "«Månedligt» følger kalenderen: besøget lander i den uge, der indeholder samme dato som startdatoen — hver 3. måned giver altså fire besøg om året på samme tid. Er startdatoen den 31., rammes sidste dag i korte måneder, så intet kvartal springes over. «Ugentligt» med flere uger imellem tæller derimod i uger og vandrer gennem kalenderen — hver 4. uge giver 13 besøg om året, hver 6. uge 8-9, altid på samme ugedag." },
 
@@ -5420,42 +5408,6 @@ function PlanningApp({ session, onSignOut }) {
     }
     notify("Ønsket er afvist" + (rk?.app_email ? " og medarbejderen har fået besked" : ""));
   }
-  // Markér en aftale til sletning — eller fortryd det.
-  //
-  // Beslutningen og handlingen er delt op med vilje: kontoret gaar bunken igennem
-  // og markerer, og sletningen sker som en samlet omgang bagefter. En aftale med
-  // denne status danner ingen opgaver imens (se src/aftalerytme.js), saa den
-  // opfoerer sig som om den allerede var vaek.
-  //
-  // Den tidligere status huskes i databasen. Ellers skulle Fortryd gaette, og
-  // gaettede den forkert, kunne en OPSAGT aftale blive aktiv igen og begynde at
-  // danne opgaver hos en kunde, der havde sagt op.
-  async function saetSlettes(tpl, markér) {
-    const fra = tpl.status || "aktiv";
-    if (markér) {
-      const harOpgaver = instances.some((i) => i.templateId === tpl.id);
-      if (!window.confirm(
-        `Markér «${tpl.title}» til sletning?\n\n`
-        + `Aftalen danner ingen opgaver, så længe den er markeret, og den kan findes `
-        + `under filteret «Skal slettes». Intet slettes nu — det sker som en samlet omgang.\n\n`
-        + (harOpgaver
-            ? `OBS: der ligger allerede opgaver på denne aftale. Slettes aftalen, bliver de `
-              + `stående som løse opgaver uden aftale. Skal aftalen bare stoppe, er `
-              + `«Markér som udgået» det rigtige i stedet.\n\n`
-            : "")
-        + `Fortsæt?`)) return;
-    }
-    const nyStatus = markér ? "slettes" : (tpl.statusFoerSlettes || "kladde");
-    const { error } = await supabase.from("service_templates")
-      .update({ status: nyStatus, status_foer_slettes: markér ? fra : null })
-      .eq("id", tpl.id);
-    if (dbFail(error, markér ? "markere aftalen til sletning" : "fortryde markeringen")) return;
-    setTemplates((prev) => prev.map((t) => (t.id === tpl.id
-      ? { ...t, status: nyStatus, statusFoerSlettes: markér ? fra : null } : t)));
-    notify(markér
-      ? `«${tpl.title}» er markeret til sletning`
-      : `Markeringen er fortrudt — aftalen står igen som ${nyStatus === "kladde" ? "kladde" : nyStatus}`);
-  }
 
   // ── Bestillinger fra kundeportalen ─────────────────────────────────────────
   //
@@ -6565,7 +6517,7 @@ function PlanningApp({ session, onSignOut }) {
 
       {view === "contracts" && (
         <ContractsView templates={templates} instances={instances} pricing={pricing} employees={aktiveEmployees} onEditDraft={(tpl) => { setCopyPayload({ ...tpl, type: "fixed", templateDays: tpl.days }); setEditTplId(tpl.id); setShowAddTask(true); }}
-            isAdminUser={isAdminUser} onCancelTemplate={(tplId) => setCancelTarget(tplId)} onSaetSlettes={saetSlettes}
+            isAdminUser={isAdminUser} onCancelTemplate={(tplId) => setCancelTarget(tplId)}
             startStatus={aftalerStart} onStartBrugt={() => setAftalerStart(null)} />
       )}
 
@@ -10102,7 +10054,6 @@ function DriftView({ isAdminUser, paaSide, aftaler = [], onAabnAftale }) {
           aktive:   await t("service_templates", (q) => q.eq("status", "aktiv")),
           kladder,
           udenNavn: kladder - kladderNavn,
-          slettes:  await t("service_templates", (q) => q.eq("status", "slettes")),
           opgaver:  await t("instances"),
           medarbejdere,
           udenMail: medarbejdere - medMail,
@@ -10214,9 +10165,6 @@ function DriftView({ isAdminUser, paaSide, aftaler = [], onAabnAftale }) {
     tal.udenNavn > 0 && { t: `${tal.udenNavn} kladder mangler kundenavn`,
       s: "De kan ikke godkendes, og de kan ikke faktureres, før navnet er på.",
       knap: "Åbn kladderne", gaa: () => paaSide("contracts", "kladde") },
-    tal.slettes > 0 && { t: `${tal.slettes} aftaler er markeret til sletning`,
-      s: "De danner ingen opgaver imens. Sletningen sker, når nogen kører den.",
-      knap: "Gennemgå", gaa: () => paaSide("contracts", "slettes") },
     tal.udenMail > 0 && { t: `${tal.udenMail} af ${tal.medarbejdere} medarbejdere har ingen mailadresse`,
       s: "De får ingen besked, når planen ændrer sig, og ingen påmindelse om manglende registrering.",
       knap: "Åbn Medarbejdere", gaa: () => paaSide("employees") },
@@ -13695,7 +13643,7 @@ function CancelTemplateModal({ template, onClose, onConfirm }) {
     </div>
   );
 }
-function ContractsView({ templates: alleTemplates, instances, pricing, employees, isAdminUser, onCancelTemplate, onEditDraft, onSaetSlettes, startStatus, onStartBrugt }) {
+function ContractsView({ templates: alleTemplates, instances, pricing, employees, isAdminUser, onCancelTemplate, onEditDraft, startStatus, onStartBrugt }) {
   // startStatus saettes kun, naar man kommer hertil fra en knap paa Drift-siden.
   // Ellers er den null, og saa staar filteret paa «Alle» som altid.
   const [statusFilter, setStatusFilter] = useState(startStatus || "alle");
@@ -13706,13 +13654,6 @@ function ContractsView({ templates: alleTemplates, instances, pricing, employees
   useEffect(() => { if (startStatus && onStartBrugt) onStartBrugt(); }, []);   // eslint-disable-line react-hooks/exhaustive-deps
   const [typeFilter, setTypeFilter] = useState("all");
   const [soeg, setSoeg] = useState("");
-  // De to sidste gaelder KUN kladdebunken, og de nulstilles naar man forlader den.
-  //
-  // 340 kladder er for mange til at gaa igennem i ét stykke. Bunken skal deles op
-  // paa de to maader, gennemgangen faktisk foregaar paa: «ryd dubletterne foerst»
-  // og «tag Nadines ind ad gangen, saa kan hun svare paa dem alle sammen».
-  const [dubletFilter, setDubletFilter] = useState("alle");   // alle | dublet | ikke
-  const [medarbFilter, setMedarbFilter] = useState("alle");   // alle | <id> | ingen
 
   // Søgningen leder i MERE end kundenavnet, og det er ikke overflod.
   //
@@ -13776,12 +13717,6 @@ function ContractsView({ templates: alleTemplates, instances, pricing, employees
     .filter((t) => (statusFilter === "udgaaet" ? true : !erGjortOp(t)))
     .filter((t) => (statusFilter === "alle" ? true : (t.status || "aktiv") === statusFilter))
     .filter((t) => (typeFilter === "all" ? true : effectiveContractType(t) === typeFilter))
-    // De to kladdefiltre virker kun i kladdevisningen. Ellers ville et valg, man
-    // havde glemt, sidde og skjule aftaler i en anden liste.
-    .filter((t) => !erKladdevisning || dubletFilter === "alle"
-      || (dubletFilter === "dublet" ? dubletter.has(t.id) : !dubletter.has(t.id)))
-    .filter((t) => !erKladdevisning || medarbFilter === "alle"
-      || (medarbFilter === "ingen" ? !t.preferredEmployeeId : t.preferredEmployeeId === medarbFilter))
     .filter(passerSoegning);
   // Find den reelle, aktuelle kontrakttype for en skabelon: den seneste værdi sat på
   // en tilknyttet opgave slår den statiske skabelonværdi, så redigering i ugeplanen
@@ -13856,35 +13791,6 @@ function ContractsView({ templates: alleTemplates, instances, pricing, employees
     }
     return { sum: weeklyValue, weeks: 1, wholePeriod: false };
   }
-
-  // Grundbunken bag tallene paa kladdefiltrene.
-  //
-  // Tallene skal sige, hvad et klik GIVER — ikke hvor mange der findes i alt. Derfor
-  // regnes de af de kladder, de oevrige filtre allerede slipper igennem: har man
-  // valgt «Erhverv», skal der staa hvor mange erhvervskladder der er dubletter, og
-  // ikke hvor mange dubletter der er i hele bunken.
-  const kladdeGrund = erKladdevisning
-    ? alleTemplates
-        .filter((t) => (t.status || "aktiv") === "kladde")
-        .filter((t) => (typeFilter === "all" ? true : effectiveContractType(t) === typeFilter))
-        .filter(passerSoegning)
-    : [];
-  const kladdeDubletAntal = kladdeGrund.filter((t) => dubletter.has(t.id)).length;
-
-  // Medarbejderne med kladder — og kun dem. En liste med alle tyve ville have
-  // femten navne, der giver nul aftaler, og saa skal man prøve sig frem.
-  const kladdeMedarbejdere = (() => {
-    const antal = new Map();
-    let uden = 0;
-    kladdeGrund.forEach((t) => {
-      if (!t.preferredEmployeeId) { uden += 1; return; }
-      antal.set(t.preferredEmployeeId, (antal.get(t.preferredEmployeeId) || 0) + 1);
-    });
-    const liste = [...antal.entries()]
-      .map(([id, n]) => ({ id, navn: (employees.find((e) => e.id === id) || {}).name || id, n }))
-      .sort((a, b) => a.navn.localeCompare(b.navn, "da"));
-    return { liste, uden };
-  })();
 
   // Hent alle faste kontrakter med udløbsdato — sortér efter nærmest udløbende
   const contracts = templates
@@ -13965,17 +13871,11 @@ function ContractsView({ templates: alleTemplates, instances, pricing, employees
           man kan f.eks. se kun kladder af typen hovedrengoering. Antallet staar kun
           paa kladde-knappen — det er den eneste bunke der skal tommes. */}
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
-        {[["alle", "Alle"], ["kladde", "Under udarbejdelse"], ["aktiv", "Aktive"], ["udgaaet", "Udgåede"], ["slettes", "Skal slettes"]].map(([k, l]) => (
+        {[["alle", "Alle"], ["kladde", "Under udarbejdelse"], ["aktiv", "Aktive"], ["udgaaet", "Udgåede"]].map(([k, l]) => (
           <button
             key={k}
             type="button"
-            onClick={() => {
-              setStatusFilter(k);
-              // Kladdefiltrene nulstilles, naar man forlader bunken. Ellers kommer
-              // man tilbage til «Under udarbejdelse» en time senere og ser 12 af
-              // 340 uden at kunne huske hvorfor.
-              if (k !== "kladde") { setDubletFilter("alle"); setMedarbFilter("alle"); }
-            }}
+            onClick={() => setStatusFilter(k)}
             style={statusFilter === k
               ? { ...styles.typePickBtn, flex: "none", borderColor: "var(--farve)", color: "var(--farve)", background: "var(--farve-lys)" }
               : { ...styles.typePickBtn, flex: "none" }}>
@@ -13989,59 +13889,9 @@ function ContractsView({ templates: alleTemplates, instances, pricing, employees
             {k === "udgaaet" && udgaaetAntal > 0
               ? (gjortOpAntal > 0 ? ` (${udgaaetAntal}, heraf ${gjortOpAntal} gjort op)` : ` (${udgaaetAntal})`)
               : ""}
-            {/* Tallet skal staa der. En bunke, der venter paa at blive slettet,
-                maa ikke kunne ligge og blive glemt - og statussen er lavet
-                netop til at dele beslutningen og handlingen op. */}
-            {k === "slettes" && alleTemplates.filter((t) => t.status === "slettes").length > 0
-              ? ` (${alleTemplates.filter((t) => t.status === "slettes").length})`
-              : ""}
           </button>
         ))}
       </div>
-
-      {/* Kladdebunkens egne to filtre.
-          De staar KUN her, fordi de kun giver mening her: en aktiv aftale faar
-          aldrig et dubletmaerke, og en gennemgang «medarbejder for medarbejder» er
-          noget, man goer med de indlaeste ruteplaner og ikke med driften. */}
-      {erKladdevisning && (
-        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", marginBottom: 14 }}>
-          {[["alle", `Alle kladder (${kladdeGrund.length})`],
-            ["dublet", `⚠ Ser ud som dublet (${kladdeDubletAntal})`],
-            ["ikke", `Uden dubletmistanke (${kladdeGrund.length - kladdeDubletAntal})`]].map(([k, l]) => (
-            <button
-              key={k}
-              type="button"
-              onClick={() => setDubletFilter(k)}
-              style={dubletFilter === k
-                ? { ...styles.typePickBtn, flex: "none", borderColor: "#D97706", color: "#92400E", background: "#FEF3C7" }
-                : { ...styles.typePickBtn, flex: "none" }}>
-              {l}
-            </button>
-          ))}
-          <select
-            value={medarbFilter}
-            onChange={(e) => setMedarbFilter(e.target.value)}
-            style={{ ...styles.inputSm, margin: 0, minWidth: 210, fontSize: 13, fontWeight: 600,
-                     color: medarbFilter !== "alle" ? "var(--farve-moerk)" : "#111111",
-                     borderColor: medarbFilter !== "alle" ? "var(--farve)" : "#E2E8F0",
-                     background: medarbFilter !== "alle" ? "var(--farve-lys)" : "#fff" }}>
-            <option value="alle">Alle medarbejdere</option>
-            {kladdeMedarbejdere.liste.map((m) => (
-              <option key={m.id} value={m.id}>{m.navn} ({m.n})</option>
-            ))}
-            {kladdeMedarbejdere.uden > 0 && (
-              <option value="ingen">Uden fast medarbejder ({kladdeMedarbejdere.uden})</option>
-            )}
-          </select>
-          {(dubletFilter !== "alle" || medarbFilter !== "alle") && (
-            <button type="button" onClick={() => { setDubletFilter("alle"); setMedarbFilter("alle"); }}
-              style={{ border: "none", background: "transparent", color: "var(--farve)", fontWeight: 700,
-                       cursor: "pointer", fontSize: 13, fontFamily: "inherit" }}>
-              Nulstil
-            </button>
-          )}
-        </div>
-      )}
 
       {statusFilter === "udgaaet" && gjortOpAntal > 0 && (
         <div style={{ fontSize: 12.5, color: "#64748B", marginBottom: 14, lineHeight: 1.5 }}>
@@ -14183,19 +14033,7 @@ function ContractsView({ templates: alleTemplates, instances, pricing, employees
                       </span>
                     )}
                     {t.status === "slettes" ? (
-                      /* Markeret til sletning. Den danner ingen opgaver imens - reglen
-                         ligger i aftalerytme.js - saa den opfoerer sig som om den
-                         allerede var vaek, indtil nogen faktisk sletter den. */
-                      <>
-                        <span style={{ color: "#B91C1C", fontWeight: 800 }}>🗑 SKAL SLETTES</span>
-                        {isAdminUser && onSaetSlettes && (
-                          <button type="button" onClick={() => onSaetSlettes(t, false)}
-                            style={{ padding: "2px 9px", borderRadius: 999, border: "1px solid #CBD5E1",
-                              background: "#fff", color: "#475569", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
-                            Fortryd
-                          </button>
-                        )}
-                      </>
+                      <span style={{ color: "#B91C1C", fontWeight: 800 }}>🗑 SKAL SLETTES</span>
                     ) : t.status === "udgaaet" ? (
                       <span style={{ color: "#B91C1C", fontWeight: 800 }}>
                         UDGÅET · {cancelReasonLabel(t.cancelReason)}
@@ -14208,19 +14046,6 @@ function ContractsView({ templates: alleTemplates, instances, pricing, employees
                         Markér som udgået
                       </button>
                     ) : null}
-                    {/* Markér til sletning. Staar ved siden af «udgået», fordi de to
-                        loeser hver sin ting: udgået beholder historikken og rydder
-                        fremtiden, sletning fjerner aftalen helt. Det sidste duer kun
-                        paa noget, der ikke skulle have vaeret der - en dublet, en
-                        fejlindlaesning. Derfor to knapper og ikke én. */}
-                    {t.status !== "slettes" && isAdminUser && onSaetSlettes && (
-                      <button type="button" onClick={() => onSaetSlettes(t, true)}
-                        title="Markerer aftalen til sletning. Den danner ingen opgaver imens. Sletningen sker først, når nogen kører den."
-                        style={{ padding: "2px 9px", borderRadius: 999, border: "1px solid #CBD5E1",
-                          background: "#F8FAFC", color: "#64748B", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
-                        🗑 Markér til sletning
-                      </button>
-                    )}
                     {t.preferredEmployeeId && (
                       <span style={{ color: "var(--farve-moerk)", fontWeight: 700 }}>
                         Fast: {((employees || []).find((e) => e.id === t.preferredEmployeeId) || {}).name || "ukendt"}
@@ -14295,19 +14120,7 @@ function ContractsView({ templates: alleTemplates, instances, pricing, employees
                       </span>
                     )}
                     {t.status === "slettes" ? (
-                      /* Markeret til sletning. Den danner ingen opgaver imens - reglen
-                         ligger i aftalerytme.js - saa den opfoerer sig som om den
-                         allerede var vaek, indtil nogen faktisk sletter den. */
-                      <>
-                        <span style={{ color: "#B91C1C", fontWeight: 800 }}>🗑 SKAL SLETTES</span>
-                        {isAdminUser && onSaetSlettes && (
-                          <button type="button" onClick={() => onSaetSlettes(t, false)}
-                            style={{ padding: "2px 9px", borderRadius: 999, border: "1px solid #CBD5E1",
-                              background: "#fff", color: "#475569", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
-                            Fortryd
-                          </button>
-                        )}
-                      </>
+                      <span style={{ color: "#B91C1C", fontWeight: 800 }}>🗑 SKAL SLETTES</span>
                     ) : t.status === "udgaaet" ? (
                       <span style={{ color: "#B91C1C", fontWeight: 800 }}>
                         UDGÅET · {cancelReasonLabel(t.cancelReason)}
@@ -14320,19 +14133,6 @@ function ContractsView({ templates: alleTemplates, instances, pricing, employees
                         Markér som udgået
                       </button>
                     ) : null}
-                    {/* Markér til sletning. Staar ved siden af «udgået», fordi de to
-                        loeser hver sin ting: udgået beholder historikken og rydder
-                        fremtiden, sletning fjerner aftalen helt. Det sidste duer kun
-                        paa noget, der ikke skulle have vaeret der - en dublet, en
-                        fejlindlaesning. Derfor to knapper og ikke én. */}
-                    {t.status !== "slettes" && isAdminUser && onSaetSlettes && (
-                      <button type="button" onClick={() => onSaetSlettes(t, true)}
-                        title="Markerer aftalen til sletning. Den danner ingen opgaver imens. Sletningen sker først, når nogen kører den."
-                        style={{ padding: "2px 9px", borderRadius: 999, border: "1px solid #CBD5E1",
-                          background: "#F8FAFC", color: "#64748B", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
-                        🗑 Markér til sletning
-                      </button>
-                    )}
                     {t.preferredEmployeeId && (
                       <span style={{ color: "var(--farve-moerk)", fontWeight: 700 }}>
                         Fast: {((employees || []).find((e) => e.id === t.preferredEmployeeId) || {}).name || "ukendt"}
