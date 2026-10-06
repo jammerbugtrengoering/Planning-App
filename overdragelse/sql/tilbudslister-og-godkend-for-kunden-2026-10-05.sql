@@ -48,3 +48,11 @@ alter table public.checklist_templates add column tilbud_fase text check (tilbud
 --  * kontor_indbakke: ny linje 'naeste_besoeg' — aftale med ved_besoeg, status aktiv, ingen åben opgave, sidste besøg før i dag, ikke udsat inden for 7 dage.
 -- Punktets tekst «Aftal næste besøg med kunden» står i src/aftalerytme.js (NAESTE_BESOEG_TEKST), i Worklist og i naeste_besoeg_kerne (c_tekst).
 -- opret_naeste_besoeg_for_aftale(p_template_id, p_dato, p_tid): kontorets vej til samme kerne (naeste_besoeg_kerne), fra klokken og fra aftalekortet.
+
+-- 6.10.2026 (Jonn): HR-administrator. Migrationer: hr_admin_1_rolle, hr_admin_2b/2c/2d (ALTER POLICY).
+--  * Tabellen hr_administratorer (employee_id), funktionen er_hr_admin() (lukket for anon), udløseren hr_admin_sidste_trg (mindst én).
+--  * Politikkerne på employee_hr, employee_dokumenter, employee_wages (læs) og storage-politikken for bucket medarbejder-dokumenter kræver nu er_hr_admin().
+--  * Startliste: e5 (Charlotte), evfebxn6 (Karen), e2 (Udvikler IT) — de tre administratorer.
+--  * DROP POLICY hænger i apply_migration (som DELETE); ALTER POLICY virker. Politikkerne hedder stadig admin_all/admin_read.
+--  * Ikke ændret: employee_wage_history, km_sats_historik, employee_home. De er løn/transport og bør med, når en planlægger uden HR-adgang kommer til;
+--    appens planlæggerudgave skriver dem ikke (wageFrom/kmSatsFra sættes til null uden hrAdgang).

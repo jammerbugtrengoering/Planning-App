@@ -240,6 +240,9 @@ const MENU_GRUPPER = [
   // se om der er saebe nok, var et led for meget.
   { key: "lager",     navn: "Lager",      sider: [["inventory", "Lager"]] },
   { key: "oekonomi",  navn: "Økonomi",     sider: [["time", "Fakturering"], ["kundetimer", "Kundetimer"], ["reports", "Rapportering"], ["medExport", "Løn data"], ["papirskema", "Papirskema"]] },
+  // Personalemappen (6.10.2026): HR-data, kun for HR-administratorer (tabellen hr_administratorer, funktionen er_hr_admin). Planlæggere uden HR-adgang
+  // bruger «Medarbejdere» under Opsætning, der kun har planlægningsdata.
+  { key: "personale", navn: "Personalemappen", kunHr: true, sider: [["personalemappen", "Medarbejdere"]] },
   { key: "opsaetning", navn: "Opsætning", sider: [["employees", "Medarbejdere"], ["kompetencer", "Kompetencer"], ["omraader", "Områder"], ["startstop", "Start/stop"], ["loenperioder", "Lønperioder"], ["checklists", "Tjeklister"], ["transport", "Transporttid"], ["aflysning", "Aflysning"], ["timepriser", "Timepriser"], ["firma", "Firma"]] },
   // Kun i kundeudgaven (fase 5, 29.9.2026): kundefirmaet bestiller ekstra hjaelp hos
   // Jammerbugt Rengoering. Hos Jammerbugt selv findes siden ikke — der er man den,
@@ -1962,6 +1965,7 @@ const MODULE_HELP = {
 
   employees: { title: "Medarbejdere", intro: "Her styrer du hvem der kan hvad, hvor meget tid de har, og hvilke områder de dækker.", blocks: [
     { h: "Sådan læses listen", p: [
+        "Ansættelse, dokumenter, nødkontakt og løn ligger i Personalemappen, som kun HR-administratorer kan se. Her står kun det, planlægningen bruger.",
         "Denne side er stamdata: hvem medarbejderne er, hvad de kan, hvor mange timer de har, og hvem der har adgang til appen. Hvor meget der er planlagt i en bestemt uge, står i Ugeplan — ikke her.",
         "Hver medarbejder er én linje med det aftalte timetal, weekendaftale og mødetid.",
         "Mærkaterne til højre er det du ellers ikke kan se: manglende app-adgang, kørsel som arbejdstid, administrator, og de to første kompetencer.",
@@ -2030,6 +2034,13 @@ const MODULE_HELP = {
         "Skal hun tilbage, fjerner du fratrædelsesdatoen under «Redigér» og opretter en ny adgang. Det gamle login kan ikke gendannes."] },
   ], warn: "Weekendarbejde kræver flueben på medarbejderen. Uden det kan hun slet ikke planlægges lørdag og søndag. Med fluebenet er der ingen timegrænse i weekenden — derfor står der Ja/Nej og ikke et timetal." },
 
+  personalemappen: { title: "Personalemappen", intro: "Her ligger medarbejdernes ansættelse, dokumenter, løn og nødkontakt. Kun HR-administratorer kan se siden.", blocks: [
+    { h: "Hvem kan se hvad", p: ["Personalemappen vises kun for HR-administratorer. Databasen håndhæver det: ansættelse, dokumenter, nødkontakt, løn og filerne i dokumentarkivet kan kun læses af dem — også selv om en planlægger åbner siden på anden vis.",
+        "De øvrige planlæggere bruger «Medarbejdere» under Opsætning. Dér står kun det, planlægningen bruger: navn, kompetencer, område, kapacitet, ugedage, fast tid og adgang til Worklist.",
+        "HR-administratorerne er i dag Charlotte, Karen og Udvikler IT. Der skal altid være mindst én."] },
+    { h: "Medarbejderkortet", p: ["Tryk på en medarbejder for at åbne kortet med faner: Person, Ansættelse, Dokumenter, Planlægning, Løn, Adgang og Udlevering. Alle faner gemmes med den samme knap.",
+        "«Ny medarbejder» og «Fratræd» findes kun her."] },
+  ] },
   loenperioder: { title: "Lønperioder", intro: "Hvornår en lønperiode starter og lukker, og hvornår medarbejderne får besked.", blocks: [
     { h: "Lukkedagen", p: ["Lønperioden går fra lukkedagen til dagen før i næste måned og lukker på lukkedagen kl. 23.59. Standard er den 20., så «oktober» er 20. sep – 19. okt. Skriv 1 for kalendermåned.",
         "Efter lukningen kan medarbejderen ikke rette sin tid. Kun planlæggerne kan, og rettelsen lægges som efterregulering i den åbne periode.",
@@ -2479,7 +2490,7 @@ const MODULE_HELP = {
         "Hjemmeadresse, men kun for dem der har kørsel i arbejdstiden. Den bruges alene til at beregne afstanden til dagens første opgave.",
         "Timeløn og lønhistorik, bonus og kilometersats, weekendtillæg, SH-sats og Danløn-nummer.",
         "Registrerede timer pr. opgave, fravær og fratrædelsesdato.",
-        "Dokumentarkiv på medarbejderkortet: ansættelseskontrakt, ændringer, MUS-referater og certifikater, som kontoret selv lægger ind. Kun administratorer kan se dem, og filerne slettes, når de ikke længere skal opbevares. Læg ikke sygemeldinger, lægeerklæringer eller straffeattester ind.",
+        "Dokumentarkiv på medarbejderkortet: ansættelseskontrakt, ændringer, MUS-referater og certifikater, som kontoret selv lægger ind. Kun HR-administratorer kan se dem (under Personalemappen), og filerne slettes, når de ikke længere skal opbevares. Læg ikke sygemeldinger, lægeerklæringer eller straffeattester ind.",
         "HR-oplysninger, som kun administratorer kan se: telefonnummer, privat e-mail, ansættelsesform og ansættelsesdato, datoerne for MUS-samtaler (aldrig indholdet), og en nødkontakt — navn, forhold og telefonnummer på en anden person, som medarbejderen selv har oplyst. Telefonnummer og nødkontakt kan medarbejderen selv rette i Worklist (Indstillinger → Dine oplysninger); resten rettes kun af kontoret.",
         "Fravær står som fravær. Systemet gemmer aldrig en årsag — hverken sygdom eller diagnose.",
         "Bliver du spurgt: der er ingen GPS og ingen positionsmåling i Worklist. Kørslen regnes ud fra adresserne på opgaverne, ikke fra hvor telefonen har været. Det er et spørgsmål, medarbejdere stiller, og svaret er entydigt nej."] },
@@ -3544,6 +3555,10 @@ function PlanningApp({ session, onSignOut }) {
   // HR-oplysninger pr. medarbejder (telefon, nødkontakt, ansættelse, MUS-datoer). Kun administratorer kan læse tabellen; for andre er
   // objektet tomt. Hentes for sig og ikke i loadAll, så en fejl her aldrig kan vælte opstarten af ugeplanen.
   const [hrData, setHrData] = useState({});
+  // Har den indloggede adgang til personalemappen (HR-data)? Databasen afgør det (er_hr_admin); menuen følger bare med.
+  const [erHrAdmin, setErHrAdmin] = useState(false);
+  // Hvilken udgave af medarbejderkortet er åbnet: den fulde (Personalemappen) eller planlæggerens.
+  const [empHrAdgang, setEmpHrAdgang] = useState(false);
   const [omkostninger, setOmkostninger] = useState([]); // [{id, aar, maaned, beskrivelse, beloeb}]
   const [kmLog, setKmLog] = useState([]); // [{id, employee_id, work_date, km}]
   const [bonus, setBonus] = useState([]); // [{id, employee_id, aar, kvartal, beloeb, note}]
@@ -3894,7 +3909,12 @@ function PlanningApp({ session, onSignOut }) {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    if (loading || !isAdminRef.current) return;
+    if (loading) return;
+    supabase.rpc("er_hr_admin").then(({ data }) => setErHrAdmin(data === true));
+  }, [loading]);
+
+  useEffect(() => {
+    if (loading || !erHrAdmin) return;
     let afbrudt = false;
     supabase.from("employee_hr").select("*").then(({ data, error }) => {
       if (afbrudt) return;
@@ -3902,7 +3922,7 @@ function PlanningApp({ session, onSignOut }) {
       setHrData(Object.fromEntries((data || []).map((r) => [r.employee_id, r])));
     });
     return () => { afbrudt = true; };
-  }, [loading, genindlaes]);
+  }, [loading, genindlaes, erHrAdmin]);
 
   const syncEmployee = useCallback(async (emp) => {
     const { data: skillRows_db } = await supabase.from("skills").select("id, name");
@@ -6245,7 +6265,7 @@ function PlanningApp({ session, onSignOut }) {
           </button>
         </div>
         <nav style={styles.nav}>
-          {MENU_GRUPPER.filter((gr) => (!gr.kunAdmin || isAdminUser) && (!gr.kunKunde || KUNDEUDGAVE) && synligeSider(gr).length > 0).map((gr) => {
+          {MENU_GRUPPER.filter((gr) => (!gr.kunAdmin || isAdminUser) && (!gr.kunHr || erHrAdmin) && (!gr.kunKunde || KUNDEUDGAVE) && synligeSider(gr).length > 0).map((gr) => {
             const aktiv = gruppeFor(view).key === gr.key;
             return (
               <button key={gr.key} onClick={() => setView(synligeSider(gr)[0][0])}
@@ -6477,10 +6497,17 @@ function PlanningApp({ session, onSignOut }) {
           onOpenAddActivity={() => setShowAddActivity(true)}
         />
       )}
+      {view === "personalemappen" && erHrAdmin && (
+        <EmployeesView employees={employees}
+          onAdd={() => { setEditEmp(null); setEmpHrAdgang(true); setShowAddEmp(true); }}
+          onEdit={(e) => { setEditEmp(e); setEmpHrAdgang(true); setShowAddEmp(true); }}
+          supabase={supabase}
+          areas={areas}
+          employeeAreas={employeeAreas} />
+      )}
       {view === "employees" && (
         <EmployeesView employees={employees}
-          onAdd={() => { setEditEmp(null); setShowAddEmp(true); }}
-          onEdit={(e) => { setEditEmp(e); setShowAddEmp(true); }}
+          onEdit={(e) => { setEditEmp(e); setEmpHrAdgang(false); setShowAddEmp(true); }}
           supabase={supabase}
           areas={areas}
           employeeAreas={employeeAreas} />
@@ -6660,7 +6687,7 @@ function PlanningApp({ session, onSignOut }) {
           travelSettings={travelSettings} onClose={() => setVisSimulering(false)}
           onAnvend={anvendSimulering} onRulTilbage={rulSimuleringTilbage} />
       )}
-      {showAddEmp && <EmployeeModal emp={editEmp} onClose={() => { setShowAddEmp(false); setEditEmp(null); }} onSave={saveEmployee} skills={skills} hr={editEmp ? hrData[editEmp.id] : null} brugerId={currentEmployeeForAuth?.id} onFratraed={(id) => { setShowAddEmp(false); setEditEmp(null); setSletMedarbejder(id); }} satsHistorik={editEmp ? satsHistorik[editEmp.id] : null} kmSatser={editEmp ? kmSatser[editEmp.id] : null} />}
+      {showAddEmp && <EmployeeModal hrAdgang={empHrAdgang} emp={editEmp} onClose={() => { setShowAddEmp(false); setEditEmp(null); }} onSave={saveEmployee} skills={skills} hr={editEmp ? hrData[editEmp.id] : null} brugerId={currentEmployeeForAuth?.id} onFratraed={(id) => { setShowAddEmp(false); setEditEmp(null); setSletMedarbejder(id); }} satsHistorik={editEmp ? satsHistorik[editEmp.id] : null} kmSatser={editEmp ? kmSatser[editEmp.id] : null} />}
       {showAddBlock && <BlockModal employees={aktiveEmployees} onClose={() => setShowAddBlock(false)} onSave={addBlock} />}
       {showAddActivity && <ActivityModal employees={aktiveEmployees} onClose={() => setShowAddActivity(false)} onSave={addActivity} />}
       {/* Transporttid ligger under Opsaetning (28.9.2026). Den saettes én gang og
@@ -7580,7 +7607,7 @@ function EmployeesView({ employees, onAdd, onEdit, supabase, areas, employeeArea
   return (
     <div style={styles.page}>
       <div style={styles.toolbar}>
-        <button style={styles.primaryBtn} onClick={onAdd}><Plus size={16} /> Ny medarbejder</button>
+        {onAdd && <button style={styles.primaryBtn} onClick={onAdd}><Plus size={16} /> Ny medarbejder</button>}
       </div>
 
       {/* Vaerktoejslinje. Fandtes ikke foer: "hvem kan vinduespolering og har tid" betoed
@@ -19188,7 +19215,7 @@ function StamKort({ titel, hint, bg, farve, hintFarve, children }) {
   );
 }
 
-function EmployeeModal({ emp, onClose, onSave, skills: skillList, satsHistorik, kmSatser, hr, brugerId, onFratraed }) {
+function EmployeeModal({ hrAdgang = true, emp, onClose, onSave, skills: skillList, satsHistorik, kmSatser, hr, brugerId, onFratraed }) {
   const [fane, setFane] = useState("person");
   // HR-oplysninger (6.10.2026) ligger i employee_hr, kun synlig for administratorer. Datoer som tekst «ÅÅÅÅ-MM-DD», tomt = ikke angivet.
   const [hrTelefon, setHrTelefon] = useState(hr?.telefon || "");
@@ -19288,7 +19315,9 @@ function EmployeeModal({ emp, onClose, onSave, skills: skillList, satsHistorik, 
           HR-oplysninger, sættes de som et nyt kort i fanen «Ansættelse» — resten af vinduet røres ikke. Alle faner gemmes med
           den samme knap, så en rettelse i én fane aldrig går tabt, fordi man skiftede fane. */}
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16 }}>
-        {[["person", "Person"], ["ansaettelse", "Ansættelse"], ["dokumenter", "Dokumenter"], ["planlaegning", "Planlægning"], ["loen", "Løn"], ["adgang", "Adgang"], ["udlevering", "Udlevering"]].map(([k, l]) => (
+        {[["person", "Person"], ["ansaettelse", "Ansættelse"], ["dokumenter", "Dokumenter"], ["planlaegning", "Planlægning"], ["loen", "Løn"], ["adgang", "Adgang"], ["udlevering", "Udlevering"]]
+          // Planlæggerens udgave har kun det, planlægningen bruger. Resten er HR-data, som databasen heller ikke giver adgang til.
+          .filter(([k]) => hrAdgang || ["person", "planlaegning", "adgang"].includes(k)).map(([k, l]) => (
           <button key={k} type="button" onClick={() => setFane(k)}
             style={{ padding: "7px 16px", borderRadius: 999, fontSize: 13, fontWeight: 700, cursor: "pointer",
                      border: fane === k ? "1px solid var(--farve-moerk)" : "1px solid #E2E8F0",
@@ -19306,14 +19335,17 @@ function EmployeeModal({ emp, onClose, onSave, skills: skillList, satsHistorik, 
           <input style={styles.input} value={name} onChange={(e) => setName(e.target.value)} placeholder="Fulde navn" />
 
 
+          {hrAdgang && (<>
           <label style={styles.label}>Telefon</label>
           <input style={styles.input} type="tel" inputMode="tel" value={hrTelefon} onChange={(e) => setHrTelefon(e.target.value)} placeholder="12 34 56 78" />
           <label style={styles.label}>Privat e-mail</label>
           <input style={styles.input} type="email" value={hrPrivatEmail} onChange={(e) => setHrPrivatEmail(e.target.value)} placeholder="Bruges ikke til login" />
           <div style={styles.hint}>
-            Telefon og privat e-mail kan kun ses af administratorer. Arbejdsmailen, hun logger ind med, står under Medarbejdere.
+            Telefon og privat e-mail kan kun ses af HR-administratorer. Arbejdsmailen, hun logger ind med, står under Medarbejdere.
           </div>
+          </>)}
         </StamKort>
+        {hrAdgang && (
         <StamKort titel="Nødkontakt" hint="Den, vi ringer til, hvis der sker noget" bg="#FEF2F2" farve="#B91C1C" hintFarve="#DC2626">
           <label style={styles.label}>Navn</label>
           <input style={styles.input} value={hrNodNavn} onChange={(e) => setHrNodNavn(e.target.value)} placeholder="Fx ægtefælle, forælder eller ven" />
@@ -19322,9 +19354,10 @@ function EmployeeModal({ emp, onClose, onSave, skills: skillList, satsHistorik, 
           <label style={styles.label}>Telefon</label>
           <input style={styles.input} type="tel" inputMode="tel" value={hrNodTelefon} onChange={(e) => setHrNodTelefon(e.target.value)} />
           <div style={styles.hint}>
-            Det er en tredjepersons oplysninger. De bruges kun, hvis der sker noget med medarbejderen, og kun administratorer kan se dem.
+            Det er en tredjepersons oplysninger. De bruges kun, hvis der sker noget med medarbejderen, og kun HR-administratorer kan se dem.
           </div>
         </StamKort>
+        )}
       </>)}
 
       {fane === "ansaettelse" && (<>
@@ -19366,7 +19399,7 @@ function EmployeeModal({ emp, onClose, onSave, skills: skillList, satsHistorik, 
               Skal hun tilbage, ryddes fratrædelsesdatoen i databasen først.
             </div>
           </StamKort>
-        ) : (
+        ) : !hrAdgang ? null : (
           <StamKort titel="Fratræd" hint="Når hun holder op" bg="#FEF2F2" farve="#B91C1C" hintFarve="#DC2626">
             <div style={styles.hint}>
               Du vælger datoen, og dialogen fortæller, hvor mange kommende opgaver der mister hende. Login'et slettes, og hun forsvinder fra planlægningen.
@@ -19660,8 +19693,9 @@ function EmployeeModal({ emp, onClose, onSave, skills: skillList, satsHistorik, 
           if (gemmer) return;
           setGemmer(true);
           try {
-            await onSave({ id: emp?.id || uid("e"), name: name.trim(), skills: empSkills, color: emp?.color || color, capacity, isAdmin, weekendOk, startStop, startTime: startTime || null, hourlyWage: hourlyWage === "" ? STANDARD_TIMELOEN : Math.max(0, Number(hourlyWage)), wageFrom: satsErAendret || !emp ? wageFrom : null, kmSats: kmSats === "" ? null : Math.max(0, Number(kmSats)), kmSatsFra: kmSats !== "" && (kmSatsErAendret || !emp) ? kmSatsFra : null, homeAddress: homeAddress.trim() || null, travelInWorktime, danloenNr: danloenNr.trim() || null,
-              hr: { telefon: hrTelefon.trim() || null, privat_email: hrPrivatEmail.trim() || null,
+            await onSave({ id: emp?.id || uid("e"), name: name.trim(), skills: empSkills, color: emp?.color || color, capacity, isAdmin, weekendOk, startStop, startTime: startTime || null, hourlyWage: hourlyWage === "" ? STANDARD_TIMELOEN : Math.max(0, Number(hourlyWage)), wageFrom: hrAdgang && (satsErAendret || !emp) ? wageFrom : null, kmSats: kmSats === "" ? null : Math.max(0, Number(kmSats)), kmSatsFra: kmSats !== "" && (kmSatsErAendret || !emp) ? kmSatsFra : null, homeAddress: homeAddress.trim() || null, travelInWorktime, danloenNr: danloenNr.trim() || null,
+              // Uden HR-adgang sendes ingen HR-række: den ville nulstille det, der står, og databasen afviser den alligevel.
+              hr: !hrAdgang ? undefined : { telefon: hrTelefon.trim() || null, privat_email: hrPrivatEmail.trim() || null,
                     nodkontakt_navn: hrNodNavn.trim() || null, nodkontakt_relation: hrNodRelation.trim() || null,
                     nodkontakt_telefon: hrNodTelefon.trim() || null, ansaettelsesform: hrForm || null,
                     ansat_fra: hrAnsatFra || null, mus_sidst: hrMusSidst || null, mus_naeste: hrMusNaeste || null },
