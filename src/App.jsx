@@ -2036,7 +2036,7 @@ const MODULE_HELP = {
   ], warn: "Weekendarbejde kræver flueben på medarbejderen. Uden det kan hun slet ikke planlægges lørdag og søndag. Med fluebenet er der ingen timegrænse i weekenden — derfor står der Ja/Nej og ikke et timetal." },
 
   haandbog: { title: "Håndbog og politikker", intro: "Personalehåndbogen og politikkerne, som medarbejderne læser i Personalemappen-appen.", blocks: [
-    { h: "Ret teksten", p: ["Vælg et dokument øverst. Hvert afsnit har en overskrift og en tekst. Du kan flytte afsnit op og ned, fjerne dem og tilføje nye.",
+    { h: "Ret teksten", p: ["Vælg et dokument øverst. Du ser det først, som medarbejderne gør; tryk «Rediger» for at ændre det, og «Tilbage til visning» eller «Annuller», når du er færdig. Hvert afsnit har en overskrift og en tekst. Du kan flytte afsnit op og ned, fjerne dem og tilføje nye.",
         "Tryk «Gem og vis for medarbejderne». Der er intet kladdetrin: det, du gemmer, kan medarbejderne læse med det samme.",
         "«Nyt dokument» laver fx en syge- og fraværspolitik. Skriv ikke navne på medarbejdere eller kunder i teksten, og læg ikke personlige oplysninger ind her."] },
   ] },
@@ -15362,6 +15362,8 @@ function HaandbogView() {
   const [gemmer, setGemmer] = useState(false);
   const [fejl, setFejl] = useState("");
   const [gemtTid, setGemtTid] = useState(null);
+  // Visning først: dokumentet læses, som medarbejderne ser det, og «Rediger» åbner felterne. Et nyt dokument starter i redigering.
+  const [redigerer, setRedigerer] = useState(false);
 
   const laes = useCallback(async (vaelg) => {
     const [{ data: d, error: e1 }, { data: a, error: e2 }] = await Promise.all([
@@ -15377,6 +15379,7 @@ function HaandbogView() {
     setKladde(dok ? { id: dok.id, titel: dok.titel, underskrift: dok.underskrift || "", ny: false,
       afsnit: dok.afsnit.map((y) => ({ k: y.id, overskrift: y.overskrift, tekst: y.tekst })) } : null);
     setAendret(false);
+    setRedigerer(false);
   }, []);
   useEffect(() => { laes(); }, [laes]);
 
@@ -15390,6 +15393,12 @@ function HaandbogView() {
     setValgt(id);
     setKladde({ id, titel: "", underskrift: "", ny: true, afsnit: [{ k: uid("a"), overskrift: "", tekst: "" }] });
     setAendret(true);
+    setRedigerer(true);
+  }
+  // Tilbage til visning. Er der ikke gemt, hentes dokumentet igen, så rettelserne ikke hænger i luften.
+  function stopRedigering() {
+    if (aendret && !window.confirm("Du har rettelser, der ikke er gemt. Kassér dem?")) return;
+    laes(kladde?.ny ? undefined : kladde?.id);
   }
   const ret = (felt, v) => { setKladde((k) => ({ ...k, [felt]: v })); setAendret(true); };
   const retAfsnit = (k, felt, v) => { setKladde((x) => ({ ...x, afsnit: x.afsnit.map((a) => (a.k === k ? { ...a, [felt]: v } : a)) })); setAendret(true); };
@@ -15426,7 +15435,7 @@ function HaandbogView() {
     <div style={styles.page}>
       <div style={{ fontWeight: 700, fontSize: 18, color: "#111111", marginBottom: 4 }}>Håndbog og politikker</div>
       <div style={{ fontSize: 13, color: "#64748B", marginBottom: 14, lineHeight: 1.55 }}>
-        Det, du retter her, kan medarbejderne læse i Personalemappen-appen, så snart du har gemt. Skriv ikke navne på medarbejdere eller kunder i teksten.
+        Her ser du dokumenterne, som medarbejderne gør i Personalemappen-appen. Tryk «Rediger» for at rette; det, du gemmer, kan de læse med det samme. Skriv ikke navne på medarbejdere eller kunder i teksten.
       </div>
       {dokumenter === null && !fejl && <div style={styles.hint}>Henter…</div>}
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }}>
@@ -15438,7 +15447,28 @@ function HaandbogView() {
         ))}
         <button type="button" style={{ ...styles.secondaryBtn, padding: "6px 12px" }} onClick={nytDokument}><Plus size={14} /> Nyt dokument</button>
       </div>
-      {kladde && (
+      {kladde && !redigerer && dok && (
+        <div style={{ background: "#fff", borderRadius: 14, padding: "18px 20px", boxShadow: "0 1px 3px rgba(0,0,0,0.06)", maxWidth: 860, textAlign: "left" }}>
+          <div style={{ display: "flex", gap: 12, alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap", marginBottom: 12 }}>
+            <div>
+              <div style={{ fontWeight: 700, fontSize: 20, color: "#111111", lineHeight: 1.3 }}>{dok.titel}</div>
+              <div style={styles.hint}>Sådan ser medarbejderne det. Sidst rettet {new Date(dok.opdateret).toLocaleDateString("da-DK", { day: "numeric", month: "long", year: "numeric" })}.</div>
+            </div>
+            <button type="button" style={styles.primaryBtn} onClick={() => setRedigerer(true)}>Rediger</button>
+          </div>
+          {dok.afsnit.length === 0 && <div style={styles.hint}>Dokumentet har ingen afsnit endnu. Tryk «Rediger» for at skrive.</div>}
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            {dok.afsnit.map((a) => (
+              <div key={a.id}>
+                {a.overskrift && <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 3 }}>{a.overskrift}</div>}
+                <div style={{ whiteSpace: "pre-line", fontSize: 14.5, lineHeight: 1.6, color: "#1F2433", overflowWrap: "anywhere" }}>{a.tekst}</div>
+              </div>
+            ))}
+          </div>
+          {dok.underskrift && <div style={{ ...styles.hint, borderTop: "1px solid #E2E8F0", paddingTop: 10, marginTop: 16 }}>{dok.underskrift}</div>}
+        </div>
+      )}
+      {kladde && redigerer && (
         <div style={{ background: "#fff", borderRadius: 14, padding: "16px 18px", boxShadow: "0 1px 3px rgba(0,0,0,0.06)", maxWidth: 860 }}>
           <label style={styles.label}>Titel</label>
           <input style={styles.input} value={kladde.titel} onChange={(e) => ret("titel", e.target.value)} placeholder="Fx Syge- og fraværspolitik" />
@@ -15461,6 +15491,7 @@ function HaandbogView() {
           {fejl && <div style={{ color: "#B91C1C", fontSize: 13, margin: "6px 0" }}>{fejl}</div>}
           <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
             <button type="button" style={{ ...styles.primaryBtn, opacity: gemmer || !aendret ? 0.6 : 1 }} disabled={gemmer || !aendret} onClick={gem}>{gemmer ? "Gemmer…" : "Gem og vis for medarbejderne"}</button>
+            <button type="button" style={styles.secondaryBtn} disabled={gemmer} onClick={stopRedigering}>{aendret ? "Annuller" : "Tilbage til visning"}</button>
             {dok?.opdateret && !aendret && <span style={styles.hint}>Sidst rettet {new Date(dok.opdateret).toLocaleDateString("da-DK", { day: "numeric", month: "long", year: "numeric" })}{gemtTid ? " — gemt" : ""}</span>}
             {aendret && <span style={{ ...styles.hint, color: "#B45309" }}>Ikke gemt</span>}
           </div>
