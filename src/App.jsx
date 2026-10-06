@@ -2052,6 +2052,9 @@ const MODULE_HELP = {
     { h: "Hvem kan se hvad", p: ["Personalemappen vises kun for HR-administratorer. Databasen håndhæver det: ansættelse, dokumenter, nødkontakt, løn og filerne i dokumentarkivet kan kun læses af dem — også selv om en planlægger åbner siden på anden vis.",
         "De øvrige planlæggere bruger «Medarbejdere» under Opsætning. Dér står kun det, planlægningen bruger: navn, kompetencer, område, kapacitet, ugedage, fast tid og adgang til Worklist.",
         "HR-administratorerne er i dag Charlotte, Karen og Udvikler IT. Der skal altid være mindst én."] },
+    { h: "Overblikket", p: ["Øverst står fire tal: beviser, der udløber inden 60 dage eller er udløbet; dokumenter, medarbejderne ikke har kvitteret for; MUS der er forfaldet; og antal aktive medarbejdere. Under dem er en tabel med en linje pr. medarbejder.",
+        "«Kræver handling» viser dem, der har et bevis der udløber, et dokument uden kvittering eller en forfalden MUS — de samme regler som linjerne i klokken. Skift til «Fratrådte» for at se dem, der er holdt op.",
+        "Certifikater og dokumenter kommer fra fanen Dokumenter på kortet; sæt en slutdato på beviser, så de kan tælles med. MUS-datoerne følger samtalerne, du booker i ugeplanen."] },
     { h: "Medarbejderkortet", p: ["Tryk på en medarbejder for at åbne kortet med faner: Person, Ansættelse, Dokumenter, Planlægning, Løn, Adgang og Udlevering. Alle faner gemmes med den samme knap.",
         "«Ny medarbejder» og «Fratræd» findes kun her.",
         "MUS bookes i ugeplanen: «Anden aktivitet» → vælg «MUS (medarbejdersamtale)», og vælg medarbejder, leder, dato og tid. Samtalen lægges i begges opgaveliste i Worklist, og medarbejderen ser den i sin Personalemappe og kan forberede sig dér. Markeres aktiviteten udført, står samtalen som afholdt, og kortets «sidste MUS» opdateres; aflyses den, tømmes «næste MUS».",
@@ -6560,12 +6563,9 @@ function PlanningApp({ session, onSignOut }) {
       {view === "haandbog" && erHrAdmin && <HaandbogView />}
       {view === "fravaer" && erHrAdmin && <FravaerView onAfgoer={afgoerFravaer} beroerte={opgaverIPeriode} />}
       {view === "personalemappen" && erHrAdmin && (
-        <EmployeesView employees={employees}
+        <PersonalemappeListe employees={employees} hrData={hrData}
           onAdd={() => { setEditEmp(null); setEmpHrAdgang(true); setShowAddEmp(true); }}
-          onEdit={(e) => { setEditEmp(e); setEmpHrAdgang(true); setShowAddEmp(true); }}
-          supabase={supabase}
-          areas={areas}
-          employeeAreas={employeeAreas} />
+          onEdit={(e) => { setEditEmp(e); setEmpHrAdgang(true); setShowAddEmp(true); }} />
       )}
       {view === "employees" && (
         <EmployeesView employees={employees}
@@ -7593,6 +7593,127 @@ function TypeBadge({ type, mini }) {
 // ---------- Employees ----------
 // instances og travelSettings er bevidst ikke props laengere: siden er stamdata og
 // skal ikke afhaenge af hvilken uge man staar i. Belaegningen laeses i ugeplanen.
+// Personalemappen → Medarbejdere (6.10.2026): HR-overblikket. Tal øverst for det, der kræver handling, og en tabel med én linje pr. medarbejder; tryk på en linje for at åbne kortet.
+// «Kræver handling» bruger de samme regler som linjerne i klokken (bevis udløber inden 60 dage, dokument uden kvittering, MUS forfalden), så de to aldrig siger noget forskelligt.
+// MUS-datoerne kommer fra kortet (employee_hr): book_mus og udløseren på aktiviteter holder dem ajour.
+const ANSAETTELSE_NAVN = { fast: "Fastansat", timeloenned: "Timelønnet", vikar: "Vikar", elev: "Elev", andet: "Andet" };
+function PersonalemappeListe({ employees, hrData, onAdd, onEdit }) {
+  const [dokumenter, setDokumenter] = useState(null);
+  const [fejl, setFejl] = useState("");
+  const [soeg, setSoeg] = useState("");
+  const [filter, setFilter] = useState("aktive");
+
+  useEffect(() => {
+    let afbrudt = false;
+    supabase.from("employee_dokumenter").select("id, employee_id, kategori, titel, gyldig_til, synlig_for_medarbejder, kvittering_kraeves, kvitteret_tid")
+      .then(({ data, error }) => {
+        if (afbrudt) return;
+        if (error) { setFejl("Dokumenterne kunne ikke hentes: " + error.message); setDokumenter([]); return; }
+        setDokumenter(data || []);
+      });
+    return () => { afbrudt = true; };
+  }, []);
+
+  const idag = todayIso();
+  const om60 = new Date(Date.now() + 60 * 864e5).toISOString().slice(0, 10);
+  const for12 = new Date(new Date().getFullYear() - 1, new Date().getMonth(), new Date().getDate()).toISOString().slice(0, 10);
+
+  const raekker = useMemo(() => employees.map((e) => {
+    const hr = hrData[e.id] || {};
+    const dok = (dokumenter || []).filter((d) => d.employee_id === e.id);
+    const bevis = dok.filter((d) => d.gyldig_til).sort((a, b) => a.gyldig_til.localeCompare(b.gyldig_til))[0] || null;
+    const bevisStatus = !bevis ? "ingen" : bevis.gyldig_til < idag ? "udloebet" : bevis.gyldig_til <= om60 ? "snart" : "ok";
+    const tilKvittering = dok.filter((d) => d.synlig_for_medarbejder && d.kvittering_kraeves && !d.kvitteret_tid).length;
+    const musForfalden = !e.fratraadtDato && ((hr.mus_naeste && hr.mus_naeste < idag) || (!hr.mus_naeste && (hr.mus_sidst || hr.ansat_fra) && (hr.mus_sidst || hr.ansat_fra) < for12));
+    const kraever = bevisStatus === "udloebet" || bevisStatus === "snart" || tilKvittering > 0 || musForfalden;
+    return { e, hr, dok, bevis, bevisStatus, tilKvittering, musForfalden, kraever };
+  }), [employees, hrData, dokumenter, idag, om60, for12]);
+
+  const aktive = raekker.filter((r) => !r.e.fratraadtDato);
+  const fratraadte = raekker.filter((r) => r.e.fratraadtDato);
+  const tal = {
+    bevis: aktive.filter((r) => r.bevisStatus === "udloebet" || r.bevisStatus === "snart").length,
+    kvit: aktive.reduce((n, r) => n + r.tilKvittering, 0),
+    mus: aktive.filter((r) => r.musForfalden).length,
+  };
+  const soegeord = soeg.trim().toLowerCase();
+  const viste = (filter === "fratraadte" ? fratraadte : filter === "handling" ? aktive.filter((r) => r.kraever) : aktive)
+    .filter((r) => !soegeord || r.e.name.toLowerCase().includes(soegeord))
+    .sort((a, b) => a.e.name.localeCompare(b.e.name, "da"));
+  const kort = (d) => (d ? new Date(d).toLocaleDateString("da-DK", { day: "numeric", month: "short", year: "numeric" }) : "");
+  const KOL = "2fr 1.2fr 1.1fr 1.5fr 1.5fr 1.3fr";
+
+  const tile = (titel, tallet, undertekst, farve) => (
+    <div style={{ flex: "1 1 190px", background: "#fff", borderRadius: 14, padding: "14px 18px", boxShadow: "0 1px 3px rgba(0,0,0,0.06)", textAlign: "left" }}>
+      <div style={{ fontSize: 13, color: "#64748B" }}>{titel}</div>
+      <div style={{ fontSize: 28, fontWeight: 700, color: farve, lineHeight: 1.3 }}>{tallet}</div>
+      <div style={{ fontSize: 12.5, color: "#64748B" }}>{undertekst}</div>
+    </div>
+  );
+  const chip = (k, tekst) => (
+    <button key={k} type="button" onClick={() => setFilter(k)}
+      style={filter === k ? { ...styles.typePickBtn, flex: "none", borderColor: "var(--farve)", color: "var(--farve)", background: "var(--farve-lys)" } : { ...styles.typePickBtn, flex: "none" }}>{tekst}</button>
+  );
+
+  return (
+    <div style={styles.page}>
+      <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap", marginBottom: 14 }}>
+        <div style={{ fontWeight: 700, fontSize: 20, color: "#111111", flex: "1 1 auto" }}>Medarbejdere</div>
+        <input style={{ ...styles.inputSm, width: 260, margin: 0 }} placeholder="Søg navn" value={soeg} onChange={(e) => setSoeg(e.target.value)} aria-label="Søg navn" />
+        <button type="button" style={styles.primaryBtn} onClick={onAdd}><Plus size={16} /> Ny medarbejder</button>
+      </div>
+      {fejl && <div style={{ color: "#B91C1C", fontSize: 13, marginBottom: 8 }}>{fejl}</div>}
+
+      <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 14 }}>
+        {tile("Udløber inden 60 dage", tal.bevis, "certifikater og beviser", tal.bevis ? "#B45309" : "#166534")}
+        {tile("Ikke kvitteret", tal.kvit, "dokumenter hos medarbejdere", tal.kvit ? "#A81A5F" : "#166534")}
+        {tile("MUS forfalden", tal.mus, "næste dato passeret, eller over 12 måneder siden", tal.mus ? "#B91C1C" : "#166534")}
+        {tile("Aktive medarbejdere", aktive.length, `${fratraadte.length} fratrådte`, "#111111")}
+      </div>
+
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
+        {chip("aktive", `Aktive (${aktive.length})`)}
+        {chip("fratraadte", `Fratrådte (${fratraadte.length})`)}
+        {chip("handling", `Kræver handling (${aktive.filter((r) => r.kraever).length})`)}
+      </div>
+
+      <div style={{ background: "#fff", borderRadius: 14, boxShadow: "0 1px 3px rgba(0,0,0,0.06)", overflowX: "auto" }}>
+        <div style={{ minWidth: 880 }}>
+          <div style={{ display: "grid", gridTemplateColumns: KOL, gap: 12, padding: "11px 18px", background: "#FBF3F7", fontSize: 12.5, fontWeight: 700, color: "#64748B", textAlign: "left" }}>
+            <span>Navn</span><span>Ansættelse</span><span>Ansat siden</span><span>MUS</span><span>Certifikater</span><span>Dokumenter</span>
+          </div>
+          {dokumenter === null && <div style={{ ...styles.hint, padding: "12px 18px" }}>Henter…</div>}
+          {viste.length === 0 && dokumenter !== null && <div style={{ ...styles.hint, padding: "12px 18px" }}>Ingen medarbejdere at vise.</div>}
+          {viste.map((r) => {
+            const { e, hr } = r;
+            const musTekst = hr.mus_naeste && hr.mus_naeste >= idag ? { t: `Næste ${kort(hr.mus_naeste)}`, f: "#166534" }
+              : r.musForfalden ? { t: hr.mus_sidst ? `Forfalden · sidst ${kort(hr.mus_sidst)}` : "Forfalden · ingen endnu", f: "#B91C1C" }
+              : hr.mus_sidst ? { t: `Sidst ${kort(hr.mus_sidst)}`, f: "#475467" } : { t: "Ingen endnu", f: "#94A3B8" };
+            const bevisTekst = r.bevisStatus === "ingen" ? { t: "Ingen", f: "#94A3B8" }
+              : r.bevisStatus === "udloebet" ? { t: `Udløbet ${kort(r.bevis.gyldig_til)}`, f: "#B91C1C" }
+              : r.bevisStatus === "snart" ? { t: `Udløber ${kort(r.bevis.gyldig_til)}`, f: "#B45309" } : { t: "I orden", f: "#166534" };
+            const dokTekst = r.tilKvittering > 0 ? { t: `${r.tilKvittering} til kvittering`, f: "#A81A5F", fed: true }
+              : r.dok.length === 0 ? { t: "Ingen", f: "#94A3B8" } : { t: `${r.dok.length} · alt kvitteret`, f: "#166534" };
+            return (
+              <button key={e.id} type="button" onClick={() => onEdit(e)}
+                style={{ display: "grid", gridTemplateColumns: KOL, gap: 12, padding: "13px 18px", alignItems: "center", width: "100%", border: "none", borderTop: "1px solid #F1E6EB", background: "transparent",
+                         textAlign: "left", cursor: "pointer", fontFamily: "inherit", fontSize: 14.5, color: "#1F2433" }}>
+                <span style={{ fontWeight: 700 }}>{e.name}{e.fratraadtDato ? <span style={{ fontWeight: 400, color: "#64748B" }}> · fratrådt {kort(e.fratraadtDato)}</span> : null}</span>
+                <span style={{ color: "#475467" }}>{ANSAETTELSE_NAVN[hr.ansaettelsesform] || "—"}</span>
+                <span style={{ color: "#475467" }}>{hr.ansat_fra ? kort(hr.ansat_fra) : "—"}</span>
+                <span style={{ color: musTekst.f, fontWeight: r.musForfalden ? 700 : 400 }}>{musTekst.t}</span>
+                <span style={{ color: bevisTekst.f, fontWeight: r.bevisStatus === "udloebet" || r.bevisStatus === "snart" ? 700 : 400 }}>{bevisTekst.t}</span>
+                <span style={{ color: dokTekst.f, fontWeight: dokTekst.fed ? 700 : 400 }}>{dokTekst.t}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+      <div style={{ ...styles.hint, marginTop: 8 }}>Tryk på en medarbejder for at åbne kortet: ansættelse, dokumenter, løn, samtaler og udlevering.</div>
+    </div>
+  );
+}
+
 function EmployeesView({ employees, onAdd, onEdit, supabase, areas, employeeAreas }) {
   const [sog, setSog] = useState("");
   const [sortering, setSortering] = useState("ledig");
