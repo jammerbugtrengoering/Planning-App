@@ -70,3 +70,9 @@ alter table public.checklist_templates add column tilbud_fase text check (tilbud
 -- personalemappen_6a-6c: fravaer_anmodninger (ferie/fridag; status afventer/godkendt/afvist/trukket; for_sent efter håndbogen: ferie < 28 dage, fri < 10 dage),
 --   anmod_fravaer / traek_fravaer / mine_fravaer (medarbejderen) og afgoer_fravaer (HR-administrator), og linjen 'fravaer_anmodning' i kontor_indbakke.
 --   Godkendelsen lægger blokeringen i ugeplanen i APPEN (addBlock) efter at databasen har gemt afgørelsen. Sygdom er ikke en anmodning.
+-- personalemappen_7a-7e: MUS og udvikling.
+--  * mus_samtaler (instance_id → aktiviteten i ugeplanen, employee_id, leder_id, status planlagt/afholdt/aflyst, forberedelse jsonb q1-q5, forberedelse_delt).
+--    authenticated har INGEN direkte adgang: forberedelsen er medarbejderens egen, til hun deler den. Alt går gennem book_mus (HR), hr_mus (HR, forberedelse kun hvis delt),
+--    min_mus, gem_mus_forberedelse. udviklingsoensker: mine_udviklingsoensker / tilfoej / traek (medarbejder); HR læser og retter tabellen direkte. mine_kompetencer().
+--  * Udløser mus_status_fra_aktivitet_trg på instances (after update of status → udført/aflyst): samtalen afholdt/aflyst, employee_hr.mus_sidst sættes, mus_naeste tømmes. Testet i en migration, der rullede tilbage.
+--  * mine_datoer(): næste MUS er den planlagte aktivitet, ellers kortets dato. kontor_indbakke: mus_forfalden springer over, når en MUS er booket; ny linje 'udviklingsoenske'.

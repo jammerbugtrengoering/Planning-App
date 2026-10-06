@@ -2053,6 +2053,8 @@ const MODULE_HELP = {
         "HR-administratorerne er i dag Charlotte, Karen og Udvikler IT. Der skal altid være mindst én."] },
     { h: "Medarbejderkortet", p: ["Tryk på en medarbejder for at åbne kortet med faner: Person, Ansættelse, Dokumenter, Planlægning, Løn, Adgang og Udlevering. Alle faner gemmes med den samme knap.",
         "«Ny medarbejder» og «Fratræd» findes kun her.",
+        "MUS bookes i ugeplanen: «Anden aktivitet» → vælg «MUS (medarbejdersamtale)», og vælg medarbejder, leder, dato og tid. Samtalen lægges i begges opgaveliste i Worklist, og medarbejderen ser den i sin Personalemappe og kan forberede sig dér. Markeres aktiviteten udført, står samtalen som afholdt, og kortets «sidste MUS» opdateres; aflyses den, tømmes «næste MUS».",
+        "Fanen «Samtaler og udvikling» viser medarbejderens samtaler. Hendes forberedelse er hendes egen, til hun trykker «Del med kontoret» — først da kan du læse den her. Under den står hendes udviklingsønsker; sæt status (ønsket, aftalt, gennemført, afvist) og skriv et svar, som hun ser i sin app.",
         "Dokumenter er skjult for medarbejderen som standard. Sæt flueben ved «Medarbejderen kan se og hente dokumentet», når du lægger det ind — eller tryk «Vis for hende» bagefter. Tryk «Skjul» for at tage det væk igen.",
         "Sæt også «Hun skal kvittere for at have læst det», hvis du vil vide, at hun har set det, fx et ansættelsesbevis. Dokumentet står så som «Venter på kvittering», til hun trykker, og derefter med datoen.",
         "Læg ikke interne noter, sygemeldinger, lægeerklæringer eller straffeattester ind som synlige dokumenter.",
@@ -3900,7 +3902,7 @@ function PlanningApp({ session, onSignOut }) {
     }
     // Personalemappen: HR-linjerne (kun HR-administratorer får dem) peger på medarbejderlisten dér.
     if (l.art === "fravaer_anmodning") { setView("fravaer"); return; }
-    if (l.art === "ikke_kvitteret" || l.art === "bevis_udloeber" || l.art === "mus_forfalden") { setView("personalemappen"); return; }
+    if (l.art === "ikke_kvitteret" || l.art === "bevis_udloeber" || l.art === "mus_forfalden" || l.art === "udviklingsoenske") { setView("personalemappen"); return; }
     if (l.art === "produktbestilling" || l.art === "udlevering") { setView("inventory"); return; }
     if (l.art === "drift") { setView("drift"); return; }
     if (l.art === "systemlukninger") { setView("reports"); return; }
@@ -5675,6 +5677,28 @@ function PlanningApp({ session, onSignOut }) {
   }
 
   async function addActivity(payload) {
+    // MUS: aktiviteten lægges i planen for medarbejder og leder, og derefter knyttes den til samtalen i databasen (book_mus), så medarbejderen kan forberede sig.
+    if (payload.erMus) {
+      const emp0 = employees.find((e) => e.id === payload.employeeId);
+      const leder = employees.find((e) => e.id === payload.lederId);
+      const d0 = new Date(payload.date);
+      if (!emp0 || !leder || isNaN(d0) || emp0.id === leder.id) { notify("Vælg en medarbejder, en leder og en dato"); return; }
+      const { week, year } = isoWeekInfo(d0);
+      const mus = {
+        id: uid("act"), type: "aktivitet", title: `MUS: ${emp0.name}`,
+        day: weekdayKeyFor(d0), week, year, assignees: [emp0.id, leder.id], status: "planlagt",
+        duration: Number(payload.duration) || 60, scheduledTime: payload.time || null,
+        requiredSkills: [], checklist: [], timeLog: [], warning: null, address: "", customerName: "",
+        accessInstructions: payload.description || "", poNumber: "", contractType: "privat", invoiceReady: false, dineroExported: false,
+      };
+      setInstances((prev) => [...prev, mus]);
+      await syncInstance(mus);
+      const { error } = await supabase.rpc("book_mus", { p_instance_id: mus.id, p_employee_id: emp0.id, p_leder_id: leder.id });
+      if (error) { notify("MUS ligger i planen, men kunne ikke knyttes til medarbejderen: " + error.message); return; }
+      setHrData((prev) => ({ ...prev, [emp0.id]: { ...(prev[emp0.id] || { employee_id: emp0.id }), mus_naeste: payload.date } }));
+      notify(`MUS booket: ${emp0.name} og ${leder.name} den ${d0.toLocaleDateString("da-DK", { day: "numeric", month: "long" })}`);
+      return;
+    }
     const { employeeId, customerName, address, date, time, duration, description,
             kmFra, kmTurRetur, kmAnslaaet } = payload;
     const emp = employees.find((e) => e.id === employeeId);
@@ -6726,7 +6750,7 @@ function PlanningApp({ session, onSignOut }) {
       )}
       {showAddEmp && <EmployeeModal hrAdgang={empHrAdgang} emp={editEmp} onClose={() => { setShowAddEmp(false); setEditEmp(null); }} onSave={saveEmployee} skills={skills} hr={editEmp ? hrData[editEmp.id] : null} brugerId={currentEmployeeForAuth?.id} onFratraed={(id) => { setShowAddEmp(false); setEditEmp(null); setSletMedarbejder(id); }} satsHistorik={editEmp ? satsHistorik[editEmp.id] : null} kmSatser={editEmp ? kmSatser[editEmp.id] : null} />}
       {showAddBlock && <BlockModal employees={aktiveEmployees} onClose={() => setShowAddBlock(false)} onSave={addBlock} />}
-      {showAddActivity && <ActivityModal employees={aktiveEmployees} onClose={() => setShowAddActivity(false)} onSave={addActivity} />}
+      {showAddActivity && <ActivityModal kanBookeMus={erHrAdmin} employees={aktiveEmployees} onClose={() => setShowAddActivity(false)} onSave={addActivity} />}
       {/* Transporttid ligger under Opsaetning (28.9.2026). Den saettes én gang og
           fyldes siden af rutetjenesten — den hoerer ikke til i ugeplanens vaerktoejslinje. */}
       {view === "transport" && (
@@ -18922,7 +18946,7 @@ function BlockModal({ employees, onClose, onSave }) {
 }
 
 
-function ActivityModal({ employees, onClose, onSave }) {
+function ActivityModal({ employees, onClose, onSave, kanBookeMus = false }) {
   const todayStr = new Date().toISOString().slice(0, 10);
   const [employeeId, setEmployeeId] = useState(employees[0]?.id || "");
   const [customerName, setCustomerName] = useState("");
@@ -18945,6 +18969,10 @@ function ActivityModal({ employees, onClose, onSave }) {
   const [anslag, setAnslag] = useState(null);
   const [anslagFejl, setAnslagFejl] = useState("");
   const [anslagHenter, setAnslagHenter] = useState(false);
+  // MUS (6.10.2026): en aktivitet med medarbejder OG leder, som begge får den i deres opgaveliste. Kun HR-administratorer kan booke den (databasen tjekker det i book_mus).
+  const [art, setArt] = useState("aktivitet");
+  const [lederId, setLederId] = useState("");
+  const lederEff = lederId && lederId !== employeeId ? lederId : (employees.find((e) => e.isAdmin && e.id !== employeeId)?.id || "");
 
   const valgt = employees.find((e) => e.id === employeeId);
   // Kun planlaeggere kan tage et tilbudsmoede — det er ogsaa haandhaevet i databasen.
@@ -18997,10 +19025,56 @@ function ActivityModal({ employees, onClose, onSave }) {
     onClose();
   }
 
+  function submitMus() {
+    if (!employeeId || !date || !lederEff) return;
+    onSave({ erMus: true, employeeId, lederId: lederEff, date, time, duration, description });
+    onClose();
+  }
+  const artVaelger = kanBookeMus && (
+    <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
+      {[["aktivitet", "Aktivitet"], ["mus", "MUS (medarbejdersamtale)"]].map(([k, l]) => (
+        <button key={k} type="button" onClick={() => setArt(k)}
+          style={art === k ? { ...styles.typePickBtn, flex: 1, borderColor: "var(--farve)", color: "var(--farve)", background: "var(--farve-lys)" } : { ...styles.typePickBtn, flex: 1 }}>{l}</button>
+      ))}
+    </div>
+  );
+  if (art === "mus") {
+    return (
+      <Modal onClose={onClose} title="Book MUS" persistent>
+        {artVaelger}
+        <div style={styles.hint}>
+          MUS lægges i ugeplanen som en aktivitet for både medarbejderen og lederen, så den står i begges opgaveliste i Worklist. Medarbejderen ser den også i sin
+          Personalemappe og kan forberede sig dér.
+        </div>
+        <label style={styles.label}>Medarbejder</label>
+        <select style={styles.input} value={employeeId} onChange={(e) => setEmployeeId(e.target.value)}>
+          {employees.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
+        </select>
+        <label style={styles.label}>Leder (holder samtalen)</label>
+        <select style={styles.input} value={lederEff} onChange={(e) => setLederId(e.target.value)}>
+          {employees.filter((e) => e.id !== employeeId).map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
+        </select>
+        <label style={styles.label}>Dato</label>
+        <input type="date" style={styles.input} value={date} onChange={(e) => setDate(e.target.value)} />
+        <label style={styles.label}>Tidspunkt</label>
+        <input type="time" style={styles.input} value={time} onChange={(e) => setTime(e.target.value)} />
+        <label style={styles.label}>Varighed (minutter)</label>
+        <input type="number" min="15" step="5" style={styles.input} value={duration} onChange={(e) => setDuration(e.target.value)} />
+        <label style={styles.label}>Sted eller bemærkning (valgfri)</label>
+        <input style={styles.input} value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Fx på kontoret" />
+        <div style={styles.modalActions}>
+          <button style={styles.secondaryBtn} onClick={onClose}>Annuller</button>
+          <button style={styles.primaryBtn} disabled={!employeeId || !lederEff || !date} onClick={submitMus}>Book MUS</button>
+        </div>
+      </Modal>
+    );
+  }
+
   // persistent: et tryk ved siden af lukkede vinduet uden at gemme, og det udfyldte var væk.
   // Vinduet lukkes kun med X eller Annuller.
   return (
     <Modal onClose={onClose} title="Anden aktivitet" persistent>
+      {artVaelger}
       <div style={styles.hint}>
         Opretter en enkeltstående aktivitet (fx kundebesøg) i kalenderen. Aktiviteten optager medarbejderens
         kapacitet ligesom en almindelig opgave, men indgår ikke i fakturering eller rapporter.
@@ -19469,6 +19543,94 @@ function MedarbejderAdgang({ emp }) {
 }
 
 // Udleveringshistorik (arbejdstøj m.m.) på stamkortet. Samme opslag som i listen: de seneste 20 udleveringer, kun medarbejderprodukter.
+// Spørgsmålene til MUS-forberedelsen. De står også i medarbejderens app (src/App.jsx dér, MUS_SPOERGSMAAL) — svarene gemmes under nøglerne q1-q5, så
+// ændres spørgsmålene, skal begge steder ændres, og nøglerne må ikke flyttes.
+const MUS_SPOERGSMAAL = [
+  ["q1", "Hvordan har du det med dit arbejde lige nu?"],
+  ["q2", "Hvad er gået godt det seneste år?"],
+  ["q3", "Hvad kunne gøre dit arbejde bedre eller nemmere?"],
+  ["q4", "Hvad vil du gerne blive bedre til eller lære?"],
+  ["q5", "Er der noget andet, du gerne vil tale om?"],
+];
+const OENSKE_STATUS = [["oensket", "Ønsket"], ["aftalt", "Aftalt"], ["gennemfoert", "Gennemført"], ["afvist", "Afvist"]];
+
+// Fanen «Samtaler og udvikling» på medarbejderkortet (6.10.2026). MUS-samtalerne kommer fra hr_mus: medarbejderens forberedelse vises KUN, hvis hun har delt den.
+// Udviklingsønskerne kan HR sætte status og et svar på; medarbejderen ser svaret i sin app.
+function MedarbejderSamtaler({ empId }) {
+  const [mus, setMus] = useState(null);
+  const [oensker, setOensker] = useState(null);
+  const [fejl, setFejl] = useState("");
+  const [noter, setNoter] = useState({});
+  const [gemmer, setGemmer] = useState("");
+
+  const hent = useCallback(async () => {
+    const [a, b] = await Promise.all([
+      supabase.rpc("hr_mus", { p_employee_id: empId }),
+      supabase.from("udviklingsoensker").select("*").eq("employee_id", empId).neq("status", "trukket").order("oprettet", { ascending: false }),
+    ]);
+    if (a.error || b.error) setFejl((a.error || b.error).message);
+    setMus(a.data || []); setOensker(b.data || []);
+    setNoter(Object.fromEntries((b.data || []).map((o) => [o.id, o.hr_note || ""])));
+  }, [empId]);
+  useEffect(() => { hent(); }, [hent]);
+
+  async function gemOenske(o, status) {
+    setGemmer(o.id); setFejl("");
+    const { error } = await supabase.from("udviklingsoensker").update({ status, hr_note: (noter[o.id] || "").trim() || null, aendret: new Date().toISOString() }).eq("id", o.id);
+    setGemmer("");
+    if (error) { setFejl(error.message); return; }
+    hent();
+  }
+  const dag = (d) => (d ? new Date(d).toLocaleDateString("da-DK", { weekday: "short", day: "numeric", month: "long", year: "numeric" }) : "uden dato");
+  const STATUS_MUS = { planlagt: "Planlagt", afholdt: "Afholdt", aflyst: "Aflyst" };
+
+  return (
+    <>
+      <StamKort titel={`MUS (${(mus || []).length})`} hint="Bookes i ugeplanen under Anden aktivitet → MUS" bg="#F5F3FF" farve="#6D28D9" hintFarve="#7C3AED">
+        {mus === null ? <div style={styles.hint}>Henter…</div>
+          : mus.length === 0 ? <div style={styles.hint}>Der er ikke booket nogen MUS. Gør det i ugeplanen: «Anden aktivitet» → «MUS».</div>
+          : mus.map((m) => (
+            <div key={m.id} style={{ padding: "9px 0", borderBottom: "1px solid #F1F5F9" }}>
+              <div style={{ fontWeight: 700, fontSize: 13.5 }}>{dag(m.dato || m.afholdt_dato)}{m.tid ? ` kl. ${String(m.tid).slice(0, 5)}` : ""}</div>
+              <div style={{ fontSize: 12.5, color: "#64748B" }}>{STATUS_MUS[m.status]}{m.leder_navn ? ` · leder: ${m.leder_navn}` : ""}</div>
+              {m.forberedelse_delt ? (
+                <div style={{ marginTop: 6, background: "#F8FAFC", borderRadius: 8, padding: "8px 10px" }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: "#166534", marginBottom: 4 }}>Hun har delt sin forberedelse ({new Date(m.forberedelse_delt).toLocaleDateString("da-DK")})</div>
+                  {MUS_SPOERGSMAAL.filter(([k]) => (m.forberedelse || {})[k]).map(([k, q]) => (
+                    <div key={k} style={{ marginBottom: 6 }}>
+                      <div style={{ fontSize: 12, color: "#64748B" }}>{q}</div>
+                      <div style={{ fontSize: 13.5, whiteSpace: "pre-line" }}>{m.forberedelse[k]}</div>
+                    </div>
+                  ))}
+                </div>
+              ) : m.status === "planlagt" ? <div style={{ fontSize: 12.5, color: "#94A3B8", marginTop: 4 }}>Hun har ikke delt sin forberedelse. Den er hendes egen, til hun deler den.</div> : null}
+            </div>
+          ))}
+        <div style={{ ...styles.hint, marginTop: 10 }}>Referatet lægges som dokument under fanen Dokumenter (slags: Samtale). Læg ikke helbredsoplysninger ind.</div>
+      </StamKort>
+
+      <StamKort titel={`Udviklingsønsker (${(oensker || []).length})`} hint="Medarbejderen skriver dem i sin app" bg="#ECFDF5" farve="#047857" hintFarve="#059669">
+        {fejl && <div style={{ color: "#B91C1C", fontSize: 13, margin: "6px 0" }}>{fejl}</div>}
+        {oensker === null ? <div style={styles.hint}>Henter…</div>
+          : oensker.length === 0 ? <div style={styles.hint}>Medarbejderen har ikke skrevet nogen ønsker.</div>
+          : oensker.map((o) => (
+            <div key={o.id} style={{ padding: "9px 0", borderBottom: "1px solid #F1F5F9" }}>
+              <div style={{ fontSize: 13.5, whiteSpace: "pre-line" }}>{o.tekst}</div>
+              <div style={{ fontSize: 12, color: "#64748B", margin: "2px 0 6px" }}>Skrevet {new Date(o.oprettet).toLocaleDateString("da-DK")}</div>
+              <input style={{ ...styles.input, marginBottom: 6 }} placeholder="Svar til medarbejderen (valgfrit)" value={noter[o.id] || ""} onChange={(e) => setNoter((x) => ({ ...x, [o.id]: e.target.value }))} aria-label="Svar til medarbejderen" />
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                {OENSKE_STATUS.map(([k, l]) => (
+                  <button key={k} type="button" disabled={gemmer === o.id} onClick={() => gemOenske(o, k)}
+                    style={{ ...styles.secondaryBtn, padding: "5px 10px", fontSize: 12.5, ...(o.status === k ? { borderColor: "#047857", color: "#047857", background: "#ECFDF5", fontWeight: 700 } : {}) }}>{l}</button>
+                ))}
+              </div>
+            </div>
+          ))}
+      </StamKort>
+    </>
+  );
+}
+
 function MedarbejderUdlevering({ empId }) {
   const [rader, setRader] = useState(null);
   useEffect(() => {
@@ -19610,7 +19772,7 @@ function EmployeeModal({ hrAdgang = true, emp, onClose, onSave, skills: skillLis
           HR-oplysninger, sættes de som et nyt kort i fanen «Ansættelse» — resten af vinduet røres ikke. Alle faner gemmes med
           den samme knap, så en rettelse i én fane aldrig går tabt, fordi man skiftede fane. */}
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16 }}>
-        {[["person", "Person"], ["ansaettelse", "Ansættelse"], ["dokumenter", "Dokumenter"], ["planlaegning", "Planlægning"], ["loen", "Løn"], ["adgang", "Adgang"], ["udlevering", "Udlevering"]]
+        {[["person", "Person"], ["ansaettelse", "Ansættelse"], ["dokumenter", "Dokumenter"], ["planlaegning", "Planlægning"], ["loen", "Løn"], ["adgang", "Adgang"], ["udlevering", "Udlevering"], ["samtaler", "Samtaler og udvikling"]]
           // Planlæggerens udgave har kun det, planlægningen bruger. Resten er HR-data, som databasen heller ikke giver adgang til.
           .filter(([k]) => hrAdgang || ["person", "planlaegning", "adgang"].includes(k)).map(([k, l]) => (
           <button key={k} type="button" onClick={() => setFane(k)}
@@ -19740,6 +19902,12 @@ function EmployeeModal({ hrAdgang = true, emp, onClose, onSave, skills: skillLis
 
         </div>
       </>)}
+
+      {fane === "samtaler" && (emp?.id
+        ? <MedarbejderSamtaler empId={emp.id} />
+        : <StamKort titel="Samtaler og udvikling" hint="Gem medarbejderen først" bg="#F1F5F9" farve="#334155" hintFarve="#64748B">
+            <div style={styles.hint}>Samtaler og ønsker findes først, når medarbejderen er gemt.</div>
+          </StamKort>)}
 
       {fane === "udlevering" && (emp?.id
         ? <MedarbejderUdlevering empId={emp.id} />
