@@ -2039,7 +2039,10 @@ const MODULE_HELP = {
         "De øvrige planlæggere bruger «Medarbejdere» under Opsætning. Dér står kun det, planlægningen bruger: navn, kompetencer, område, kapacitet, ugedage, fast tid og adgang til Worklist.",
         "HR-administratorerne er i dag Charlotte, Karen og Udvikler IT. Der skal altid være mindst én."] },
     { h: "Medarbejderkortet", p: ["Tryk på en medarbejder for at åbne kortet med faner: Person, Ansættelse, Dokumenter, Planlægning, Løn, Adgang og Udlevering. Alle faner gemmes med den samme knap.",
-        "«Ny medarbejder» og «Fratræd» findes kun her."] },
+        "«Ny medarbejder» og «Fratræd» findes kun her.",
+        "Dokumenter er skjult for medarbejderen som standard. Sæt flueben ved «Medarbejderen kan se og hente dokumentet», når du lægger det ind — eller tryk «Vis for hende» bagefter. Tryk «Skjul» for at tage det væk igen.",
+        "Sæt også «Hun skal kvittere for at have læst det», hvis du vil vide, at hun har set det, fx et ansættelsesbevis. Dokumentet står så som «Venter på kvittering», til hun trykker, og derefter med datoen.",
+        "Læg ikke interne noter, sygemeldinger, lægeerklæringer eller straffeattester ind som synlige dokumenter."] },
   ] },
   loenperioder: { title: "Lønperioder", intro: "Hvornår en lønperiode starter og lukker, og hvornår medarbejderne får besked.", blocks: [
     { h: "Lukkedagen", p: ["Lønperioden går fra lukkedagen til dagen før i næste måned og lukker på lukkedagen kl. 23.59. Standard er den 20., så «oktober» er 20. sep – 19. okt. Skriv 1 for kalendermåned.",
@@ -18980,6 +18983,9 @@ function MedarbejderDokumenter({ empId, brugerId }) {
   const [titel, setTitel] = useState("");
   const [gyldigTil, setGyldigTil] = useState("");
   const [fil, setFil] = useState(null);
+  // Skjult for medarbejderen som standard: en kontrakt indeholder ofte CPR, og interne noter må aldrig ses af hende.
+  const [synlig, setSynlig] = useState(false);
+  const [kraevKvit, setKraevKvit] = useState(false);
   const [arbejder, setArbejder] = useState("");
   const [fejl, setFejl] = useState("");
   const filRef = useRef(null);
@@ -19007,13 +19013,14 @@ function MedarbejderDokumenter({ empId, brugerId }) {
     const { error } = await supabase.from("employee_dokumenter").insert({
       employee_id: empId, kategori, titel: navn, filnavn: fil.name, sti, stoerrelse: fil.size, mime: fil.type || null,
       gyldig_til: gyldigTil || null, uploadet_af: brugerId || null,
+      synlig_for_medarbejder: synlig, kvittering_kraeves: synlig && kraevKvit,
     });
     if (error) {
       // Rækken kom ikke med: fjern filen igen, ellers ligger der en fil, ingen kan finde.
       await supabase.storage.from(DOK_BUCKET).remove([sti]);
       setArbejder(""); setFejl("Dokumentet kunne ikke gemmes: " + error.message); return;
     }
-    setTitel(""); setGyldigTil(""); setFil(null); if (filRef.current) filRef.current.value = "";
+    setTitel(""); setGyldigTil(""); setFil(null); setSynlig(false); setKraevKvit(false); if (filRef.current) filRef.current.value = "";
     setArbejder("");
     hent();
   }
@@ -19022,6 +19029,15 @@ function MedarbejderDokumenter({ empId, brugerId }) {
     const { data } = await supabase.storage.from(DOK_BUCKET).createSignedUrl(d.sti, 300, { download: false });
     if (data?.signedUrl) window.open(data.signedUrl, "_blank");
     else setFejl("Filen kunne ikke åbnes.");
+  }
+
+  // Synligheden kan ændres bagefter. Skjules et dokument, forsvinder det for medarbejderen med det samme; en kvittering, der allerede er givet, bliver stående.
+  async function saetSynlig(d, synligNu, kraever) {
+    setFejl("");
+    const felter = { synlig_for_medarbejder: synligNu, kvittering_kraeves: synligNu && kraever };
+    const { error } = await supabase.from("employee_dokumenter").update(felter).eq("id", d.id);
+    if (error) { setFejl(error.message); return; }
+    setListe((prev) => prev.map((x) => (x.id === d.id ? { ...x, ...felter } : x)));
   }
 
   async function slet(d) {
@@ -19055,13 +19071,23 @@ function MedarbejderDokumenter({ empId, brugerId }) {
         <input ref={filRef} type="file" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" onChange={(e) => setFil(e.target.files?.[0] || null)}
           style={{ fontSize: 13, marginBottom: 8, maxWidth: "100%" }} />
         <div style={styles.hint}>PDF, billede eller Word, højst 10 MB.</div>
+        <label style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: 13.5, margin: "8px 0 4px", cursor: "pointer" }}>
+          <input type="checkbox" checked={synlig} onChange={(e) => { setSynlig(e.target.checked); if (!e.target.checked) setKraevKvit(false); }} style={{ marginTop: 3 }} />
+          <span>Medarbejderen kan se og hente dokumentet i sin personalemappe</span>
+        </label>
+        {synlig && (
+          <label style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: 13.5, margin: "0 0 4px 22px", cursor: "pointer" }}>
+            <input type="checkbox" checked={kraevKvit} onChange={(e) => setKraevKvit(e.target.checked)} style={{ marginTop: 3 }} />
+            <span>Hun skal kvittere for at have læst det</span>
+          </label>
+        )}
         {fejl && <div style={{ color: "#B91C1C", fontSize: 13, margin: "6px 0" }}>{fejl}</div>}
         <button type="button" style={{ ...styles.primaryBtn, marginTop: 8, opacity: arbejder ? 0.6 : 1 }} disabled={!!arbejder} onClick={laeg}>
           {arbejder ? "Lægger ind…" : "Læg dokumentet ind"}
         </button>
       </StamKort>
 
-      <StamKort titel={`Dokumenter (${liste.length})`} hint="Kun administratorer kan se og åbne dem" bg="#F1F5F9" farve="#334155" hintFarve="#64748B">
+      <StamKort titel={`Dokumenter (${liste.length})`} hint="Kun HR-administratorer kan se alle; medarbejderen ser kun dem, du viser" bg="#F1F5F9" farve="#334155" hintFarve="#64748B">
         {henter ? <div style={styles.hint}>Henter…</div>
           : liste.length === 0 ? <div style={styles.hint}>Der er ikke lagt nogen dokumenter ind endnu.</div>
           : liste.map((d) => {
@@ -19076,6 +19102,11 @@ function MedarbejderDokumenter({ empId, brugerId }) {
                       {DOK_KATEGORIER.find(([k]) => k === d.kategori)?.[1]} · {new Date(d.uploadet_at).toLocaleDateString("da-DK")}
                       {d.stoerrelse != null && ` · ${stoerrelseTekst(d.stoerrelse)}`}
                     </div>
+                    <div style={{ fontSize: 12, fontWeight: 600, marginTop: 2, color: d.synlig_for_medarbejder ? (d.kvittering_kraeves && !d.kvitteret_tid ? "#A81A5F" : "#166534") : "#64748B" }}>
+                      {!d.synlig_for_medarbejder ? "Skjult for medarbejderen"
+                        : d.kvittering_kraeves ? (d.kvitteret_tid ? `Kvitteret ${new Date(d.kvitteret_tid).toLocaleDateString("da-DK")}` : "Venter på kvittering")
+                        : "Medarbejderen kan se det"}
+                    </div>
                     {d.gyldig_til && (
                       <div style={{ fontSize: 12, fontWeight: 600, color: udloebet ? "#B91C1C" : udloeberSnart ? "#B45309" : "#64748B" }}>
                         {udloebet ? "Udløbet " : "Gyldigt til "}{new Date(d.gyldig_til).toLocaleDateString("da-DK")}
@@ -19084,6 +19115,11 @@ function MedarbejderDokumenter({ empId, brugerId }) {
                   </div>
                   <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
                     <button type="button" style={{ ...styles.secondaryBtn, padding: "5px 10px", fontSize: 12.5 }} onClick={() => aabn(d)}>Åbn</button>
+                    <button type="button" style={{ ...styles.secondaryBtn, padding: "5px 10px", fontSize: 12.5 }}
+                      title={d.synlig_for_medarbejder ? "Skjul dokumentet for medarbejderen" : "Gør dokumentet synligt for medarbejderen"}
+                      onClick={() => saetSynlig(d, !d.synlig_for_medarbejder, d.kvittering_kraeves)}>
+                      {d.synlig_for_medarbejder ? "Skjul" : "Vis for hende"}
+                    </button>
                     <button type="button" style={{ ...styles.iconBtnGhostInline }} title="Slet dokumentet" onClick={() => slet(d)}><Trash2 size={14} /></button>
                   </div>
                 </div>

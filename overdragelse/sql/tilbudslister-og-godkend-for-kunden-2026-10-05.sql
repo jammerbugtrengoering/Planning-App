@@ -56,3 +56,8 @@ alter table public.checklist_templates add column tilbud_fase text check (tilbud
 --  * DROP POLICY hænger i apply_migration (som DELETE); ALTER POLICY virker. Politikkerne hedder stadig admin_all/admin_read.
 --  * Ikke ændret: employee_wage_history, km_sats_historik, employee_home. De er løn/transport og bør med, når en planlægger uden HR-adgang kommer til;
 --    appens planlæggerudgave skriver dem ikke (wageFrom/kmSatsFra sættes til null uden hrAdgang).
+
+-- 6.10.2026 (Jonn): dokumenter i personalemappen kan gøres synlige for medarbejderen. Migrationer: personalemappen_1_dokumenter_synlighed, personalemappen_2_storage_laes_eget.
+--  * employee_dokumenter: synlig_for_medarbejder (standard false), kvittering_kraeves, kvitteret_tid. Klassificeret i persondata_register.
+--  * mine_dokumenter() og kvitter_dokument(id): medarbejderens egne synlige dokumenter og kvittering. Lukket for anon.
+--  * storage-politik medarbejder_dokumenter_laes_eget: medarbejderen kan læse en fil, hvis dens dokument er synligt og hendes.
