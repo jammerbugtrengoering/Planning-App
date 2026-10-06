@@ -2472,6 +2472,7 @@ const MODULE_HELP = {
         "Hjemmeadresse, men kun for dem der har kørsel i arbejdstiden. Den bruges alene til at beregne afstanden til dagens første opgave.",
         "Timeløn og lønhistorik, bonus og kilometersats, weekendtillæg, SH-sats og Danløn-nummer.",
         "Registrerede timer pr. opgave, fravær og fratrædelsesdato.",
+        "Dokumentarkiv på medarbejderkortet: ansættelseskontrakt, ændringer, MUS-referater og certifikater, som kontoret selv lægger ind. Kun administratorer kan se dem, og filerne slettes, når de ikke længere skal opbevares. Læg ikke sygemeldinger, lægeerklæringer eller straffeattester ind.",
         "HR-oplysninger, som kun administratorer kan se: telefonnummer, privat e-mail, ansættelsesform og ansættelsesdato, datoerne for MUS-samtaler (aldrig indholdet), og en nødkontakt — navn, forhold og telefonnummer på en anden person, som medarbejderen selv har oplyst. Telefonnummer og nødkontakt kan medarbejderen selv rette i Worklist (Indstillinger → Dine oplysninger); resten rettes kun af kontoret.",
         "Fravær står som fravær. Systemet gemmer aldrig en årsag — hverken sygdom eller diagnose.",
         "Bliver du spurgt: der er ingen GPS og ingen positionsmåling i Worklist. Kørslen regnes ud fra adresserne på opgaverne, ikke fra hvor telefonen har været. Det er et spørgsmål, medarbejdere stiller, og svaret er entydigt nej."] },
@@ -2483,7 +2484,7 @@ const MODULE_HELP = {
         "Henvendelser fra «Bliv ringet op» (QR-koden i pjecen): navn, telefon, hvornår vi må ringe, og det borgeren selv vælger at skrive — adresse, om hun får hjælp fra kommunen, hvad hun er interesseret i, og en besked. Ingen IP-adresse. Slettes automatisk 6 måneder efter, at den er afsluttet, og senest efter 12 måneder.",
         "På Nexus- og ældrelovsopgaver er det kommunen der er dataansvarlig. Spørger en borger om indsigt i sine oplysninger, skal hun henvises til kommunen — vi udfører alene arbejdet efter kommunens instruks."] },
     { h: "Det systemet ikke indeholder", p: [
-        "Ingen CPR-numre. Lønfilen bruger Danløn-nummeret.",
+        "Ingen CPR-numre i selve systemet. Lønfilen bruger Danløn-nummeret. Undtagelsen er dokumentarkivet på medarbejderkortet: en ansættelseskontrakt, som kontoret lægger ind, kan indeholde et CPR-nummer. Filerne ligger i en privat mappe, som kun administratorer kan åbne.",
         "Ingen bankoplysninger og ingen kontonumre.",
         "Ingen helbredsoplysninger.",
         "Det er værd at kunne svare på, for det er ofte det første en kunde eller en kommune spørger om."] },
@@ -6646,7 +6647,7 @@ function PlanningApp({ session, onSignOut }) {
           travelSettings={travelSettings} onClose={() => setVisSimulering(false)}
           onAnvend={anvendSimulering} onRulTilbage={rulSimuleringTilbage} />
       )}
-      {showAddEmp && <EmployeeModal emp={editEmp} onClose={() => { setShowAddEmp(false); setEditEmp(null); }} onSave={saveEmployee} skills={skills} hr={editEmp ? hrData[editEmp.id] : null} satsHistorik={editEmp ? satsHistorik[editEmp.id] : null} kmSatser={editEmp ? kmSatser[editEmp.id] : null} />}
+      {showAddEmp && <EmployeeModal emp={editEmp} onClose={() => { setShowAddEmp(false); setEditEmp(null); }} onSave={saveEmployee} skills={skills} hr={editEmp ? hrData[editEmp.id] : null} brugerId={currentEmployeeForAuth?.id} satsHistorik={editEmp ? satsHistorik[editEmp.id] : null} kmSatser={editEmp ? kmSatser[editEmp.id] : null} />}
       {showAddBlock && <BlockModal employees={aktiveEmployees} onClose={() => setShowAddBlock(false)} onSave={addBlock} />}
       {showAddActivity && <ActivityModal employees={aktiveEmployees} onClose={() => setShowAddActivity(false)} onSave={addActivity} />}
       {/* Transporttid ligger under Opsaetning (28.9.2026). Den saettes én gang og
@@ -18916,6 +18917,139 @@ function TravelSettingsForm({ settings, onSave }) {
   );
 }
 
+// Dokumentarkiv på medarbejderkortet (6.10.2026). Filer lægges i den private bucket «medarbejder-dokumenter», oplysningerne om dem i
+// employee_dokumenter, og kun administratorer kan se begge. Upload og sletning sker STRAKS og hører ikke til «Gem medarbejder»: en fil, der
+// er lagt ind, skal ikke forsvinde, fordi man trykker Annuller på resten af kortet. Filen får et tilfældigt navn i bucket'en; det rigtige
+// filnavn står kun i tabellen, så et navn med tegn, som lagerplads ikke kan lide, aldrig kan få en upload til at fejle.
+const DOK_KATEGORIER = [["kontrakt", "Kontrakt"], ["aendring", "Ændring af ansættelsen"], ["mus", "MUS-referat"], ["certifikat", "Certifikat eller kursus"], ["andet", "Andet"]];
+const DOK_BUCKET = "medarbejder-dokumenter";
+
+function MedarbejderDokumenter({ empId, brugerId }) {
+  const [liste, setListe] = useState([]);
+  const [henter, setHenter] = useState(true);
+  const [kategori, setKategori] = useState("kontrakt");
+  const [titel, setTitel] = useState("");
+  const [gyldigTil, setGyldigTil] = useState("");
+  const [fil, setFil] = useState(null);
+  const [arbejder, setArbejder] = useState("");
+  const [fejl, setFejl] = useState("");
+  const filRef = useRef(null);
+
+  async function hent() {
+    const { data, error } = await supabase.from("employee_dokumenter").select("*")
+      .eq("employee_id", empId).order("uploadet_at", { ascending: false });
+    if (error) setFejl(error.message);
+    setListe(data || []);
+    setHenter(false);
+  }
+  useEffect(() => { hent(); }, [empId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function laeg() {
+    setFejl("");
+    if (!fil) { setFejl("Vælg en fil først."); return; }
+    if (fil.size > 10 * 1024 * 1024) { setFejl("Filen er over 10 MB."); return; }
+    const navn = (titel || fil.name.replace(/\.[^.]+$/, "")).trim();
+    if (!navn) { setFejl("Skriv en titel."); return; }
+    setArbejder("upload");
+    const ende = (fil.name.match(/\.([A-Za-z0-9]{1,5})$/) || [])[1]?.toLowerCase() || "bin";
+    const sti = `${empId}/${crypto.randomUUID()}.${ende}`;
+    const { error: upErr } = await supabase.storage.from(DOK_BUCKET).upload(sti, fil, { contentType: fil.type || undefined, upsert: false });
+    if (upErr) { setArbejder(""); setFejl("Filen kunne ikke lægges ind: " + upErr.message); return; }
+    const { error } = await supabase.from("employee_dokumenter").insert({
+      employee_id: empId, kategori, titel: navn, filnavn: fil.name, sti, stoerrelse: fil.size, mime: fil.type || null,
+      gyldig_til: gyldigTil || null, uploadet_af: brugerId || null,
+    });
+    if (error) {
+      // Rækken kom ikke med: fjern filen igen, ellers ligger der en fil, ingen kan finde.
+      await supabase.storage.from(DOK_BUCKET).remove([sti]);
+      setArbejder(""); setFejl("Dokumentet kunne ikke gemmes: " + error.message); return;
+    }
+    setTitel(""); setGyldigTil(""); setFil(null); if (filRef.current) filRef.current.value = "";
+    setArbejder("");
+    hent();
+  }
+
+  async function aabn(d) {
+    const { data } = await supabase.storage.from(DOK_BUCKET).createSignedUrl(d.sti, 300, { download: false });
+    if (data?.signedUrl) window.open(data.signedUrl, "_blank");
+    else setFejl("Filen kunne ikke åbnes.");
+  }
+
+  async function slet(d) {
+    if (!window.confirm(`Slet «${d.titel}»? Filen fjernes for altid.`)) return;
+    setFejl("");
+    const { error: fErr } = await supabase.storage.from(DOK_BUCKET).remove([d.sti]);
+    if (fErr) { setFejl("Filen kunne ikke slettes: " + fErr.message); return; }
+    const { error } = await supabase.from("employee_dokumenter").delete().eq("id", d.id);
+    if (error) { setFejl(error.message); return; }
+    setListe((prev) => prev.filter((x) => x.id !== d.id));
+  }
+
+  const idag = todayIso();
+  const snart = new Date(Date.now() + 60 * 864e5).toISOString().slice(0, 10);
+  const stoerrelseTekst = (n) => (n == null ? "" : n < 1024 * 1024 ? `${Math.max(1, Math.round(n / 1024))} kB` : `${(n / 1024 / 1024).toFixed(1).replace(".", ",")} MB`);
+
+  return (
+    <>
+      <StamKort titel="Læg et dokument ind" hint="Gemmes med det samme — uafhængigt af «Gem medarbejder»" bg="#F5F3FF" farve="#6D28D9" hintFarve="#7C3AED">
+        <label style={styles.label}>Slags</label>
+        <select style={styles.input} value={kategori} onChange={(e) => setKategori(e.target.value)}>
+          {DOK_KATEGORIER.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+        </select>
+        <label style={styles.label}>Titel</label>
+        <input style={styles.input} value={titel} onChange={(e) => setTitel(e.target.value)} placeholder="Fx «Ansættelseskontrakt 2026»" />
+        {(kategori === "certifikat" || kategori === "kontrakt") && (<>
+          <label style={styles.label}>{kategori === "certifikat" ? "Gyldigt til (valgfri)" : "Udløber (valgfri)"}</label>
+          <input style={{ ...styles.input, maxWidth: 200 }} type="date" value={gyldigTil} onChange={(e) => setGyldigTil(e.target.value)} />
+        </>)}
+        <label style={styles.label}>Fil</label>
+        <input ref={filRef} type="file" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" onChange={(e) => setFil(e.target.files?.[0] || null)}
+          style={{ fontSize: 13, marginBottom: 8, maxWidth: "100%" }} />
+        <div style={styles.hint}>PDF, billede eller Word, højst 10 MB.</div>
+        {fejl && <div style={{ color: "#B91C1C", fontSize: 13, margin: "6px 0" }}>{fejl}</div>}
+        <button type="button" style={{ ...styles.primaryBtn, marginTop: 8, opacity: arbejder ? 0.6 : 1 }} disabled={!!arbejder} onClick={laeg}>
+          {arbejder ? "Lægger ind…" : "Læg dokumentet ind"}
+        </button>
+      </StamKort>
+
+      <StamKort titel={`Dokumenter (${liste.length})`} hint="Kun administratorer kan se og åbne dem" bg="#F1F5F9" farve="#334155" hintFarve="#64748B">
+        {henter ? <div style={styles.hint}>Henter…</div>
+          : liste.length === 0 ? <div style={styles.hint}>Der er ikke lagt nogen dokumenter ind endnu.</div>
+          : liste.map((d) => {
+            const udloebet = d.gyldig_til && d.gyldig_til < idag;
+            const udloeberSnart = d.gyldig_til && !udloebet && d.gyldig_til <= snart;
+            return (
+              <div key={d.id} style={{ padding: "9px 0", borderBottom: "1px solid #F1F5F9" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "flex-start" }}>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontWeight: 700, fontSize: 13.5, wordBreak: "break-word" }}>{d.titel}</div>
+                    <div style={{ fontSize: 12, color: "#64748B" }}>
+                      {DOK_KATEGORIER.find(([k]) => k === d.kategori)?.[1]} · {new Date(d.uploadet_at).toLocaleDateString("da-DK")}
+                      {d.stoerrelse != null && ` · ${stoerrelseTekst(d.stoerrelse)}`}
+                    </div>
+                    {d.gyldig_til && (
+                      <div style={{ fontSize: 12, fontWeight: 600, color: udloebet ? "#B91C1C" : udloeberSnart ? "#B45309" : "#64748B" }}>
+                        {udloebet ? "Udløbet " : "Gyldigt til "}{new Date(d.gyldig_til).toLocaleDateString("da-DK")}
+                      </div>
+                    )}
+                  </div>
+                  <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                    <button type="button" style={{ ...styles.secondaryBtn, padding: "5px 10px", fontSize: 12.5 }} onClick={() => aabn(d)}>Åbn</button>
+                    <button type="button" style={{ ...styles.iconBtnGhostInline }} title="Slet dokumentet" onClick={() => slet(d)}><Trash2 size={14} /></button>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        <div style={{ ...styles.hint, marginTop: 10 }}>
+          En kontrakt indeholder ofte et CPR-nummer. Læg derfor kun dokumenter ind her, som skal opbevares, og slet dem, når opbevaringstiden er gået.
+          Læg ikke sygemeldinger, lægeerklæringer eller straffeattester ind.
+        </div>
+      </StamKort>
+    </>
+  );
+}
+
 // Ét kort i stamkortet: farvet hoved og en krop. Samme udseende som de gamle afsnit, men kortene kan nu sættes frit i fanerne.
 function StamKort({ titel, hint, bg, farve, hintFarve, children }) {
   return (
@@ -18929,7 +19063,7 @@ function StamKort({ titel, hint, bg, farve, hintFarve, children }) {
   );
 }
 
-function EmployeeModal({ emp, onClose, onSave, skills: skillList, satsHistorik, kmSatser, hr }) {
+function EmployeeModal({ emp, onClose, onSave, skills: skillList, satsHistorik, kmSatser, hr, brugerId }) {
   const [fane, setFane] = useState("person");
   // HR-oplysninger (6.10.2026) ligger i employee_hr, kun synlig for administratorer. Datoer som tekst «ÅÅÅÅ-MM-DD», tomt = ikke angivet.
   const [hrTelefon, setHrTelefon] = useState(hr?.telefon || "");
@@ -19029,7 +19163,7 @@ function EmployeeModal({ emp, onClose, onSave, skills: skillList, satsHistorik, 
           HR-oplysninger, sættes de som et nyt kort i fanen «Ansættelse» — resten af vinduet røres ikke. Alle faner gemmes med
           den samme knap, så en rettelse i én fane aldrig går tabt, fordi man skiftede fane. */}
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16 }}>
-        {[["person", "Person"], ["ansaettelse", "Ansættelse"], ["planlaegning", "Planlægning"], ["loen", "Løn"]].map(([k, l]) => (
+        {[["person", "Person"], ["ansaettelse", "Ansættelse"], ["dokumenter", "Dokumenter"], ["planlaegning", "Planlægning"], ["loen", "Løn"]].map(([k, l]) => (
           <button key={k} type="button" onClick={() => setFane(k)}
             style={{ padding: "7px 16px", borderRadius: 999, fontSize: 13, fontWeight: 700, cursor: "pointer",
                      border: fane === k ? "1px solid var(--farve-moerk)" : "1px solid #E2E8F0",
@@ -19101,6 +19235,12 @@ function EmployeeModal({ emp, onClose, onSave, skills: skillList, satsHistorik, 
           </div>
         </StamKort>
       </>)}
+
+      {fane === "dokumenter" && (emp?.id
+        ? <MedarbejderDokumenter empId={emp.id} brugerId={brugerId} />
+        : <StamKort titel="Dokumenter" hint="Gem medarbejderen først" bg="#F1F5F9" farve="#334155" hintFarve="#64748B">
+            <div style={styles.hint}>Dokumenter hører til en medarbejder, der er gemt. Tryk «Gem medarbejder», og åbn kortet igen.</div>
+          </StamKort>)}
 
       {fane === "planlaegning" && (<>
         <StamKort titel="Tid" hint="Mødetid og timer til rådighed pr. dag — det loft planlægningen regner med" bg="#EFF6FF" farve="#1D4ED8" hintFarve="#3B82F6">

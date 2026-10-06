@@ -26,3 +26,7 @@ alter table public.checklist_templates add column tilbud_fase text check (tilbud
 -- 6.10.2026: medarbejderen retter selv telefon og nødkontakt i Worklist. Funktionerne hent_mine_kontaktoplysninger() og
 -- opdater_mine_kontaktoplysninger(telefon, nod_navn, nod_relation, nod_telefon) — security definer, kun for den indloggede medarbejder,
 -- rører KUN de fire felter (ikke privat e-mail, ansættelse eller MUS), lukket for anon. Registeret er opdateret (bemærkningen).
+
+-- 6.10.2026: dokumentarkiv på medarbejderkortet. Tabel employee_dokumenter (kategori kontrakt/aendring/mus/certifikat/andet, titel, filnavn, sti,
+-- gyldig_til, uploadet_af/-at) + privat bucket «medarbejder-dokumenter» (10 MB, pdf/jpg/png/doc/docx), begge kun for administratorer.
+-- Migrationerne «medarbejder_dokumentarkiv_1_tabel» og «_2_bucket». Filen får tilfældigt navn i bucket'en; det rigtige filnavn står i tabellen.
