@@ -19354,7 +19354,9 @@ function EmployeeModal({ emp, onClose, onSave, skills: skillList, satsHistorik, 
         </div>
       </div>
 
-      <div style={styles.modalActions}>
+      {/* Knapperne sidder fast i bunden af vinduet (som i Ny opgave), så man ikke skal rulle ned for at gemme — uanset hvilken fane man står i. */}
+      <div style={{ ...styles.modalActions, position: "sticky", bottom: 0, zIndex: 5, background: "#fff", borderTop: "1px solid #E2E8F0",
+                    padding: "12px 18px", margin: "14px -18px -16px" }}>
         <button style={styles.secondaryBtn} disabled={gemmer} onClick={onClose}>Annuller</button>
         <button style={{ ...styles.primaryBtn, opacity: gemmer ? 0.6 : 1 }} disabled={gemmer || !name.trim()} onClick={async () => {
           if (gemmer) return;
