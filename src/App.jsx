@@ -6626,7 +6626,14 @@ function PlanningApp({ session, onSignOut }) {
           opslagene uanset hvad — job_koersel er lukket med is_admin(). */}
       {view === "aendringer" && isAdminUser && <AendringslogView employees={employees} />}
       {view === "drift" && (
-        <DriftView isAdminUser={isAdminUser}
+        <DriftView isAdminUser={isAdminUser} aftaler={templates}
+          onAabnAftale={(tplId) => {
+            const tpl = templates.find((x) => x.id === tplId);
+            if (!tpl) return;
+            setCopyPayload({ ...tpl, type: "fixed", templateDays: tpl.days });
+            setEditTplId(tpl.id);
+            setShowAddTask(true);
+          }}
           paaSide={(side, status) => { setAftalerStart(status || null); setView(side); }} />
       )}
 
@@ -10011,7 +10018,7 @@ function DriftNote({ children }) {
   );
 }
 
-function DriftView({ isAdminUser, paaSide }) {
+function DriftView({ isAdminUser, paaSide, aftaler = [], onAabnAftale }) {
   const [job, setJob] = useState(null);          // null = henter endnu
   const [tal, setTal] = useState(null);
   const [kilder, setKilder] = useState(null);
@@ -10220,6 +10227,14 @@ function DriftView({ isAdminUser, paaSide }) {
                       <a href={`https://www.openstreetmap.org/?mlat=${s.lat}&mlon=${s.lng}#map=16/${s.lat}/${s.lng}`} target="_blank" rel="noreferrer"
                         style={{ color: "#2563EB", fontWeight: 600 }}>se på kort</a>
                     )}
+                    {/* Aftalerne med netop den adresse (6.10.2026), så den kan rettes uden at lede: knappen åbner aftalen til redigering. */}
+                    {s.fraReserve && aftaler.filter((x) => x.status !== "udgaaet" && (x.address || "").trim() === (s.adr || "").trim()).slice(0, 3).map((x) => (
+                      <button key={x.id} type="button" onClick={() => onAabnAftale && onAabnAftale(x.id)}
+                        style={{ background: "#fff", border: "1px solid #E2E8F0", borderRadius: 8, padding: "3px 9px", fontSize: 12, fontWeight: 600,
+                                 color: "#334155", cursor: "pointer", fontFamily: "inherit" }}>
+                        Åbn aftalen{x.customerName ? ` — ${x.customerName}` : ""}
+                      </button>
+                    ))}
                   </div>
                 ))}
                 <div style={{ color: "#94A3B8" }}>Ruten er regnet til {r.km != null ? String(r.km).replace(".", ",") + " km" : "?"}</div>
@@ -10228,7 +10243,8 @@ function DriftView({ isAdminUser, paaSide }) {
           })}
           <div style={{ fontSize: 12.5, color: "#64748B", marginTop: 6, lineHeight: 1.5 }}>
             Sådan fikser du det: klik «se på kort». Ligger prikken på den rigtige adresse, er kilometerne i orden, og du kan lade den være.
-            Ligger den et helt andet sted, så er adressen stavet forkert eller mangler postnummer — ret den i aftalen eller opgaven, så slås den nye stavemåde op fra bunden.
+            Ligger den et helt andet sted, så er adressen stavet forkert eller mangler postnummer — tryk «Åbn aftalen», ret adressen og gem, så slås den nye stavemåde op fra bunden.
+            Etage og lejlighed (fx «1. sal») hører ikke til i adressefeltet: registret kender ikke dem. Skriv «Vejnavn nr, postnummer by» og sæt resten i adgangsfeltet.
           </div>
         </div>
       ) },
