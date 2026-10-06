@@ -2034,6 +2034,7 @@ const MODULE_HELP = {
         "Tilføj punkter i den rækkefølge de skal udføres.",
         "Sæt evt. beskrivelse og video på det enkelte punkt — det ses direkte i medarbejder-appen.",
         "Vælg tjeklisten når du opretter en opgave. Der kan vælges flere."] },
+    { h: "Find en liste", p: ["Knapperne øverst — Alle, Tilbud, Privat, Erhverv, Nexus og Ældreloven — viser kun de lister, der hører til. Vælger du en kontrakttype, ser du både de lister, der er mærket med typen, og dem der gælder alle typer. «Tilbud» viser de tre lister, der kun bruges på tilbud."] },
     { h: "Bruges til", p: ["Under «Bruges til» vælger du, hvilke kontrakttyper listen hører til: Privat, Erhverv, Nexus og/eller Ældreloven. Så vises listen kun, når man arbejder med en opgave af den type — og skriver du ingen, kan den bruges på alle.",
         "Opretter du en ny aftale og vælger typen, bliver de lister, der hører til den type, sat på af sig selv. Skifter du type, skiftes de ud igen; lister du selv har valgt, bliver stående. En aftale, der allerede findes, får aldrig sine lister ændret af et typeskift.",
         "Skriv derfor ikke typen i navnet — det gør tjeklisten «Kommunal Rengøring 1» og ikke «Kommunal Rengøring (Nexus)1»."] },
