@@ -359,6 +359,12 @@ function valgbareKontrakttyper() {
 const CONTRACT_META = Object.fromEntries(CONTRACT_TYPES.map((c) => [c.key, c]));
 function contractMeta(key) { return CONTRACT_META[key] || CONTRACT_META.privat; }
 function contractLabel(key) { return contractMeta(key).label; }
+// En tjekliste gaelder for de kontrakttyper, der staar paa den. Tom liste = alle typer. Foer 6.10.2026 stod typen i navnet
+// («Kommunal Rengoering (Nexus)1»), og listen kunne vaelges paa enhver opgave.
+function listeGaelderFor(liste, kontrakttype) {
+  const typer = liste.kontrakttyper || [];
+  return typer.length === 0 || typer.includes(kontrakttype);
+}
 function contractIconLabel(key) { const c = contractMeta(key); return c.icon + " " + c.label; }
 // Bruges til at afgøre om en instans er en blokering (sygdom/ferie) i stedet for
 // en rigtig rengøringsopgave — blokeringer skal ikke tælle med i fakturagrundlag,
@@ -2028,6 +2034,9 @@ const MODULE_HELP = {
         "Tilføj punkter i den rækkefølge de skal udføres.",
         "Sæt evt. beskrivelse og video på det enkelte punkt — det ses direkte i medarbejder-appen.",
         "Vælg tjeklisten når du opretter en opgave. Der kan vælges flere."] },
+    { h: "Bruges til", p: ["Under «Bruges til» vælger du, hvilke kontrakttyper listen hører til: Privat, Erhverv, Nexus og/eller Ældreloven. Så vises listen kun, når man arbejder med en opgave af den type — og skriver du ingen, kan den bruges på alle.",
+        "Opretter du en ny aftale og vælger typen, bliver de lister, der hører til den type, sat på af sig selv. Skifter du type, skiftes de ud igen; lister du selv har valgt, bliver stående. En aftale, der allerede findes, får aldrig sine lister ændret af et typeskift.",
+        "Skriv derfor ikke typen i navnet — det gør tjeklisten «Kommunal Rengøring 1» og ikke «Kommunal Rengøring (Nexus)1»."] },
   ], warn: "Retter du i en tjekliste, slår ændringen igennem med det samme på alle opgaver der endnu ikke er udført — også dem der allerede ligger i kalenderen. Punkter medarbejderen har sat flueben ved bevares. Udførte opgaver røres ikke, så det står fast hvad der faktisk blev gjort." },
 
   time: { title: "Fakturering", intro: KUNDEUDGAVE ? "Her ser du planlagt og registreret tid og beløb, og henter det som en Excel-fil." : "Her omsætter du udført arbejde til fakturakladder i Dinero.", blocks: [
@@ -3197,7 +3206,7 @@ function PlanningApp({ session, onSignOut }) {
       let clMapped = [];
       if (clData?.length) {
         const alle = clData.map((cl) => ({
-          id: cl.id, name: cl.name, tilbudFase: cl.tilbud_fase || null,
+          id: cl.id, name: cl.name, tilbudFase: cl.tilbud_fase || null, kontrakttyper: cl.kontrakttyper || [],
           items: (clItemsData || []).filter((i) => i.checklist_template_id === cl.id)
             .map((i) => ({ text: i.text, description: i.description, videoUrl: i.video_url })),
         }));
@@ -4165,7 +4174,7 @@ function PlanningApp({ session, onSignOut }) {
   }, []);
 
   const syncChecklistTemplate = useCallback(async (cl) => {
-    const { error: clErr } = await supabase.from("checklist_templates").upsert({ id: cl.id, name: cl.name }, { onConflict: "id" });
+    const { error: clErr } = await supabase.from("checklist_templates").upsert({ id: cl.id, name: cl.name, kontrakttyper: cl.kontrakttyper || [] }, { onConflict: "id" });
     if (dbFail(clErr, "gemme tjeklisten")) return;
     const rows = (cl.items || []).map((it, i) => ({
       sort_order: i, text: it.text,
@@ -7779,7 +7788,11 @@ function ChecklistsView({ checklistTemplates, tilbudsLister = [], onSave, onDele
               <span style={{ ...styles.avatar, background: "var(--farve)", width: 34, height: 34 }}><ListChecks size={16} /></span>
               <div style={{ flex: 1 }}>
                 <div style={styles.empName}>{c.name}</div>
-                <div style={styles.empLoad}>{c.items.length} tasks</div>
+                <div style={styles.empLoad}>
+                  {c.items.length} tasks · {(c.kontrakttyper || []).length
+                    ? c.kontrakttyper.map((k) => contractMeta(k).label).join(", ")
+                    : "alle typer"}
+                </div>
               </div>
               <button style={styles.iconBtnGhostInline} onClick={() => { setEditing(c); setShowModal(true); }}><Pencil size={14} /></button>
               <button style={styles.iconBtnGhostInline} onClick={() => onDelete(c.id)}><Trash2 size={14} /></button>
@@ -7810,6 +7823,7 @@ function ChecklistsView({ checklistTemplates, tilbudsLister = [], onSave, onDele
 function ChecklistModal({ checklist, onClose, onSave }) {
   const [name, setName] = useState(checklist?.name || "");
   const [items, setItems] = useState(checklist?.items || []);
+  const [kontrakttyper, setKontrakttyper] = useState(checklist?.kontrakttyper || []);
   const [draftText, setDraftText] = useState("");
   const [draftDescription, setDraftDescription] = useState("");
   const [draftVideoUrl, setDraftVideoUrl] = useState("");
@@ -7848,6 +7862,27 @@ function ChecklistModal({ checklist, onClose, onSave }) {
       <label style={styles.label}>Navn</label>
       <input style={styles.input} value={name} onChange={(e) => setName(e.target.value)} placeholder="F.eks. Gulvvask – standard" />
 
+      {!checklist?.tilbudFase && (
+        <>
+          <label style={styles.label}>Bruges til</label>
+          <div style={styles.typePicker}>
+            {CONTRACT_TYPES.map((c) => (
+              <button key={c.key} type="button"
+                onClick={() => setKontrakttyper((prev) => (prev.includes(c.key) ? prev.filter((x) => x !== c.key) : [...prev, c.key]))}
+                style={kontrakttyper.includes(c.key)
+                  ? { ...styles.typePickBtn, borderColor: "var(--farve)", color: "var(--farve)", background: "var(--farve-lys)" }
+                  : styles.typePickBtn}>
+                {c.icon} {c.label}
+              </button>
+            ))}
+          </div>
+          <div style={styles.hint}>
+            Vælg de typer, listen hører til. Så vises den kun, når man opretter eller redigerer en opgave af den type.
+            Vælger du ingen, kan listen bruges på alle.
+          </div>
+        </>
+      )}
+
       <label style={styles.label}>Tasks ({items.length})</label>
       {items.map((it, i) => (
         <div key={i} style={i === editIndex ? { ...styles.checklistEditRow, background: "var(--farve-lys)", borderLeft: "3px solid var(--farve)", borderRadius: 4, paddingLeft: 6 } : styles.checklistEditRow}>
@@ -7880,7 +7915,7 @@ function ChecklistModal({ checklist, onClose, onSave }) {
 
       <div style={styles.modalActions}>
         <button style={styles.secondaryBtn} onClick={onClose}>Annuller</button>
-        <button style={styles.primaryBtn} disabled={!name.trim() || items.length === 0} onClick={() => onSave({ id: checklist?.id || uid("cl"), name: name.trim(), items })}>Gem tjekliste</button>
+        <button style={styles.primaryBtn} disabled={!name.trim() || items.length === 0} onClick={() => onSave({ id: checklist?.id || uid("cl"), name: name.trim(), items, kontrakttyper })}>Gem tjekliste</button>
       </div>
     </Modal>
   );
@@ -11460,6 +11495,16 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
   const [accessInstructions, setAccessInstructions] = useState(copyFrom?.accessInstructions || "");
   const [needsKeyPickup, setNeedsKeyPickup] = useState(copyFrom?.needsKeyPickup ?? false);
 
+  // Ny aftale: vaelges typen, saettes de lister, der hoerer til netop den type. Listerne, den selv har sat, skiftes ud,
+  // naar typen skiftes; det man har valgt i haanden roeres ikke. En eksisterende aftale faar aldrig sine lister aendret af et typeskift.
+  const autoListeIds = useRef([]);
+  function vaelgKontrakttype(k) {
+    setContractType(k);
+    if (copyFrom) return;
+    const nye = checklistTemplates.filter((c) => (c.kontrakttyper || []).includes(k)).map((c) => c.id);
+    setChecklistTemplateIds((prev) => [...prev.filter((id) => !autoListeIds.current.includes(id)), ...nye.filter((id) => !prev.includes(id))]);
+    autoListeIds.current = nye;
+  }
   function toggleTemplate(id) { setChecklistTemplateIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id])); }
   function addExtraItem() { if (!newItemText.trim()) return; setExtraItems((prev) => [...prev, newItemText.trim()]); setNewItemText(""); }
   function removeExtraItem(i) { setExtraItems((prev) => prev.filter((_, idx) => idx !== i)); }
@@ -11596,7 +11641,7 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
       <label style={styles.label}>Kontrakttype</label>
       <div style={styles.typePicker}>
         {valgbareKontrakttyper().map((c) => [c.key, c.icon + " " + c.label]).map(([k,l]) => (
-          <button key={k} type="button" onClick={() => setContractType(k)}
+          <button key={k} type="button" onClick={() => vaelgKontrakttype(k)}
             style={contractType === k ? { ...styles.typePickBtn, borderColor:"var(--farve)", color:"var(--farve)", background:"var(--farve-lys)" } : styles.typePickBtn}>
             {l}
           </button>
@@ -11789,7 +11834,7 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
         er der afsat {fmtMin((Number(duration) || 0) * 2)} arbejde i alt — ikke {fmtMin(Number(duration) || 0)} delt mellem dem.
       </div><label style={styles.label}>Tjeklister (tasks der skal udføres)</label>
       <div style={styles.skillPicker}>
-        {checklistTemplates.map((c) => (
+        {checklistTemplates.filter((c) => checklistTemplateIds.includes(c.id) || listeGaelderFor(c, contractType)).map((c) => (
           <button key={c.id} type="button" onClick={() => toggleTemplate(c.id)} style={checklistTemplateIds.includes(c.id) ? styles.skillPickBtnActive : styles.skillPickBtn}>
             <ListChecks size={11} style={{ marginRight: 4, verticalAlign: "-2px" }} />{c.name} ({c.items.length})
           </button>
@@ -20308,7 +20353,7 @@ return (
           </button>
           {showTemplates && (
             <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 6 }}>
-              {checklistTemplates.map((cl) => {
+              {checklistTemplates.filter((cl) => listeGaelderFor(cl, t.contractType || "privat")).map((cl) => {
                 const alreadyAdded = cl.items.every((it) => existingTexts.has(it.text || it));
                 return (
                   <div key={cl.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 10px", borderRadius: 8, border: "1px solid #E2E8F0", background: alreadyAdded ? "#F8FAFC" : "#fff" }}>
