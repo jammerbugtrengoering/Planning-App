@@ -1872,6 +1872,7 @@ const MODULE_HELP = {
         "«Registreret efter lønlukning» er en medarbejder, der registrerer en ikke-udført opgave fra en lukket lønperiode. Hendes begrundelse står i linjen. «Godkend» — tiden kommer med i den åbne periode; «Afvis» — ingen løn, kunden faktureres stadig.",
         "Auto-slut: «Rettelse af tid» er en medarbejder, der vil rette en systemlukket opgave til mindre end planlagt. «Godkend» — hendes løn følger rettelsen; «Afvis» — den planlagte tid står. Fakturaen røres ikke. «Glemmer at afslutte» betyder, at hun har mange systemlukninger i lønperioden.",
         "«Aftal næste besøg»: en aftale med rytmen «Aftales ved besøget» har ingen opgave i planen, og besøget er udført uden at næste er aftalt. Der står «Kontakt kunden for næste besøgsdato — sidste besøg var d. …». Ring til kunden, tryk «Åbn», skriv den aftalte dato og tryk «Opret besøg». Det samme kan gøres fra aftalen under Aftaler: «Aftal næste besøg». «Husk om en uge» skjuler linjen i syv dage, og så kommer den igen, til der er en dato.",
+        "Personalemappen (kun HR-administratorer): «Dokument ikke kvitteret» står, når en medarbejder ikke har kvitteret for et dokument 4 dage efter, det blev lagt ind. «Bevis udløber snart» eller «er udløbet» står for dokumenter med en slutdato inden 60 dage. «MUS er forfalden» står, når næste samtale er passeret, eller der ikke har været en i 12 måneder. Linjerne forsvinder, når sagen er klaret; «Set ✓» skjuler dem for altid. De kommer ikke med i morgenmailen, fordi de nævner HR-oplysninger.",
         "Alle planlæggere ser den samme liste og får de samme beskeder: push på telefonen, når noget haster (kræver Worklist på telefonen med beskeder slået til), og en mail kl. 7 med alt, der venter."] },
     { h: "Aflys en opgave", p: [
         "Åbn opgaven og tryk «🚫 Aflys». Vælg først, hvem der aflyser — kunden eller jer — og så en grund. Skriv evt. en kort forklaring; skriv kun det nødvendige, ingen helbredsdetaljer.",
@@ -2042,7 +2043,8 @@ const MODULE_HELP = {
         "«Ny medarbejder» og «Fratræd» findes kun her.",
         "Dokumenter er skjult for medarbejderen som standard. Sæt flueben ved «Medarbejderen kan se og hente dokumentet», når du lægger det ind — eller tryk «Vis for hende» bagefter. Tryk «Skjul» for at tage det væk igen.",
         "Sæt også «Hun skal kvittere for at have læst det», hvis du vil vide, at hun har set det, fx et ansættelsesbevis. Dokumentet står så som «Venter på kvittering», til hun trykker, og derefter med datoen.",
-        "Læg ikke interne noter, sygemeldinger, lægeerklæringer eller straffeattester ind som synlige dokumenter."] },
+        "Læg ikke interne noter, sygemeldinger, lægeerklæringer eller straffeattester ind som synlige dokumenter.",
+        "Påmindelser står i klokken øverst, kun for HR-administratorer: dokumenter, der ikke er kvitteret efter 4 dage, beviser der udløber inden 60 dage, og MUS der er forfaldet. Sæt udløbsdato på beviser og MUS-datoer under Ansættelse, så systemet kan minde dig."] },
   ] },
   loenperioder: { title: "Lønperioder", intro: "Hvornår en lønperiode starter og lukker, og hvornår medarbejderne får besked.", blocks: [
     { h: "Lukkedagen", p: ["Lønperioden går fra lukkedagen til dagen før i næste måned og lukker på lukkedagen kl. 23.59. Standard er den 20., så «oktober» er 20. sep – 19. okt. Skriv 1 for kalendermåned.",
@@ -3884,6 +3886,8 @@ function PlanningApp({ session, onSignOut }) {
       if (tpl) { setNaesteBesoegTpl(tpl); return; }
       setView("contracts"); return;
     }
+    // Personalemappen: HR-linjerne (kun HR-administratorer får dem) peger på medarbejderlisten dér.
+    if (l.art === "ikke_kvitteret" || l.art === "bevis_udloeber" || l.art === "mus_forfalden") { setView("personalemappen"); return; }
     if (l.art === "produktbestilling" || l.art === "udlevering") { setView("inventory"); return; }
     if (l.art === "drift") { setView("drift"); return; }
     if (l.art === "systemlukninger") { setView("reports"); return; }
