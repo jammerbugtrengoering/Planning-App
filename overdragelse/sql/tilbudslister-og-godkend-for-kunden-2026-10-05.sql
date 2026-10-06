@@ -22,3 +22,7 @@ alter table public.checklist_templates add column tilbud_fase text check (tilbud
 -- 6.10.2026: employee_hr (HR-oplysninger, kun administratorer). Migration «employee_hr_tabel». Egen tabel og ikke kolonner på employees,
 -- fordi employees kan læses af alle kolleger. Kolonner: telefon, privat_email, nodkontakt_navn/-relation/-telefon, ansaettelsesform
 -- (fast/timeloenned/vikar/elev/andet), ansat_fra, mus_sidst, mus_naeste. Ingen CPR, ingen helbred, ingen samtalenoter.
+
+-- 6.10.2026: medarbejderen retter selv telefon og nødkontakt i Worklist. Funktionerne hent_mine_kontaktoplysninger() og
+-- opdater_mine_kontaktoplysninger(telefon, nod_navn, nod_relation, nod_telefon) — security definer, kun for den indloggede medarbejder,
+-- rører KUN de fire felter (ikke privat e-mail, ansættelse eller MUS), lukket for anon. Registeret er opdateret (bemærkningen).

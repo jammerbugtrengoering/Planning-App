@@ -2472,7 +2472,7 @@ const MODULE_HELP = {
         "Hjemmeadresse, men kun for dem der har kørsel i arbejdstiden. Den bruges alene til at beregne afstanden til dagens første opgave.",
         "Timeløn og lønhistorik, bonus og kilometersats, weekendtillæg, SH-sats og Danløn-nummer.",
         "Registrerede timer pr. opgave, fravær og fratrædelsesdato.",
-        "HR-oplysninger, som kun administratorer kan se: telefonnummer, privat e-mail, ansættelsesform og ansættelsesdato, datoerne for MUS-samtaler (aldrig indholdet), og en nødkontakt — navn, forhold og telefonnummer på en anden person, som medarbejderen selv har oplyst.",
+        "HR-oplysninger, som kun administratorer kan se: telefonnummer, privat e-mail, ansættelsesform og ansættelsesdato, datoerne for MUS-samtaler (aldrig indholdet), og en nødkontakt — navn, forhold og telefonnummer på en anden person, som medarbejderen selv har oplyst. Telefonnummer og nødkontakt kan medarbejderen selv rette i Worklist (Indstillinger → Dine oplysninger); resten rettes kun af kontoret.",
         "Fravær står som fravær. Systemet gemmer aldrig en årsag — hverken sygdom eller diagnose.",
         "Bliver du spurgt: der er ingen GPS og ingen positionsmåling i Worklist. Kørslen regnes ud fra adresserne på opgaverne, ikke fra hvor telefonen har været. Det er et spørgsmål, medarbejdere stiller, og svaret er entydigt nej."] },
     { h: "Om kunderne og borgerne", p: [
