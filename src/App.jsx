@@ -2006,16 +2006,16 @@ const MODULE_HELP = {
         "Medarbejder-appen henter aldrig lønnen. En medarbejder kan altså ikke se hverken sin egen eller kollegernes sats der."] },
     { h: "Kompetencer", p: ["Ligger under knappen «Kompetencer» øverst på siden. Her opretter, omdøber og sletter du de færdigheder du kan kræve på en opgave.", "En kompetence er et krav, ikke et ønske: kan medarbejderen den ikke på det krævede niveau, kommer hun slet ikke i betragtning til opgaven.", "Selve niveauet sættes pr. medarbejder på hendes eget kort — Nybegynder, Øvet eller Ekspert. Kræver opgaven Øvet, er Nybegynder ikke nok.", "Blandt dem der lever op til kravene, vælges den med det højeste samlede niveau. Står to lige, vælges den med mest ledig tid den dag.", "Sletter du en kompetence, fjernes den fra alle medarbejdere og fra alle opgaver.", "Omdøber du en kompetence, følger medarbejderne og aftalerne med. Men opgaver der allerede ligger i kalenderen, husker det gamle navn og viser derefter «Ingen har alle krævede kompetencer» — så ret kompetencen på de opgaver, eller lad være med at omdøbe når der er oprettet opgaver."] },
         { h: "Områder", p: ["Ligger under knappen «Områder». Et område er et navn og en række postnumre, og du klikker de medarbejdere til der dækker det.", "Ved planlægning aflæses postnummeret i opgavens adresse. Findes der et område med det postnummer, søges der kun blandt de medarbejdere der er knyttet til området.", "Har adressen intet postnummer, eller er postnummeret ikke lagt ind på noget område, planlægges der frit blandt alle med kompetencerne.", "Er der ikke klikket en eneste medarbejder på et område, springes området over. Et tomt område spærrer altså ikke — det gør ingenting.", "Kan ingen i området løse opgaven, planlægges den alligevel hos en der kan, og opgaven mærkes «Planlagt uden for medarbejderens område». En opgave bliver aldrig liggende alene fordi den falder uden for et område.", "Sletter du et område, forsvinder tilknytningerne med det samme. Opgaverne røres ikke."] },
-    { h: "Adgang til Worklist", p: ["Fold medarbejderen ud, skriv e-mailen og tryk Opret. Hun får en mail med et link, hvor hun selv vælger sin adgangskode, og kan derefter logge ind i medarbejder-appen.",
+    { h: "Adgang til Worklist", p: ["Tryk Redigér på medarbejderen, vælg fanen Adgang, skriv e-mailen og tryk Opret. Hun får en mail med et link, hvor hun selv vælger sin adgangskode, og kan derefter logge ind i medarbejder-appen.",
         "Har mailen allerede et login — for eksempel fordi hun også bruger planlægningsappen — bliver det eksisterende login koblet til hende. Du behøver ikke finde på en ny mailadresse.",
         "Står der at adgangen er oprettet, men at mailen ikke kunne sendes, er hun kommet ind i systemet alligevel. Så skal hun bare bruge «glemt adgangskode» på login-siden.",
         "«Luk adgang» sletter login’et helt. Medarbejderen og hele hendes historik bliver stående, og du kan give hende adgang igen senere med en ny mail.",
         "Bruges når nogen midlertidigt ikke skal kunne logge ind. Holder hun helt op, brug «Fratræd» i stedet — så ryger hun også ud af planlægningen."] },
     { h: "Arbejdstøj", p: [
         "Medarbejderne bestiller selv arbejdstøj i deres app, og du godkender bestillingerne under Lager. Her på medarbejderen ser du kun hvad hun har fået udleveret.",
-        "Fold hende ud og tryk «Se historik» for de seneste 20 udleveringer."] },
+        "Åbn hendes kort (Redigér) og vælg fanen Udlevering, eller fold hende ud i listen og tryk «Se historik». Begge viser de seneste 20 udleveringer."] },
     { h: "Når en medarbejder fratræder", p: [
-        "Fold hende ud og tryk «Fratræd». Du vælger datoen, og dialogen fortæller hvor mange kommende opgaver der mister hende.",
+        "Tryk Redigér på hende, vælg fanen Ansættelse og tryk «Fratræd». Du vælger datoen, og dialogen fortæller hvor mange kommende opgaver der mister hende.",
         "Login’et slettes med det samme. Står appen åben på hendes telefon, bliver hun logget ud i samme øjeblik.",
         "Kommende opgaver går tilbage til «Ikke tildelt», og du skal selv planlægge dem på ny. Udførte opgaver beholder hendes navn og tidsregistrering.",
         "Hun forsvinder fra ugeplanen, fra auto-planlægningen, fra områderne og fra alle vælgere — men bliver stående på medarbejderlisten med sin fratrædelsesdato.",
@@ -6647,7 +6647,7 @@ function PlanningApp({ session, onSignOut }) {
           travelSettings={travelSettings} onClose={() => setVisSimulering(false)}
           onAnvend={anvendSimulering} onRulTilbage={rulSimuleringTilbage} />
       )}
-      {showAddEmp && <EmployeeModal emp={editEmp} onClose={() => { setShowAddEmp(false); setEditEmp(null); }} onSave={saveEmployee} skills={skills} hr={editEmp ? hrData[editEmp.id] : null} brugerId={currentEmployeeForAuth?.id} satsHistorik={editEmp ? satsHistorik[editEmp.id] : null} kmSatser={editEmp ? kmSatser[editEmp.id] : null} />}
+      {showAddEmp && <EmployeeModal emp={editEmp} onClose={() => { setShowAddEmp(false); setEditEmp(null); }} onSave={saveEmployee} skills={skills} hr={editEmp ? hrData[editEmp.id] : null} brugerId={currentEmployeeForAuth?.id} onFratraed={(id) => { setShowAddEmp(false); setEditEmp(null); setSletMedarbejder(id); }} satsHistorik={editEmp ? satsHistorik[editEmp.id] : null} kmSatser={editEmp ? kmSatser[editEmp.id] : null} />}
       {showAddBlock && <BlockModal employees={aktiveEmployees} onClose={() => setShowAddBlock(false)} onSave={addBlock} />}
       {showAddActivity && <ActivityModal employees={aktiveEmployees} onClose={() => setShowAddActivity(false)} onSave={addActivity} />}
       {/* Transporttid ligger under Opsaetning (28.9.2026). Den saettes én gang og
@@ -7547,8 +7547,6 @@ function EmployeesView({ employees, onAdd, onEdit, onDelete, supabase, skills, o
   const [showAreasPanel, setShowAreasPanel] = useState(false);
   const [showStartStopPanel, setShowStartStopPanel] = useState(false);
   const [showAutoslutPanel, setShowAutoslutPanel] = useState(false);
-  const [inviteEmail, setInviteEmail] = useState({});
-  const [inviteStatus, setInviteStatus] = useState({});
   const [orderPanel, setOrderPanel] = useState(null); // emp.id
   const [empOrders, setEmpOrders] = useState({}); // { empId: [transactions] }
 
@@ -7572,71 +7570,6 @@ function EmployeesView({ employees, onAdd, onEdit, onDelete, supabase, skills, o
 
 
 
-  async function inviteUser(emp) {
-    const email = inviteEmail[emp.id]?.trim();
-    if (!email) return;
-    setInviteStatus((prev) => ({ ...prev, [emp.id]: "sending" }));
-
-    // Oprettelsen sker i edge-funktionen, ikke her. Grunden er at et EKSISTERENDE login
-    // kun kan slaas op paa mail med service-noeglen — og den maa aldrig ligge i en
-    // browser, for saa kunne hvem som helst afproeve mailadresser. Tidligere kaldte vi
-    // supabase.auth.signUp() her, og den svarer med en ATTRAP-bruger med et opdigtet id
-    // naar mailen allerede findes. Det id blev skrevet i employees, og fremmednoeglen
-    // til auth.users afviste det: "violates foreign key constraint".
-    const { data, error } = await supabase.functions.invoke("inviter-bruger", {
-      body: {
-        type: "medarbejder",
-        email,
-        empId: emp.id,
-        redirectTo: WORKLIST_URL,
-      },
-    });
-
-    const fejl = data?.error || error?.message;
-    if (fejl) {
-      setInviteStatus((prev) => ({ ...prev, [emp.id]: "error: " + fejl }));
-      return;
-    }
-
-    // Funktionen har skrevet koblingen med service-noeglen. Raekken laeses tilbage, saa
-    // maerkatet "Ingen app-adgang" forsvinder med det samme.
-    const { data: opdateret } = await supabase
-      .from("employees").select("auth_user_id, app_email").eq("id", emp.id).maybeSingle();
-    emp.auth_user_id = opdateret?.auth_user_id || null;
-    emp.app_email = opdateret?.app_email || email;
-
-    // Koblingen kan lykkes selv om mailen driller. Det skal planlaeggeren kunne se,
-    // ellers sender hun invitationen igen til en medarbejder der allerede har adgang.
-    setInviteStatus((prev) => ({
-      ...prev,
-      [emp.id]: data?.mailSendt === false
-        ? "error: Adgangen er oprettet, men mailen kunne ikke sendes. Bed medarbejderen bruge «glemt adgangskode»."
-        : "sent",
-    }));
-    setInviteEmail((prev) => ({ ...prev, [emp.id]: "" }));
-  }
-
-  // Lukker adgangen ved at SLETTE login'et. Før ryddede den kun koblingen på
-  // medarbejderen, så kontoen blev stående i auth: hun kunne stadig logge ind, kom
-  // bare ind uden profil — og ingen kunne se at kontoen var der.
-  async function deactivateUser(emp) {
-    if (!window.confirm(`Luk adgang for ${emp.name}?\n\nLogin'et slettes, og hun bliver logget ud med det samme — også hvis appen står åben på telefonen. Hun bliver stående som medarbejder og kan få en ny adgang senere.`)) return;
-    setInviteStatus((prev) => ({ ...prev, [emp.id]: "deactivating" }));
-    const { data, error } = await supabase.functions.invoke("fratraed-medarbejder", {
-      body: { handling: "lukAdgang", empId: emp.id },
-    });
-    if (error || data?.error) {
-      const grunde = {
-        sidste_planlaegger: "Det er den sidste planlægger med adgang. Giv en anden administratorrettigheder først.",
-        ikke_dig_selv: "Du kan ikke lukke din egen adgang. Bed en anden planlægger gøre det.",
-      };
-      setInviteStatus((prev) => ({ ...prev, [emp.id]: "error: " + (grunde[data?.error] || error?.message || data?.error) }));
-      return;
-    }
-    emp.auth_user_id = null;
-    emp.app_email = null;
-    setInviteStatus((prev) => ({ ...prev, [emp.id]: "deactivated" }));
-  }
 
   return (
     <div style={styles.page}>
@@ -7702,7 +7635,6 @@ function EmployeesView({ employees, onAdd, onEdit, onDelete, supabase, skills, o
 
       <div style={styles.empListe}>
         {synligeMedarbejdere.map(({ emp: e, ugeTimer, kompetenceListe }) => {
-          const status = inviteStatus[e.id];
           const hasUser = !!e.auth_user_id;
           return (
             <div key={e.id} style={{ borderBottom: "1px solid #F1F5F9" }}>
@@ -7752,10 +7684,6 @@ function EmployeesView({ employees, onAdd, onEdit, onDelete, supabase, skills, o
               <div style={styles.empDetaljer}>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
                 <button style={styles.secondaryBtn} onClick={() => onEdit(e)}><Pencil size={14} /> Redigér</button>
-                {!e.fratraadtDato && (
-                  <button style={{ ...styles.secondaryBtn, color: "#B91C1C", borderColor: "#FCA5A5", marginLeft: "auto" }}
-                    onClick={() => onDelete(e.id)}><LogOut size={14} /> Fratræd</button>
-                )}
               </div>
               <div style={styles.empSkills}>
                 {Object.entries(e.skills || {}).map(([s, lvl]) => (
@@ -7787,59 +7715,12 @@ function EmployeesView({ employees, onAdd, onEdit, onDelete, supabase, skills, o
                 </div>
               </div>
 
-              {/* Brugeradgang. Vises ikke for en fratraadt: login'et er slettet, og et
-                  felt der inviterer til at oprette et nyt ville modsige beslutningen.
-                  Skal hun tilbage, ryddes fratraedelsesdatoen under Redigér foerst. */}
-              {e.fratraadtDato ? (
-                <div style={{ borderTop: "1px solid #F1F5F9", marginTop: 10, paddingTop: 10,
-                              fontSize: 12.5, color: "#64748B", lineHeight: 1.6 }}>
+              {/* Login (adgang til medarbejder-appen) og fratræd ligger nu i stamkortet (Redigér): fanerne Adgang og Ansættelse. */}
+              {e.fratraadtDato && (
+                <div style={{ borderTop: "1px solid #F1F5F9", marginTop: 10, paddingTop: 10, fontSize: 12.5, color: "#64748B", lineHeight: 1.6 }}>
                   Fratrådt {new Date(e.fratraadtDato).toLocaleDateString("da-DK", { day: "numeric", month: "long", year: "numeric" })}.
-                  Login’et er slettet, og hun indgår ikke i planlægningen.
-                  Lønhistorik og kørsel er bevaret.
+                  Login’et er slettet, og hun indgår ikke i planlægningen. Lønhistorik og kørsel er bevaret.
                 </div>
-              ) : (
-              <div style={{ borderTop: "1px solid #F1F5F9", marginTop: 10, paddingTop: 10 }}>
-                {/* Status + mail + luk-knap på én linje */}
-                <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8, flexWrap: "wrap" }}>
-                  <span style={{ fontSize: 12, fontWeight: 600, color: hasUser ? "#16A34A" : "#94A3B8", whiteSpace: "nowrap" }}>
-                    {hasUser ? "✓ App-adgang" : "○ Ingen adgang"}
-                  </span>
-                  {hasUser && e.app_email && (
-                    <span style={{ fontSize: 11, color: "#64748B", background: "#F1F5F9", padding: "2px 8px", borderRadius: 6, overflow: "hidden", textOverflow: "ellipsis", maxWidth: "100%", display: "block" }}>
-                      {e.app_email}
-                    </span>
-                  )}
-                  {hasUser && (
-                    <button
-                      style={{ fontSize: 11, padding: "3px 8px", borderRadius: 6, border: "1px solid #FCA5A5", background: "#FEF2F2", color: "#DC2626", cursor: "pointer", whiteSpace: "nowrap", marginLeft: "auto" }}
-                      onClick={() => deactivateUser(e)}>
-                      {status === "deactivating" ? "Lukker…" : "Luk adgang"}
-                    </button>
-                  )}
-                </div>
-
-                {/* Email-felt og Opret-knap */}
-                <div style={{ display: "flex", gap: 6 }}>
-                  <input
-                    type="email"
-                    placeholder={hasUser ? "Ny e-mail (skift bruger)" : "E-mail til medarbejder"}
-                    style={{ ...styles.inputSm, flex: 1, fontSize: 12, color: "#111111", background: "#fff", minWidth: 0 }}
-                    value={inviteEmail[e.id] || ""}
-                    onChange={(ev) => setInviteEmail((prev) => ({ ...prev, [e.id]: ev.target.value }))}
-                    onKeyDown={(ev) => { if (ev.key === "Enter") inviteUser(e); }}
-                  />
-                  <button
-                    style={{ ...styles.primaryBtn, fontSize: 12, padding: "6px 10px", whiteSpace: "nowrap" }}
-                    disabled={!inviteEmail[e.id]?.trim() || status === "sending"}
-                    onClick={() => inviteUser(e)}>
-                    {status === "sending" ? "Sender…" : "Opret"}
-                  </button>
-                </div>
-
-                {status === "sent" && <div style={{ fontSize: 12, color: "#16A34A", marginTop: 4 }}>✓ Bekræftelses-mail sendt</div>}
-                {status === "deactivated" && <div style={{ fontSize: 12, color: "#DC2626", marginTop: 4 }}>Adgang lukket</div>}
-                {status?.startsWith("error") && <div style={{ fontSize: 12, color: "#DC2626", marginTop: 4 }}>{status}</div>}
-              </div>
               )}
 
               {/* Medarbejderprodukter — kun historik */}
@@ -19050,6 +18931,109 @@ function MedarbejderDokumenter({ empId, brugerId }) {
   );
 }
 
+// Adgang til medarbejder-appen (login) — flyttet fra medarbejderlisten ind i stamkortet (6.10.2026). Opretter, skifter og lukker login'et.
+// Selve oprettelsen sker i edge-funktionen inviter-bruger og lukningen i fratraed-medarbejder, aldrig her (servicenøglen ligger ikke i en browser).
+// emp rettes direkte (auth_user_id, app_email), ligesom listen altid har gjort, så mærket «Ingen app-adgang» i listen følger med, når kortet lukkes.
+function MedarbejderAdgang({ emp }) {
+  const [email, setEmail] = useState("");
+  const [status, setStatus] = useState("");
+  const [, setVersion] = useState(0);
+  const harLogin = !!emp.auth_user_id;
+
+  async function opret() {
+    const adresse = email.trim();
+    if (!adresse) return;
+    setStatus("sending");
+    const { data, error } = await supabase.functions.invoke("inviter-bruger", {
+      body: { type: "medarbejder", email: adresse, empId: emp.id, redirectTo: WORKLIST_URL },
+    });
+    const fejl = data?.error || error?.message;
+    if (fejl) { setStatus("error: " + fejl); return; }
+    const { data: opdateret } = await supabase.from("employees").select("auth_user_id, app_email").eq("id", emp.id).maybeSingle();
+    emp.auth_user_id = opdateret?.auth_user_id || null;
+    emp.app_email = opdateret?.app_email || adresse;
+    // Koblingen kan lykkes, selv om mailen driller. Det skal planlæggeren kunne se, ellers sender hun invitationen igen til en, der allerede har adgang.
+    setStatus(data?.mailSendt === false
+      ? "error: Adgangen er oprettet, men mailen kunne ikke sendes. Bed medarbejderen bruge «glemt adgangskode»."
+      : "sent");
+    setEmail(""); setVersion((v) => v + 1);
+  }
+
+  async function luk() {
+    if (!window.confirm(`Luk adgang for ${emp.name}?\n\nLogin'et slettes, og hun bliver logget ud med det samme — også hvis appen står åben på telefonen. Hun bliver stående som medarbejder og kan få en ny adgang senere.`)) return;
+    setStatus("deactivating");
+    const { data, error } = await supabase.functions.invoke("fratraed-medarbejder", { body: { handling: "lukAdgang", empId: emp.id } });
+    if (error || data?.error) {
+      const grunde = {
+        sidste_planlaegger: "Det er den sidste planlægger med adgang. Giv en anden administratorrettigheder først.",
+        ikke_dig_selv: "Du kan ikke lukke din egen adgang. Bed en anden planlægger gøre det.",
+      };
+      setStatus("error: " + (grunde[data?.error] || error?.message || data?.error));
+      return;
+    }
+    emp.auth_user_id = null; emp.app_email = null;
+    setStatus("deactivated"); setVersion((v) => v + 1);
+  }
+
+  return (
+    <StamKort titel="Adgang til medarbejder-appen" hint="Login til Worklist" bg="#ECFDF5" farve="#166534" hintFarve="#15803D">
+      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
+        <span style={{ fontSize: 13, fontWeight: 700, color: harLogin ? "#16A34A" : "#94A3B8" }}>{harLogin ? "✓ App-adgang" : "○ Ingen adgang"}</span>
+        {harLogin && emp.app_email && (
+          <span style={{ fontSize: 12, color: "#64748B", background: "#F1F5F9", padding: "2px 8px", borderRadius: 6, wordBreak: "break-all" }}>{emp.app_email}</span>
+        )}
+        {harLogin && (
+          <button type="button" onClick={luk}
+            style={{ fontSize: 12, padding: "4px 10px", borderRadius: 6, border: "1px solid #FCA5A5", background: "#FEF2F2", color: "#DC2626", cursor: "pointer", marginLeft: "auto" }}>
+            {status === "deactivating" ? "Lukker…" : "Luk adgang"}
+          </button>
+        )}
+      </div>
+      <label style={styles.label}>{harLogin ? "Ny e-mail (skifter login)" : "E-mail til medarbejderen"}</label>
+      <div style={{ display: "flex", gap: 8 }}>
+        <input type="email" style={{ ...styles.input, flex: 1, minWidth: 0, marginBottom: 0 }} value={email} placeholder="navn@mail.dk"
+          onChange={(e) => setEmail(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") opret(); }} />
+        <button type="button" style={{ ...styles.primaryBtn, whiteSpace: "nowrap" }} disabled={!email.trim() || status === "sending"} onClick={opret}>
+          {status === "sending" ? "Sender…" : harLogin ? "Skift" : "Opret"}
+        </button>
+      </div>
+      <div style={styles.hint}>Medarbejderen får en mail med et link, hvor hun vælger sin adgangskode. Adgangen virker med det samme og gemmes uden «Gem medarbejder».</div>
+      {status === "sent" && <div style={{ fontSize: 12.5, color: "#16A34A", marginTop: 4 }}>✓ Bekræftelses-mail sendt</div>}
+      {status === "deactivated" && <div style={{ fontSize: 12.5, color: "#DC2626", marginTop: 4 }}>Adgang lukket</div>}
+      {status.startsWith("error") && <div style={{ fontSize: 12.5, color: "#DC2626", marginTop: 4 }}>{status}</div>}
+    </StamKort>
+  );
+}
+
+// Udleveringshistorik (arbejdstøj m.m.) på stamkortet. Samme opslag som i listen: de seneste 20 udleveringer, kun medarbejderprodukter.
+function MedarbejderUdlevering({ empId }) {
+  const [rader, setRader] = useState(null);
+  useEffect(() => {
+    let afbrudt = false;
+    supabase.from("inventory_transactions")
+      .select("*, inventory_items(name, unit, inventory_categories(type))")
+      .eq("employee_id", empId).eq("type", "out").order("id", { ascending: false }).limit(20)
+      .then(({ data }) => {
+        if (afbrudt) return;
+        setRader((data || []).filter((tx) => tx.inventory_items?.inventory_categories?.type === "medarbejder"));
+      });
+    return () => { afbrudt = true; };
+  }, [empId]);
+  return (
+    <StamKort titel="👕 Udleveringshistorik" hint="Arbejdstøj og andet, hun har fået udleveret — de seneste 20" bg="#F1F5F9" farve="#334155" hintFarve="#64748B">
+      {rader === null ? <div style={styles.hint}>Henter…</div>
+        : rader.length === 0 ? <div style={styles.hint}>Ingen udleveringer endnu.</div>
+        : rader.map((tx) => (
+          <div key={tx.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 13, padding: "6px 0", borderBottom: "1px solid #F1F5F9", color: "#475569", gap: 8 }}>
+            <span style={{ flex: 1 }}>{tx.inventory_items?.name}</span>
+            <span style={{ fontWeight: 600, color: "#111111" }}>{Math.abs(tx.quantity)} {tx.inventory_items?.unit}</span>
+            {tx.created_at && <span style={{ color: "#94A3B8", fontSize: 12, flexShrink: 0 }}>{new Date(tx.created_at).toLocaleDateString("da-DK", { day: "numeric", month: "short", year: "numeric" })}</span>}
+          </div>
+        ))}
+    </StamKort>
+  );
+}
+
 // Ét kort i stamkortet: farvet hoved og en krop. Samme udseende som de gamle afsnit, men kortene kan nu sættes frit i fanerne.
 function StamKort({ titel, hint, bg, farve, hintFarve, children }) {
   return (
@@ -19063,7 +19047,7 @@ function StamKort({ titel, hint, bg, farve, hintFarve, children }) {
   );
 }
 
-function EmployeeModal({ emp, onClose, onSave, skills: skillList, satsHistorik, kmSatser, hr, brugerId }) {
+function EmployeeModal({ emp, onClose, onSave, skills: skillList, satsHistorik, kmSatser, hr, brugerId, onFratraed }) {
   const [fane, setFane] = useState("person");
   // HR-oplysninger (6.10.2026) ligger i employee_hr, kun synlig for administratorer. Datoer som tekst «ÅÅÅÅ-MM-DD», tomt = ikke angivet.
   const [hrTelefon, setHrTelefon] = useState(hr?.telefon || "");
@@ -19163,7 +19147,7 @@ function EmployeeModal({ emp, onClose, onSave, skills: skillList, satsHistorik, 
           HR-oplysninger, sættes de som et nyt kort i fanen «Ansættelse» — resten af vinduet røres ikke. Alle faner gemmes med
           den samme knap, så en rettelse i én fane aldrig går tabt, fordi man skiftede fane. */}
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16 }}>
-        {[["person", "Person"], ["ansaettelse", "Ansættelse"], ["dokumenter", "Dokumenter"], ["planlaegning", "Planlægning"], ["loen", "Løn"]].map(([k, l]) => (
+        {[["person", "Person"], ["ansaettelse", "Ansættelse"], ["dokumenter", "Dokumenter"], ["planlaegning", "Planlægning"], ["loen", "Løn"], ["adgang", "Adgang"], ["udlevering", "Udlevering"]].map(([k, l]) => (
           <button key={k} type="button" onClick={() => setFane(k)}
             style={{ padding: "7px 16px", borderRadius: 999, fontSize: 13, fontWeight: 700, cursor: "pointer",
                      border: fane === k ? "1px solid var(--farve-moerk)" : "1px solid #E2E8F0",
@@ -19234,12 +19218,64 @@ function EmployeeModal({ emp, onClose, onSave, skills: skillList, satsHistorik, 
             Appen gemmer kun datoerne, ikke indholdet af samtalen. Referatet hører til i jeres eget dokumentarkiv og er følsomt.
           </div>
         </StamKort>
+        {emp?.id && (emp.fratraadtDato ? (
+          <StamKort titel="Fratrådt" hint="Login'et er slettet, og hun indgår ikke i planlægningen" bg="#F1F5F9" farve="#334155" hintFarve="#64748B">
+            <div style={styles.hint}>
+              Fratrådt {new Date(emp.fratraadtDato).toLocaleDateString("da-DK", { day: "numeric", month: "long", year: "numeric" })}. Lønhistorik og kørsel er bevaret.
+              Skal hun tilbage, ryddes fratrædelsesdatoen i databasen først.
+            </div>
+          </StamKort>
+        ) : (
+          <StamKort titel="Fratræd" hint="Når hun holder op" bg="#FEF2F2" farve="#B91C1C" hintFarve="#DC2626">
+            <div style={styles.hint}>
+              Du vælger datoen, og dialogen fortæller, hvor mange kommende opgaver der mister hende. Login'et slettes, og hun forsvinder fra planlægningen.
+              Rettelser i dette kort, som ikke er gemt, går tabt — tryk først «Gem medarbejder», hvis du har rettet noget.
+            </div>
+            <button type="button" style={{ ...styles.secondaryBtn, color: "#B91C1C", borderColor: "#FCA5A5", marginTop: 8 }}
+              onClick={() => onFratraed && onFratraed(emp.id)}><LogOut size={14} /> Fratræd {emp.name}</button>
+          </StamKort>
+        ))}
       </>)}
 
       {fane === "dokumenter" && (emp?.id
         ? <MedarbejderDokumenter empId={emp.id} brugerId={brugerId} />
         : <StamKort titel="Dokumenter" hint="Gem medarbejderen først" bg="#F1F5F9" farve="#334155" hintFarve="#64748B">
             <div style={styles.hint}>Dokumenter hører til en medarbejder, der er gemt. Tryk «Gem medarbejder», og åbn kortet igen.</div>
+          </StamKort>)}
+
+      {fane === "adgang" && (<>
+        {emp?.id
+          ? <MedarbejderAdgang emp={emp} />
+          : <StamKort titel="Adgang til medarbejder-appen" hint="Gem medarbejderen først" bg="#ECFDF5" farve="#166534" hintFarve="#15803D">
+              <div style={styles.hint}>Login oprettes til en medarbejder, der er gemt. Tryk «Gem medarbejder», og åbn kortet igen.</div>
+            </StamKort>}
+        <div>
+      {/* Administrator staar for sig med roed ramme. Fluebenet er i mellemtiden blevet
+          den kontakt der afgoer om man kan aabne planlaegningsappen overhovedet, se
+          kollegernes loen, deres hjemmeadresser og kundernes noeglebokskoder — og
+          markere fakturalinjer som sendt til Dinero. Det maa ikke ligne et vilkaarligt felt. */}
+      <div style={styles.empAdminBoks}>
+        <button type="button" style={isAdmin ? styles.empTjekAktivRoed : styles.empTjek}
+          onClick={() => setIsAdmin((v) => !v)}>
+          <span style={isAdmin ? styles.empTjekFirkantRoed : styles.empTjekFirkant}>
+            {isAdmin && <Check size={11} color="#fff" strokeWidth={3} />}
+          </span>
+          <span style={{ fontSize: 13, fontWeight: 600, color: "#111111" }}>🛡️ Administrator</span>
+        </button>
+        <div style={styles.empAdminAdvarsel}>
+          Giver adgang til hele planlægningsappen, til alle kollegers timeløn og hjemmeadresser,
+          til kundernes nøglebokskoder, til budgetterne i Rapportering, og til at markere
+          fakturalinjer som sendt til Dinero. Sæt det kun på kontorets folk.
+        </div>
+      </div>
+
+        </div>
+      </>)}
+
+      {fane === "udlevering" && (emp?.id
+        ? <MedarbejderUdlevering empId={emp.id} />
+        : <StamKort titel="Udleveringshistorik" hint="Gem medarbejderen først" bg="#F1F5F9" farve="#334155" hintFarve="#64748B">
+            <div style={styles.hint}>Historikken findes først, når medarbejderen er gemt.</div>
           </StamKort>)}
 
       {fane === "planlaegning" && (<>
@@ -19473,25 +19509,6 @@ function EmployeeModal({ emp, onClose, onSave, skills: skillList, satsHistorik, 
         </StamKort>
       </>)}
 
-      </div>
-
-      {/* Administrator staar for sig med roed ramme. Fluebenet er i mellemtiden blevet
-          den kontakt der afgoer om man kan aabne planlaegningsappen overhovedet, se
-          kollegernes loen, deres hjemmeadresser og kundernes noeglebokskoder — og
-          markere fakturalinjer som sendt til Dinero. Det maa ikke ligne et vilkaarligt felt. */}
-      <div style={styles.empAdminBoks}>
-        <button type="button" style={isAdmin ? styles.empTjekAktivRoed : styles.empTjek}
-          onClick={() => setIsAdmin((v) => !v)}>
-          <span style={isAdmin ? styles.empTjekFirkantRoed : styles.empTjekFirkant}>
-            {isAdmin && <Check size={11} color="#fff" strokeWidth={3} />}
-          </span>
-          <span style={{ fontSize: 13, fontWeight: 600, color: "#111111" }}>🛡️ Administrator</span>
-        </button>
-        <div style={styles.empAdminAdvarsel}>
-          Giver adgang til hele planlægningsappen, til alle kollegers timeløn og hjemmeadresser,
-          til kundernes nøglebokskoder, til budgetterne i Rapportering, og til at markere
-          fakturalinjer som sendt til Dinero. Sæt det kun på kontorets folk.
-        </div>
       </div>
 
       {/* Knapperne sidder fast i bunden af vinduet (som i Ny opgave), så man ikke skal rulle ned for at gemme — uanset hvilken fane man står i. */}
