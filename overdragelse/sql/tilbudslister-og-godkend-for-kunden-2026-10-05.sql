@@ -30,3 +30,10 @@ alter table public.checklist_templates add column tilbud_fase text check (tilbud
 -- 6.10.2026: dokumentarkiv på medarbejderkortet. Tabel employee_dokumenter (kategori kontrakt/aendring/mus/certifikat/andet, titel, filnavn, sti,
 -- gyldig_til, uploadet_af/-at) + privat bucket «medarbejder-dokumenter» (10 MB, pdf/jpg/png/doc/docx), begge kun for administratorer.
 -- Migrationerne «medarbejder_dokumentarkiv_1_tabel» og «_2_bucket». Filen får tilfældigt navn i bucket'en; det rigtige filnavn står i tabellen.
+
+-- 6.10.2026 (Jonn): lønlukningen flyttes til hverdagen før, når lukkedagen er weekend/helligdag.
+-- Kolonnen tidsregistrering_indstillinger.loen_hverdag_foer (standard true), dk_paaskedag/dk_helligdag, loen_slut_maaned,
+-- loen_periode_slut (nu min. af kandidaterne fra tre måneder), loen_periode_start, loen_periode_interval. kontor_indbakke og
+-- loen_varsel_behandl brugte «en måned tilbage» som periodestart; de er omskrevet med replace() til loen_periode_start.
+-- Migrationer: loen_hverdag_foer_1_kolonne_og_helligdage, loen_hverdag_foer_2_periodefunktioner.
+-- Rulles tilbage ved at sætte loen_hverdag_foer = false (så er alt som før).

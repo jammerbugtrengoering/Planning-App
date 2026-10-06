@@ -2000,7 +2000,7 @@ const MODULE_HELP = {
         "Medarbejderen får en besked en time før, og en besked når den er lukket. Det gælder alle med Worklist — ikke kun dem med start/stop. Elever på opgaven lukkes ikke.",
         "Kunden faktureres altid den planlagte tid på en systemlukket opgave. Medarbejderens løn er den planlagte tid, medmindre hun selv retter.",
         "Hun kan rette sin tid i Worklist under «Min tid», indtil lønperioden lukker. Mere tid gælder med det samme og kræver en begrundelse. Mindre tid skal I godkende — den kommer i klokken 🔔 som «Rettelse af tid».",
-        "Lønperioden går fra lukkedagen til dagen før i næste måned (standard 20.–19.) og lukker på lukkedagen kl. 23.59. Medarbejderen får en besked 3 dage og 1 dag før, hvis hun har systemlukkede opgaver, hun ikke har rettet.",
+        "Lønperioden går fra lukkedagen til dagen før i næste måned (standard 20.–19.) og lukker på lukkedagen kl. 23.59 — på hverdagen før, hvis lukkedagen falder i en weekend eller på en helligdag. Medarbejderen får en besked 3 dage og 1 dag før, hvis hun har systemlukkede opgaver, hun ikke har rettet.",
         "Låsen gælder kun opgaver, der er udført. Er en opgave i en lukket periode IKKE meldt færdig, kan medarbejderen stadig registrere den — men først når hun har skrevet, hvorfor det sker efter lønlukningen. Begrundelsen kommer i klokken 🔔 som «Registreret efter lønlukning». Godkend: tiden kommer med i den åbne lønperiode. Afvis: ingen løn for registreringen, men kunden faktureres stadig.",
         "Efter lukningen kan medarbejderen hverken rette eller ændre en udført opgave i perioden. Kun planlæggerne kan rette: på opgaven står «Efterreguler tid», og rettelsen lægges som en ny linje (+ eller −) i den åbne periode. En udbetalt løn ændres aldrig.",
         "Har en medarbejder 3 eller flere systemlukninger i samme periode (kan ændres), står det i klokken som «Glemmer at afslutte». Tag en snak, og tryk «Set ✓».",
@@ -2032,10 +2032,11 @@ const MODULE_HELP = {
   loenperioder: { title: "Lønperioder", intro: "Hvornår en lønperiode starter og lukker, og hvornår medarbejderne får besked.", blocks: [
     { h: "Lukkedagen", p: ["Lønperioden går fra lukkedagen til dagen før i næste måned og lukker på lukkedagen kl. 23.59. Standard er den 20., så «oktober» er 20. sep – 19. okt. Skriv 1 for kalendermåned.",
         "Efter lukningen kan medarbejderen ikke rette sin tid. Kun planlæggerne kan, og rettelsen lægges som efterregulering i den åbne periode.",
+        "Falder lukkedagen i en weekend eller på en helligdag, og feltet «lukker perioden på hverdagen før» er sat, flytter lukkedagen til den sidste hverdag før. Perioden følger med: den slutter dagen før den flyttede lukkedag, og den næste begynder dagen efter. Oversigten viser «flyttet fra» ved de perioder, hvor det sker. Helligdage er de officielle danske (nytår, skærtorsdag, langfredag, påske, Kristi himmelfart, pinse, juledag og 2. juledag); 24. og 31. december og Grundlovsdag tæller ikke. Ved lukkedag 1 flyttes intet.",
         "Lønopgørelsen, kørsel og «Min tid» i Worklist følger de samme perioder."] },
     { h: "Besked før lukning", p: ["Her skriver du, hvor mange dage før lukkedagen medarbejderen får besked, hvis hun har opgaver, systemet har lukket, og som hun ikke har rettet. Standard er «3, 1»."] },
     { h: "Oversigten", p: ["Tabellen viser de seneste tolv perioder, den aktuelle og de næste to, med dagene i perioden, lukketidspunktet og om perioden er åben eller lukket."] },
-  ], warn: "Flytter du lukkedagen, flytter alle perioder sig — også de lukkede. En lukket periode kan blive åben igen, og dage kan skifte periode. Du bliver spurgt, før det gemmes. Varsl medarbejderne først." },
+  ], warn: "Slår du weekendreglen til eller fra, eller flytter du lukkedagen, flytter alle perioder sig — også de lukkede. En lukket periode kan blive åben igen, og dage kan skifte periode. Du bliver spurgt, før det gemmes. Varsl medarbejderne først." },
   checklists: { title: "Tjeklister", intro: "Tjeklister er de arbejdsopgaver medarbejderen sætter flueben ved ude hos kunden.", blocks: [
     { h: "Sådan gør du", p: ["Tryk «Ny tjekliste» og giv den et navn.",
         "Tilføj punkter i den rækkefølge de skal udføres.",
@@ -8790,20 +8791,20 @@ function EmployeeExportView({ instances, employees, satsHistorik }) {
   // Lønperioden (1.10.2026): måneden i vælgeren er den måned, perioden SLUTTER i.
   // «Oktober» = 20. sep – 19. okt ved lukkedag 20. Lukkedagen hentes fra Opsætning →
   // Tidsregistrering; 1 betyder kalendermåned. Vælgeren starter i den åbne periode.
-  const [lukkedag, setLukkedag] = useState(20);
+  // «Reglen» er lukkedagen og om den flyttes til hverdagen før (loenperiode.js).
+  const [lukkedag, setLukkedag] = useState({ l: 20, hverdag: false });
   const startPeriode = periodeFor(isoDag(now), 20);
   const [filterMonth, setFilterMonth] = useState(startPeriode.maaned - 1);
   const [filterYear, setFilterYear] = useState(startPeriode.aar);
   useEffect(() => {
     (async () => {
+      // select("*"): en database uden kolonnen loen_hverdag_foer (kundedatabasen) skal ikke fejle, men have reglen slået fra.
       const { data } = await supabase.from("tidsregistrering_indstillinger")
-        .select("loen_lukkedag").eq("id", "default").maybeSingle();
-      const l = Number(data?.loen_lukkedag) || 20;
-      if (l !== 20) {
-        setLukkedag(l);
-        const p = periodeFor(isoDag(new Date()), l);
-        setFilterMonth(p.maaned - 1); setFilterYear(p.aar);
-      }
+        .select("*").eq("id", "default").maybeSingle();
+      const regelNu = { l: Number(data?.loen_lukkedag) || 20, hverdag: data?.loen_hverdag_foer === true };
+      setLukkedag(regelNu);
+      const p = periodeFor(isoDag(new Date()), regelNu);
+      setFilterMonth(p.maaned - 1); setFilterYear(p.aar);
     })();
   }, []);
   const periode = loenPeriode(filterYear, filterMonth + 1, lukkedag);
@@ -15098,12 +15099,13 @@ function LoenperioderPanel({ supabase }) {
   const [fejl, setFejl] = useState("");
   useEffect(() => {
     let afbrudt = false;
-    supabase.from("tidsregistrering_indstillinger").select("loen_lukkedag, loen_varsel_dage")
+    supabase.from("tidsregistrering_indstillinger").select("*")
       .eq("id", "default").maybeSingle()
       .then(({ data, error }) => {
         if (afbrudt) return;
         if (error) { setFejl(error.message); return; }
-        const nu = { lukkedag: String(data?.loen_lukkedag ?? 20), varsel: (data?.loen_varsel_dage || [3, 1]).join(", ") };
+        const nu = { lukkedag: String(data?.loen_lukkedag ?? 20), varsel: (data?.loen_varsel_dage || [3, 1]).join(", "),
+                     hverdag: data?.loen_hverdag_foer === true, harHverdag: data ? "loen_hverdag_foer" in data : true };
         setV(nu); setGemt(nu);
       });
     return () => { afbrudt = true; };
@@ -15115,8 +15117,8 @@ function LoenperioderPanel({ supabase }) {
   const varsel = String(v.varsel).split(/[\s,]+/).filter(Boolean).map(Number);
   const gyldig = Number.isInteger(lukkedag) && lukkedag >= 1 && lukkedag <= 28
     && varsel.length > 0 && varsel.every((n) => Number.isInteger(n) && n >= 1 && n <= 14);
-  const aendret = gemt && (v.lukkedag !== gemt.lukkedag || v.varsel !== gemt.varsel);
-  const l = gyldig ? lukkedag : Number(gemt?.lukkedag) || 20;
+  const aendret = gemt && (v.lukkedag !== gemt.lukkedag || v.varsel !== gemt.varsel || v.hverdag !== gemt.hverdag);
+  const l = { l: gyldig ? lukkedag : Number(gemt?.lukkedag) || 20, hverdag: v.hverdag };
   const idag = new Date();
   // Perioderne omkring i dag: de seneste 12, den aktuelle og de næste to.
   const aktuelt = periodeFor(isoDag(idag), l);
@@ -15124,25 +15126,30 @@ function LoenperioderPanel({ supabase }) {
   for (let i = -12; i <= 2; i++) {
     const d = new Date(aktuelt.aar, aktuelt.maaned - 1 + i, 1);
     const p = loenPeriode(d.getFullYear(), d.getMonth() + 1, l);
-    rader.push({ ...p, navn: d.toLocaleDateString("da-DK", { month: "long", year: "numeric" }), i, laast: loenErLaast(p.til, l) });
+    // Flyttet: lukkedagen er ikke den dag i måneden, der står i indstillingen.
+    const aftalt = isoDag(new Date(d.getFullYear(), d.getMonth(), l.l));
+    const flyttetFra = l.l > 1 && aftalt !== p.lukkedag
+      ? new Date(d.getFullYear(), d.getMonth(), l.l).toLocaleDateString("da-DK", { weekday: "short", day: "numeric" }) : null;
+    rader.push({ ...p, navn: d.toLocaleDateString("da-DK", { month: "long", year: "numeric" }), i, laast: loenErLaast(p.til, l), flyttetFra });
   }
   rader.reverse();
 
   async function gem() {
     if (!gyldig) return;
-    const flytter = v.lukkedag !== gemt.lukkedag;
+    const flytter = v.lukkedag !== gemt.lukkedag || v.hverdag !== gemt.hverdag;
     if (flytter) {
-      const gammel = loenPeriode(aktuelt.aar, aktuelt.maaned, Number(gemt.lukkedag));
-      const ny = loenPeriode(aktuelt.aar, aktuelt.maaned, lukkedag);
+      const gammel = loenPeriode(aktuelt.aar, aktuelt.maaned, { l: Number(gemt.lukkedag), hverdag: gemt.hverdag });
+      const ny = loenPeriode(aktuelt.aar, aktuelt.maaned, { l: lukkedag, hverdag: v.hverdag });
       if (!window.confirm(
-        `Flyt lukkedagen fra den ${gemt.lukkedag}. til den ${lukkedag}.?\n\n`
-        + `Den aktuelle periode går fra ${periodeTekst(gammel)} til ${periodeTekst(ny)}. Lukkedagen gælder alle perioder, også dem, `
+        `Ændre lønlukningen?\n\n`
+        + `Den aktuelle periode går i dag fra ${periodeTekst(gammel)} og bliver til ${periodeTekst(ny)}. Det gælder alle perioder, også dem, `
         + `der allerede er lukket, så en lukket periode kan blive åben igen, eller dage kan skifte periode.\n\n`
         + `Er det varslet til medarbejderne?`)) return;
     }
     setGemmer(true); setFejl("");
     const { error } = await supabase.from("tidsregistrering_indstillinger")
-      .update({ loen_lukkedag: lukkedag, loen_varsel_dage: varsel, aendret: new Date().toISOString() }).eq("id", "default");
+      .update({ loen_lukkedag: lukkedag, loen_varsel_dage: varsel, aendret: new Date().toISOString(),
+                ...(v.harHverdag ? { loen_hverdag_foer: v.hverdag } : {}) }).eq("id", "default");
     setGemmer(false);
     if (error) { setFejl(error.message); return; }
     setGemt({ ...v });
@@ -15165,6 +15172,14 @@ function LoenperioderPanel({ supabase }) {
             <span style={{ fontSize: 13, color: "#64748B" }}>{enhed}</span>
           </div>
         ))}
+        {v.harHverdag && (
+          <label style={{ display: "flex", alignItems: "flex-start", gap: 8, fontSize: 13.5, color: "#334155", marginTop: 4, cursor: "pointer" }}>
+            <input type="checkbox" checked={v.hverdag} onChange={(e) => setV((x) => ({ ...x, hverdag: e.target.checked }))} style={{ marginTop: 3 }} />
+            <span>Falder lukkedagen i en weekend eller på en helligdag, lukker perioden på hverdagen før
+              <span style={{ display: "block", fontSize: 12.5, color: "#64748B" }}>
+                Perioden følger med: den slutter dagen før den flyttede lukkedag, og den næste begynder dagen efter. Ved lukkedag 1 flyttes intet.</span></span>
+          </label>
+        )}
         <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 10 }}>
           <button type="button" style={styles.primaryBtn} disabled={gemmer || !gyldig || !aendret} onClick={gem}>
             {gemmer ? "Gemmer…" : "Gem"}</button>
@@ -15181,7 +15196,7 @@ function LoenperioderPanel({ supabase }) {
                                     fontSize: 13.5, background: r.i === 0 ? "var(--farve-lys)" : "transparent" }}>
             <span style={{ fontWeight: r.i === 0 ? 700 : 500, textTransform: "capitalize" }}>{r.navn}</span>
             <span>{periodeTekst(r)}</span>
-            <span>{dag(r.lukkedag)} kl. 23.59</span>
+            <span>{dag(r.lukkedag)} kl. 23.59{r.flyttetFra && <span style={{ display: "block", fontSize: 11.5, color: "#B45309" }}>flyttet fra {r.flyttetFra}.</span>}</span>
             <span style={{ fontWeight: 700, color: r.laast ? "#64748B" : "#166534" }}>
               {r.laast ? "🔒 Lukket" : (r.i === 0 ? "Åben · aktuel" : "Åben")}</span>
           </div>
