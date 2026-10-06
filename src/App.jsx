@@ -18984,7 +18984,7 @@ function EmployeeModal({ emp, onClose, onSave, skills: skillList, satsHistorik, 
       {/* Stamkortet er tre kolonner (5.10.2026), fordi der kommer flere HR-oplysninger til. Hvert afsnit er ét kort i et gitter, der
           selv går ned til to og én kolonne på smallere skærme — nye afsnit sættes bare ind som endnu et kort. Hver kolonne er sin egen
           stak, så et langt afsnit i den ene ikke skubber de andre ned. */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(340px, 1fr))", gap: 16, alignItems: "start" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 16, alignItems: "start" }}>
       <div>
       <div style={styles.empSection}>
         <div style={{ ...styles.empSectionHead, background: "var(--farve-lys)" }}>
