@@ -61,3 +61,4 @@ alter table public.checklist_templates add column tilbud_fase text check (tilbud
 --  * employee_dokumenter: synlig_for_medarbejder (standard false), kvittering_kraeves, kvitteret_tid. Klassificeret i persondata_register.
 --  * mine_dokumenter() og kvitter_dokument(id): medarbejderens egne synlige dokumenter og kvittering. Lukket for anon.
 --  * storage-politik medarbejder_dokumenter_laes_eget: medarbejderen kan læse en fil, hvis dens dokument er synligt og hendes.
+-- personalemappen_3_mine_datoer: mine_datoer() giver medarbejderen hendes egen ansat_fra, mus_sidst og mus_naeste (employee_hr er kun for HR-administratorer).
