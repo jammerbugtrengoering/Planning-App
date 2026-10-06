@@ -242,7 +242,7 @@ const MENU_GRUPPER = [
   { key: "oekonomi",  navn: "Økonomi",     sider: [["time", "Fakturering"], ["kundetimer", "Kundetimer"], ["reports", "Rapportering"], ["medExport", "Løn data"], ["papirskema", "Papirskema"]] },
   // Personalemappen (6.10.2026): HR-data, kun for HR-administratorer (tabellen hr_administratorer, funktionen er_hr_admin). Planlæggere uden HR-adgang
   // bruger «Medarbejdere» under Opsætning, der kun har planlægningsdata.
-  { key: "personale", navn: "Personalemappen", kunHr: true, sider: [["personalemappen", "Medarbejdere"], ["fravaer", "Ferie og fravær"], ["haandbog", "Håndbog og politikker"]] },
+  { key: "personale", navn: "Personalemappen", kunHr: true, skjultIMenu: true, sider: [["personalemappen", "Medarbejdere"], ["fravaer", "Ferie og fravær"], ["haandbog", "Håndbog og politikker"]] },
   { key: "opsaetning", navn: "Opsætning", sider: [["employees", "Medarbejdere"], ["kompetencer", "Kompetencer"], ["omraader", "Områder"], ["startstop", "Start/stop"], ["loenperioder", "Lønperioder"], ["checklists", "Tjeklister"], ["transport", "Transporttid"], ["aflysning", "Aflysning"], ["timepriser", "Timepriser"], ["firma", "Firma"]] },
   // Kun i kundeudgaven (fase 5, 29.9.2026): kundefirmaet bestiller ekstra hjaelp hos
   // Jammerbugt Rengoering. Hos Jammerbugt selv findes siden ikke — der er man den,
@@ -2049,6 +2049,7 @@ const MODULE_HELP = {
         "«Nyt dokument» laver fx en syge- og fraværspolitik. Skriv ikke navne på medarbejdere eller kunder i teksten, og læg ikke personlige oplysninger ind her."] },
   ] },
   personalemappen: { title: "Personalemappen", intro: "Her ligger medarbejdernes ansættelse, dokumenter, løn og nødkontakt. Kun HR-administratorer kan se siden.", blocks: [
+    { h: "Sådan finder du den", p: ["Personalemappen åbnes med mappe-ikonet øverst, ved siden af ikonerne til SoMe og Dinero. Ikonet vises kun for HR-administratorer. De tre sider (Medarbejdere, Ferie og fravær, Håndbog og politikker) står som faner under topbjælken, mens du er derinde."] },
     { h: "Hvem kan se hvad", p: ["Personalemappen vises kun for HR-administratorer. Databasen håndhæver det: ansættelse, dokumenter, nødkontakt, løn og filerne i dokumentarkivet kan kun læses af dem — også selv om en planlægger åbner siden på anden vis.",
         "De øvrige planlæggere bruger «Medarbejdere» under Opsætning. Dér står kun det, planlægningen bruger: navn, kompetencer, område, kapacitet, ugedage, fast tid og adgang til Worklist.",
         "HR-administratorerne er i dag Charlotte, Karen og Udvikler IT. Der skal altid være mindst én."] },
@@ -6328,7 +6329,7 @@ function PlanningApp({ session, onSignOut }) {
           </button>
         </div>
         <nav style={styles.nav}>
-          {MENU_GRUPPER.filter((gr) => (!gr.kunAdmin || isAdminUser) && (!gr.kunHr || erHrAdmin) && (!gr.kunKunde || KUNDEUDGAVE) && synligeSider(gr).length > 0).map((gr) => {
+          {MENU_GRUPPER.filter((gr) => (!gr.kunAdmin || isAdminUser) && (!gr.kunHr || erHrAdmin) && !gr.skjultIMenu && (!gr.kunKunde || KUNDEUDGAVE) && synligeSider(gr).length > 0).map((gr) => {
             const aktiv = gruppeFor(view).key === gr.key;
             return (
               <button key={gr.key} onClick={() => setView(synligeSider(gr)[0][0])}
@@ -6346,6 +6347,16 @@ function PlanningApp({ session, onSignOut }) {
                   <img src={ikon} alt="" style={{ width: 32, height: 32, borderRadius: 8, display: "block" }} />
                 </button>
               ))}
+              {/* Personalemappen (6.10.2026): ikonet står ved siden af de to andre og erstatter menupunktet. Til forskel fra dem åbner det ikke et eget vindue, men
+                  siderne herinde (menugruppen «personale» findes stadig og viser sine faner under topbjælken; den er bare skjult i rækken). Kun for HR-administratorer. */}
+              {erHrAdmin && (
+                <button type="button" onClick={() => setView("personalemappen")}
+                  title="Personalemappen" aria-label="Åbn Personalemappen" aria-current={gruppeFor(view).key === "personale" ? "page" : undefined}
+                  style={{ background: "none", border: "none", padding: 0, cursor: "pointer", display: "block", lineHeight: 0, borderRadius: 10,
+                           boxShadow: gruppeFor(view).key === "personale" ? "0 0 0 2px var(--farve)" : "none" }}>
+                  <img src="/ikon-personalemappen.png" alt="" style={{ width: 32, height: 32, borderRadius: 8, display: "block" }} />
+                </button>
+              )}
             </span>
           )}
           {/* Sprogvalg og Google Translate fjernet - planlaegningsappen bruges kun paa dansk. */}
