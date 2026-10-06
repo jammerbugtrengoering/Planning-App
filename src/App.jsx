@@ -1711,7 +1711,7 @@ const MODULE_HELP = {
         "«🔀 Simulér uge» (kun planlæggere) viser en bedre fordeling af den uge, du står i — ud fra kompetencer, område, mødetid, dagstimer og kørsel. Intet gemmes i ugeplanen.",
         "Dagen flyttes aldrig, og aftalte klokkeslæt bliver, som de er. Tillader du forslag (±15/30/60 min), flytter simuleringen kun et klokkeslæt, når det aftalte ikke kan lade sig gøre, og markerer det orange.",
         "«Fast medarbejder» lader den faste medarbejder på aftalen blive. «Fri medarbejder» fordeler alt frit. Skyderen «Kunden beholder sin medarbejder» bestemmer, hvor meget det skal spare, før en kunde får en ny.",
-        "Kørslen regnes kun mellem opgaverne — ikke hjemmefra og hjem — i kroner med hver medarbejders egen kilometersats. Har en medarbejder ingen sats, bruges 3,94 kr./km, så hun ikke får al kørslen, bare fordi den ser gratis ud.",
+        "Kørslen regnes kun mellem opgaverne — ikke hjemmefra og hjem — i kroner med hver medarbejders egen kilometersats. Har en medarbejder ingen sats, bruges 3,94 kr./km, så medarbejderen ikke får al kørslen, bare fordi den ser gratis ud.",
         "Øverst står sammenligningen med den nuværende plan: kroner og km, minutter for sent, dage over dagstimerne, nye medarbejdere og opgaver, der ikke kan placeres. Blå kort har fået en ny medarbejder («før: …»). Under hver dag står «før:» med de gamle tal.",
         "Planlæggerne (Charlotte og Karen) indgår som udgangspunkt ikke: de beholder deres egne opgaver og får ingen nye, fordi de tager opgaver, når der skal fyldes huller. Sæt flueben ved «Medtag …» for at tage dem med.",
         "Flere på én opgave: hver person er en plads med sine minutter. Pladserne fordeles hver for sig, aldrig to til samme person, og antallet af personer ændres ikke. Foreslås et nyt klokkeslæt, får alle pladser det samme.",
@@ -1723,7 +1723,7 @@ const MODULE_HELP = {
     { h: "Øv dig først", p: ["Knappen «Øv dig på en prøveuge» øverst i hjælpen åbner en opdigtet uge med femten små øvelser: tildele og flytte opgaver, sætte flere medarbejdere på en opgave, fordele tiden og rette varigheden på en aftale, melde en syg, oprette en fast aftale, rydde indbakken, sende ugen til fakturering og simulere ugen — godkende en dag og rulle den tilbage.", "Intet af det er rigtigt. Den taler ikke med databasen, så du kan ikke ødelægge noget, og den kan tages så mange gange, du vil. Den er også god at vise, når nogen skal se, hvordan planlægningen virker."] },
     { h: "Sådan planlægger systemet", p: [
         "Opgaverne oprettes automatisk ud fra aftalerne, fire uger frem. Det sker når du åbner appen, og alt nyt gemmes med det samme.",
-        "Horisonten opretter opgaverne, men fordeler dem ikke. Aftaler med fast medarbejder får hende straks — alt andet ligger i Ikke tildelt indtil du trykker Planlæg.",
+        "Horisonten opretter opgaverne, men fordeler dem ikke. Aftaler med fast medarbejder får medarbejderen straks — alt andet ligger i Ikke tildelt indtil du trykker Planlæg.",
         "Bladrer du længere frem end fire uger, oprettes ugen når du åbner den, men den gemmes først når du rører den. Tildel en medarbejder, flyt eller ret noget, ellers er den væk igen når du lukker appen.",
         "De første par sekunder efter du har åbnet appen, er kun ugerne omkring i dag hentet, og derefter et halvt år frem. Opgaverne længere ude hentes først, når du bladrer derud, åbner en side der regner på det hele (fx Aftaler eller Rapporter), eller retter en hel aftale — så går der et øjeblik ekstra den første gang. Mens en uge ikke er hentet, siger siden det med rødt, og så skal du vente, før du lægger noget ind. En tom uge betyder dér ikke «ingen opgaver», men «ikke hentet endnu».",
         "Rapportering, Aftaler, Fakturering, Kundetimer og Løn data regner på alle opgaver. De siger med gult, at tallene ikke er færdige, indtil resten er hentet. Det tager typisk få sekunder.",
@@ -1739,11 +1739,11 @@ const MODULE_HELP = {
     { h: "Beskeder på medarbejdernes telefoner", p: [
         "Medarbejderne kan få besked på telefonen om manglende registrering, ændringer i deres plan, og svar på ønsker om ny tid. De slår det selv til under deres profil i Worklist.",
         "Ændringer samles og sendes højst hvert kvarter. Rydder du op i ugeplanen og flytter ti opgaver, får medarbejderen én besked — ikke ti.",
-        "Svarer du på et ønske om ny tid, går beskeden derimod af sted med det samme. Hun har givet kunden et løfte og venter på svar.",
+        "Svarer du på et ønske om ny tid, går beskeden derimod af sted med det samme. Medarbejderen har givet kunden et løfte og venter på svar.",
         "Om aftenen får hver medarbejder en besked om, hvad der venter i morgen.",
         "Mailen sendes stadig som før. Beskeden på telefonen kommer oveni, ikke i stedet for.",
-        "Siger en medarbejder at hun ikke får beskeder: har hun en iPhone, skal appen ligge på hjemmeskærmen. En fane i Safari kan ikke modtage beskeder — det er Apples regel. Hun skal trykke Del i Safari og vælge «Føj til hjemmeskærm».",
-        "Skifter hun telefon, skal hun slå beskeder til igen på den nye."] },
+        "Siger en medarbejder at vedkommende ikke får beskeder: er det en iPhone, skal appen ligge på hjemmeskærmen. En fane i Safari kan ikke modtage beskeder — det er Apples regel. Medarbejderen skal trykke Del i Safari og vælge «Føj til hjemmeskærm».",
+        "Skifter medarbejderen telefon, skal vedkommende slå beskeder til igen på den nye."] },
     { h: "Overståede dage er låst", p: [
         "Dage der ligger før i dag kan ikke planlægges om. De er skraveret, opgaverne kan ikke trækkes, og kryds og plus er væk.",
         "I dag er ikke låst. Dagen er i gang, og planer ændrer sig hen over en dag.",
@@ -1755,20 +1755,20 @@ const MODULE_HELP = {
         "Vælger du et område øverst, viser den kun medarbejderne i det område."] },
     { h: "Gitter eller tidslinje", p: [
         "Lige over ugeplanen, yderst til venstre, skifter du mellem Gitter og Tidslinje. Gitteret viser HVAD der ligger på hver dag; tidslinjen viser HVORNÅR og hvor der er luft.",
-        "Tidslinjen er den du detailplanlægger i. Vælg én medarbejder i listen, så står hendes uge alene.",
+        "Tidslinjen er den du detailplanlægger i. Vælg én medarbejder i listen, så står medarbejderens uge alene.",
         "Du kan trække en opgave fra «Ikke tildelt» ned på et klokkeslæt i tidslinjen. Tidspunktet rundes til nærmeste kvarter og sættes som aftalt tid — der kommer aldrig til at stå 09:47 på en aftale.",
         "Opgaver kan også trækkes rundt inde i tidslinjen. Overståede dage er skraveret og tager ikke imod.",
-        "Tiderne står ens i begge visninger: først det tidspunkt, hun reelt kan være der, og 🎯 med den aftalte tid ved siden af, når de ikke passer sammen.",
+        "Tiderne står ens i begge visninger: først det tidspunkt, medarbejderen reelt kan være der, og 🎯 med den aftalte tid ved siden af, når de ikke passer sammen.",
         "Plusset på et kort sætter flere medarbejdere på opgaven — i tidslinjen såvel som i gitteret. De andre, der er på, vises med deres forbogstaver på kortet.",
         "Fuldt optrukket kant betyder aftalt klokkeslæt. Stiplet betyder, at tiden er regnet ud fra hvornår dagen begynder — skrider dagen, skrider den med. Der står også «ikke aftalt tid» på blokken, når der er plads.",
         "Blokken viser det samme som brikken i gitteret: klokkeslæt, navn, adresse, opgavens art, varighed, tjeklistepunkter og hvem der har udført den hvornår. Korte opgaver viser kun det, der kan være — en afklippet adresse er værre end ingen. Hold musen over for at få det hele.",
         "En udført opgave bliver grøn med «Udført af …» og tidspunktet, ligesom i gitteret.",
-        "🎯 betyder at den aftalte tid ikke kan nås — hun kan tidligst være fremme senere. «⏱ for sent» siger hvor meget.",
+        "🎯 betyder at den aftalte tid ikke kan nås — medarbejderen kan tidligst være fremme senere. «⏱ for sent» siger hvor meget.",
         "Over hver dag står belægningen med samme regnestykke som i gitteret, så de to visninger ikke kan vise forskelligt for den samme dag.",
         "⚠️ betyder planlagt uden for aftalen, 📍 uden for medarbejderens område. Hold musen over blokken for at få det hele.",
         "Det er præcis den samme dag, medarbejderen selv ser i Worklist. De to kan ikke vise forskellige tider, fordi de regnes af den samme funktion.",
         "Medarbejderens navn og ugedagene bliver stående øverst, når du scroller ned gennem medarbejderne. En overstået dag har en hængelås.",
-        "En medarbejder uden opgaver får alligevel en tom arbejdsdag, du kan trække ned i — det er netop hende, du leder efter, når noget skal placeres.",
+        "En medarbejder uden opgaver får alligevel en tom arbejdsdag, du kan trække ned i — det er netop medarbejderen, du leder efter, når noget skal placeres.",
         "Dit valg af visning huskes til næste gang."] },
     { h: "Udskrift", p: [
         "«Print ugeplan» udskriver en liste med klokkeslæt, kunde, adresse, kørsel, adgang og tjekliste — én medarbejder pr. side. Den ser ikke ud som skærmen; udskriften er sat op for sig, så den kan læses i en bil.",
@@ -1776,9 +1776,9 @@ const MODULE_HELP = {
         "Det er et valg, du skal tage hver gang — fluebenet huskes ikke. I appen logges hvert opslag, koden ligger kun på telefonen dagen ud, og et natligt job rydder den. Papir har ingen af delene, så selve udskriften skrives i adgangsloggen med dit navn, tidspunktet og hvilke opgaver den omfattede.",
         "Brug medarbejderfilteret, så sedlen kun indeholder den ene medarbejders uge. Ellers bærer ét ark koderne til alle ugens hjem.",
         "Udskriften får et bånd øverst om, at den er fortrolig og skal makuleres. Bliver en seddel væk, skal koderne skiftes — sig det til kontoret med det samme.",
-        "Der kommer én medarbejder pr. side, liggende A4. Vil du kun have én med, så vælg hende i listen først.",
+        "Der kommer én medarbejder pr. side, liggende A4. Vil du kun have én med, så vælg medarbejderen i listen først.",
         "Sæt fluebenet «Tag time- og kørselsskema med», og der lægges et skema bagerst — ét pr. medarbejder, på sin egen stående side. Det er det samme skema, I hidtil har brugt på papir.",
-        "Dato og arbejdssted er skrevet ind på forhånd ud fra planen, så hun kun skal skrive timer og kilometer. Der er tomme linjer i bunden til det, der ikke stod i planen.",
+        "Dato og arbejdssted er skrevet ind på forhånd ud fra planen, så medarbejderen kun skal skrive timer og kilometer. Der er tomme linjer i bunden til det, der ikke stod i planen.",
         "Skemaet er til de medarbejdere, der starter på papir, før de får Worklist på telefonen. Kontoret taster tallene ind bagefter, så løn og fakturering bygger på det samme som alle andres.",
         "Det flueben huskes derimod til næste gang — i modsætning til adgangsoplysningerne er der ingen koder på skemaet.",
         "Menuer og knapper kommer ikke med."] },
@@ -1794,11 +1794,11 @@ const MODULE_HELP = {
         "Borgerens navn hentes fra referencefeltet på aftalen. Står det tomt, viser brikken adressen i stedet — aldrig kommunens navn alene, for så ligner alle opgaver hinanden.",
         "Medarbejderne ser præcis det samme i Worklist, så I taler om den samme opgave med det samme navn."] },
     { h: "Ønsker om ny tid fra medarbejderne", p: [
-        "Aftaler en medarbejder en ny tid med kunden, flytter hun ikke selv opgaven. Hun sender et ønske, og du planlægger ændringen.",
+        "Aftaler en medarbejder en ny tid med kunden, flytter medarbejderen ikke selv opgaven. Der sendes et ønske, og du planlægger ændringen.",
         "Ønskerne står øverst i Ugeplan i en gul boks, og du får samtidig en mail. Der står hvem der spørger, hvilken opgave og kunde, fra hvad til hvad, og hvorfor.",
-        "«Godkend og flyt» rykker opgaven til det aftalte tidspunkt og beholder medarbejderen — det er hende der har lavet aftalen med kunden.",
-        "Passer den nye tid ikke ind i hendes dag, dukker det op som en tidskonflikt på opgaven, og så kan du flytte videre derfra.",
-        "«Afvis» kræver en begrundelse, som sendes til medarbejderen på mail, så hun ved at hun skal kontakte kunden igen.",
+        "«Godkend og flyt» rykker opgaven til det aftalte tidspunkt og beholder medarbejderen — det er medarbejderen, der har lavet aftalen med kunden.",
+        "Passer den nye tid ikke ind i medarbejderens dag, dukker det op som en tidskonflikt på opgaven, og så kan du flytte videre derfra.",
+        "«Afvis» kræver en begrundelse, som sendes til medarbejderen på mail, så vedkommende ved, at kunden skal kontaktes igen.",
         "Alt gemmes: hvem, hvornår, hvad opgaven stod til før, hvad der blev ønsket, og hvad du svarede."] },
     { h: "Når en kunde opsiger aftalen", p: [
         "Gå ind på aftalen under Aftaler, eller åbn en hvilken som helst opgave på den, og vælg «Markér som udgået».",
@@ -1815,9 +1815,9 @@ const MODULE_HELP = {
         "Sætter du flere på, kommer der en påmindelse med regnestykket: «2 × 1t = 2t samlet arbejde». Tjek at det passer med opgaven.",
         "Det tal er både det medarbejderne måles på, og det der ligger til grund for «Planlagt kr.» i Fakturering. Sætter du varigheden som om det var den samlede tid, får medarbejderne besked om at de har overskredet noget de ikke har.",
         "Faktureringen bygger stadig på registreret tid, ikke på det planlagte — det er kun forventningen der ændrer sig når du sætter flere på.",
-        "Flytter eller ændrer du en opgave der ligger i dag, får alle på opgaven besked på mail — ikke kun den første. Tages nogen af opgaven, får hun også besked om det."] },
+        "Flytter eller ændrer du en opgave der ligger i dag, får alle på opgaven besked på mail — ikke kun den første. Tages nogen af opgaven, får medarbejderen også besked om det."] },
     { h: "Fast medarbejder på en aftale", p: [
-        "Vælg medarbejderen under Ansvarlig medarbejder når du opretter aftalen, så følger han eller hun aftalen resten af perioden.",
+        "Vælg medarbejderen under Ansvarlig medarbejder når du opretter aftalen, så følger medarbejderen aftalen resten af perioden.",
         "Du kan også gøre det fra en åben opgave: tildel medarbejderen, og tryk så «Gør fast på aftalen».",
         "Det slår igennem på alle kommende opgaver på aftalen. Udførte opgaver røres ikke.",
         "Tilføjer du derimod bare en medarbejder på en enkelt opgave, gælder det kun den ene opgave. Brug det til afløsning."] },
@@ -1827,7 +1827,7 @@ const MODULE_HELP = {
         "Opgaver der er udført, har registreret tid eller er sendt til Dinero, røres aldrig. Der er arbejdet leveret, og en senere prisændring må ikke omregne det bagud.",
         "PO-nummer og Dinero-nummer arves kun ned hvis aftalen faktisk har et. Er aftalens felt tomt, bevares det der står på den enkelte opgave — det er sådan borgerens navn bliver stående på kommunens opgaver."] },
     { h: "Kunden skal findes i Dinero", p: [
-        "Fakturakunden skrives ikke — den vælges. Skriv de første bogstaver, og vælg kunden i listen der kommer frem. Er hun der ikke, skal hun oprettes i Dinero først.",
+        "Fakturakunden skrives ikke — den vælges. Skriv de første bogstaver, og vælg kunden i listen der kommer frem. Er kunden der ikke, skal vedkommende oprettes i Dinero først.",
         "Gem-knappen er slået fra indtil du har valgt. Et navn der bare er skrevet, giver en opgave faktureringen ikke kan sende, og en kunde der hverken kan få en portal eller står rigtigt i Kunder.",
         "Det gælder også når du skifter kunde på en opgave der allerede findes.",
         "Kundemøder og andre aktiviteter er undtaget. Skal du ud og give et tilbud, findes kunden jo netop ikke i Dinero endnu."] },
@@ -1858,19 +1858,19 @@ const MODULE_HELP = {
         "Linjen er rød, når der ikke blev trykket Start, eller når der blev startet eller afsluttet mere end 150 m fra adressen. Hold musen over linjen for at se hvem.",
         "Åbn opgaven for at se det hele pr. medarbejder: planlagt tidspunkt, startet kl. og afstand, afsluttet kl. og afstand."] },
     { h: "Glemt Start", p: [
-        "Har en medarbejder med start/stop ikke startet tiden 5 minutter efter det planlagte tidspunkt, får hun en besked på telefonen: «Husk at trykke Start».",
-        "Er tiden stadig ikke startet efter 10 minutter, starter systemet den fra det planlagte tidspunkt (eller fra hendes sidste afslutning, hvis den ligger senere). Så står der «(system)» ved starten.",
-        "En tid startet af systemet er et skøn, ikke en måling. Medarbejderen skal ikke forklare det, hvis hun retter tiden ved Afslut.",
-        "Har hun en tidligere opgave samme dag, som hun ikke har meldt færdig, kommer der hverken påmindelse eller systemstart på den næste. Så er hun ikke kommet videre endnu.",
+        "Har en medarbejder med start/stop ikke startet tiden 5 minutter efter det planlagte tidspunkt, får medarbejderen en besked på telefonen: «Husk at trykke Start».",
+        "Er tiden stadig ikke startet efter 10 minutter, starter systemet den fra det planlagte tidspunkt (eller fra medarbejderens sidste afslutning, hvis den ligger senere). Så står der «(system)» ved starten.",
+        "En tid startet af systemet er et skøn, ikke en måling. Medarbejderen skal ikke forklare det, hvis tiden rettes ved Afslut.",
+        "Har medarbejderen en tidligere opgave samme dag, som ikke er meldt færdig, kommer der hverken påmindelse eller systemstart på den næste. Så er vedkommende ikke kommet videre endnu.",
         "Påmindelsen og systemstarten gælder kun medarbejdere, der har et login til Worklist. Er start/stop slået til for alle, sker der ingenting for dem, der endnu ikke er på telefonen — de kan jo hverken se påmindelsen eller trykke Afslut.",
-        "Der sker intet, mens hun har en anden tid kørende, eller hvis opgaven ikke har et fast tidspunkt."] },
+        "Der sker intet, mens medarbejderen har en anden tid kørende, eller hvis opgaven ikke har et fast tidspunkt."] },
     { h: "Klokken — til kontoret 🔔", p: [
         "Klokken øverst til højre samler alt, der venter på en planlægger: ønsker om ny tid, «kom ikke ind», bestillinger fra kunder, medarbejdernes produktbestillinger, udleveringer der ikke er bekræftet efter 14 dage, tider der er gået over tiden, afvigelser de sidste 14 dage, og fejl fra Drift.",
         "Tallet er rødt, når noget haster. Tryk «Åbn» for at komme derhen, hvor sagen klares.",
         "Linjerne forsvinder af sig selv, når sagen er klaret det rigtige sted — et ønske besvaret, en bestilling godkendt, en tid afsluttet.",
         "Afvigelser har ikke noget andet sted at blive lukket. Tryk «Set ✓», når du har kigget på den. Så forsvinder den for alle planlæggere.",
-        "«Registreret efter lønlukning» er en medarbejder, der registrerer en ikke-udført opgave fra en lukket lønperiode. Hendes begrundelse står i linjen. «Godkend» — tiden kommer med i den åbne periode; «Afvis» — ingen løn, kunden faktureres stadig.",
-        "Auto-slut: «Rettelse af tid» er en medarbejder, der vil rette en systemlukket opgave til mindre end planlagt. «Godkend» — hendes løn følger rettelsen; «Afvis» — den planlagte tid står. Fakturaen røres ikke. «Glemmer at afslutte» betyder, at hun har mange systemlukninger i lønperioden.",
+        "«Registreret efter lønlukning» er en medarbejder, der registrerer en ikke-udført opgave fra en lukket lønperiode. Medarbejderens begrundelse står i linjen. «Godkend» — tiden kommer med i den åbne periode; «Afvis» — ingen løn, kunden faktureres stadig.",
+        "Auto-slut: «Rettelse af tid» er en medarbejder, der vil rette en systemlukket opgave til mindre end planlagt. «Godkend» — medarbejderens løn følger rettelsen; «Afvis» — den planlagte tid står. Fakturaen røres ikke. «Glemmer at afslutte» betyder, at medarbejderen har mange systemlukninger i lønperioden.",
         "«Aftal næste besøg»: en aftale med rytmen «Aftales ved besøget» har ingen opgave i planen, og besøget er udført uden at næste er aftalt. Der står «Kontakt kunden for næste besøgsdato — sidste besøg var d. …». Ring til kunden, tryk «Åbn», skriv den aftalte dato og tryk «Opret besøg». Det samme kan gøres fra aftalen under Aftaler: «Aftal næste besøg». «Husk om en uge» skjuler linjen i syv dage, og så kommer den igen, til der er en dato.",
         "Personalemappen (kun HR-administratorer): «Dokument ikke kvitteret» står, når en medarbejder ikke har kvitteret for et dokument 4 dage efter, det blev lagt ind. «Bevis udløber snart» eller «er udløbet» står for dokumenter med en slutdato inden 60 dage. «MUS er forfalden» står, når næste samtale er passeret, eller der ikke har været en i 12 måneder. Linjerne forsvinder, når sagen er klaret; «Set ✓» skjuler dem for altid. De kommer ikke med i morgenmailen, fordi de nævner HR-oplysninger.",
         "«Håndbog ikke læst af alle»: et dokument, der kræver kvittering, og som ikke alle har kvitteret for 14 dage efter udgivelsen eller sidste nye version. Linjen står, til alle har kvitteret; «Set ✓» skjuler den for altid.",
@@ -1889,7 +1889,7 @@ const MODULE_HELP = {
     { h: "Weekend", p: ["Knappen Man–Fre / Man–Søn bestemmer om lørdag og søndag vises.", "Ugeplanen åbner altid på Man–Fre, så fokus er arbejdsugen. Vil du se weekenden, trykker du på knappen.", "Ligger der opgaver i weekenden, står der ved siden af knappen hvor mange der er skjult — så du ikke overser dem."] }, { h: "Sådan er «Ny opgave» og serviceordren bygget op", p: ["Begge skærme er delt i tre farvede afsnit, så det er tydeligt hvad der hører sammen. Farverne betyder det samme begge steder.", "Rosa er kunden: kontrakttype, prismodel, titel, fakturakunde, adresse, fakturabeskrivelse og adgangsforhold. Det er det der ender på fakturaen.", "Grønt er selve opgaven: krævede kompetencer, varighed, tjeklister og instruktionsvideo.", "Blåt er tid: i «Ny opgave» hedder det Planlægning og rummer fast interval eller fleksibel, ansvarlig medarbejder, start- og udløbsdato, interval og ugedage.", "Klikker du på en opgave i ugeplanen, åbner serviceordren med de samme tre farver. Der hedder det blå afsnit Udførelse og rummer status, medarbejdere på opgaven, tasks og tidsregistrering.", "Under Tidsregistrering står hver registrering for sig: hvem, hvornår, hvor lang tid og medarbejderens begrundelse. Øverst står afvigelsen fra den planlagte tid for hele holdet.", "Har medarbejderen start/stop, står den målte tid der også, og afstanden til adressen ved start og ved slut. Er noget værd at se på — fx «afsluttet 3,4 km fra adressen» — står det med orange.", "I «Ny opgave» bliver Annuller og Gem og planlæg stående nederst, uanset hvor langt du har scrollet."] },
     { h: "Beskeder fra medarbejderne", p: [
         "Øverst i ugeplanen kommer et banner, når en medarbejder har meldt noget ind. Der er to slags.",
-        "«Ønske om ny tid» betyder at medarbejderen har aftalt et nyt tidspunkt med kunden. Tryk «Godkend og flyt», så rykkes opgaven — eller «Afvis» og skriv hvorfor, så får hun en mail.",
+        "«Ønske om ny tid» betyder at medarbejderen har aftalt et nyt tidspunkt med kunden. Tryk «Godkend og flyt», så rykkes opgaven — eller «Afvis» og skriv hvorfor, så får medarbejderen en mail.",
         "«Forgæves besøg» betyder at medarbejderen ikke kunne komme ind, og at opgaven ikke blev udført. Banneret bliver rødt.",
         "Her er der ingen tid registreret, og opgaven ville derfor stå til 0 kr. Det er dig der afgør om kunden skal betale alligevel.",
         "Tryk «Sæt til udført og fakturér», så registreres antallet af minutter i feltet ved siden af, og opgaven kommer med på fakturaen. Feltet starter på opgavens planlagte varighed — sæt det ned hvis kun turen skal faktureres.",
@@ -1898,16 +1898,16 @@ const MODULE_HELP = {
     { h: "Udlevering af produkter", p: [
         "Produkter udleveres på kontoret under Lager, ikke ude hos kunden. Medarbejderne kører i privat bil og har aldrig lagervarer med.",
         "Tryk «Udlever produkter», vælg medarbejder, kunde, dato og varer. Lageret trækkes med det samme, for varen er væk fra hylden.",
-        "Næste gang medarbejderen afslutter en opgave hos den kunde, bliver hun spurgt om kunden har fået varerne. Det er ligegyldigt hvilken opgave — udleveringen følger hende og kunden, ikke en bestemt dag.",
-        "Først når hun har svaret ja, bliver linjen fakturerbar og dukker op her i Fakturering. Svarer hun nej, bliver den stående og dukker op igen næste gang.",
-        "Det gamle flueben «Der udleveres produkter til kunden» findes ikke længere. Hun bliver spurgt når hun faktisk har noget med — ikke ud fra et flueben der forsøgte at forudsige det."] },
+        "Næste gang medarbejderen afslutter en opgave hos den kunde, bliver vedkommende spurgt om kunden har fået varerne. Det er ligegyldigt hvilken opgave — udleveringen følger medarbejderen og kunden, ikke en bestemt dag.",
+        "Først når der er svaret ja, bliver linjen fakturerbar og dukker op her i Fakturering. Svarer medarbejderen nej, bliver den stående og dukker op igen næste gang.",
+        "Det gamle flueben «Der udleveres produkter til kunden» findes ikke længere. Medarbejderen bliver spurgt, når vedkommende faktisk har noget med — ikke ud fra et flueben der forsøgte at forudsige det."] },
     { h: "Nøgle eller adgangskort på kontoret", p: [
         "Skal medarbejderen forbi kontoret efter en nøgle eller et adgangskort, sæt fluebenet «Nøgle/adgangskort skal hentes på kontoret først» under Adgang.",
         "Sættes det på aftalen, gentager det sig på alle kommende opgaver. Er nøglen eller kortet allerede udleveret en enkelt uge, kan du slå det fra på den ene opgave uden at røre aftalen.",
-        "Medarbejderen ser det på selve opgavekortet i dagslisten — altså inden hun kører — og ikke først når hun åbner opgaven."] },
+        "Medarbejderen ser det på selve opgavekortet i dagslisten — altså inden vedkommende kører — og ikke først når opgaven åbnes."] },
     { h: "Adgangsoplysninger og logning", p: [
         "Nøgleboks- og alarmkoder ligger nu i en beskyttet tabel. De sendes ikke længere ud til medarbejder-appen sammen med opgaven.",
-        "I appen er teksten skjult bag knappen «Vis adgangsoplysninger». Trykker hun, tjekker databasen at hun er på opgaven, skriver en linje i loggen med navn og tidspunkt, og svarer så med teksten.",
+        "I appen er teksten skjult bag knappen «Vis adgangsoplysninger». Trykker medarbejderen, tjekker databasen at vedkommende er på opgaven, skriver en linje i loggen med navn og tidspunkt, og svarer så med teksten.",
         "Det betyder at loggen er fuldstændig: der findes ingen anden vej til koden. Tidligere lå koden i det svar appen fik, uanset om den blev vist — og så kunne man læse den uden at det blev registreret.",
         "Du redigerer teksten som hidtil under Adgang på opgaven eller aftalen. Kun administratorer kan se og rette den.",
         "Åbn en opgave og tryk «Vis hvem der har åbnet adgangen» under kundeoplysningerne. Så står navn og tidspunkt for hver åbning, nyeste først.",
@@ -1919,8 +1919,8 @@ const MODULE_HELP = {
         "Selve kommentaren og billederne ser du under Fakturering, lige under opgavens linje. Det er dér du skal bruge dem.",
         "Billederne slettes automatisk efter 12 måneder, fordi billeder fra kundernes hjem er personoplysninger. Teksten bliver stående."] },
     { h: "Nexus-kvittering", p: [
-        "På en Nexus-opgave bliver medarbejderen ved afslutningen mindet om at kvittere i KMD Nexus, og sætter et flueben når hun har gjort det.",
-        "Fluebenet spærrer ikke — hun kan afslutte uden. Til gengæld markeres opgaven med «Nexus!» i ugeplanen og «Ikke kvitteret i Nexus» på fakturalinjen.",
+        "På en Nexus-opgave bliver medarbejderen ved afslutningen mindet om at kvittere i KMD Nexus, og sætter et flueben når det er gjort.",
+        "Fluebenet spærrer ikke — medarbejderen kan afslutte uden. Til gengæld markeres opgaven med «Nexus!» i ugeplanen og «Ikke kvitteret i Nexus» på fakturalinjen.",
         "Kommunen betaler efter det der står i Nexus, så en manglende kvittering er noget du skal følge op på med medarbejderen — ikke noget du kan rette her.",
         "Er der intet mærke, er der kvitteret, eller opgaven er ikke en Nexus-opgave."] },
   ], warn: "En fleksibel opgave har en «senest udført»-dato. Er fristen passeret, planlægges opgaven ikke — den rulles ikke videre af sig selv. Ret fristen, så placeres den med det samme." },
@@ -1979,14 +1979,14 @@ const MODULE_HELP = {
         "Mødetid bruges til at beregne hvornår dagens første opgave kan starte.",
         "Timeløn bruges til lønsummerne under Løn data. Nye medarbejdere starter på 170 kr. Ændrer du satsen, skal du angive hvornår den gælder fra — tidligere satser står nedenunder, så du kan se historikken.",
         "Dialogen er delt i fire afsnit: Personen, Kan, Tid, og Løn og transport bag hængelås.",
-        "Under Kan vises kun de kompetencer hun har. Tryk «Tilføj kompetence» for at se resten.",
-        "Under Tid kan du sætte mandagens timetal på alle dage med ét tryk, og du kan se ugens sum — så du kan tjekke at det passer med hendes ansættelse.",
+        "Under Kan vises kun de kompetencer medarbejderen har. Tryk «Tilføj kompetence» for at se resten.",
+        "Under Tid kan du sætte mandagens timetal på alle dage med ét tryk, og du kan se ugens sum — så du kan tjekke at det passer med medarbejderens ansættelse.",
         "Administrator-fluebenet står for sig med rød ramme. Det giver adgang til hele planlægningsappen, til kollegernes løn og hjemmeadresser, til kundernes nøglebokskoder, til budgetterne i Rapportering, og til at markere fakturalinjer som sendt til Dinero. Sæt det kun på kontorets folk."] },
     { h: "Kørsel som arbejdstid", p: [
-        "Nogle medarbejdere har kørsel med i arbejdstiden. Sæt fluebenet «Kørsel er en del af arbejdstiden» på hendes kort og skriv hjemmeadressen.",
-        "Så tæller dagens kørsel i hendes kapacitet: hjemmefra til første opgave, mellem opgaverne, og fra sidste opgave hjem. På kortet står hvor meget af ugen der går til kørsel.",
-        "Uden fluebenet planlægges hun præcis som hidtil. Transporten vises stadig på tidslinjen, men optager ingen kapacitet, og kørslen afregnes med kilometerpenge.",
-        "Mødetiden bliver tidspunktet hvor hun tager hjemmefra — ikke hvor hun står hos den første kunde.",
+        "Nogle medarbejdere har kørsel med i arbejdstiden. Sæt fluebenet «Kørsel er en del af arbejdstiden» på medarbejderens kort og skriv hjemmeadressen.",
+        "Så tæller dagens kørsel i medarbejderens kapacitet: hjemmefra til første opgave, mellem opgaverne, og fra sidste opgave hjem. På kortet står hvor meget af ugen der går til kørsel.",
+        "Uden fluebenet planlægges medarbejderen præcis som hidtil. Transporten vises stadig på tidslinjen, men optager ingen kapacitet, og kørslen afregnes med kilometerpenge.",
+        "Mødetiden bliver tidspunktet hvor medarbejderen tager hjemmefra — ikke hvor vedkommende står hos den første kunde.",
         "Kan dagen ikke holde når kørslen tælles med, lægges opgaven på alligevel og dagen markeres «Overbelastet». Så forsvinder ingenting ud af syne, men du kan se at der skal flyttes noget.",
         "Uden hjemmeadresse slår ordningen ikke til, uanset fluebenet. Der er ingen adresse at regne fra."] },
     { h: "Hvem kan se hjemmeadressen", p: [
@@ -1995,21 +1995,21 @@ const MODULE_HELP = {
         "Kilometerpengene røres ikke af ordningen. De beregnes stadig kun mellem opgaver med registreret tid — kørsel mellem hjem og arbejde indgår ikke."] },
     { h: "Start/stop", p: [
         "Fanen «Start/stop» under Opsætning viser hvem der har start/stop, og hvor lange opgaver der skal til, før den bruges. Standard er 60 minutter.",
-        "Har hun start/stop, trykker hun Start når hun er ved kunden, og Afslut når hun går. Står Worklist åben når hun ankommer, kan den starte af sig selv. Den målte tid står klar ved Afslut. Retter hun den med mere end 2 minutter, skal hun skrive hvorfor.",
-        "Start kan ikke trykkes, hvis telefonen viser at hun tydeligt er et andet sted. Er der ingen position, må hun godt starte — det bliver noteret. Afslut kan altid trykkes.",
-        "Der gemmes kun afstanden til adressen, aldrig hvor hun er. Og kun ved start og ved afslut — ikke undervejs.",
+        "Har medarbejderen start/stop, trykker vedkommende Start ved kunden og Afslut ved afgang. Står Worklist åben ved ankomst, kan den starte af sig selv. Den målte tid står klar ved Afslut. Rettes den med mere end 2 minutter, skal der skrives hvorfor.",
+        "Start kan ikke trykkes, hvis telefonen viser at medarbejderen tydeligt er et andet sted. Er der ingen position, må der godt startes — det bliver noteret. Afslut kan altid trykkes.",
+        "Der gemmes kun afstanden til adressen, aldrig hvor medarbejderen er. Og kun ved start og ved afslut — ikke undervejs.",
         "Opgaver under grænsen, og alle medarbejdere uden start/stop, registrerer præcis som hidtil: minutter og afvigelsesbegrundelse.",
-        "Tolerance (standard ± 5 min): afslutter hun inden for tolerancen af sin planlagte tid, registreres den planlagte — både løn og faktura, og uden begrundelse. Fx 56 eller 64 min på en 60 min-opgave bliver 60. På opgaven står «Afsluttet med 56 min — inden for ± 5 min». Gælder kun start/stop. 0 slår det fra.",
+        "Tolerance (standard ± 5 min): afslutter medarbejderen inden for tolerancen af sin planlagte tid, registreres den planlagte — både løn og faktura, og uden begrundelse. Fx 56 eller 64 min på en 60 min-opgave bliver 60. På opgaven står «Afsluttet med 56 min — inden for ± 5 min». Gælder kun start/stop. 0 slår det fra.",
         "Slås til på det enkelte kort under «Løn og transport», eller for alle på én gang i panelet. Det er slået fra fra start.",
         "Start/stop er en kontrolforanstaltning. Medarbejderne skal varsles, før det slås til — typisk 6 uger. Slå det ikke til, før varslingen er givet."] },
     { h: "Auto-slut og lønlukning", p: [
         "Auto-slut ligger under Opsætning → Start/stop; lukkedag og varsler ligger under Opsætning → Lønperioder. Besluttet af Jonn og Charlotte 1.10.2026. Det er slået fra, indtil I slår det til.",
         "En opgave, medarbejderen ikke har afsluttet, lukkes af systemet 2 timer efter planlagt slut (kan ændres). Den bliver udført med den planlagte tid, så kunden altid kan faktureres. Uden klokkeslæt regnes slut som kl. 17.",
         "Medarbejderen får en besked en time før, og en besked når den er lukket. Det gælder alle med Worklist — ikke kun dem med start/stop. Elever på opgaven lukkes ikke.",
-        "Kunden faktureres altid den planlagte tid på en systemlukket opgave. Medarbejderens løn er den planlagte tid, medmindre hun selv retter.",
-        "Hun kan rette sin tid i Worklist under «Min tid», indtil lønperioden lukker. Mere tid gælder med det samme og kræver en begrundelse. Mindre tid skal I godkende — den kommer i klokken 🔔 som «Rettelse af tid».",
-        "Lønperioden går fra lukkedagen til dagen før i næste måned (standard 20.–19.) og lukker på lukkedagen kl. 23.59 — på hverdagen før, hvis lukkedagen falder i en weekend eller på en helligdag. Medarbejderen får en besked 3 dage og 1 dag før, hvis hun har systemlukkede opgaver, hun ikke har rettet.",
-        "Låsen gælder kun opgaver, der er udført. Er en opgave i en lukket periode IKKE meldt færdig, kan medarbejderen stadig registrere den — men først når hun har skrevet, hvorfor det sker efter lønlukningen. Begrundelsen kommer i klokken 🔔 som «Registreret efter lønlukning». Godkend: tiden kommer med i den åbne lønperiode. Afvis: ingen løn for registreringen, men kunden faktureres stadig.",
+        "Kunden faktureres altid den planlagte tid på en systemlukket opgave. Medarbejderens løn er den planlagte tid, medmindre medarbejderen selv retter tiden.",
+        "Medarbejderen kan rette sin tid i Worklist under «Min tid», indtil lønperioden lukker. Mere tid gælder med det samme og kræver en begrundelse. Mindre tid skal I godkende — den kommer i klokken 🔔 som «Rettelse af tid».",
+        "Lønperioden går fra lukkedagen til dagen før i næste måned (standard 20.–19.) og lukker på lukkedagen kl. 23.59 — på hverdagen før, hvis lukkedagen falder i en weekend eller på en helligdag. Medarbejderen får en besked 3 dage og 1 dag før, hvis vedkommende har systemlukkede opgaver, som ikke er rettet.",
+        "Låsen gælder kun opgaver, der er udført. Er en opgave i en lukket periode IKKE meldt færdig, kan medarbejderen stadig registrere den — men først når der er skrevet, hvorfor det sker efter lønlukningen. Begrundelsen kommer i klokken 🔔 som «Registreret efter lønlukning». Godkend: tiden kommer med i den åbne lønperiode. Afvis: ingen løn for registreringen, men kunden faktureres stadig.",
         "Efter lukningen kan medarbejderen hverken rette eller ændre en udført opgave i perioden. Kun planlæggerne kan rette: på opgaven står «Efterreguler tid», og rettelsen lægges som en ny linje (+ eller −) i den åbne periode. En udbetalt løn ændres aldrig.",
         "Har en medarbejder 3 eller flere systemlukninger i samme periode (kan ændres), står det i klokken som «Glemmer at afslutte». Tag en snak, og tryk «Set ✓».",
         "Slås det til, gælder det kun opgaver fra det øjeblik. Gamle, glemte opgaver røres ikke.",
@@ -2018,29 +2018,29 @@ const MODULE_HELP = {
         "Timelønnen ligger i sin egen tabel, som kun administratorer har adgang til. Det er håndhævet i databasen, ikke kun i skærmbilledet.",
         "Er du ikke administrator, står feltet tomt, og lønkolonnerne under Løn data vises slet ikke — heller ikke i CSV-filen.",
         "Medarbejder-appen henter aldrig lønnen. En medarbejder kan altså ikke se hverken sin egen eller kollegernes sats der."] },
-    { h: "Kompetencer", p: ["Ligger under Opsætning → Kompetencer. Her opretter, omdøber og sletter du de færdigheder du kan kræve på en opgave.", "En kompetence er et krav, ikke et ønske: kan medarbejderen den ikke på det krævede niveau, kommer hun slet ikke i betragtning til opgaven.", "Selve niveauet sættes pr. medarbejder på hendes eget kort — Nybegynder, Øvet eller Ekspert. Kræver opgaven Øvet, er Nybegynder ikke nok.", "Blandt dem der lever op til kravene, vælges den med det højeste samlede niveau. Står to lige, vælges den med mest ledig tid den dag.", "Sletter du en kompetence, fjernes den fra alle medarbejdere og fra alle opgaver.", "Omdøber du en kompetence, følger medarbejderne og aftalerne med. Men opgaver der allerede ligger i kalenderen, husker det gamle navn og viser derefter «Ingen har alle krævede kompetencer» — så ret kompetencen på de opgaver, eller lad være med at omdøbe når der er oprettet opgaver."] },
+    { h: "Kompetencer", p: ["Ligger under Opsætning → Kompetencer. Her opretter, omdøber og sletter du de færdigheder du kan kræve på en opgave.", "En kompetence er et krav, ikke et ønske: kan medarbejderen den ikke på det krævede niveau, kommer vedkommende slet ikke i betragtning til opgaven.", "Selve niveauet sættes pr. medarbejder på medarbejderens eget kort — Nybegynder, Øvet eller Ekspert. Kræver opgaven Øvet, er Nybegynder ikke nok.", "Blandt dem der lever op til kravene, vælges den med det højeste samlede niveau. Står to lige, vælges den med mest ledig tid den dag.", "Sletter du en kompetence, fjernes den fra alle medarbejdere og fra alle opgaver.", "Omdøber du en kompetence, følger medarbejderne og aftalerne med. Men opgaver der allerede ligger i kalenderen, husker det gamle navn og viser derefter «Ingen har alle krævede kompetencer» — så ret kompetencen på de opgaver, eller lad være med at omdøbe når der er oprettet opgaver."] },
         { h: "Områder", p: ["Ligger under Opsætning → Områder. Et område er et navn og en række postnumre, og du klikker de medarbejdere til der dækker det.", "Ved planlægning aflæses postnummeret i opgavens adresse. Findes der et område med det postnummer, søges der kun blandt de medarbejdere der er knyttet til området.", "Har adressen intet postnummer, eller er postnummeret ikke lagt ind på noget område, planlægges der frit blandt alle med kompetencerne.", "Er der ikke klikket en eneste medarbejder på et område, springes området over. Et tomt område spærrer altså ikke — det gør ingenting.", "Kan ingen i området løse opgaven, planlægges den alligevel hos en der kan, og opgaven mærkes «Planlagt uden for medarbejderens område». En opgave bliver aldrig liggende alene fordi den falder uden for et område.", "Sletter du et område, forsvinder tilknytningerne med det samme. Opgaverne røres ikke."] },
-    { h: "Adgang til Worklist", p: ["Tryk Redigér på medarbejderen, vælg fanen Adgang, skriv e-mailen og tryk Opret. Hun får en mail med et link, hvor hun selv vælger sin adgangskode, og kan derefter logge ind i medarbejder-appen.",
-        "Har mailen allerede et login — for eksempel fordi hun også bruger planlægningsappen — bliver det eksisterende login koblet til hende. Du behøver ikke finde på en ny mailadresse.",
-        "Står der at adgangen er oprettet, men at mailen ikke kunne sendes, er hun kommet ind i systemet alligevel. Så skal hun bare bruge «glemt adgangskode» på login-siden.",
-        "«Luk adgang» sletter login’et helt. Medarbejderen og hele hendes historik bliver stående, og du kan give hende adgang igen senere med en ny mail.",
-        "Bruges når nogen midlertidigt ikke skal kunne logge ind. Holder hun helt op, brug «Fratræd» i stedet — så ryger hun også ud af planlægningen."] },
+    { h: "Adgang til Worklist", p: ["Tryk Redigér på medarbejderen, vælg fanen Adgang, skriv e-mailen og tryk Opret. Medarbejderen får en mail med et link, hvor adgangskoden vælges, og kan derefter logge ind i medarbejder-appen.",
+        "Har mailen allerede et login — for eksempel fordi medarbejderen også bruger planlægningsappen — bliver det eksisterende login koblet til vedkommende. Du behøver ikke finde på en ny mailadresse.",
+        "Står der at adgangen er oprettet, men at mailen ikke kunne sendes, er medarbejderen kommet ind i systemet alligevel. Så skal vedkommende bare bruge «glemt adgangskode» på login-siden.",
+        "«Luk adgang» sletter login’et helt. Medarbejderen og hele historikken bliver stående, og du kan give vedkommende adgang igen senere med en ny mail.",
+        "Bruges når nogen midlertidigt ikke skal kunne logge ind. Holder medarbejderen helt op, brug «Fratræd» i stedet — så ryger vedkommende også ud af planlægningen."] },
     { h: "Arbejdstøj", p: [
-        "Medarbejderne bestiller selv arbejdstøj i deres app, og du godkender bestillingerne under Lager. Her på medarbejderen ser du kun hvad hun har fået udleveret.",
-        "Åbn hendes kort (Redigér) og vælg fanen Udlevering, eller fold hende ud i listen og tryk «Se historik». Begge viser de seneste 20 udleveringer."] },
+        "Medarbejderne bestiller selv arbejdstøj i deres app, og du godkender bestillingerne under Lager. Her på medarbejderen ser du kun, hvad vedkommende har fået udleveret.",
+        "Åbn medarbejderens kort (Redigér) og vælg fanen Udlevering, eller fold kortet ud i listen og tryk «Se historik». Begge viser de seneste 20 udleveringer."] },
     { h: "Når en medarbejder fratræder", p: [
-        "Tryk Redigér på hende, vælg fanen Ansættelse og tryk «Fratræd». Du vælger datoen, og dialogen fortæller hvor mange kommende opgaver der mister hende.",
-        "Login’et slettes med det samme. Står appen åben på hendes telefon, bliver hun logget ud i samme øjeblik.",
-        "Kommende opgaver går tilbage til «Ikke tildelt», og du skal selv planlægge dem på ny. Udførte opgaver beholder hendes navn og tidsregistrering.",
-        "Hun forsvinder fra ugeplanen, fra auto-planlægningen, fra områderne og fra alle vælgere — men bliver stående på medarbejderlisten med sin fratrædelsesdato.",
-        "Lønhistorik og kørselslog bevares. Det er dokumentationen for hvad hun har fået udbetalt og kørt, og den skal kunne fremvises også om flere år.",
-        "Skal hun tilbage, fjerner du fratrædelsesdatoen under «Redigér» og opretter en ny adgang. Det gamle login kan ikke gendannes."] },
-  ], warn: "Weekendarbejde kræver flueben på medarbejderen. Uden det kan hun slet ikke planlægges lørdag og søndag. Med fluebenet er der ingen timegrænse i weekenden — derfor står der Ja/Nej og ikke et timetal." },
+        "Tryk Redigér på medarbejderen, vælg fanen Ansættelse og tryk «Fratræd». Du vælger datoen, og dialogen fortæller hvor mange kommende opgaver der mister medarbejderen.",
+        "Login’et slettes med det samme. Står appen åben på medarbejderens telefon, bliver vedkommende logget ud i samme øjeblik.",
+        "Kommende opgaver går tilbage til «Ikke tildelt», og du skal selv planlægge dem på ny. Udførte opgaver beholder medarbejderens navn og tidsregistrering.",
+        "Medarbejderen forsvinder fra ugeplanen, fra auto-planlægningen, fra områderne og fra alle vælgere — men bliver stående på medarbejderlisten med sin fratrædelsesdato.",
+        "Lønhistorik og kørselslog bevares. Det er dokumentationen for hvad medarbejderen har fået udbetalt og kørt, og den skal kunne fremvises også om flere år.",
+        "Skal medarbejderen tilbage, fjerner du fratrædelsesdatoen under «Redigér» og opretter en ny adgang. Det gamle login kan ikke gendannes."] },
+  ], warn: "Weekendarbejde kræver flueben på medarbejderen. Uden det kan vedkommende slet ikke planlægges lørdag og søndag. Med fluebenet er der ingen timegrænse i weekenden — derfor står der Ja/Nej og ikke et timetal." },
 
   fravaer: { title: "Ferie og fravær", intro: "Medarbejdernes anmodninger om ferie og fri.", blocks: [
     { h: "Sådan virker det", p: ["Medarbejderen anmoder i sin Personalemappen-app: ferie eller fri, første og sidste dag og evt. en bemærkning. Anmodningen står her og i klokken, til du har svaret.",
         "Under hver anmodning står, om den er sendt med kort varsel (håndbogen siger 4 uger til ferie og 10 dage til fri), og hvor mange opgaver medarbejderen står på i perioden. Systemet afviser ikke kort varsel; du afgør det.",
-        "«Godkend» lægger ferien i ugeplanen som en almindelig ferieblokering. Medarbejderens opgaver i perioden frigives og kan planlægges om. Skriv gerne en besked til medarbejderen; hun ser svaret i sin app.",
+        "«Godkend» lægger ferien i ugeplanen som en almindelig ferieblokering. Medarbejderens opgaver i perioden frigives og kan planlægges om. Skriv gerne en besked til medarbejderen; svaret ses i appen.",
         "«Afvis» ændrer ikke planen. Skriv en begrundelse. Sygdom er ikke en anmodning og meldes som hidtil på telefonen."] },
   ] },
   haandbog: { title: "Håndbog og politikker", intro: "Personalehåndbogen og politikkerne, som medarbejderne læser i Personalemappen-appen.", blocks: [
@@ -2059,10 +2059,10 @@ const MODULE_HELP = {
     { h: "Medarbejderkortet", p: ["Tryk på en medarbejder for at åbne kortet med faner: Person, Ansættelse, Dokumenter, Planlægning, Løn, Adgang og Udlevering. Alle faner gemmes med den samme knap.",
         "«Ny medarbejder» og «Fratræd» findes kun her.",
         "MUS bookes i ugeplanen: «Anden aktivitet» → vælg «MUS (medarbejdersamtale)», og vælg medarbejder, leder, dato og tid. Samtalen lægges i begges opgaveliste i Worklist, og medarbejderen ser den i sin Personalemappe og kan forberede sig dér. Markeres aktiviteten udført, står samtalen som afholdt, og kortets «sidste MUS» opdateres; aflyses den, tømmes «næste MUS».",
-        "Fanen «Samtaler og udvikling» viser medarbejderens samtaler. Hendes forberedelse er hendes egen, til hun trykker «Del med kontoret» — først da kan du læse den her. Under den står hendes udviklingsønsker; sæt status (ønsket, aftalt, gennemført, afvist) og skriv et svar, som hun ser i sin app.",
-        "Referatet fra MUS skrives normalt af lederen i Worklist, når han åbner samtalen: «Send til medarbejderen» markerer samtalen som holdt og sender referatet til hendes Personalemappe, hvor hun godkender det eller skriver en bemærkning. Du ser status her under samtalen, og kan selv skrive eller sende referatet, hvis lederen ikke gør det. Et godkendt referat kan ikke rettes. Har hun bemærkninger, eller har hun ikke svaret efter en uge, står det i klokken.",
-        "Dokumenter er skjult for medarbejderen som standard. Sæt flueben ved «Medarbejderen kan se og hente dokumentet», når du lægger det ind — eller tryk «Vis for hende» bagefter. Tryk «Skjul» for at tage det væk igen.",
-        "Sæt også «Hun skal kvittere for at have læst det», hvis du vil vide, at hun har set det, fx et ansættelsesbevis. Dokumentet står så som «Venter på kvittering», til hun trykker, og derefter med datoen.",
+        "Fanen «Samtaler og udvikling» viser medarbejderens samtaler. Forberedelsen er medarbejderens egen, til vedkommende trykker «Del med kontoret» — først da kan du læse den her. Under den står medarbejderens udviklingsønsker; sæt status (ønsket, aftalt, gennemført, afvist) og skriv et svar, som ses i appen.",
+        "Referatet fra MUS skrives normalt af lederen i Worklist, når lederen åbner samtalen: «Send til medarbejderen» markerer samtalen som holdt og sender referatet til medarbejderens Personalemappe, hvor medarbejderen godkender det eller skriver en bemærkning. Du ser status her under samtalen, og kan selv skrive eller sende referatet, hvis lederen ikke gør det. Et godkendt referat kan ikke rettes. Er der bemærkninger, eller er der ikke svaret efter en uge, står det i klokken.",
+        "Dokumenter er skjult for medarbejderen som standard. Sæt flueben ved «Medarbejderen kan se og hente dokumentet», når du lægger det ind — eller tryk «Vis for medarbejderen» bagefter. Tryk «Skjul» for at tage det væk igen.",
+        "Sæt også «Medarbejderen skal kvittere for at have læst det», hvis du vil vide, at det er set, fx et ansættelsesbevis. Dokumentet står så som «Venter på kvittering», til der trykkes, og derefter med datoen.",
         "Læg ikke interne noter, sygemeldinger, lægeerklæringer eller straffeattester ind som synlige dokumenter.",
         "Påmindelser står i klokken øverst, kun for HR-administratorer: dokumenter, der ikke er kvitteret efter 4 dage, beviser der udløber inden 60 dage, og MUS der er forfaldet. Sæt udløbsdato på beviser og MUS-datoer under Ansættelse, så systemet kan minde dig."] },
   ] },
@@ -2071,7 +2071,7 @@ const MODULE_HELP = {
         "Efter lukningen kan medarbejderen ikke rette sin tid. Kun planlæggerne kan, og rettelsen lægges som efterregulering i den åbne periode.",
         "Falder lukkedagen i en weekend eller på en helligdag, og feltet «lukker perioden på hverdagen før» er sat, flytter lukkedagen til den sidste hverdag før. Perioden følger med: den slutter dagen før den flyttede lukkedag, og den næste begynder dagen efter. Oversigten viser «flyttet fra» ved de perioder, hvor det sker. Helligdage er de officielle danske (nytår, skærtorsdag, langfredag, påske, Kristi himmelfart, pinse, juledag og 2. juledag); 24. og 31. december og Grundlovsdag tæller ikke. Ved lukkedag 1 flyttes intet.",
         "Lønopgørelsen, kørsel og «Min tid» i Worklist følger de samme perioder."] },
-    { h: "Besked før lukning", p: ["Her skriver du, hvor mange dage før lukkedagen medarbejderen får besked, hvis hun har opgaver, systemet har lukket, og som hun ikke har rettet. Standard er «3, 1»."] },
+    { h: "Besked før lukning", p: ["Her skriver du, hvor mange dage før lukkedagen medarbejderen får besked, hvis vedkommende har opgaver, systemet har lukket, og som ikke er rettet. Standard er «3, 1»."] },
     { h: "Oversigten", p: ["Tabellen viser de seneste tolv perioder, den aktuelle og de næste to, med dagene i perioden, lukketidspunktet og om perioden er åben eller lukket."] },
   ], warn: "Slår du weekendreglen til eller fra, eller flytter du lukkedagen, flytter alle perioder sig — også de lukkede. En lukket periode kan blive åben igen, og dage kan skifte periode. Du bliver spurgt, før det gemmes. Varsl medarbejderne først." },
   checklists: { title: "Tjeklister", intro: "Tjeklister er de arbejdsopgaver medarbejderen sætter flueben ved ude hos kunden.", blocks: [
@@ -2100,7 +2100,7 @@ const MODULE_HELP = {
         "Er portalen lukket i løbet af måneden, kommer den stadig med den måned, men ikke den næste."] },
     { h: "Kunder oprettes i Dinero", p: [
         "Kunder oprettes altid i Dinero, aldrig herfra. I feltet «Fakturakunde» søger du i Dinero mens du skriver, og vælger kunden i listen.",
-        "Når du vælger kunden, gemmes hendes unikke kundenummer på opgaven og på aftalen. Det er det nummer eksporten bruger — så to kunder med samme navn ikke kan forveksles.",
+        "Når du vælger kunden, gemmes kundens unikke kundenummer på opgaven og på aftalen. Det er det nummer eksporten bruger — så to kunder med samme navn ikke kan forveksles.",
         "Finder søgningen ingen, skal kunden oprettes i Dinero først. Så kan du finde den her bagefter.",
         "Svarer Dinero ikke, så vent lidt og prøv igen. Du kan ikke oprette kunden midlertidigt i systemet — en kunde uden Dinero-nummer kan ikke faktureres."] }]),
     { h: "Kolonnerne", p: ["Planlagt er den tid der er sat af. Registreret er den tid der kan faktureres.",
@@ -2113,7 +2113,7 @@ const MODULE_HELP = {
     { h: "Ret den registrerede tid", p: [
         "Klik på minuttallet i listen for at rette det. Du kan skrive præcis det antal minutter, der er brugt — 18 minutter er lige så gyldigt som 15 eller 20.",
         "Tiden skal passe med det, der faktisk er brugt. Runder man op til nærmeste kvarter, betaler kunden for noget, der ikke er sket, og medarbejderen får løn for det samme.",
-        "Retter du her, erstattes medarbejderens egen registrering, og der står «Justeret af planlægger» på linjen. Aftal det med hende først — det er hendes løn, det også handler om."] },
+        "Retter du her, erstattes medarbejderens egen registrering, og der står «Justeret af planlægger» på linjen. Aftal det med medarbejderen først — det er vedkommendes løn, det også handler om."] },
     { h: "Sæt fakturagrundlag på hele listen", p: [
         "Knappen «Sæt fakturagrundlag på N viste» sætter flueben på alt i listen på én gang. Vælg måneden, sæt status til «Udført», og tryk.",
         "Knappen findes KUN under status «Udført». Fakturagrundlag på en opgave, der ikke er kørt endnu, er en regning for noget kunden ikke har fået — og under «Alle statusser» ligger de blandet, så man ikke kan se hvad et klik ville ramme.",
@@ -2141,13 +2141,13 @@ const MODULE_HELP = {
         "Bestillinger skal godkendes, før de trækkes fra lageret."] },
     { h: "Seneste bevægelser", p: [
         "Under listen står hvem der bestilte, hvem der udleverede, og hvornår begge dele skete.",
-        "Spørger en medarbejder hvornår hun sidst fik handsker, står svaret her.",
+        "Spørger en medarbejder hvornår medarbejderen sidst fik handsker, står svaret her.",
         "Står der «uden navn» på en udlevering, er den godkendt før vi begyndte at gemme hvem der gjorde det. Det gælder kun gamle linjer."] },
     { h: "Udlevering til kunde", p: [
         "Produkter udleveres her på kontoret. Medarbejderne kører i privat bil og har aldrig lagervarer med, så varen forlader hylden i det øjeblik du giver den fra dig — og der trækkes lageret.",
         "Tryk «Udlever produkter», vælg medarbejder, kunde, dato og varer. Kundelisten er dem der har opgaver — ikke et opslag i Dinero. Vælger du en kunde uden opgaver, ville udleveringen aldrig komme til syne hos nogen.",
-        "Udleveringen hænger på medarbejder og kunde, ikke på en bestemt opgave. Næste gang hun afslutter en opgave hos den kunde, bliver hun spurgt om kunden har fået varerne. Flyttes opgaven, eller kommer hun en anden dag, følger udleveringen med.",
-        "Først når hun har svaret ja, bliver linjen fakturerbar og dukker op i Fakturering. Svarer hun nej, bliver den stående og dukker op igen næste gang.",
+        "Udleveringen hænger på medarbejder og kunde, ikke på en bestemt opgave. Næste gang medarbejderen afslutter en opgave hos den kunde, bliver vedkommende spurgt om kunden har fået varerne. Flyttes opgaven, eller kommer medarbejderen en anden dag, følger udleveringen med.",
+        "Først når der er svaret ja, bliver linjen fakturerbar og dukker op i Fakturering. Svarer medarbejderen nej, bliver den stående og dukker op igen næste gang.",
         "Listen «Udleveret, ikke afleveret hos kunden endnu» viser hvad der er undervejs. Står noget der længe, er varen ikke kommet frem — og den bliver ikke faktureret."] },
   ], warn: "Retter du prisen på et kundeprodukt, slår den igennem i Fakturering med det samme. Allerede sendte fakturalinjer røres ikke." },
 
@@ -2179,7 +2179,7 @@ const MODULE_HELP = {
 
   kunder: { title: "Kunder", intro: KUNDEUDGAVE ? "Kunden set samlet: omsætning, aftaler og besøg." : "Kunden set samlet — og stedet hvor kundeportalen og kundeløsningen tændes.", blocks: [
     { h: "Sådan læses listen", p: [
-        "Her ser du hver kunde ét sted: hvad hun har givet i omsætning, hvor mange aftaler hun har, og hvornår hun sidst fik besøg.",
+        "Her ser du hver kunde ét sted: hvad kunden har givet i omsætning, hvor mange aftaler der er, og hvornår der sidst var besøg.",
         "Omsætningen er realiseret — registreret tid gange satsen for kontrakttypen, plus udførte fastprisopgaver. Planlagt tid tæller ikke med; det er ikke penge før nogen har været der.",
         "Står der «aldrig besøgt», er der oprettet opgaver men endnu ikke registreret tid på nogen af dem.",
         KUNDEUDGAVE
@@ -2188,21 +2188,21 @@ const MODULE_HELP = {
         "Løse opgaver tæller med. En kunde uden aftale, som bare har fået en enkelt opgave, står også på listen.",
         "Vælg sortering ved siden af søgefeltet: kundenavn (A–Å), senest besøg (nyeste først, aldrig besøgt til sidst) eller portaladgang (Premium, Udvidet, Basis og til sidst kunder uden portal)."] },
     ...(KUNDEUDGAVE ? [] : [{ h: "«Ikke i Dinero»", p: [
-        "Mærkatet betyder at kundens opgaver ikke har hendes kundenummer fra Dinero. Det kan ikke længere opstå: en fakturerbar opgave kan ikke gemmes før kunden er valgt i Dinero-listen. Mærkatet er kun på kunder fra før den spærring.",
+        "Mærkatet betyder at kundens opgaver ikke har sit kundenummer fra Dinero. Det kan ikke længere opstå: en fakturerbar opgave kan ikke gemmes før kunden er valgt i Dinero-listen. Mærkatet er kun på kunder fra før den spærring.",
         "Fakturaen bliver dannet alligevel, fordi kunden så slås op på navnet. Men det opslag fejler den dag to kontakter i Dinero hedder det samme — og kunden kan ikke få en portal, for portalen hænger på kundenummeret.",
-        "Fold kunden ud og tryk «Find i Dinero». Er der præcis ét træf, kan du koble hende, og alle hendes opgaver og aftaler får nummeret. Er der flere træf, skal dubletterne ryddes op i Dinero først.",
+        "Fold kunden ud og tryk «Find i Dinero». Er der præcis ét træf, kan du koble kunden, og alle opgaver og aftaler får nummeret. Er der flere træf, skal dubletterne ryddes op i Dinero først.",
         "Lykkes en fakturering på et navneopslag, gemmer systemet selv nummeret bagefter, så mærkatet forsvinder af sig selv."] }]),
     { h: "Tænd kundeportalen", p: [
         "Fold kunden ud og vælg et kort navn til adressen. Det foreslås ud fra kundens navn og må kun indeholde små bogstaver, tal og bindestreg.",
-        "Kunden får sin egen adresse med sit navn på, og hun ser kun sine egne data. Det er håndhævet i databasen, ikke i skærmbilledet.",
+        "Kunden får sin egen adresse med sit navn på, og ser kun sine egne data. Det er håndhævet i databasen, ikke i skærmbilledet.",
         "Vælg Basis. Udvidet er ikke bygget endnu — vælger du den, får kunden det samme som basis indtil videre.",
-        "Inviter derefter den første bruger. Hun bliver administrator og kan selv invitere kolleger hos kunden, men kun hos sin egen."] },
+        "Inviter derefter den første bruger. Vedkommende bliver administrator og kan selv invitere kolleger hos kunden, men kun hos sin egen."] },
     { h: "Sådan logger kunden ind", p: [
-        "Invitationsmailen indeholder ikke et login — kun adressen på kundens egen portalside. Der skriver hun sin mail og får en kode tilsendt.",
-        "Koden virker én gang og udløber efter en time. Hun kan selv bede om en ny på siden, så længe portalen er tændt og hun står som aktiv bruger.",
-        "Ringer en kunde og siger at hun ikke kan komme ind, så bed hende tjekke at koden er den nyeste. Beder man om flere koder, er det kun den sidste der virker.",
-        "Vi sender en kode og ikke et link, fordi firmamail scanner links ved at åbne dem automatisk. Det brugte engangslinket op, før kunden selv nåede at trykke — hun endte på login-siden igen uden forklaring.",
-        "Spørg aldrig en kunde om hendes kode, og send den aldrig videre. Har hun brug for adgang, beder hun selv om en ny på siden."] },
+        "Invitationsmailen indeholder ikke et login — kun adressen på kundens egen portalside. Der skriver brugeren sin mail og får en kode tilsendt.",
+        "Koden virker én gang og udløber efter en time. Brugeren kan selv bede om en ny på siden, så længe portalen er tændt, og vedkommende står som aktiv bruger.",
+        "Ringer en kunde og siger at vedkommende ikke kan komme ind, så bed vedkommende tjekke at koden er den nyeste. Beder man om flere koder, er det kun den sidste der virker.",
+        "Vi sender en kode og ikke et link, fordi firmamail scanner links ved at åbne dem automatisk. Det brugte engangslinket op, før kunden selv nåede at trykke — vedkommende endte på login-siden igen uden forklaring.",
+        "Spørg aldrig en kunde om kundens kode, og send den aldrig videre. Har kunden brug for adgang, beder vedkommende selv om en ny på siden."] },
     { h: "Basis og Udvidet", p: [
         "Basis giver kunden sine opgaver og sine fakturaer. Det er den de fleste skal have.",
         "Udvidet lægger en Bestil-fane oveni, hvor kunden kan bestille ekstra arbejde. Fanen vises kun ved Udvidet, og databasen afviser en bestilling fra en basis-kunde uanset hvad.",
@@ -2228,9 +2228,9 @@ const MODULE_HELP = {
         "Option er en trappe: Basis < Udvidet < Premium. Hvert trin har alt fra trinnet under. Premium er Udvidet plus kundens egen planlægning og Worklist til sine egne medarbejdere.",
         "Vælg Premium i Option-feltet. Første gang folder felterne ud: administratorens navn og mail, det korte navn i adressen, branchen og tilvalgene. Branchen giver en første tjekliste, så kunden ikke starter på en tom skærm.",
         "Tilvalgene er Start/stop, Lager og Tilbud. Premium-kunden får ikke en portal til sine egne kunder.",
-        "Administratoren er udfyldt med portalens administrator. Så er der ét login: hun logger ind i kundeportalen som altid og trykker på fanen «Planlægning» — planlægningen åbner logget ind, uden adgangskode.",
+        "Administratoren er udfyldt med portalens administrator. Så er der ét login: administratoren logger ind i kundeportalen som altid og trykker på fanen «Planlægning» — planlægningen åbner logget ind, uden adgangskode.",
         "Kun portalens administratorer ser fanen «Planlægning». Almindelige portalbrugere ser kun portalen. Mailen skal være den samme i portalen og i planlægningen.",
-        "Vælger du en anden mail end portalens administrator, logger den person ind direkte på planlægningens adresse med en adgangskode, hun vælger via linket i mailen.",
+        "Vælger du en anden mail end portalens administrator, logger den person ind direkte på planlægningens adresse med en adgangskode, som vedkommende vælger via linket i mailen.",
         "Portalen, dens brugere og adressen bliver som de er, når kunden går til Premium. Planlægningen får sin egen adresse.",
         "«Opret og send link» opretter planlægningen og skifter kunden til Premium i samme skridt. Administratoren får en mail med et link til at vælge adgangskode. Er mailen gået tabt, tryk «Send link igen».",
         "Planlægningen kan kun oprettes herfra. Der er ingen tilmelding på nettet.",
@@ -2239,7 +2239,7 @@ const MODULE_HELP = {
         "Skifter du ned fra Premium, lukkes kundens planlægning, så ingen kan logge ind i den. Data bliver liggende, og alt kommer tilbage, hvis du skifter til Premium igen. «Luk portalen» lukker også planlægningen.",
         "Mærkatet «Premium» på kundelisten viser, hvem der har kundens egen planlægning."] },
     { h: "Pris og fakturering", p: [
-        "Hvert trin har sin egen pris under Salg → Produkter: Kundeportal Basis, Udvidet og Premium. Kunden betaler for det trin, hun står på — ikke for trinene under.",
+        "Hvert trin har sin egen pris under Salg → Produkter: Kundeportal Basis, Udvidet og Premium. Kunden betaler for det trin, vedkommende står på — ikke for trinene under.",
         "Premiums tilvalg har hver sin pris under Produkter («Tilvalg: …») og kommer oveni.",
         "Hver måned dannes én linje for trinnet og én for hvert tilvalg under Fakturering → Abonnementer. Skiftes trinnet eller et tilvalg midt i måneden, rettes linjerne, så længe de ikke er sendt til Dinero."] },
     { h: "Ekstra hjælp fra kunden", p: [
@@ -2310,7 +2310,7 @@ const MODULE_HELP = {
         "Under «Plan parametre» vælger du først, om aftalen gentages ugentligt, månedligt eller på bestemte datoer. Ved Ugentligt og Månedligt skriver du selv antallet: hver uge, hver 2. uge, hver 3. uge og så videre op til hver 52. uge — eller hver måned, hver 3. måned og så videre op til hver 12. måned. Kadencen tælles fra startdatoen.",
         "Under valgene står en sætning og et antal besøg, fx «Gentages hver 4. uge på tirsdag» og «27 besøg i alt». Tallet regnes af den samme regel, der opretter opgaverne, så tjek det, før du godkender: står der 26 besøg, hvor du ventede 6, er rytmen ikke den, du tror.",
         "«Hver 4. uge» er ikke det samme som en gang om måneden. Det giver 13 besøg om året i stedet for 12, og dagen vandrer gennem kalenderen — et besøg den 5. bliver med tiden den 28. Til gengæld ligger det altid på den samme ugedag, og det er sådan, rengøring aftales i praksis.",
-        "Skal besøgene ligge sjældnere end hver 12. måned, eller uden fast rytme — fx hver 15. måned — så vælg «Bestemte datoer» og skriv datoerne ind én for én."] }, { h: "Aftales ved besøget", p: ["Til kunder, hvor næste besøg aftales, mens rengøringen udføres. Vælg «Aftales ved besøget» under Plan parametre. Startdatoen er det første besøg; der oprettes ingen flere opgaver af sig selv.", "Aftalen får et punkt på opgavens tjekliste: «Aftal næste besøg med kunden». I Worklist skriver medarbejderen datoen (og evt. klokkeslæt) ved punktet, før hun registrerer tiden. Så oprettes næste opgave med de samme medarbejdere, og punktet står på den igen.", "Bliver næste besøg ikke aftalt, står punktet ikke afkrydset. Dagen efter besøget kommer der en linje i klokken til kontoret: «Kontakt kunden for næste besøgsdato — sidste besøg var d. …». Den skjules en uge ad gangen med «Husk om en uge», og forsvinder, når der ligger en opgave på aftalen. På aftalekortet står næste aftalte besøg, eller «Næste besøg er ikke aftalt» med en knap til at sætte det.", "Kontraktsummen kan ikke regnes ud, for der er ingen rytme at gange med. Listen viser værdien pr. besøg og det realiserede.", "Retter du aftalen senere, bliver de opgaver, der er aftalt undervejs, stående. De ryddes ikke, som ved en fast rytme. Startdatoen må stå i fortiden på en aftale, der kører, så længe du ikke ændrer den — den er bare dagen for første besøg, og den skal passe til de opgaver, der allerede er udført og faktureret. Skifter du den, skal den være i dag eller senere."] }, { h: "Under udarbejdelse", p: ["Er du ikke færdig med en ny aftale, så tryk «Gem som kladde» i stedet for «Gem og planlæg».", "En kladde opretter ingen opgaver. Den ligger og venter, og du kan rette alle felter i den så mange gange du vil.", "Find den igen med filteret «Under udarbejdelse» øverst her på siden. Tallet i knappen viser hvor mange der ligger.", "Tryk «Åbn og godkend» for at rette videre. Inde i aftalen vælger du så «Gem kladde» hvis du stadig ikke er færdig, eller «Godkend og planlæg» når den er klar.", "«Gem kladde» findes kun på nye aftaler og kladder. Retter du en aftale, der allerede kører, gemmer du med «Godkend og planlæg» — en aftale, der kører, kan ikke laves om til en kladde, for så ville alle dens kommende opgaver blive slettet.", "Først ved godkendelsen oprettes opgaverne — fra startdatoen og frem til udløbsdatoen. Det kan være mange på én gang, så tjek datoerne inden du godkender.", "Er startdatoen løbet fra kladden, mens den lå i bunken, flytter appen den frem, når du åbner den — og siger det med blåt øverst i kolonnen til højre, med både den gamle og den nye dato.", "Den nye dato er ikke altid i morgen. Startdatoen er nemlig ankeret for rytmen: for «hver 14. dag» tæller systemet uger fra startdatoens mandag, så flytter man datoen én uge, skifter aftalen fra lige til ulige uger. Derfor vælges den første dag fra i morgen, der holder aftalen i de samme uger som før. Passer det ikke, retter du den selv.", "Datoerne kommer fra kladden. Indtil 21. september 2026 stod der «i dag» og «i dag + 1 år» uanset hvad, så en kladde med toårig løbetid blev etårig ved godkendelsen — uden at nogen fik det at vide.", "Er kladden lavet ved en indlæsning, står der en gul «Bemærkning til kontoret» med det, indlæsningen ikke kunne afgøre — manglende kundenavn, en gættet kontrakttype, noter fra det ark den kom fra. Læs den, ret det den peger på, og godkend så.", "På en bred skærm står bemærkningen i en kolonne til højre, og den bliver hængende, mens du bladrer ned gennem felterne. Den hørte før nederst, altså længst væk fra det, den handler om. Er skærmen for smal til to kolonner, står den øverst i stedet.", "Ligner kladden en aftale, der allerede findes, står advarslen øverst i den samme kolonne — med hvilken aftale, hvilken dag og hvor længe. Den regnes ud fra det, der står i felterne lige nu, så retter du adressen eller dagen, forsvinder den af sig selv.", "Feltet vises kun, så længe aftalen er en kladde. Når den er godkendt, er noten gjort op, og feltet forsvinder — teksten bliver stående i databasen, men skal ikke stå og fylde bagefter."] }, { h: "Del kladdebunken op", p: [
+        "Skal besøgene ligge sjældnere end hver 12. måned, eller uden fast rytme — fx hver 15. måned — så vælg «Bestemte datoer» og skriv datoerne ind én for én."] }, { h: "Aftales ved besøget", p: ["Til kunder, hvor næste besøg aftales, mens rengøringen udføres. Vælg «Aftales ved besøget» under Plan parametre. Startdatoen er det første besøg; der oprettes ingen flere opgaver af sig selv.", "Aftalen får et punkt på opgavens tjekliste: «Aftal næste besøg med kunden». I Worklist skriver medarbejderen datoen (og evt. klokkeslæt) ved punktet, før medarbejderen registrerer tiden. Så oprettes næste opgave med de samme medarbejdere, og punktet står på den igen.", "Bliver næste besøg ikke aftalt, står punktet ikke afkrydset. Dagen efter besøget kommer der en linje i klokken til kontoret: «Kontakt kunden for næste besøgsdato — sidste besøg var d. …». Den skjules en uge ad gangen med «Husk om en uge», og forsvinder, når der ligger en opgave på aftalen. På aftalekortet står næste aftalte besøg, eller «Næste besøg er ikke aftalt» med en knap til at sætte det.", "Kontraktsummen kan ikke regnes ud, for der er ingen rytme at gange med. Listen viser værdien pr. besøg og det realiserede.", "Retter du aftalen senere, bliver de opgaver, der er aftalt undervejs, stående. De ryddes ikke, som ved en fast rytme. Startdatoen må stå i fortiden på en aftale, der kører, så længe du ikke ændrer den — den er bare dagen for første besøg, og den skal passe til de opgaver, der allerede er udført og faktureret. Skifter du den, skal den være i dag eller senere."] }, { h: "Under udarbejdelse", p: ["Er du ikke færdig med en ny aftale, så tryk «Gem som kladde» i stedet for «Gem og planlæg».", "En kladde opretter ingen opgaver. Den ligger og venter, og du kan rette alle felter i den så mange gange du vil.", "Find den igen med filteret «Under udarbejdelse» øverst her på siden. Tallet i knappen viser hvor mange der ligger.", "Tryk «Åbn og godkend» for at rette videre. Inde i aftalen vælger du så «Gem kladde» hvis du stadig ikke er færdig, eller «Godkend og planlæg» når den er klar.", "«Gem kladde» findes kun på nye aftaler og kladder. Retter du en aftale, der allerede kører, gemmer du med «Godkend og planlæg» — en aftale, der kører, kan ikke laves om til en kladde, for så ville alle dens kommende opgaver blive slettet.", "Først ved godkendelsen oprettes opgaverne — fra startdatoen og frem til udløbsdatoen. Det kan være mange på én gang, så tjek datoerne inden du godkender.", "Er startdatoen løbet fra kladden, mens den lå i bunken, flytter appen den frem, når du åbner den — og siger det med blåt øverst i kolonnen til højre, med både den gamle og den nye dato.", "Den nye dato er ikke altid i morgen. Startdatoen er nemlig ankeret for rytmen: for «hver 14. dag» tæller systemet uger fra startdatoens mandag, så flytter man datoen én uge, skifter aftalen fra lige til ulige uger. Derfor vælges den første dag fra i morgen, der holder aftalen i de samme uger som før. Passer det ikke, retter du den selv.", "Datoerne kommer fra kladden. Indtil 21. september 2026 stod der «i dag» og «i dag + 1 år» uanset hvad, så en kladde med toårig løbetid blev etårig ved godkendelsen — uden at nogen fik det at vide.", "Er kladden lavet ved en indlæsning, står der en gul «Bemærkning til kontoret» med det, indlæsningen ikke kunne afgøre — manglende kundenavn, en gættet kontrakttype, noter fra det ark den kom fra. Læs den, ret det den peger på, og godkend så.", "På en bred skærm står bemærkningen i en kolonne til højre, og den bliver hængende, mens du bladrer ned gennem felterne. Den hørte før nederst, altså længst væk fra det, den handler om. Er skærmen for smal til to kolonner, står den øverst i stedet.", "Ligner kladden en aftale, der allerede findes, står advarslen øverst i den samme kolonne — med hvilken aftale, hvilken dag og hvor længe. Den regnes ud fra det, der står i felterne lige nu, så retter du adressen eller dagen, forsvinder den af sig selv.", "Feltet vises kun, så længe aftalen er en kladde. Når den er godkendt, er noten gjort op, og feltet forsvinder — teksten bliver stående i databasen, men skal ikke stå og fylde bagefter."] }, { h: "Del kladdebunken op", p: [
         "Kladderne står efter kontraktsum, med den største øverst — uanset kontrakttype. Så kan du tage de aftaler, der er mest værd, først. De øvrige lister på siden står stadig efter udløbsdato."] }, { h: "Søg og filtrér", p: [
         "Søgefeltet under knapperne leder i kundenavn, fakturabeskrivelse, adresse og opgavetekst på én gang.",
         "At den også leder i fakturabeskrivelsen er med vilje: på Nexus- og Ældrelov-aftaler hedder kunden «Jammerbugt Kommune» på dem alle sammen, og borgerens navn står i fakturabeskrivelsen. Søger du på borgeren, finder du den rigtige aftale — søger du på kommunen, får du dem alle.",
@@ -2378,8 +2378,8 @@ const MODULE_HELP = {
         "Værdien er den planlagte tid for dem, der var på opgaven, gange timeprisen for kundetypen — eller fastprisen."] },
     { h: "Start/stop pr. medarbejder", p: [
         "Fanen «⏱ Start/stop» viser, hvordan tiden bliver startet og afsluttet: af medarbejderen selv, automatisk ved ankomst, af systemet eller slet ikke — og hvor langt fra adressen den blev afsluttet.",
-        "Kun opgaver, hvor start/stop gælder, er med: hendes egen tid på opgaven er mindst grænsen under Opsætning → Tidsregistrering. Rettes grænsen dér, følger rapporten med. Er tiden fordelt, er det hendes andel, der tæller.",
-        "Øverst står en linje pr. medarbejder med de vigtigste tal. Tryk på en, så kommer hendes opgaver dag for dag, med en vurdering i ord af, hvad I skal tale med hende om. Tryk på en opgave for hele forløbet: påmindelse, systemstart, «Fortryd start», afslutning og afstand.",
+        "Kun opgaver, hvor start/stop gælder, er med: medarbejderens egen tid på opgaven er mindst grænsen under Opsætning → Tidsregistrering. Rettes grænsen dér, følger rapporten med. Er tiden fordelt, er det medarbejderens andel, der tæller.",
+        "Øverst står en linje pr. medarbejder med de vigtigste tal. Tryk på en, så kommer medarbejderens opgaver dag for dag, med en vurdering i ord af, hvad I skal tale med medarbejderen om. Tryk på en opgave for hele forløbet: påmindelse, systemstart, «Fortryd start», afslutning og afstand.",
         "«Ved adressen» betyder højst 150 m fra adressen — samme grænse som indbakken og stopuret i ugeplanen.",
         "«Fortryd start» bliver husket fra 30. september 2026. Før den dato er det et skøn: en systemstart før afslutningen, der ikke står i registreringen.",
       ] },
@@ -2409,13 +2409,13 @@ const MODULE_HELP = {
         "Er der flere på besøget, er den planlagte tid regnet for hele holdet. To medarbejdere à to timer er fire timers planlagt arbejde — ikke to.",
         "Alt er foldet ud. Ringer kunden og spørger hvorfor der er brugt mere tid, skal du kunne læse svaret uden at klikke først.",
         "Mest merforbrug øverst — det er den samtale der kommer.",
-        "Søgefeltet finder kunden med det samme, hvis du allerede har hende i røret."] },
+        "Søgefeltet finder kunden med det samme, hvis du allerede har vedkommende i røret."] },
     { h: "Kun udførte opgaver", p: [
         "En opgave der ikke er kørt endnu, er ikke en afvigelse og tæller ikke med.",
         "Regnede vi den med, ville hver eneste kunde se ud til at mangle timer den første i måneden, og listen ville være ubrugelig præcis når du kigger på den."] },
     { h: "Uden begrundelse", p: [
         "Tallet øverst er de besøg hvor der er brugt mere tid end aftalt, uden at nogen har skrevet hvorfor.",
-        "Det er dem du ikke kan svare kunden på. Står der et tal, er det værd at spørge medarbejderen mens hun stadig kan huske det."] },
+        "Det er dem du ikke kan svare kunden på. Står der et tal, er det værd at spørge medarbejderen, mens vedkommende stadig kan huske det."] },
     { h: "Sådan læses forskellen", p: [
         "Et plus betyder mere tid end aftalt. Sker det fast hos samme kunde, er det aftalens varighed der er sat for lavt — ret den på aftalen.",
         "Et minus betyder mindre tid. Er opgaven udført, er det enten gået hurtigere, eller også er tiden ikke registreret færdig.",
@@ -2451,9 +2451,9 @@ const MODULE_HELP = {
         "Satsen har en gyldighedsdato. Lønsummen slår op hvad der gjaldt den dag opgaven blev udført — så en lønstigning ændrer ikke de måneder der allerede er afregnet.",
         "Ændrer du en sats, bliver du spurgt hvornår den gælder fra. Skal stigningen gælde bagud, sætter du bare datoen tilbage, og de berørte måneder regner om af sig selv.",
         "Står der en streg i stedet for et beløb, fandtes der ingen sats den dag. Det sker kun hvis opgaven ligger før medarbejderens første sats.",
-        "«Planlagt løn» er den afsatte tid gange medarbejderens sats. «Registreret løn» er den tid hun faktisk har registreret.",
+        "«Planlagt løn» er den afsatte tid gange medarbejderens sats. «Registreret løn» er den tid, der faktisk er registreret.",
         "Under Lønarter sætter du de koder, Danløn skal bruge — én for timer og én for kilometer. De står i jeres egen Danløn-opsætning, ikke i denne app.",
-        "Samme sted står, hvem der mangler et Danløn-nummer. En medarbejder uden nummer kommer ikke med i løneksporten, og nummeret sættes på hendes stamkort under Medarbejdere.",
+        "Samme sted står, hvem der mangler et Danløn-nummer. En medarbejder uden nummer kommer ikke med i løneksporten, og nummeret sættes på medarbejderens stamkort under Medarbejdere.",
         "Fluebenet foran hver linje betyder «godkendt til løn». Kun linjer med flueben kommer med i Danløn-filen — hverken timer eller kilometer sendes automatisk.",
         "Det er med vilje. Timerne i systemet er registreret tid fra marken; løn er betalt tid. Et besøg med dobbelt tidsforbrug og en begrundelse på tre bogstaver skal ses af et menneske, før det bliver til penge.",
         "«Godkend alle viste» sætter flueben på alt i den valgte lønperiode. Fortryder du, skifter knappen til at fjerne dem igen.",
@@ -2472,25 +2472,25 @@ const MODULE_HELP = {
         "Varigheden på en opgave er tiden PR. PERSON. Sætter du tre på en opgave til to timer, er der afsat seks timers arbejde.",
         "Skal de dele timerne ulige — en opgave på ti timer som 4, 4 og 2 — åbner du opgaven og skriver minutterne ud for hver medarbejder. Feltet er tomt som udgangspunkt, og så gælder opgavens varighed.",
         "Under listen står summen løbende: «Fordelt i alt: 10t (4t + 4t + 2t)». Passer den ikke med det, du har aftalt med kunden, retter du enten fordelingen eller varigheden — systemet blokerer ikke, for lige så tit er det planen der er forkert.",
-        "Hendes egen andel er det, hun ser i Worklist, og det hendes dag belastes med i kapaciteten. Uden fordeling ville hun få gennemsnittet foreslået og se ud til at overskride fra første minut.",
+        "Medarbejderens egen andel er det, der vises i Worklist, og det dagen belastes med i kapaciteten. Uden fordeling ville vedkommende få gennemsnittet foreslået og se ud til at overskride fra første minut.",
         "Kundetimer måler mod summen af andelene. Holder alle deres, er der ingen afvigelse.",
         "Sætter du en person mere på — også med plusset på kortet — får du besked om at åbne opgaven og fordele timerne. En ny får ikke automatisk en andel.",
         "Ved fast pris ændrer fordelingen ikke fakturaen; prisen er aftalt på forhånd. Ved timepris er fordelingen netop dét, der gør at ti planlagte timer også bliver til ti fakturerede."] },
     { h: "Oplæring — flere på opgaven uden at kunden betaler mere", p: [
-        "Skal en ny med ud og lære en opgave, sætter du hende på opgaven som alle andre og trykker «Oplæring» ud for hendes navn i opgavevinduet.",
-        "Så får hun sine timer på lønsedlen som normalt, men kunden faktureres kun for den, der udfører opgaven. Tre mand på en opgave til to timer giver seks timer i løn og to timer på fakturaen.",
+        "Skal en ny med ud og lære en opgave, sætter du medarbejderen på opgaven som alle andre og trykker «Oplæring» ud for navnet i opgavevinduet.",
+        "Så får medarbejderen sine timer på lønsedlen som normalt, men kunden faktureres kun for den, der udfører opgaven. Tre mand på en opgave til to timer giver seks timer i løn og to timer på fakturaen.",
         "Kundetimer regner også kun med den fakturerbare tid. Uden det ville hver eneste oplæringsdag stå som et overforbrug på flere timer, og listen ville blive ubrugelig i den uge.",
-        "Mærket sidder på den ENKELTE opgave og aldrig på medarbejderen. Hun kan sagtens være fast og fakturerbar på sine egne opgaver samme dag.",
+        "Mærket sidder på den ENKELTE opgave og aldrig på medarbejderen. Medarbejderen kan sagtens være fast og fakturerbar på sine egne opgaver samme dag.",
         "Det arves heller ikke til næste uges opgave på samme aftale. Det er med vilje: arvedes det, ville en kunde stille og roligt holde op med at blive faktureret, og ingen ville opdage hvornår det begyndte.",
-        "Bliver eleven fast på opgaven bagefter, fjerner du bare mærket — så faktureres hendes tid igen fra den dag.",
-        "Medarbejderen kan se det selv i Worklist, med besked om at tiden stadig tæller på lønnen. Ellers ville hun tro, det ikke kunne betale sig at registrere den."] },
+        "Bliver eleven fast på opgaven bagefter, fjerner du bare mærket — så faktureres medarbejderens tid igen fra den dag.",
+        "Medarbejderen kan se det selv i Worklist, med besked om at tiden stadig tæller på lønnen. Ellers ville vedkommende tro, det ikke kunne betale sig at registrere den."] },
     { h: "Kørsel på en anden aktivitet", p: [
         "Skal en medarbejder have kilometerpenge for en tur, der ikke er en almindelig opgave — hente materialer, køre til kursus — opretter du en Anden aktivitet og sætter flueben i «Der skal udbetales kørsel for turen».",
-        "Turen ender på aktivitetens egen adresse — den du skrev i feltet Adresse øverst. Du skal derfor kun skrive, hvor hun kører FRA.",
+        "Turen ender på aktivitetens egen adresse — den du skrev i feltet Adresse øverst. Du skal derfor kun skrive, hvor medarbejderen kører FRA.",
         "Så snart begge adresser står der, viser vinduet turens længde: «ca. 166 km». Er tallet urimeligt, er en af adresserne skrevet forkert — og det opdager du her i stedet for i lønopgørelsen en måned senere.",
         "Anslaget står også på aktiviteten ude i ugeplanen, som et lille mærke: 🚗 ca. 166 km t/r.",
         "Anslaget er vejledende. Det tal der udbetales, beregnes i nat efter at aktiviteten er markeret udført — en tur der bliver aflyst, udbetales ikke.",
-        "«Tur/retur» giver to linjer i stedet for én. Det er med vilje: kørte hun kun den ene vej, kan I fjerne den anden uden at hele turen ryger.",
+        "«Tur/retur» giver to linjer i stedet for én. Det er med vilje: kørte medarbejderen kun den ene vej, kan I fjerne den anden uden at hele turen ryger.",
         "Turen skal godkendes ligesom alt andet, før den kommer med i Danløn-filen.",
         "Har aktiviteten sin egen kørsel, tages den UD af dagens rutekæde. Ellers ville strækningen blive talt to gange — én gang som sin egen tur, og én gang som led mellem opgaven før og opgaven efter.",
         "En almindelig aktivitet uden de to adresser opfører sig som hidtil: den er et sted i ruten, ikke en tur for sig.",
@@ -2522,10 +2522,10 @@ const MODULE_HELP = {
     { h: "Om kunderne og borgerne", p: [
         "Navn, adresse, telefon, e-mail og kontaktperson. Aftale, tider, priser og fakturaer.",
         "Noter og billeder fra besøget. Adgangsforhold, herunder nøgleboks- og alarmkoder.",
-        "Ved accept af et tilbud gemmes desuden IP-adresse og browser sammen med underskriften. Kunden får det oplyst på accept-siden, inden hun trykker.",
+        "Ved accept af et tilbud gemmes desuden IP-adresse og browser sammen med underskriften. Kunden får det oplyst på accept-siden, inden der trykkes.",
         "Underskriver kunden på telefonen eller skærmen, gemmes billedet af underskriften, kundens navn, hvem hos os der var til stede, og tidspunktet — i stedet for IP-adresse og browser. Godkender kontoret for en kunde uden mail, gemmes hvem i kontoret, hvordan kunden sagde ja (telefon, på stedet, brev), og en note. Det underskrevne tilbud (PDF) ligger i en privat mappe og mailes til kunden, hvis vi har en adresse.",
-        "Henvendelser fra «Bliv ringet op» (QR-koden i pjecen): navn, telefon, hvornår vi må ringe, og det borgeren selv vælger at skrive — adresse, om hun får hjælp fra kommunen, hvad hun er interesseret i, og en besked. Ingen IP-adresse. Slettes automatisk 6 måneder efter, at den er afsluttet, og senest efter 12 måneder.",
-        "På Nexus- og ældrelovsopgaver er det kommunen der er dataansvarlig. Spørger en borger om indsigt i sine oplysninger, skal hun henvises til kommunen — vi udfører alene arbejdet efter kommunens instruks."] },
+        "Henvendelser fra «Bliv ringet op» (QR-koden i pjecen): navn, telefon, hvornår vi må ringe, og det borgeren selv vælger at skrive — adresse, om borgeren får hjælp fra kommunen, hvad borgeren er interesseret i, og en besked. Ingen IP-adresse. Slettes automatisk 6 måneder efter, at den er afsluttet, og senest efter 12 måneder.",
+        "På Nexus- og ældrelovsopgaver er det kommunen der er dataansvarlig. Spørger en borger om indsigt i sine oplysninger, skal borgeren henvises til kommunen — vi udfører alene arbejdet efter kommunens instruks."] },
     { h: "Det systemet ikke indeholder", p: [
         "Ingen CPR-numre i selve systemet. Lønfilen bruger Danløn-nummeret. Undtagelsen er dokumentarkivet på medarbejderkortet: en ansættelseskontrakt, som kontoret lægger ind, kan indeholde et CPR-nummer. Filerne ligger i en privat mappe, som kun administratorer kan åbne.",
         "Ingen bankoplysninger og ingen kontonumre.",
@@ -5251,7 +5251,7 @@ function PlanningApp({ session, onSignOut }) {
       const antalNu = (task.assignees || []).length + 1;
       const fordelt = harFordeling(task);
       notify(fordelt
-        ? `${emp?.name || "Medarbejderen"} er sat på — men hun har ingen andel af timerne endnu. Åbn opgaven og fordel tiden, ellers regnes hun med opgavens varighed på ${fmtMin(task.duration || 0)}.`
+        ? `${emp?.name || "Medarbejderen"} er sat på — men vedkommende har ingen andel af timerne endnu. Åbn opgaven og fordel tiden, ellers regnes der med opgavens varighed på ${fmtMin(task.duration || 0)}.`
         : `${emp?.name || "Medarbejderen"} er sat på. Nu er der ${antalNu} på opgaven à ${fmtMin(task.duration || 0)} = ${fmtMin((task.duration || 0) * antalNu)} samlet. Åbn opgaven, hvis timerne skal fordeles anderledes.`);
     }
   }
@@ -6629,7 +6629,7 @@ function PlanningApp({ session, onSignOut }) {
       {/* Og den omvendte fare: blader man langt frem, FØR anden runde er inde, er
           ugen ikke hentet. Den ville se tom ud — og en tom ugeplan er ikke «ingen
           opgaver», den er «vi ved det ikke endnu». Forskellen er hele arbejdsdagen:
-          ser planlæggeren tomt, lægger hun noget andet ind oveni.
+          ser planlæggeren tomt, lægger medarbejderen noget andet ind oveni.
           Horisonten danner heller ikke noget i sådan en uge; værnet ved
           ensureWeekInstances holder den ude, så der ikke opstår dubletter. */}
       {!alleOpgaverHentet && view === "uge" && !ugenErHentet(hentedeUgerNu, wk.year, wk.weekNo) && (
@@ -7911,7 +7911,7 @@ function EmployeesView({ employees, onAdd, onEdit, supabase, areas, employeeArea
               {e.fratraadtDato && (
                 <div style={{ borderTop: "1px solid #F1F5F9", marginTop: 10, paddingTop: 10, fontSize: 12.5, color: "#64748B", lineHeight: 1.6 }}>
                   Fratrådt {new Date(e.fratraadtDato).toLocaleDateString("da-DK", { day: "numeric", month: "long", year: "numeric" })}.
-                  Login’et er slettet, og hun indgår ikke i planlægningen. Lønhistorik og kørsel er bevaret.
+                  Login’et er slettet, og medarbejderen indgår ikke i planlægningen. Lønhistorik og kørsel er bevaret.
                 </div>
               )}
 
@@ -10791,9 +10791,9 @@ function StartStopRapport() {
 
   function vurdering(navn, t) {
     const f = navn.split(" ")[0];
-    if (!t.reg) return { farve: "#94A3B8", h: `${f} har ikke registreret noget i perioden`, p: "Enten er hun ikke kommet i gang med Worklist, eller også skrives tiden et andet sted. Tal med hende om, hvordan det skal foregå." };
-    if ((t.pStart ?? 0) >= 80 && (t.pAdr ?? 100) >= 80) return { farve: "#16A34A", h: `${f} bruger start/stop, som det er tænkt`, p: "Hun starter selv og afslutter ved adressen. Tiden er målt, ikke skønnet." };
-    if (t.uden >= t.reg / 2 && (t.pAdr ?? 0) < 50) return { farve: "#DC2626", h: `${f} trykker ikke Start og afslutter, efter hun er kørt`, p: "Tiden bliver meldt bagefter — ofte i bilen på vej til næste sted. Vis hende rytmen: åbn Worklist ved ankomst, tryk ▶ Start, og tryk Afslut, før du kører. Tjek også, at notifikationer er slået til på hendes telefon." };
+    if (!t.reg) return { farve: "#94A3B8", h: `${f} har ikke registreret noget i perioden`, p: "Enten er medarbejderen ikke kommet i gang med Worklist, eller også skrives tiden et andet sted. Tal med vedkommende om, hvordan det skal foregå." };
+    if ((t.pStart ?? 0) >= 80 && (t.pAdr ?? 100) >= 80) return { farve: "#16A34A", h: `${f} bruger start/stop, som det er tænkt`, p: "Medarbejderen starter selv og afslutter ved adressen. Tiden er målt, ikke skønnet." };
+    if (t.uden >= t.reg / 2 && (t.pAdr ?? 0) < 50) return { farve: "#DC2626", h: `${f} trykker ikke Start og afslutter, efter kørslen`, p: "Tiden bliver meldt bagefter — ofte i bilen på vej til næste sted. Vis vedkommende rytmen: åbn Worklist ved ankomst, tryk ▶ Start, og tryk Afslut, før du kører. Tjek også, at notifikationer er slået til på telefonen." };
     return { farve: "#D97706", h: `${f} er delvist med`, p: "Nogle opgaver er startet og afsluttet rigtigt, andre ikke. Se de røde markeringer herunder." };
   }
 
@@ -10847,7 +10847,7 @@ function StartStopRapport() {
       )}
 
       {data && navne.length > 0 && !aktiv && (
-        <div style={{ color: "#64748B", fontSize: 14 }}>Tryk på en medarbejder for at se hendes opgaver.</div>
+        <div style={{ color: "#64748B", fontSize: 14 }}>Tryk på en medarbejder for at se medarbejderens opgaver.</div>
       )}
 
       {aktiv && (() => {
@@ -10915,11 +10915,11 @@ function StartStopRapport() {
                                 {o.paam && <div>🔔 Påmindelse sendt kl. {o.paam}.</div>}
                                 {o.sys && <div>⚙️ Systemet startede tiden kl. {o.sys}.
                                   {st.slags === "fjernet" ? ` Starten blev fjernet igen${o.fortrudt ? ` kl. ${o.fortrudt} med «Fortryd start»` : " — typisk med «Fortryd start»"}.` : ""}
-                                  {o.slut && o.sys > o.slut ? " Det var efter, hun allerede havde afsluttet, så det talte ikke." : ""}</div>}
-                                {!o.sys && o.fortrudt && <div>↩ Hun fortrød sin start kl. {o.fortrudt}.</div>}
+                                  {o.slut && o.sys > o.slut ? " Det var efter, medarbejderen allerede havde afsluttet, så det talte ikke." : ""}</div>}
+                                {!o.sys && o.fortrudt && <div>↩ Medarbejderen fortrød sin start kl. {o.fortrudt}.</div>}
                                 {st.slags === "system" && o.start && <div>▶ Tiden løb fra {o.start} — et skøn sat af systemet, ikke en måling.</div>}
                                 {st.slags === "god" && o.a_start != null && <div>▶ Startet {ssKm(o.a_start)} fra adressen.</div>}
-                                {o.uden && <div>▶ Ingen start: hun trykkede Afslut uden at have startet.</div>}
+                                {o.uden && <div>▶ Ingen start: medarbejderen trykkede Afslut uden at have startet.</div>}
                                 {o.slut && <div>■ Afsluttet kl. {o.slut}{o.a_slut != null ? `, ${ssKm(o.a_slut)} fra adressen` : ""}.
                                   {o.kl && o.slut < o.kl ? <b> Før det planlagte tidspunkt.</b> : null}</div>}
                                 {o.maalt != null && <div>⏱ Målt {fmtMin(o.maalt)}, registreret {fmtMin(o.min)}.</div>}
@@ -10942,9 +10942,9 @@ function StartStopRapport() {
 
       <div style={{ marginTop: 18, background: "#fff", borderRadius: 12, padding: "12px 16px", fontSize: 13, color: "#334155", lineHeight: 1.7 }}>
         <div style={{ fontWeight: 800, marginBottom: 4 }}>Sådan læses rapporten</div>
-        <div><SsMaerke farve="groen">▶ selv</SsMaerke> hun trykkede Start. <SsMaerke farve="groen">▶ ved ankomst</SsMaerke> Worklist startede, da hun kom frem (kræver at appen er åben).</div>
-        <div><SsMaerke farve="blaa">▶ systemet</SsMaerke> hun startede ikke selv; systemet startede 10 min efter planlagt tid. Tiden er et skøn.</div>
-        <div><SsMaerke farve="roed">▶ ingen start</SsMaerke> hun trykkede Afslut uden at have startet. <SsMaerke farve="orange">systemstart fjernet</SsMaerke> starten blev fjernet igen med «Fortryd start».</div>
+        <div><SsMaerke farve="groen">▶ selv</SsMaerke> medarbejderen trykkede Start. <SsMaerke farve="groen">▶ ved ankomst</SsMaerke> Worklist startede, da vedkommende kom frem (kræver at appen er åben).</div>
+        <div><SsMaerke farve="blaa">▶ systemet</SsMaerke> medarbejderen startede ikke selv; systemet startede 10 min efter planlagt tid. Tiden er et skøn.</div>
+        <div><SsMaerke farve="roed">▶ ingen start</SsMaerke> medarbejderen trykkede Afslut uden at have startet. <SsMaerke farve="orange">systemstart fjernet</SsMaerke> starten blev fjernet igen med «Fortryd start».</div>
         <div><SsMaerke farve="groen">■ ved adressen</SsMaerke> afsluttet højst {SS_VED_ADRESSEN} m fra adressen. <SsMaerke farve="roed">■ 8,1 km væk</SsMaerke> afsluttet et andet sted — oftest i bilen bagefter.</div>
         <div><SsMaerke farve="graa">tid skrevet</SsMaerke> tiden er skrevet ind uden start/stop. <SsMaerke farve="graa">ikke registreret</SsMaerke> intet registreret endnu.</div>
       </div>
@@ -12005,7 +12005,7 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
       <label style={styles.label}>Adgang (nøgleboks, koder, kontaktperson m.v.)</label>
       <textarea style={styles.textarea} rows={2} value={accessInstructions} onChange={(e) => setAccessInstructions(e.target.value)} placeholder="F.eks. Nøgleboks ved hovedindgang, kode 4471" />
       <div style={styles.hint}>
-        Teksten er skjult i medarbejder-appen. Hun skal trykke for at se den, og hver åbning registreres.
+        Teksten er skjult i medarbejder-appen. Medarbejderen skal trykke for at se den, og hver åbning registreres.
       </div>
 
       {/* Noeglen skal hentes paa kontoret. Vises paa opgavekortet i medarbejder-appen,
@@ -12924,7 +12924,7 @@ function PapirskemaView({ instances, employees, kmLog, onTidIndlaest, onFakturag
                         <tr style={r.indlaest ? { background: "#F0FDF4" } : undefined}>
                           <td style={{ ...celle, fontVariantNumeric: "tabular-nums", color: "#64748B" }}>{r.nr ?? ""}</td>
                           <td style={celle}>{r.dato ? `${r.dato.slice(8, 10)}.${r.dato.slice(5, 7)}` : ""}</td>
-                          <td style={celle}>{r.sted}{r.t.assignees?.includes(empId) ? "" : <span style={{ color: roed }}> · ikke på hendes plan</span>}</td>
+                          <td style={celle}>{r.sted}{r.t.assignees?.includes(empId) ? "" : <span style={{ color: roed }}> · ikke på medarbejderens plan</span>}</td>
                           <td style={celle}>{fmtMin(r.t.duration || 0)}</td>
                           <td style={{ ...celle, color: r.harWorklist ? "#1D4ED8" : "#94A3B8", fontWeight: r.harWorklist ? 600 : 400 }}>
                             {r.harWorklist ? fmtMin(r.wl) : "–"}
@@ -13515,7 +13515,7 @@ function UgeTidslinje({ emp, dage, instances, travelSettings, weekOffset, weekYe
         <span style={{ fontWeight: 400, color: "#94A3B8", marginLeft: 8 }}>
           {tom
             ? "Ingen opgaver i denne uge — træk en herned for at planlægge."
-            : "Samme dag som hun selv ser i Worklist. Stiplet = ikke aftalt klokkeslæt."}
+            : "Samme dag som medarbejderen selv ser i Worklist. Stiplet = ikke aftalt klokkeslæt."}
         </span>
       </div>
 
@@ -13859,23 +13859,23 @@ function FratraedModal({ emp, instances, onClose, onConfirm }) {
         <input type="date" style={styles.input} value={dato} onChange={(e) => setDato(e.target.value)} />
 
         <div style={{ ...styles.hint, color: "#B91C1C", marginTop: 10 }}>
-          Hendes login bliver <b>slettet</b>. Står appen åben på hendes telefon, bliver hun
+          Medarbejderens login bliver <b>slettet</b>. Står appen åben på medarbejderens telefon, bliver vedkommende
           logget ud med det samme.
         </div>
         <div style={styles.hint}>
           {kommende.length > 0
-            ? `${kommende.length} kommende opgave${kommende.length === 1 ? "" : "r"} mister hende og går tilbage til "Ikke tildelt". Du skal selv planlægge dem på ny.`
-            : "Hun står ikke på nogen kommende opgaver."}
+            ? `${kommende.length} kommende opgave${kommende.length === 1 ? "" : "r"} mister medarbejderen og går tilbage til "Ikke tildelt". Du skal selv planlægge dem på ny.`
+            : "Medarbejderen står ikke på nogen kommende opgaver."}
         </div>
         <div style={styles.hint}>
-          {udfoerte > 0 ? `${udfoerte} udført${udfoerte === 1 ? " opgave beholder" : "e opgaver beholder"} hendes navn og tidsregistrering. ` : ""}
-          Lønhistorik og kørselslog bevares, så du kan dokumentere hvad hun har fået
+          {udfoerte > 0 ? `${udfoerte} udført${udfoerte === 1 ? " opgave beholder" : "e opgaver beholder"} medarbejderens navn og tidsregistrering. ` : ""}
+          Lønhistorik og kørselslog bevares, så du kan dokumentere hvad medarbejderen har fået
           udbetalt og kørt — også om flere år.
         </div>
 
         <label style={{ display: "flex", gap: 8, alignItems: "flex-start", marginTop: 12, fontSize: 13, cursor: "pointer" }}>
           <input type="checkbox" checked={accepted} onChange={(e) => setAccepted(e.target.checked)} />
-          <span>Jeg er klar over at <b>login’et slettes</b> og ikke kan gendannes. Skal hun tilbage,
+          <span>Jeg er klar over at <b>login’et slettes</b> og ikke kan gendannes. Skal medarbejderen tilbage,
             oprettes en ny adgang.</span>
         </label>
 
@@ -14664,7 +14664,7 @@ function KontorKlokke({ isAdminUser, signal, onGaaTil }) {
                 </>)}
                 {l.art === "tidsrettelse" && (<>
                   <button style={{ ...styles.secondaryBtn, padding: "4px 10px", fontSize: 12, color: "#166534", borderColor: "#BBF7D0" }}
-                    title="Hendes løn følger rettelsen. Fakturaen er uændret." onClick={() => tidsrettelse(l, true)}>Godkend</button>
+                    title="Medarbejderens løn følger rettelsen. Fakturaen er uændret." onClick={() => tidsrettelse(l, true)}>Godkend</button>
                   <button style={{ ...styles.secondaryBtn, padding: "4px 10px", fontSize: 12, color: "#B91C1C", borderColor: "#FECACA" }}
                     title="Den planlagte tid står." onClick={() => tidsrettelse(l, false)}>Afvis</button>
                 </>)}
@@ -15016,7 +15016,7 @@ function AbonnementLinjer({ maaned, aar, maanedNavn }) {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
         <div>
           <div style={{ fontSize: 14, fontWeight: 700 }}>Abonnementer · {maanedNavn} {aar}</div>
-          <div style={{ fontSize: 12, color: "#64748B" }}>Kundeportaler. Prisen kommer fra Produkter, eller fra kunden, hvis hun har sin egen.</div>
+          <div style={{ fontSize: 12, color: "#64748B" }}>Kundeportaler. Prisen kommer fra Produkter, eller fra kunden, hvis vedkommende har sin egen.</div>
         </div>
         <button style={styles.secondaryBtn} disabled={sender || !klar.length} onClick={send}
           title={klar.length ? "" : "Intet at sende: linjerne er sendt eller står til 0 kr."}>
@@ -15305,7 +15305,7 @@ function StartStopPanel({ supabase, employees, onStartStopAlle }) {
         {!tolGyldig && tolKladde !== "" && <span style={{ fontSize: 12.5, color: "#B91C1C" }}>Mellem 0 og 30</span>}
       </div>
       <div style={{ ...styles.hint, marginBottom: 14 }}>
-        Afslutter hun inden for tolerancen, registreres den planlagte tid — både løn og faktura. 60 min-opgave, afsluttet efter
+        Afslutter medarbejderen inden for tolerancen, registreres den planlagte tid — både løn og faktura. 60 min-opgave, afsluttet efter
         56 eller 64 min: 60 min. Ingen begrundelse. 0 slår det fra.
       </div>
 
@@ -15321,7 +15321,7 @@ function StartStopPanel({ supabase, employees, onStartStopAlle }) {
           onClick={() => alle(false)}>Slå fra for alle</button>
       </div>
       <div style={{ ...styles.hint, marginTop: 10 }}>
-        Den enkelte medarbejder slås til og fra i hendes eget vindue under «Løn og transport».
+        Den enkelte medarbejder slås til og fra i medarbejderens eget vindue under «Løn og transport».
       </div>
     </div>
   );
@@ -15363,7 +15363,7 @@ function AutoslutPanel({ supabase }) {
     if (aktivNu && !v.aktiv && !window.confirm(
       "Slå auto-slut til?\n\n"
       + `Opgaver, medarbejderen ikke har afsluttet, lukkes ${v.efterTimer} time(r) efter planlagt slut med den planlagte tid. `
-      + "Kunden faktureres den planlagte tid. Medarbejderen kan rette sin tid op til lønlukningen; retter hun ned, skal I godkende.\n\n"
+      + "Kunden faktureres den planlagte tid. Medarbejderen kan rette sin tid op til lønlukningen; rettes den ned, skal I godkende.\n\n"
       + "Det gælder kun opgaver fra nu af — gamle, glemte opgaver røres ikke.\n\n"
       + "Er det varslet til medarbejderne?")) return;
     setGemmer(true); setFejl("");
@@ -15390,7 +15390,7 @@ function AutoslutPanel({ supabase }) {
       <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>🔒 Auto-slut</div>
       <div style={{ fontSize: 13, color: "#64748B", lineHeight: 1.55, marginBottom: 12 }}>
         En opgave, medarbejderen ikke har afsluttet, lukkes af systemet med den planlagte tid, så kunden altid kan
-        faktureres. Medarbejderen får en besked en time før. Hun kan rette sin tid i Worklist frem til lønlukningen —
+        faktureres. Medarbejderen får en besked en time før og kan rette sin tid i Worklist frem til lønlukningen —
         mere tid med en begrundelse, mindre tid kun med jeres godkendelse (det kommer i 🔔). Efter lukningen kan kun
         planlæggerne rette, og rettelsen lægges som efterregulering i den åbne periode.
       </div>
@@ -16231,7 +16231,7 @@ function KoblTilDinero({ supabase, kunde, onKoblet }) {
       <div style={{ fontSize: 12.5, color: "#92400E", lineHeight: 1.55, marginTop: 4 }}>
         Fakturaer bliver oprettet alligevel, fordi kunden slås op på navn — men det
         fejler så snart to kontakter i Dinero hedder det samme. Kunden kan heller ikke
-        få en portal før hun er koblet.
+        få en portal før kunden er koblet.
       </div>
       {!resultater && (
         <button style={{ ...styles.secondaryBtn, marginTop: 10, minHeight: 40 }}
@@ -16677,7 +16677,7 @@ function PortalAfsnit({ supabase, kunde, currentEmployeeId, onAendret }) {
       <div style={{ borderTop: "1px solid #F1F5F9", paddingTop: 12 }}>
         <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>Kundeportal</div>
         <div style={{ fontSize: 12.5, color: "#64748B", lineHeight: 1.5, marginBottom: 10 }}>
-          Kunden kan få adgang til at se sine egne opgaver og fakturaer. Hun får sin egen
+          Kunden kan få adgang til at se sine egne opgaver og fakturaer. Kunden får sin egen
           adresse med sit navn på — og kun sine egne data.
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end" }}>
@@ -16895,7 +16895,7 @@ function PremiumDel({ kunde, kl, priser, foreslaaetSlug, onAnnuller, onGemt }) {
       <div style={{ fontSize: 13, fontWeight: 700 }}>Opret kundens egen planlægning og Worklist</div>
       <div style={{ fontSize: 12.5, color: "#64748B", lineHeight: 1.5, marginTop: 2 }}>
         Kundens data ligger i en database for sig, adskilt fra jeres. Administratoren får en mail med et link.
-        Brug portalens administrator: så åbner hun planlægningen fra portalen under «Planlægning» uden et login mere.
+        Brug portalens administrator: så åbner administratoren planlægningen fra portalen under «Planlægning» uden et login mere.
       </div>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         <div style={{ flex: 1, minWidth: 170 }}>
@@ -17230,7 +17230,7 @@ function KunderView({ supabase, currentEmployeeId }) {
                 {!harModul("dinero") ? (
                   k.guid
                     ? (harModul("kundeportal") && <PortalAfsnit supabase={supabase} kunde={k} currentEmployeeId={currentEmployeeId} onAendret={hent} />)
-                    : (harModul("kundeportal") && <div style={styles.hint}>Kunden er kun skrevet med navn på opgaverne. Vælg hende i kundelisten på en opgave, så kan hun få en portal.</div>)
+                    : (harModul("kundeportal") && <div style={styles.hint}>Kunden er kun skrevet med navn på opgaverne. Vælg kunden i kundelisten på en opgave, så kan vedkommende få en portal.</div>)
                 ) : k.mangler_dinero ? (
                   <KoblTilDinero supabase={supabase} kunde={k}
                     onKoblet={(antal) => { hent(); notifyKobling(antal); }} />
@@ -18126,7 +18126,7 @@ function TilbudEditor({ supabase, checklistTemplates, pricing, currentUserName, 
           <div style={{ background: "#F0FDF4", border: "1px solid #BBF7D0", borderRadius: 9,
                         padding: "11px 13px", fontSize: 13, color: "#166534", marginBottom: 14, lineHeight: 1.5 }}>
             Kunden har accepteret tilbuddet, og der er dannet en aftale i kladde under Aftaler.
-            Tilbuddet kan ikke længere rettes — det er dokumentationen for det hun skrev under på.
+            Tilbuddet kan ikke længere rettes — det er dokumentationen for det kunden skrev under på.
           </div>
         )}
 
@@ -18595,7 +18595,7 @@ function UdleveringPanel({ supabase, employees, items, onOpdateret }) {
             <div style={styles.modalBody}>
             <p style={{ margin: "0 0 4px", fontSize: 12.5, color: "#64748B", lineHeight: 1.5 }}>
               Medarbejderen henter varerne på kontoret. Kunden vælges her, så udleveringen
-              dukker op hos hende næste gang hun er ude hos netop den kunde.
+              dukker op hos medarbejderen næste gang vedkommende er ude hos netop den kunde.
             </p>
 
             <label style={styles.label}>Medarbejder</label>
@@ -19363,7 +19363,7 @@ function ActivityModal({ employees, onClose, onSave, kanBookeMus = false }) {
                            display: "flex", alignItems: "center", justifyContent: "center" }}>
               {kmTurRetur && <Check size={11} color="#fff" strokeWidth={3} />}
             </span>
-            <span style={{ fontSize: 13.5 }}>Tur/retur — hun kører også tilbage</span>
+            <span style={{ fontSize: 13.5 }}>Tur/retur — medarbejderen kører også tilbage</span>
           </button>
 
           {/* Anslaget. Det staar tydeligt, men med «ca.» foran og en linje under om
@@ -19405,7 +19405,7 @@ function ActivityModal({ employees, onClose, onSave, kanBookeMus = false }) {
           {!koerselKlar && (
             <div style={{ ...styles.hint, color: "#B91C1C", fontWeight: 600 }}>
               {address.trim()
-                ? "Skriv hvor hun kører fra."
+                ? "Skriv hvor medarbejderen kører fra."
                 : "Udfyld Adresse øverst — turen skal have et sted at ende."}
             </div>
           )}
@@ -19588,7 +19588,7 @@ function MedarbejderDokumenter({ empId, brugerId }) {
         {synlig && (
           <label style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: 13.5, margin: "0 0 4px 22px", cursor: "pointer" }}>
             <input type="checkbox" checked={kraevKvit} onChange={(e) => setKraevKvit(e.target.checked)} style={{ marginTop: 3 }} />
-            <span>Hun skal kvittere for at have læst det</span>
+            <span>Medarbejderen skal kvittere for at have læst det</span>
           </label>
         )}
         {fejl && <div style={{ color: "#B91C1C", fontSize: 13, margin: "6px 0" }}>{fejl}</div>}
@@ -19628,7 +19628,7 @@ function MedarbejderDokumenter({ empId, brugerId }) {
                     <button type="button" style={{ ...styles.secondaryBtn, padding: "5px 10px", fontSize: 12.5 }}
                       title={d.synlig_for_medarbejder ? "Skjul dokumentet for medarbejderen" : "Gør dokumentet synligt for medarbejderen"}
                       onClick={() => saetSynlig(d, !d.synlig_for_medarbejder, d.kvittering_kraeves)}>
-                      {d.synlig_for_medarbejder ? "Skjul" : "Vis for hende"}
+                      {d.synlig_for_medarbejder ? "Skjul" : "Vis for medarbejderen"}
                     </button>
                     <button type="button" style={{ ...styles.iconBtnGhostInline }} title="Slet dokumentet" onClick={() => slet(d)}><Trash2 size={14} /></button>
                   </div>
@@ -19674,7 +19674,7 @@ function MedarbejderAdgang({ emp }) {
   }
 
   async function luk() {
-    if (!window.confirm(`Luk adgang for ${emp.name}?\n\nLogin'et slettes, og hun bliver logget ud med det samme — også hvis appen står åben på telefonen. Hun bliver stående som medarbejder og kan få en ny adgang senere.`)) return;
+    if (!window.confirm(`Luk adgang for ${emp.name}?\n\nLogin'et slettes, og vedkommende bliver logget ud med det samme — også hvis appen står åben på telefonen. Vedkommende bliver stående som medarbejder og kan få en ny adgang senere.`)) return;
     setStatus("deactivating");
     const { data, error } = await supabase.functions.invoke("fratraed-medarbejder", { body: { handling: "lukAdgang", empId: emp.id } });
     if (error || data?.error) {
@@ -19711,7 +19711,7 @@ function MedarbejderAdgang({ emp }) {
           {status === "sending" ? "Sender…" : harLogin ? "Skift" : "Opret"}
         </button>
       </div>
-      <div style={styles.hint}>Medarbejderen får en mail med et link, hvor hun vælger sin adgangskode. Adgangen virker med det samme og gemmes uden «Gem medarbejder».</div>
+      <div style={styles.hint}>Medarbejderen får en mail med et link, hvor adgangskoden vælges. Adgangen virker med det samme og gemmes uden «Gem medarbejder».</div>
       {status === "sent" && <div style={{ fontSize: 12.5, color: "#16A34A", marginTop: 4 }}>✓ Bekræftelses-mail sendt</div>}
       {status === "deactivated" && <div style={{ fontSize: 12.5, color: "#DC2626", marginTop: 4 }}>Adgang lukket</div>}
       {status.startsWith("error") && <div style={{ fontSize: 12.5, color: "#DC2626", marginTop: 4 }}>{status}</div>}
@@ -19783,7 +19783,7 @@ function MedarbejderSamtaler({ empId }) {
               <div style={{ fontSize: 12.5, color: "#64748B" }}>{STATUS_MUS[m.status]}{m.leder_navn ? ` · leder: ${m.leder_navn}` : ""}</div>
               {m.forberedelse_delt ? (
                 <div style={{ marginTop: 6, background: "#F8FAFC", borderRadius: 8, padding: "8px 10px" }}>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: "#166534", marginBottom: 4 }}>Hun har delt sin forberedelse ({new Date(m.forberedelse_delt).toLocaleDateString("da-DK")})</div>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: "#166534", marginBottom: 4 }}>Medarbejderen har delt sin forberedelse ({new Date(m.forberedelse_delt).toLocaleDateString("da-DK")})</div>
                   {MUS_SPOERGSMAAL.filter(([k]) => (m.forberedelse || {})[k]).map(([k, q]) => (
                     <div key={k} style={{ marginBottom: 6 }}>
                       <div style={{ fontSize: 12, color: "#64748B" }}>{q}</div>
@@ -19791,7 +19791,7 @@ function MedarbejderSamtaler({ empId }) {
                     </div>
                   ))}
                 </div>
-              ) : m.status === "planlagt" ? <div style={{ fontSize: 12.5, color: "#94A3B8", marginTop: 4 }}>Hun har ikke delt sin forberedelse. Den er hendes egen, til hun deler den.</div> : null}
+              ) : m.status === "planlagt" ? <div style={{ fontSize: 12.5, color: "#94A3B8", marginTop: 4 }}>Medarbejderen har ikke delt sin forberedelse. Den er medarbejderens egen, til den deles.</div> : null}
               {m.status !== "aflyst" && (
                 <div style={{ marginTop: 8 }}>
                   <div style={{ fontSize: 12, fontWeight: 700, color: m.referat_status === "godkendt" ? "#166534" : "#6D28D9" }}>
@@ -19816,7 +19816,7 @@ function MedarbejderSamtaler({ empId }) {
               )}
             </div>
           ))}
-        <div style={{ ...styles.hint, marginTop: 10 }}>Referatet sendes til medarbejderen i hendes Personalemappe, hvor hun godkender det. Læg ikke helbredsoplysninger ind.</div>
+        <div style={{ ...styles.hint, marginTop: 10 }}>Referatet sendes til medarbejderens Personalemappe, hvor det godkendes. Læg ikke helbredsoplysninger ind.</div>
       </StamKort>
 
       <StamKort titel={`Udviklingsønsker (${(oensker || []).length})`} hint="Medarbejderen skriver dem i sin app" bg="#ECFDF5" farve="#047857" hintFarve="#059669">
@@ -19855,7 +19855,7 @@ function MedarbejderUdlevering({ empId }) {
     return () => { afbrudt = true; };
   }, [empId]);
   return (
-    <StamKort titel="👕 Udleveringshistorik" hint="Arbejdstøj og andet, hun har fået udleveret — de seneste 20" bg="#F1F5F9" farve="#334155" hintFarve="#64748B">
+    <StamKort titel="👕 Udleveringshistorik" hint="Arbejdstøj og andet, medarbejderen har fået udleveret — de seneste 20" bg="#F1F5F9" farve="#334155" hintFarve="#64748B">
       {rader === null ? <div style={styles.hint}>Henter…</div>
         : rader.length === 0 ? <div style={styles.hint}>Ingen udleveringer endnu.</div>
         : rader.map((tx) => (
@@ -19997,7 +19997,7 @@ function EmployeeModal({ hrAdgang = true, emp, onClose, onSave, skills: skillLis
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 16, alignItems: "start" }}>
 
       {fane === "person" && (<>
-        <StamKort titel="Personen" hint="Hvem hun er, og hvordan hun kontaktes" bg="var(--farve-lys)" farve="var(--farve-moerk)" hintFarve="#B4436F">
+        <StamKort titel="Personen" hint="Hvem medarbejderen er, og hvordan vedkommende kontaktes" bg="var(--farve-lys)" farve="var(--farve-moerk)" hintFarve="#B4436F">
           <label style={styles.label}>Navn</label>
           <input style={styles.input} value={name} onChange={(e) => setName(e.target.value)} placeholder="Fulde navn" />
 
@@ -20008,7 +20008,7 @@ function EmployeeModal({ hrAdgang = true, emp, onClose, onSave, skills: skillLis
           <label style={styles.label}>Privat e-mail</label>
           <input style={styles.input} type="email" value={hrPrivatEmail} onChange={(e) => setHrPrivatEmail(e.target.value)} placeholder="Bruges ikke til login" />
           <div style={styles.hint}>
-            Telefon og privat e-mail kan kun ses af HR-administratorer. Arbejdsmailen, hun logger ind med, står under Medarbejdere.
+            Telefon og privat e-mail kan kun ses af HR-administratorer. Arbejdsmailen, medarbejderen logger ind med, står under Medarbejdere.
           </div>
           </>)}
         </StamKort>
@@ -20028,7 +20028,7 @@ function EmployeeModal({ hrAdgang = true, emp, onClose, onSave, skills: skillLis
       </>)}
 
       {fane === "ansaettelse" && (<>
-        <StamKort titel="Ansættelse" hint="Hvordan og hvornår hun er ansat" bg="#F5F3FF" farve="#6D28D9" hintFarve="#7C3AED">
+        <StamKort titel="Ansættelse" hint="Hvordan og hvornår medarbejderen er ansat" bg="#F5F3FF" farve="#6D28D9" hintFarve="#7C3AED">
           <label style={styles.label}>Ansættelsesform</label>
           <select style={styles.input} value={hrForm} onChange={(e) => setHrForm(e.target.value)}>
             <option value="">Ikke angivet</option>
@@ -20060,16 +20060,16 @@ function EmployeeModal({ hrAdgang = true, emp, onClose, onSave, skills: skillLis
           </div>
         </StamKort>
         {emp?.id && (emp.fratraadtDato ? (
-          <StamKort titel="Fratrådt" hint="Login'et er slettet, og hun indgår ikke i planlægningen" bg="#F1F5F9" farve="#334155" hintFarve="#64748B">
+          <StamKort titel="Fratrådt" hint="Login'et er slettet, og medarbejderen indgår ikke i planlægningen" bg="#F1F5F9" farve="#334155" hintFarve="#64748B">
             <div style={styles.hint}>
               Fratrådt {new Date(emp.fratraadtDato).toLocaleDateString("da-DK", { day: "numeric", month: "long", year: "numeric" })}. Lønhistorik og kørsel er bevaret.
-              Skal hun tilbage, ryddes fratrædelsesdatoen i databasen først.
+              Skal medarbejderen tilbage, ryddes fratrædelsesdatoen i databasen først.
             </div>
           </StamKort>
         ) : !hrAdgang ? null : (
-          <StamKort titel="Fratræd" hint="Når hun holder op" bg="#FEF2F2" farve="#B91C1C" hintFarve="#DC2626">
+          <StamKort titel="Fratræd" hint="Når medarbejderen holder op" bg="#FEF2F2" farve="#B91C1C" hintFarve="#DC2626">
             <div style={styles.hint}>
-              Du vælger datoen, og dialogen fortæller, hvor mange kommende opgaver der mister hende. Login'et slettes, og hun forsvinder fra planlægningen.
+              Du vælger datoen, og dialogen fortæller, hvor mange kommende opgaver der mister medarbejderen. Login'et slettes, og vedkommende forsvinder fra planlægningen.
               Rettelser i dette kort, som ikke er gemt, går tabt — tryk først «Gem medarbejder», hvis du har rettet noget.
             </div>
             <button type="button" style={{ ...styles.secondaryBtn, color: "#B91C1C", borderColor: "#FCA5A5", marginTop: 8 }}
@@ -20131,7 +20131,7 @@ function EmployeeModal({ hrAdgang = true, emp, onClose, onSave, skills: skillLis
           <input style={styles.input} type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} />
           <div style={styles.hint}>
             Bruges til at beregne hvornår dagens første opgave kan starte.
-            {travelInWorktime && " Da kørslen er en del af hendes arbejdstid, er det tidspunktet hun tager hjemmefra."}
+            {travelInWorktime && " Da kørslen er en del af medarbejderens arbejdstid, er det tidspunktet medarbejderen tager hjemmefra."}
           </div>
 
           <div style={styles.capEditRow}>
@@ -20160,10 +20160,10 @@ function EmployeeModal({ hrAdgang = true, emp, onClose, onSave, skills: skillLis
             <span style={{ fontSize: 13, color: "#111111" }}>Må arbejde i weekenden — der er intet timeloft de dage</span>
           </button>
           <div style={styles.hint}>
-            Uden fluebenet kan hun slet ikke planlægges lørdag og søndag. Weekendarbejde udløser tillæg.
+            Uden fluebenet kan medarbejderen slet ikke planlægges lørdag og søndag. Weekendarbejde udløser tillæg.
           </div>
         </StamKort>
-        <StamKort titel="Kan" hint="Kompetencer og niveau — afgør hvilke opgaver hun kommer i betragtning til" bg="#F0FDFA" farve="#0F766E" hintFarve="#149285">
+        <StamKort titel="Kan" hint="Kompetencer og niveau — afgør hvilke opgaver medarbejderen kommer i betragtning til" bg="#F0FDFA" farve="#0F766E" hintFarve="#149285">
           {synlige.length === 0 && (
             <div style={styles.hint}>Ingen kompetencer valgt endnu.</div>
           )}
@@ -20186,7 +20186,7 @@ function EmployeeModal({ hrAdgang = true, emp, onClose, onSave, skills: skillLis
           {oevrige.length > 0 && (
             <button type="button" style={styles.empFoldBtn} onClick={() => setVisAlleKompetencer((v) => !v)}>
               {visAlleKompetencer
-                ? "Skjul de kompetencer hun ikke har"
+                ? "Skjul de kompetencer medarbejderen ikke har"
                 : `+ Tilføj kompetence — ${oevrige.length} ${oevrige.length === 1 ? "er" : "er"} skjult`}
             </button>
           )}
@@ -20205,9 +20205,9 @@ function EmployeeModal({ hrAdgang = true, emp, onClose, onSave, skills: skillLis
             <span style={{ fontSize: 13, color: "#111111" }}>Start/stop-tidsregistrering på længere opgaver</span>
           </button>
           <div style={{ ...styles.hint, marginBottom: 12 }}>
-            På opgaver fra grænsen (se Medarbejdere) trykker hun Start ved ankomst og Afslut, når hun
-            går — tiden måles, og retter hun den, skal hun skrive hvorfor. Start kan ikke ske væk fra
-            adressen. Uden fluebenet registrerer hun som i dag. <b>Et kontroltiltag: skal varsles,
+            På opgaver fra grænsen (se Medarbejdere) trykker medarbejderen Start ved ankomst og Afslut, når vedkommende
+            går — tiden måles, og rettes den, skal der skrives hvorfor. Start kan ikke ske væk fra
+            adressen. Uden fluebenet registrerer medarbejderen som i dag. <b>Et kontroltiltag: skal varsles,
             før det slås til.</b>
           </div>
           </>)}
@@ -20219,7 +20219,7 @@ function EmployeeModal({ hrAdgang = true, emp, onClose, onSave, skills: skillLis
             <span style={{ fontSize: 13, color: "#111111" }}>Kørsel er en del af arbejdstiden</span>
           </button>
           <div style={styles.hint}>
-            Med fluebenet tæller dagens kørsel i hendes kapacitet — hjemmefra til første opgave,
+            Med fluebenet tæller dagens kørsel i medarbejderens kapacitet — hjemmefra til første opgave,
             mellem opgaverne, og fra sidste opgave hjem. Uden det afregnes kørslen med kilometerpenge.
           </div>
 
@@ -20229,7 +20229,7 @@ function EmployeeModal({ hrAdgang = true, emp, onClose, onSave, skills: skillLis
               <input style={styles.input} value={homeAddress} onChange={(e) => setHomeAddress(e.target.value)}
                 placeholder="Vejnavn 1, 9490 Pandrup" />
               <div style={styles.hint}>
-                Kan kun ses af administratorer og af hende selv. Sendes til rutetjenesten på samme måde
+                Kan kun ses af administratorer og af medarbejderen selv. Sendes til rutetjenesten på samme måde
                 som kundernes adresser.
                 {!homeAddress.trim() && <strong style={{ color: "#B45309" }}> Uden adresse slår ordningen ikke til.</strong>}
               </div>
@@ -20245,7 +20245,7 @@ function EmployeeModal({ hrAdgang = true, emp, onClose, onSave, skills: skillLis
             placeholder="Tomt = kommer ikke med i løneksporten"
             onChange={(e) => setDanloenNr(e.target.value)} />
           <div style={styles.hint}>
-            Nummeret hun står med i Danløn. Uden det kan hendes timer og kørsel ikke
+            Nummeret medarbejderen står med i Danløn. Uden det kan medarbejderens timer og kørsel ikke
             sendes til løn — navne er ikke sikre nok, når to kan hedde det samme.
           </div>
 
@@ -20349,7 +20349,7 @@ function EmployeeModal({ hrAdgang = true, emp, onClose, onSave, skills: skillLis
             )}
           </label>
           <div style={styles.hint}>
-            Weekendtillægget beregnes af lønnen for hendes timer lørdag og søndag.
+            Weekendtillægget beregnes af lønnen for medarbejderens timer lørdag og søndag.
             Søn- og helligdagsbetalingen af hele månedens godkendte løn, tillægget
             iberegnet. Står procentfeltet tomt, bruges den fælles sats under Lønarter.
           </div>
