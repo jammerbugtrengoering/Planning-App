@@ -79,3 +79,8 @@ alter table public.checklist_templates add column tilbud_fase text check (tilbud
 -- personalemappen_8a-8c: kvittering for haandbog. haandbog_dokumenter + kraever_kvittering, version, version_udgivet; haandbog_kvitteringer (employee_id, dokument_id, version).
 --   gem_haandbog (kalder gem_haandbog_dokument og sætter flag/version), kvitter_haandbog, mine_haandbog_kvittering (medarbejder), haandbog_kvittering_status (HR),
 --   og linjen 'haandbog_ikke_kvitteret' i kontor_indbakke (14 dage efter version_udgivet). Ny navn og ikke et overload, fordi PostgREST ikke kan vælge mellem to overload med standardværdier.
+-- mus_referat_1-3 (6.10.2026): referat til MUS-samtalen. Kolonner på mus_samtaler: referat, referat_status (kladde/sendt/bemaerkning/godkendt), referat_sendt_tid, referat_godkendt_tid, medarbejder_bemaerkning.
+--   Hvorfor: lederen skriver referatet i Worklist (som tilbuddets referat), og medarbejderen godkender det i Personalemappen — så ingen kan sige, at referatet aldrig blev set.
+--   mus_for_opgave(text) (leder/medarbejder på aktiviteten), gem_mus_referat(uuid,text,boolean) (leder eller HR; send markerer samtalen holdt og lukker aktiviteten for begge),
+--   mus_holdt(uuid), min_mus_samtaler() (kladde skjules), svar_mus_referat(uuid,boolean,text) (godkend låser), hr_mus_samtaler(text). Alle lukket for anon.
+--   Redigering af et sendt referat uden at sende igen gør det til kladde. kontor_indbakke: linje 19 'mus_referat' (bemærkninger, eller sendt for over 7 dage siden uden svar).

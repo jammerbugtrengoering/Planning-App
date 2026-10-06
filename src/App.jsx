@@ -2060,6 +2060,7 @@ const MODULE_HELP = {
         "«Ny medarbejder» og «Fratræd» findes kun her.",
         "MUS bookes i ugeplanen: «Anden aktivitet» → vælg «MUS (medarbejdersamtale)», og vælg medarbejder, leder, dato og tid. Samtalen lægges i begges opgaveliste i Worklist, og medarbejderen ser den i sin Personalemappe og kan forberede sig dér. Markeres aktiviteten udført, står samtalen som afholdt, og kortets «sidste MUS» opdateres; aflyses den, tømmes «næste MUS».",
         "Fanen «Samtaler og udvikling» viser medarbejderens samtaler. Hendes forberedelse er hendes egen, til hun trykker «Del med kontoret» — først da kan du læse den her. Under den står hendes udviklingsønsker; sæt status (ønsket, aftalt, gennemført, afvist) og skriv et svar, som hun ser i sin app.",
+        "Referatet fra MUS skrives normalt af lederen i Worklist, når han åbner samtalen: «Send til medarbejderen» markerer samtalen som holdt og sender referatet til hendes Personalemappe, hvor hun godkender det eller skriver en bemærkning. Du ser status her under samtalen, og kan selv skrive eller sende referatet, hvis lederen ikke gør det. Et godkendt referat kan ikke rettes. Har hun bemærkninger, eller har hun ikke svaret efter en uge, står det i klokken.",
         "Dokumenter er skjult for medarbejderen som standard. Sæt flueben ved «Medarbejderen kan se og hente dokumentet», når du lægger det ind — eller tryk «Vis for hende» bagefter. Tryk «Skjul» for at tage det væk igen.",
         "Sæt også «Hun skal kvittere for at have læst det», hvis du vil vide, at hun har set det, fx et ansættelsesbevis. Dokumentet står så som «Venter på kvittering», til hun trykker, og derefter med datoen.",
         "Læg ikke interne noter, sygemeldinger, lægeerklæringer eller straffeattester ind som synlige dokumenter.",
@@ -3907,7 +3908,7 @@ function PlanningApp({ session, onSignOut }) {
     }
     // Personalemappen: HR-linjerne (kun HR-administratorer får dem) peger på medarbejderlisten dér.
     if (l.art === "fravaer_anmodning") { setView("fravaer"); return; }
-    if (l.art === "ikke_kvitteret" || l.art === "bevis_udloeber" || l.art === "mus_forfalden" || l.art === "udviklingsoenske" || l.art === "haandbog_ikke_kvitteret") { setView("personalemappen"); return; }
+    if (l.art === "ikke_kvitteret" || l.art === "bevis_udloeber" || l.art === "mus_forfalden" || l.art === "udviklingsoenske" || l.art === "haandbog_ikke_kvitteret" || l.art === "mus_referat") { setView("personalemappen"); return; }
     if (l.art === "produktbestilling" || l.art === "udlevering") { setView("inventory"); return; }
     if (l.art === "drift") { setView("drift"); return; }
     if (l.art === "systemlukninger") { setView("reports"); return; }
@@ -19738,14 +19739,17 @@ function MedarbejderSamtaler({ empId }) {
   const [fejl, setFejl] = useState("");
   const [noter, setNoter] = useState({});
   const [gemmer, setGemmer] = useState("");
+  // Referatet skrives normalt af lederen i Worklist. HR kan skrive og sende det her, hvis lederen ikke gør det.
+  const [refTekst, setRefTekst] = useState({});
 
   const hent = useCallback(async () => {
     const [a, b] = await Promise.all([
-      supabase.rpc("hr_mus", { p_employee_id: empId }),
+      supabase.rpc("hr_mus_samtaler", { p_employee_id: empId }),
       supabase.from("udviklingsoensker").select("*").eq("employee_id", empId).neq("status", "trukket").order("oprettet", { ascending: false }),
     ]);
     if (a.error || b.error) setFejl((a.error || b.error).message);
     setMus(a.data || []); setOensker(b.data || []);
+    setRefTekst(Object.fromEntries((a.data || []).map((m) => [m.id, m.referat || ""])));
     setNoter(Object.fromEntries((b.data || []).map((o) => [o.id, o.hr_note || ""])));
   }, [empId]);
   useEffect(() => { hent(); }, [hent]);
@@ -19757,6 +19761,14 @@ function MedarbejderSamtaler({ empId }) {
     if (error) { setFejl(error.message); return; }
     hent();
   }
+  async function gemReferat(m, send) {
+    setGemmer(m.id); setFejl("");
+    const { error } = await supabase.rpc("gem_mus_referat", { p_id: m.id, p_referat: refTekst[m.id] || "", p_send: send });
+    setGemmer("");
+    if (error) { setFejl(error.message); return; }
+    hent();
+  }
+  const REFERAT_STATUS = { kladde: "Kladde — ikke sendt", sendt: "Sendt — venter på medarbejderens godkendelse", bemaerkning: "Medarbejderen har bemærkninger", godkendt: "Godkendt af medarbejderen" };
   const dag = (d) => (d ? new Date(d).toLocaleDateString("da-DK", { weekday: "short", day: "numeric", month: "long", year: "numeric" }) : "uden dato");
   const STATUS_MUS = { planlagt: "Planlagt", afholdt: "Afholdt", aflyst: "Aflyst" };
 
@@ -19780,9 +19792,31 @@ function MedarbejderSamtaler({ empId }) {
                   ))}
                 </div>
               ) : m.status === "planlagt" ? <div style={{ fontSize: 12.5, color: "#94A3B8", marginTop: 4 }}>Hun har ikke delt sin forberedelse. Den er hendes egen, til hun deler den.</div> : null}
+              {m.status !== "aflyst" && (
+                <div style={{ marginTop: 8 }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: m.referat_status === "godkendt" ? "#166534" : "#6D28D9" }}>
+                    Referat{m.referat_status ? ` · ${REFERAT_STATUS[m.referat_status]}` : " · ikke skrevet endnu"}
+                  </div>
+                  {m.referat_status === "bemaerkning" && m.medarbejder_bemaerkning && (
+                    <div style={{ fontSize: 13, background: "#FFFBEB", border: "1px solid #FDE68A", borderRadius: 8, padding: "6px 9px", margin: "4px 0", whiteSpace: "pre-line" }}>Bemærkning: {m.medarbejder_bemaerkning}</div>
+                  )}
+                  {m.referat_status === "godkendt" ? (
+                    <div style={{ fontSize: 13.5, whiteSpace: "pre-line", marginTop: 4 }}>{m.referat}</div>
+                  ) : (
+                    <>
+                      <textarea style={{ ...styles.input, minHeight: 90, marginTop: 4, width: "100%", boxSizing: "border-box" }} aria-label="Referat" value={refTekst[m.id] || ""}
+                        onChange={(e) => setRefTekst((x) => ({ ...x, [m.id]: e.target.value }))} placeholder="Skriv referatet. Lederen kan også skrive det i Worklist." />
+                      <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
+                        <button type="button" style={{ ...styles.secondaryBtn, padding: "5px 10px", fontSize: 12.5 }} disabled={gemmer === m.id} onClick={() => gemReferat(m, false)}>Gem kladde</button>
+                        <button type="button" style={{ ...styles.secondaryBtn, padding: "5px 10px", fontSize: 12.5, fontWeight: 700 }} disabled={gemmer === m.id || !(refTekst[m.id] || "").trim()} onClick={() => gemReferat(m, true)}>{m.referat_status === "sendt" ? "Send igen" : "Send til medarbejderen"}</button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
             </div>
           ))}
-        <div style={{ ...styles.hint, marginTop: 10 }}>Referatet lægges som dokument under fanen Dokumenter (slags: Samtale). Læg ikke helbredsoplysninger ind.</div>
+        <div style={{ ...styles.hint, marginTop: 10 }}>Referatet sendes til medarbejderen i hendes Personalemappe, hvor hun godkender det. Læg ikke helbredsoplysninger ind.</div>
       </StamKort>
 
       <StamKort titel={`Udviklingsønsker (${(oensker || []).length})`} hint="Medarbejderen skriver dem i sin app" bg="#ECFDF5" farve="#047857" hintFarve="#059669">
