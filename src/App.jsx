@@ -756,7 +756,11 @@ function earliestAllowedDayIndex(week, year) {
 
 // ---------- Skill matching ----------
 function meetsRequirement(emp, req) { return (emp.skills[req.skill] || 0) >= req.minLevel; }
+// Parameteren «Brug områder i planlægningen» (firma.brug_omraader, 7.10.2026). Er den slået fra, ser ALLE vejene ind i planlægningen bort fra områderne —
+// de går alle gennem candidatesFor — og ugeplanen og medarbejderlisten skjuler dem. Mangler værdien (kundedatabase uden kolonnen), regnes den for slået til.
+function omraaderIBrug() { return FIRMA.brug_omraader !== false; }
 function candidatesFor(t, employees, areas = [], employeeAreas = []) {
+  if (!omraaderIBrug()) { areas = []; employeeAreas = []; }
   const zipCode = (t.address || "").match(/\b(\d{4})\b/)?.[1];
   let areaEmployeeIds = null;
   let hasArea = false;
@@ -2020,7 +2024,7 @@ const MODULE_HELP = {
         "Er du ikke administrator, står feltet tomt, og lønkolonnerne under Løn data vises slet ikke — heller ikke i CSV-filen.",
         "Medarbejder-appen henter aldrig lønnen. En medarbejder kan altså ikke se hverken sin egen eller kollegernes sats der."] },
     { h: "Kompetencer", p: ["Ligger under Opsætning → Kompetencer. Her opretter, omdøber og sletter du de færdigheder du kan kræve på en opgave.", "En kompetence er et krav, ikke et ønske: kan medarbejderen den ikke på det krævede niveau, kommer vedkommende slet ikke i betragtning til opgaven.", "Selve niveauet sættes pr. medarbejder på medarbejderens eget kort — Nybegynder, Øvet eller Ekspert. Kræver opgaven Øvet, er Nybegynder ikke nok.", "Blandt dem der lever op til kravene, vælges den med det højeste samlede niveau. Står to lige, vælges den med mest ledig tid den dag.", "Sletter du en kompetence, fjernes den fra alle medarbejdere og fra alle opgaver.", "Omdøber du en kompetence, følger medarbejderne og aftalerne med. Men opgaver der allerede ligger i kalenderen, husker det gamle navn og viser derefter «Ingen har alle krævede kompetencer» — så ret kompetencen på de opgaver, eller lad være med at omdøbe når der er oprettet opgaver."] },
-        { h: "Områder", p: ["Ligger under Opsætning → Områder. Et område er et navn og en række postnumre, og du klikker de medarbejdere til der dækker det.", "Ved planlægning aflæses postnummeret i opgavens adresse. Findes der et område med det postnummer, søges der kun blandt de medarbejdere der er knyttet til området.", "Har adressen intet postnummer, eller er postnummeret ikke lagt ind på noget område, planlægges der frit blandt alle med kompetencerne.", "Er der ikke klikket en eneste medarbejder på et område, springes området over. Et tomt område spærrer altså ikke — det gør ingenting.", "Kan ingen i området løse opgaven, planlægges den alligevel hos en der kan, og opgaven mærkes «Planlagt uden for medarbejderens område». En opgave bliver aldrig liggende alene fordi den falder uden for et område.", "Sletter du et område, forsvinder tilknytningerne med det samme. Opgaverne røres ikke."] },
+        { h: "Områder", p: ["Under Opsætning → Områder står en parameter «Brug områder i planlægningen». Slår du den fra, ser planlægningen bort fra områderne, og områdefiltrene skjules i ugeplanen og under Medarbejdere; slår du den til igen, er alt som før.", "Ligger under Opsætning → Områder. Et område er et navn og en række postnumre, og du klikker de medarbejdere til der dækker det.", "Ved planlægning aflæses postnummeret i opgavens adresse. Findes der et område med det postnummer, søges der kun blandt de medarbejdere der er knyttet til området.", "Har adressen intet postnummer, eller er postnummeret ikke lagt ind på noget område, planlægges der frit blandt alle med kompetencerne.", "Er der ikke klikket en eneste medarbejder på et område, springes området over. Et tomt område spærrer altså ikke — det gør ingenting.", "Kan ingen i området løse opgaven, planlægges den alligevel hos en der kan, og opgaven mærkes «Planlagt uden for medarbejderens område». En opgave bliver aldrig liggende alene fordi den falder uden for et område.", "Sletter du et område, forsvinder tilknytningerne med det samme. Opgaverne røres ikke."] },
     { h: "Adgang til Worklist", p: ["Tryk Redigér på medarbejderen, vælg fanen Adgang, skriv e-mailen og tryk Opret. Medarbejderen får en mail med et link, hvor adgangskoden vælges, og kan derefter logge ind i medarbejder-appen.",
         "Har mailen allerede et login — for eksempel fordi medarbejderen også bruger planlægningsappen — bliver det eksisterende login koblet til vedkommende. Du behøver ikke finde på en ny mailadresse.",
         "Står der at adgangen er oprettet, men at mailen ikke kunne sendes, er medarbejderen kommet ind i systemet alligevel. Så skal vedkommende bare bruge «glemt adgangskode» på login-siden.",
@@ -6600,7 +6604,8 @@ function PlanningApp({ session, onSignOut }) {
       {view === "omraader" && (
         <div style={styles.page}>
           <AreasView supabase={supabase} areas={areas} employees={aktiveEmployees} employeeAreas={employeeAreas}
-            onAreasChange={setAreas} onEmployeeAreasChange={setEmployeeAreas} />
+            onAreasChange={setAreas} onEmployeeAreasChange={setEmployeeAreas}
+            firma={firma} medarbejderId={currentEmployeeForAuth?.id || null} onFirmaGemt={(ny) => setFirma(ny)} notify={notify} />
         </div>
       )}
       {view === "startstop" && (
@@ -6958,7 +6963,7 @@ function WeekView({ employees, instances, unplaced, aflyste = [], aflysningsgrun
   const visibleDays = showWeekend ? ALL_DAYS : DAYS;
 
   // Filtrer medarbejdere baseret på valgt område
-  const areaFilteredEmployees = selectedAreaId === "all"
+  const areaFilteredEmployees = (selectedAreaId === "all" || !omraaderIBrug())
     ? employees
     : employees.filter((e) => employeeAreas.some((ea) => ea.employee_id === e.id && ea.area_id === selectedAreaId));
   const visibleEmployees = printEmployeeId === "all" ? areaFilteredEmployees : areaFilteredEmployees.filter((e) => e.id === printEmployeeId);
@@ -7017,7 +7022,7 @@ function WeekView({ employees, instances, unplaced, aflyste = [], aflysningsgrun
           title="Vis/skjul weekend">
           {showWeekend ? "Man–Søn ✓" : "Man–Fre"}
         </button>
-        {!showWeekend && weekendTaskCount > 0 && (<span style={{ ...styles.warnChip, marginLeft: 2 }} title="Slå Man–Søn til for at se dem">⚠️ {weekendTaskCount} opgave{weekendTaskCount === 1 ? "" : "r"} i weekenden er skjult</span>)}{areas && areas.length > 0 && (
+        {!showWeekend && weekendTaskCount > 0 && (<span style={{ ...styles.warnChip, marginLeft: 2 }} title="Slå Man–Søn til for at se dem">⚠️ {weekendTaskCount} opgave{weekendTaskCount === 1 ? "" : "r"} i weekenden er skjult</span>)}{omraaderIBrug() && areas && areas.length > 0 && (
           <select
             style={{ ...styles.inputSm, fontSize: 13, color: selectedAreaId !== "all" ? "#4F46E5" : "#111111", borderColor: selectedAreaId !== "all" ? "#4F46E5" : "#E2E8F0", background: selectedAreaId !== "all" ? "#EEF2FF" : "#fff", fontWeight: selectedAreaId !== "all" ? 700 : 400 }}
             value={selectedAreaId}
@@ -7833,10 +7838,10 @@ function EmployeesView({ employees, onAdd, onEdit, supabase, areas, employeeArea
           <option value="timer">Flest timer om ugen</option>
           <option value="udenadgang">Mangler app-adgang først</option>
         </select>
-        <select style={styles.inputSm} value={omraadeFilter} onChange={(ev) => setOmraadeFilter(ev.target.value)}>
+        {omraaderIBrug() && <select style={styles.inputSm} value={omraadeFilter} onChange={(ev) => setOmraadeFilter(ev.target.value)}>
           <option value="alle">Alle områder</option>
           {(areas || []).map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
-        </select>
+        </select>}
         <button style={styles.secondaryBtn}
           onClick={() => setUdfoldet((prev) => prev.size ? new Set() : new Set(synligeMedarbejdere.map((r) => r.emp.id)))}>
           {udfoldet.size ? "Fold alle sammen" : "Fold alle ud"}
@@ -7902,7 +7907,7 @@ function EmployeesView({ employees, onAdd, onEdit, supabase, areas, employeeArea
                 {Object.keys(e.skills || {}).length === 0 && <span style={styles.cardMeta}>Ingen kompetencer angivet</span>}
                 {/* Omraaderne stod slet ikke paa kortet foer, selvom de er med til at
                     afgoere hvem der overhovedet kan planlaegges hvor. */}
-                {(areas || [])
+                {(omraaderIBrug() ? (areas || []) : [])
                   .filter((a) => (employeeAreas || []).some((ea) => ea.employee_id === e.id && ea.area_id === a.id))
                   .map((a) => (
                     <span key={a.id} style={{ ...styles.skillLevelTag, background: "#EEF2FF", color: "#4F46E5" }}>📍 {a.name}</span>
@@ -15840,7 +15845,19 @@ function HaandbogView() {
   );
 }
 
-function AreasView({ supabase, areas, employees, employeeAreas, onAreasChange, onEmployeeAreasChange }) {
+function AreasView({ supabase, areas, employees, employeeAreas, onAreasChange, onEmployeeAreasChange, firma, medarbejderId, onFirmaGemt, notify }) {
+  const [skifter, setSkifter] = useState(false);
+  const iBrug = omraaderIBrug();
+  async function skiftBrug(til) {
+    if (!firma?.id) return;
+    setSkifter(true);
+    const { data, error } = await supabase.from("firma").update({ brug_omraader: til, aendret_af: medarbejderId }).eq("id", firma.id).select().maybeSingle();
+    setSkifter(false);
+    if (error || !data) { notify && notify("Kunne ikke gemme: " + (error?.message || "ukendt fejl")); return; }
+    opdaterFirma(data);
+    onFirmaGemt && onFirmaGemt(data);
+    notify && notify(til ? "Områder bruges i planlægningen" : "Områder bruges ikke i planlægningen");
+  }
   const [showAdd, setShowAdd] = useState(false);
   const [editArea, setEditArea] = useState(null);
   const [areaName, setAreaName] = useState("");
@@ -15889,6 +15906,12 @@ function AreasView({ supabase, areas, employees, employeeAreas, onAreasChange, o
 
   return (
     <div style={styles.page}>
+      <label style={{ display: "flex", alignItems: "center", gap: 10, background: "#fff", border: "1px solid #E2E8F0", borderRadius: 10, padding: "10px 14px", marginBottom: 14, cursor: "pointer", fontSize: 14, fontWeight: 600 }}>
+        <input type="checkbox" style={{ width: 20, height: 20 }} checked={iBrug} disabled={skifter || !firma} onChange={(e) => skiftBrug(e.target.checked)} />
+        Brug områder i planlægningen
+        <Info>Er det slået til, planlægges en opgave kun blandt de medarbejdere, der er knyttet til postnummerets område. Er det slået fra, ser planlægningen bort fra områderne, og områdefiltrene skjules i ugeplanen og under Medarbejdere. Områderne og deres medarbejdere bliver gemt, så du kan slå det til igen.</Info>
+        {!iBrug && <span style={{ marginLeft: "auto", fontSize: 12.5, fontWeight: 600, color: "#B45309" }}>Slået fra — områderne bruges ikke</span>}
+      </label>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
         <div>
           <div style={{ fontWeight: 700, fontSize: 18, color: "#111111" }}>Områder</div>

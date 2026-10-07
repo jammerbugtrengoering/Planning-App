@@ -35,6 +35,7 @@ const STANDARD = KUNDEUDGAVE ? {
   modul_kundeportal: false,
   modul_dinero: false,
   modul_nexus: false,
+  brug_omraader: true,
 } : {
   navn: "Jammerbugt Rengøring",
   undertekst: "Planlægning og fakturering",
@@ -52,6 +53,7 @@ const STANDARD = KUNDEUDGAVE ? {
   modul_kundeportal: true,
   modul_dinero: true,
   modul_nexus: true,
+  brug_omraader: true,
 };
 
 // Er modulet med? Ukendt = med, saa intet forsvinder, foer indstillingerne er hentet.
