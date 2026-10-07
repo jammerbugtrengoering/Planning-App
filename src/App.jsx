@@ -2059,7 +2059,7 @@ const MODULE_HELP = {
 
   fravaer: { title: "Ferie og fravær", intro: "Medarbejdernes anmodninger om ferie og fri.", blocks: [
     { h: "Sådan virker det", p: ["Medarbejderen anmoder i sin Personalemappen-app: ferie eller fri, første og sidste dag og evt. en bemærkning. Anmodningen står her og i klokken, til du har svaret.",
-        "Under hver anmodning står, om den er sendt med kort varsel (som standard 4 uger til ferie og 10 dage til fri; tallene retter du under Opsætning → Ferie og fravær), og hvor mange opgaver medarbejderen står på i perioden. Systemet afviser ikke kort varsel; du afgør det.",
+        "Under hver anmodning står, om den er sendt med kort varsel (som standard 4 uger til ferie og 10 dage til fri; tallene retter du under Opsætning → Ferie og fravær), og hvor mange opgaver medarbejderen står på i perioden. Systemet afviser ikke kort varsel, men medarbejderen skal have skrevet en gyldig og fyldestgørende grund (mindst 20 tegn), som står under anmodningen. Du afgør det.",
         "Varslet står ikke på denne side, men under Opsætning → Ferie og fravær: to tal for, hvor mange dage før første dag ferie og fri skal være søgt. Medarbejderens app viser det samme varsel, før medarbejderen sender, og anmodninger, der allerede er sendt, beholder det mærke, de fik, da de blev sendt.",
         "«Godkend» lægger ferien i ugeplanen som en almindelig ferieblokering. Medarbejderens opgaver i perioden frigives og kan planlægges om. Skriv gerne en besked til medarbejderen; svaret ses i appen.",
         "«Afvis» ændrer ikke planen. Skriv en begrundelse. Sygdom er ikke en anmodning og meldes som hidtil på telefonen."] },
@@ -15757,7 +15757,7 @@ function FravaerView({ onAfgoer, beroerte }) {
                 {r.for_sent && <span style={{ color: "#B45309", fontWeight: 700 }}>Kort varsel ({r.art === "ferie" ? `under ${varselTekst(FIRMA.ferie_varsel_dage ?? 28)}` : `under ${varselTekst(FIRMA.fridag_varsel_dage ?? 10)}`})</span>}
                 <span style={{ color: n > 0 ? "#B45309" : "#64748B", fontWeight: n > 0 ? 700 : 400 }}>{n > 0 ? `${n} ${n === 1 ? "opgave" : "opgaver"} i perioden frigives` : "Ingen opgaver berørt"}</span>
               </div>
-              {r.note && <div style={{ fontSize: 13.5, marginTop: 6, color: "#334155" }}>«{r.note}»</div>}
+              {r.note && <div style={{ fontSize: 13.5, marginTop: 6, color: "#334155" }}>{r.for_sent ? "Grund til kort varsel: " : ""}«{r.note}»</div>}
               <input style={{ ...styles.input, marginTop: 10, marginBottom: 8 }} placeholder="Besked til medarbejderen (valgfri)" value={noter[r.id] || ""}
                 onChange={(e) => setNoter((x) => ({ ...x, [r.id]: e.target.value }))} aria-label="Besked til medarbejderen" />
               <div style={{ display: "flex", gap: 8 }}>

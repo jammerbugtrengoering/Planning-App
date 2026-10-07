@@ -98,3 +98,4 @@ alter table public.checklist_templates add column tilbud_fase text check (tilbud
 --   Hvorfor: er systemet nede mandag morgen, skal kontoret stadig kunne se og printe ugens opgaver. send-email fik valgfri vedhæftning.
 -- start_mangler_completed_tidsstempel (7.10.2026): start_mangler_behandl castede instances.completed_by_employee ->> emp til boolean, men vaerdien er et tidsstempel. Funktionen (glemt Start, hvert 5. min) fejlede fra den foerste afslutning i dagen; morgenmailen meldte det.
 --   Rettet med regexp_replace paa pg_get_functiondef: en vaerdi (ikke 'false'/'f'/'0'/'') = meldt faerdig. Den eneste funktion med den cast.
+-- fravaer_kort_varsel_kraever_grund (7.10.2026): anmod_fravaer afviser en for sen anmodning (for_sent) uden en grund paa mindst 20 tegn. Hvorfor: kontoret havde intet at afgoere ud fra. Anmodningen afvises stadig ikke for det korte varsel.
