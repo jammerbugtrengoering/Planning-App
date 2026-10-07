@@ -2000,6 +2000,7 @@ const MODULE_HELP = {
         "Der gemmes kun afstanden til adressen, aldrig hvor medarbejderen er. Og kun ved start og ved afslut — ikke undervejs.",
         "Opgaver under grænsen, og alle medarbejdere uden start/stop, registrerer præcis som hidtil: minutter og afvigelsesbegrundelse.",
         "Tolerance (standard ± 5 min): afslutter medarbejderen inden for tolerancen af sin planlagte tid, registreres den planlagte — både løn og faktura, og uden begrundelse. Fx 56 eller 64 min på en 60 min-opgave bliver 60. På opgaven står «Afsluttet med 56 min — inden for ± 5 min». Gælder kun start/stop. 0 slår det fra.",
+        "Nexus- og Ældrelov-opgaver registreres altid til den aftalte tid (medarbejderens egen andel, hvis timerne er fordelt, ellers opgavens varighed). Medarbejderen får ikke tidstrinnet i Worklist, og databasen tvinger den aftalte tid, uanset hvad en gammel fane sender. Er der brugt mere, skriver medarbejderen det i beskeden til kontoret. Skal aftalen ændres, retter du opgavens tid i ugeplanen, eller bruger «Efterregulér» (kun planlæggere, logges). Papirskemaets timer ignoreres for de to typer; kilometer er uændrede. Er der ingen aftalt tid på opgaven (0 min), er tiden ikke fast.",
         "Slås til på det enkelte kort under «Løn og transport», eller for alle på én gang i panelet. Det er slået fra fra start.",
         "Start/stop er en kontrolforanstaltning. Medarbejderne skal varsles, før det slås til — typisk 6 uger. Slå det ikke til, før varslingen er givet."] },
     { h: "Auto-slut og lønlukning", p: [
@@ -12751,7 +12752,12 @@ function PapirskemaView({ instances, employees, kmLog, onTidIndlaest, onFakturag
     return liste.map((t) => {
       const f = felter[t.id] || {};
       const id = opgaveIdentitet(t);
-      const minutter = laesTimer(f.timer);
+      // Nexus og Ældrelov registreres altid til aftalt tid (7.10.2026): papirets timer ignoreres, og databasen
+      // (fast_tid_min) tvinger samme tal. Uden aftalt tid (0) er tiden ikke fast.
+      const fastMin = (t.contractType === "nexus" || t.contractType === "aeldrelov")
+        ? (Number((t.tidFordeling || t.tid_fordeling || {})[empId]) > 0 ? Math.round(Number((t.tidFordeling || t.tid_fordeling)[empId])) : (t.duration || 0)) || null
+        : null;
+      const minutter = fastMin ?? laesTimer(f.timer);
       const kmPapir = laesKm(f.km);
       const kmSys = km.pr_opgave.has(t.id) ? km.pr_opgave.get(t.id) : null;
       const wl = worklistMinutter(t, empId);
@@ -12760,7 +12766,7 @@ function PapirskemaView({ instances, employees, kmLog, onTidIndlaest, onFakturag
         sted: [id.primaer || t.title, id.sekundaer].filter(Boolean).join(", "),
         indlaest: erIndlaest(t, empId) || gemte.has(t.id),
         wl, harWorklist: wl > 0, tidAfv: tidAfvigelse(minutter, wl),
-        timerTekst: f.timer || "", kmTekst: f.km || "",
+        fastMin, timerTekst: f.timer || "", kmTekst: f.km || "",
         minutter, timerFejl: !!(f.timer || "").trim() && minutter === null,
         kmPapir, kmFejl: Number.isNaN(kmPapir), kmSys,
         afv: kmAfvigelse(kmPapir, kmSys),
@@ -12953,7 +12959,7 @@ function PapirskemaView({ instances, employees, kmLog, onTidIndlaest, onFakturag
                           </td>
                           <td style={celle}>
                             {r.indlaest ? <span style={{ color: "#166534", fontWeight: 600 }}>{r.harWorklist ? "Sammenlignet ✓" : "Indlæst ✓"}</span> : (
-                              <div>
+                              r.fastMin ? <div style={{ fontSize: 12, color: "#4F46E5", fontWeight: 600 }}>Aftalt tid: {fmtMin(r.fastMin)}<div style={{ fontWeight: 400, color: "#64748B" }}>Nexus/Ældrelov: fast</div></div> : <div>
                                 <input aria-label={`Timer, ${r.sted}`} style={{ ...lille, width: 84, borderColor: r.timerFejl ? roed : "#CBD5E1" }}
                                   value={r.timerTekst} placeholder="fx 2,5" onChange={(e) => saet(r.t.id, "timer", e.target.value)} />
                                 {r.minutter ? <div style={{ fontSize: 11, color: r.tidAfv.afviger ? roed : "#64748B", fontWeight: r.tidAfv.afviger ? 700 : 400 }}>

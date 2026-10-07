@@ -123,6 +123,13 @@ Tre apps hænger sammen: **planlægningsappen** (HR-siden, ikon i topbjælken, k
 - Ikke bygget endnu: opbevaringsfrister og sletning af dokumenter, push til medarbejderen ved afgjort ferieanmodning, ferieblokering i databasen (nu i klienten via `addBlock`), stillingsfelt.
   Funktionerne er ikke prøvet med to rigtige logins (leder + medarbejder) — gør det, før det bruges for alvor. Supabase Redirect URLs skal indeholde Personalemappens adresse.
 
+### Du rører ved tidsregistrering for Nexus eller Ældrelov
+
+**Opgaver med kontrakttype `nexus` eller `aeldrelov` registreres altid til den aftalte tid** (Jonns beslutning 7.10.2026). Aftalt tid = medarbejderens andel i `tid_fordeling`, ellers `duration`; er den 0, er tiden ikke fast.
+Reglen står i databasen (`fast_tid_min`, brugt af `afslut_tid`, `append_time_log` og `ret_systemlukket_tid`), fordi en gammel browserfane eller telefon ellers stadig sender den tid, der blev tastet. Ny registrering er idempotent pr. medarbejder: en anden afslutning tilføjer intet.
+Worklist springer tidstrinnet over (`fastTid` i `AfslutOpgave`), planlægningsappen låser timerne i papirskemaet. Overstyring sker kun med `efterreguler_tid` (planlægger, logges). Tidligere registreringer er ikke ændret.
+Ny vej, der skriver `time_log`, skal også gå gennem `fast_tid_min` — ellers findes der en vej uden om reglen.
+
 ### Du retter i databasen
 
 `execute_sql` i Supabase-værktøjet er **skrivebeskyttet**. Ethvert `insert`, `update`,

@@ -86,3 +86,6 @@ alter table public.checklist_templates add column tilbud_fase text check (tilbud
 --   Redigering af et sendt referat uden at sende igen gør det til kladde. kontor_indbakke: linje 19 'mus_referat' (bemærkninger, eller sendt for over 7 dage siden uden svar).
 -- mus_referat_4-5 (6.10.2026): rollen i mus_for_opgave følger samtalen (leder kun hvis man ER lederen; HR uden for samtalen = 'hr', skrivebeskyttet i Worklist). Før fik en HR-administrator, der selv var medarbejderen, rollen 'leder' og kunne sende sit eget referat.
 --   gem_mus_referat afviser nu, at man skriver referatet til sin egen samtale (medmindre man selv er lederen). HR skriver/retter i planlægningsappen på medarbejderens kort.
+-- fast_tid_nexus_aeldrelov_1-2 (7.10.2026): Nexus og Ældrelov registreres altid til aftalt tid. fast_tid_min(instance, emp) = tid_fordeling[emp] ellers duration for contract_type nexus/aeldrelov, ellers null.
+--   afslut_tid og append_time_log tvinger p_minutes til den og ignorerer en ny registrering fra samme medarbejder (idempotent); ret_systemlukket_tid afviser medarbejderen (planlæggere kan stadig). afslut_tid springer kravet om begrundelse over for de to typer.
+--   Hvorfor i databasen: en gammel fane/telefon sender ellers medarbejderens tastede tid. Efterreguler_tid er uændret og er kontorets vej til at rette.
