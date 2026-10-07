@@ -29,7 +29,8 @@
     "timepriser.test.mjs",
     "postnummer.test.mjs",
     "daekningsbidrag.test.mjs",
-    "udnyttelse.test.mjs"
+    "udnyttelse.test.mjs",
+    "aflysningsprocent.test.mjs"
   ],
   "rules": {
     "no-undef": "error",

@@ -1,3 +1,4 @@
+import { aflysningPrSegment } from "./aflysningsprocent.js";
 import React, { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { samletForMedarbejder, danloenLinjer, danloenCsv } from "./loenberegning.js";
 import { loenPeriode, periodeFor, periodeTekst, erLaast as loenErLaast, isoDag } from "./loenperiode.js";
@@ -2420,6 +2421,7 @@ const MODULE_HELP = {
         "Kapaciteten er de timer pr. ugedag, der står på medarbejderkortet, minus ferie og sygdom. Planlagt er opgavernes tid i hele perioden; udført er den registrerede tid til og med i dag, målt mod kapaciteten for de samme dage. Kørsel og kontortid er ikke med.",
         "Listen står med den mest ledige øverst. Gul betyder under 60 %: der er plads til flere opgaver. Rød betyder over 95 %: der er ingen luft, hvis nogen bliver syge. Står en medarbejders timer ikke på kortet, ser vedkommende ledig ud, så ret dem dér først."] },
     { h: "Aflysninger", p: [
+        "Øverst står aflysningsprocenten for hver af de fire aftaletyper: aflyste opgaver delt med alle opgaver i perioden, delt op i aflysninger fra kunden og fra os. Kun dage til og med i dag tæller med.",
         "Rapporteringen åbner nu på Aftaleportefølje. Fanen «🚫 Aflysninger» viser aflyste opgaver i en periode (denne måned, sidste måned, i år eller egne datoer).",
         "Øverst: antal aflysninger (af kunden og af jer), tabt omsætning — aflyst og ikke faktureret — og hvad der er hentet hjem på sene kundeaflysninger.",
         "«Pr. aflysningsgrund» viser antal, hvor mange af kundens aflysninger der var sene, og kronerne for hver grund. Nederst står hver aflysning med kunde, grund, forklaring og værdi.",
@@ -11079,6 +11081,7 @@ function StartStopRapport() {
 // får vi hjem på sene kundeaflysninger. Værdien af en opgave er den planlagte tid for
 // dem, der var på den (eller varigheden) × timeprisen for kundetypen — eller fastprisen.
 function AflysningRapport({ instances, pricing = {}, grunde = [] }) {
+  const idagIso = todayIso();
   const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   const nu = new Date();
   const [fra, setFra] = useState(iso(new Date(nu.getFullYear(), nu.getMonth(), 1)));
@@ -11110,6 +11113,11 @@ function AflysningRapport({ instances, pricing = {}, grunde = [] }) {
     prGrund[k].n++;
     if (r.fakt) { prGrund[k].hjem += r.kr; prGrund[k].sene++; } else prGrund[k].tabt += r.kr;
   });
+  // Procent pr. aftaletype: nævneren er alle egentlige opgaver til og med i dag, aflyste med (se aflysningsprocent.js).
+  const partFor = (t) => (grunde.find((x) => x.id === t.aflyst_grund)?.part) || "jammerbugt";
+  const procentTal = aflysningPrSegment(instances.filter((t) => t.type === "fixed" || t.type === "adhoc"),
+    { fra, til, idag: idagIso, datoAf: instanceDateString, erAflyst, partFor, segmenter: REPORT_AREAS });
+  const pctTxt = (p) => (p == null ? "–" : (Math.round(p * 10) / 10).toLocaleString("da-DK") + " %");
   const kort = (titel, tal, farve, under) => (
     <div style={{ ...styles.statBlock, borderLeft: `3px solid ${farve}` }}>
       <div><div style={{ ...styles.statValue, color: farve }}>{tal}</div><div style={styles.statLabel}>{titel}</div>
@@ -11132,6 +11140,28 @@ function AflysningRapport({ instances, pricing = {}, grunde = [] }) {
         {kort("Aflyste opgaver", raekker.length, "#475569", `${raekker.filter((r) => r.part === "kunde").length} af kunden · ${raekker.filter((r) => r.part !== "kunde").length} af os`)}
         {kort("Tabt omsætning", kr(tabt), "#B91C1C", "aflyst og ikke faktureret")}
         {kort("Hentet hjem", kr(hjem), "#166534", `${raekker.filter((r) => r.fakt).length} sene kundeaflysninger faktureret`)}
+      </div>
+
+      <div style={{ fontWeight: 700, fontSize: 15, margin: "6px 0 8px" }}>Aflysningsprocent pr. aftaletype</div>
+      <table style={{ width: "100%", borderCollapse: "collapse", background: "#fff", borderRadius: 12, overflow: "hidden", marginBottom: 6 }}>
+        <thead><tr style={{ background: "#F8FAFC" }}>
+          {["Aftaletype", "Opgaver", "Aflyst", "Aflysningsprocent", "Af kunden", "Af os"].map((h) => <th key={h} style={th}>{h}</th>)}
+        </tr></thead>
+        <tbody>
+          {[...procentTal.raekker, { noegle: "_ialt", ...procentTal.ialt }].map((r) => (
+            <tr key={r.noegle} style={r.noegle === "_ialt" ? { fontWeight: 700 } : null}>
+              <td style={{ ...td, fontWeight: 700 }}>{r.noegle === "_ialt" ? "I alt" : (REPORT_AREAS.find(([k]) => k === r.noegle) || [])[1] || r.noegle}</td>
+              <td style={td}>{r.antal.toLocaleString("da-DK")}</td>
+              <td style={td}>{r.aflyst.toLocaleString("da-DK")}</td>
+              <td style={{ ...td, fontWeight: 700, background: "#FDF2F8", color: r.procent > 10 ? "#B91C1C" : "#7A1148" }}>{pctTxt(r.procent)}</td>
+              <td style={td}>{r.kunde} · {pctTxt(r.procentKunde)}</td>
+              <td style={td}>{r.os} · {pctTxt(r.procentOs)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <div style={{ ...styles.hint, marginBottom: 18 }}>
+        Procenten er aflyste opgaver delt med alle opgaver i perioden, aflyste med. Kun dage til og med i dag tæller, for en opgave i fremtiden kan ikke være aflyst endnu.
       </div>
 
       <div style={{ fontWeight: 700, fontSize: 15, margin: "6px 0 8px" }}>Pr. aflysningsgrund</div>
