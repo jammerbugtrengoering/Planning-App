@@ -2057,7 +2057,7 @@ const MODULE_HELP = {
     { h: "Overblikket", p: ["Øverst står fire tal: beviser, der udløber inden 60 dage eller er udløbet; dokumenter, medarbejderne ikke har kvitteret for; MUS der er forfaldet; og antal aktive medarbejdere. Under dem er en tabel med en linje pr. medarbejder.",
         "«Kræver handling» viser dem, der har et bevis der udløber, et dokument uden kvittering eller en forfalden MUS — de samme regler som linjerne i klokken. Skift til «Fratrådte» for at se dem, der er holdt op.",
         "Certifikater og dokumenter kommer fra fanen Dokumenter på kortet; sæt en slutdato på beviser, så de kan tælles med. MUS-datoerne følger samtalerne, du booker i ugeplanen."] },
-    { h: "Medarbejderkortet", p: ["Tryk på en medarbejder for at åbne kortet med faner: Person, Ansættelse, Dokumenter, Planlægning, Løn, Adgang og Udlevering. Alle faner gemmes med den samme knap.",
+    { h: "Medarbejderkortet", p: ["Tryk på en medarbejder for at åbne kortet med faner: Person, Ansættelse, Dokumenter, Planlægning, Løn, Adgang og Udlevering. Kortet åbner på fanen Planlægning, fordi det er den, der oftest rettes; en ny medarbejder starter på Person. Navnet rettes under Personalemappen. Alle faner gemmes med den samme knap.",
         "«Ny medarbejder» og «Fratræd» findes kun her.",
         "MUS bookes i ugeplanen: «Anden aktivitet» → vælg «MUS (medarbejdersamtale)», og vælg medarbejder, leder, dato og tid. Samtalen lægges i begges opgaveliste i Worklist, og medarbejderen ser den i sin Personalemappe og kan forberede sig dér. Markeres aktiviteten udført, står samtalen som afholdt, og kortets «sidste MUS» opdateres; aflyses den, tømmes «næste MUS».",
         "Fanen «Samtaler og udvikling» viser medarbejderens samtaler. Forberedelsen er medarbejderens egen, til vedkommende trykker «Del med kontoret» — først da kan du læse den her. Under den står medarbejderens udviklingsønsker; sæt status (ønsket, aftalt, gennemført, afvist) og skriv et svar, som ses i appen.",
@@ -19922,7 +19922,8 @@ function StamKort({ titel, hint, bg, farve, hintFarve, children }) {
 }
 
 function EmployeeModal({ hrAdgang = true, emp, onClose, onSave, skills: skillList, satsHistorik, kmSatser, hr, brugerId, onFratraed }) {
-  const [fane, setFane] = useState("person");
+  // Eksisterende medarbejder aabner paa Planlaegning (7.10.2026): det er dér, man oftest retter noget. Navnet rettes i Personalemappen. En ny medarbejder starter paa Person.
+  const [fane, setFane] = useState(emp ? "planlaegning" : "person");
   // HR-oplysninger (6.10.2026) ligger i employee_hr, kun synlig for administratorer. Datoer som tekst «ÅÅÅÅ-MM-DD», tomt = ikke angivet.
   const [hrTelefon, setHrTelefon] = useState(hr?.telefon || "");
   const [hrPrivatEmail, setHrPrivatEmail] = useState(hr?.privat_email || "");
