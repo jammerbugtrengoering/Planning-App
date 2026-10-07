@@ -165,9 +165,11 @@ code {
      staar om display. Det fyldte bare en tom plads paa siden.
      Udskriften tegnes af #print-week-plan. Skal noget med, skal det staa DERINDE. */
 
-  /* Hvert skema paa sin egen side. Siden 7.10.2026 er hele udskriften staaende: hver
+  /* Hvert skema paa sin egen side (liggende, se nedenfor). Siden 7.10.2026 er hele udskriften staaende: hver
      dag har sin egen side (mandag til fredag), saa der er ikke laengere brug for bredden. */
-  .timeskema { display: block !important; break-before: page; page-break-before: always; }
+  /* Skemaet er liggende (7.10.2026), fordi det nu har seks kolonner; resten er staaende. Navngiven side: virker i Chrome og Safari. */
+  @page skema { size: A4 landscape; margin: 10mm; }
+  .timeskema { page: skema; display: block !important; break-before: page; page-break-before: always; }
   .timeskema table { width: 100% !important; }
 
   /* Rullefelter skal foldes helt ud, ellers klippes alt under det synlige vaek. */

@@ -1777,7 +1777,7 @@ const MODULE_HELP = {
         "Brug medarbejderfilteret, så sedlen kun indeholder den ene medarbejders uge. Ellers bærer ét ark koderne til alle ugens hjem.",
         "Udskriften får et bånd øverst om, at den er fortrolig og skal makuleres. Bliver en seddel væk, skal koderne skiftes — sig det til kontoret med det samme.",
         "Der kommer én medarbejder pr. side, liggende A4. Vil du kun have én med, så vælg medarbejderen i listen først.",
-        "Sæt fluebenet «Tag time- og kørselsskema med», og der lægges et skema bagerst — ét pr. medarbejder, på sin egen stående side. Det er det samme skema, I hidtil har brugt på papir. Hver linje viser opgavetypen (Nexus, Ældrelov, Privat eller Erhverv) og den planlagte tid, så kontoret kan sammenholde med det, medarbejderen har skrevet.",
+        "Sæt fluebenet «Tag time- og kørselsskema med», og der lægges et skema bagerst — ét pr. medarbejder, på sin egen liggende side. Det er det samme skema, I hidtil har brugt på papir. Hver linje viser opgavetypen (Nexus, Ældrelov, Privat eller Erhverv) og den planlagte tid, så kontoret kan sammenholde med det, medarbejderen har skrevet.",
         "Dato og arbejdssted er skrevet ind på forhånd ud fra planen, så medarbejderen kun skal skrive timer og kilometer. Der er tomme linjer i bunden til det, der ikke stod i planen.",
         "Skemaet er til de medarbejdere, der starter på papir, før de får Worklist på telefonen. Kontoret taster tallene ind bagefter, så løn og fakturering bygger på det samme som alle andres.",
         "Det flueben huskes derimod til næste gang — i modsætning til adgangsoplysningerne er der ingen koder på skemaet.",
