@@ -2326,7 +2326,7 @@ const MODULE_HELP = {
         "De to beløb står i højre side og bliver stående, mens du ruller gennem listen. De viser summen af præcis dét, listen indeholder lige nu — skifter du filter eller søger, følger tallene med.",
         "Så kan du se, hvad et udvalg er værd, mens du går det igennem: fx hvad erhvervsaftalerne tilsammen giver, eller hvor meget der er realiseret på en enkelt kunde."] },
     { h: "Redigér en aftale der kører", p: [
-        "Tryk «Ret aftale» på aftalen her på siden — eller åbn en hvilken som helst opgave på den i ugeplanen (vinduet hedder «Ret opgave») og vælg «Ret aftalen». Begge veje åbner det samme.",
+        "Tryk «Ret aftale» på aftalen her på siden — eller åbn en hvilken som helst opgave på den i ugeplanen (vinduet hedder «Ret opgave» og har samme brede layout) og vælg «Ret aftalen». Begge veje åbner det samme.",
         "Du kan rette alt: rytme, ugedage, klokkeslæt, varighed, pris, aftaletype, tjeklister og fast medarbejder. Ændringerne gælder de opgaver, der dannes fremover.",
         "Ændrer du rytmen eller ugedagene, rydder systemet selv de planlagte opgaver, der ikke passer længere, og siger hvor mange det var. Kun opgaver i fremtiden uden registreret tid og uden afslutning — udført arbejde røres aldrig.",
         "De nye opgaver dukker op, efterhånden som du bladrer gennem ugerne. Vil du se dem med det samme, så klik dig gennem de kommende uger én gang.",
@@ -20705,7 +20705,9 @@ function TaskDetailModal({ task, employees, templates, onSetPreferredEmployee, o
       isAdminUser && React.createElement("button", { style: styles.iconBtnGhostInline, title: "Ret opgavens navn", onClick: () => { setTitleDraft(t.title); setIsEditingTitle(true); } }, React.createElement(Pencil, { size: 14 }))
     );
 return (
-    <Modal onClose={onClose} title={titleNode} persistent>
+    <Modal onClose={onClose} title={titleNode} persistent fullscreen>
+      {/* Samme bredde og tre kolonner som Ny aftale (7.10.2026): Opgaven, Kunde og Status ved siden af hinanden. */}
+      <div style={{ maxWidth: 1600, margin: "0 auto", textAlign: "left" }}>
       {/* Ligger oeverst og for sig selv. Stod den nede ved medarbejderne, var den
           for let at ramme ved et uheld, naar man blot skulle tilfoeje en kollega. */}
       {t.templateId && isAdminUser && onCancelTemplate && (() => {
@@ -20783,7 +20785,8 @@ return (
           Det er en aftale med kunden, saa det skal kunne laeses uden at aabne noget. */}
       <div style={styles.cardMeta}>{dayLabel}{t.scheduledTime ? ` kl. ${t.scheduledTime}` : ""} · {fmtMin(t.duration)}{t.deadline ? ` · senest ${ALL_DAYS.find((d) => d.key === t.deadline)?.label}` : ""}{t.expiryDate ? ` · udløber ${t.expiryDate}` : ""}</div>
 
-      <div style={{ ...styles.formSection, borderColor: "#9ED2CB" }}><div style={{ ...styles.formSectionHead, background: "#F0FDFA", borderBottom: "1.5px solid #9ED2CB" }}><div style={{ ...styles.formSectionTitle, color: "#0F766E" }}>Opgaven</div><div style={{ ...styles.formSectionHint, color: "#149285" }}>Hvad der skal laves, og hvornår den senest skal være udført</div></div><div style={styles.formSectionBody}>{/* Kompetencer — redigerbare */}
+      <div style={{ display: "flex", gap: 18, flexWrap: "wrap", alignItems: "flex-start" }}>
+      <div style={{ ...styles.formSection, flex: "1 1 360px", minWidth: 0, marginBottom: 0, borderColor: "#9ED2CB" }}><div style={{ ...styles.formSectionHead, background: "#F0FDFA", borderBottom: "1.5px solid #9ED2CB" }}><div style={{ ...styles.formSectionTitle, color: "#0F766E" }}>Opgaven</div><div style={{ ...styles.formSectionHint, color: "#149285" }}>Hvad der skal laves, og hvornår den senest skal være udført</div></div><div style={styles.formSectionBody}>{/* Kompetencer — redigerbare */}
       <div style={{ marginBottom: 12 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
           <label style={styles.label}>Kompetencer</label>
@@ -20913,7 +20916,7 @@ return (
         </div>
       )}
 
-      </div></div><div style={{ ...styles.formSection, borderColor: "#EFAFC9" }}><div style={{ ...styles.formSectionHead, background: "var(--farve-lys)", borderBottom: "1.5px solid #EFAFC9" }}><div style={{ ...styles.formSectionTitle, color: "var(--farve-moerk)" }}>Kunde</div><div style={{ ...styles.formSectionHint, color: "#B4436F" }}>Hvem der faktureres, og hvor der arbejdes</div></div><div style={styles.formSectionBody}>{/* Kunde — redigerbar indtil udført */}
+      </div></div><div style={{ ...styles.formSection, flex: "1 1 360px", minWidth: 0, marginBottom: 0, borderColor: "#EFAFC9" }}><div style={{ ...styles.formSectionHead, background: "var(--farve-lys)", borderBottom: "1.5px solid #EFAFC9" }}><div style={{ ...styles.formSectionTitle, color: "var(--farve-moerk)" }}>Kunde</div><div style={{ ...styles.formSectionHint, color: "#B4436F" }}>Hvem der faktureres, og hvor der arbejdes</div></div><div style={styles.formSectionBody}>{/* Kunde — redigerbar indtil udført */}
       <div style={{ marginBottom: 12 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
           <label style={styles.label}>Kundeoplysninger</label>
@@ -21089,7 +21092,7 @@ return (
           )
         )}
       </div>
-      </div></div><div style={{ ...styles.formSection, borderColor: "#B9C0F4" }}><div style={{ ...styles.formSectionHead, background: "#EEF2FF", borderBottom: "1.5px solid #B9C0F4" }}><div style={{ ...styles.formSectionTitle, color: "#4F46E5" }}>Udførelse</div><div style={{ ...styles.formSectionHint, color: "#6B63EA" }}>Status, bemanding, tasks og registreret tid</div></div><div style={styles.formSectionBody}>{candidatesFor(t, employees, areas, employeeAreas).candidates.length === 0 && <span style={styles.errorChip}><AlertTriangle size={12} /> Ingen har alle krævede kompetencer</span>}
+      </div></div><div style={{ ...styles.formSection, flex: "1 1 360px", minWidth: 0, marginBottom: 0, borderColor: "#B9C0F4" }}><div style={{ ...styles.formSectionHead, background: "#EEF2FF", borderBottom: "1.5px solid #B9C0F4" }}><div style={{ ...styles.formSectionTitle, color: "#4F46E5" }}>Udførelse</div><div style={{ ...styles.formSectionHint, color: "#6B63EA" }}>Status, bemanding, tasks og registreret tid</div></div><div style={styles.formSectionBody}>{candidatesFor(t, employees, areas, employeeAreas).candidates.length === 0 && <span style={styles.errorChip}><AlertTriangle size={12} /> Ingen har alle krævede kompetencer</span>}
       {candidatesFor(t, employees, areas, employeeAreas).candidates.length > 0 && t.warning === "overloaded" && <span style={styles.warnChip}><AlertTriangle size={12} /> Ingen ledig kapacitet den dag</span>}
 
       <label style={styles.label}>Status</label>
@@ -21451,8 +21454,10 @@ return (
         <Efterregulering opgave={t} employees={employees} onOpdateret={(log) => onTidLogOpdateret(t.id, log)} />
       )}
       </div></div>
+      </div>
+      </div>
 
-      <div style={styles.modalActions}>
+      <div style={{ ...styles.modalActions, position: "sticky", bottom: 0, zIndex: 5, background: "#F8FAFC", borderTop: "1px solid #E2E8F0", padding: "12px 84px 12px 18px", margin: "0 -18px -16px" }}>
         {onCopy && <button style={{ ...styles.secondaryBtn, color: "var(--farve-moerk)", borderColor: "var(--farve-lys)" }} onClick={() => onCopy(t)}><Copy size={14} /> Kopiér</button>}
         {isAdminUser && onAflys && !BLOCK_TYPES.includes(t.type) && (t.status !== "udført" || erAflyst(t)) && (
           <AflysKnap opgave={t} grunde={aflysningsgrunde} regler={aflysningRegler} onAflys={onAflys} onGenaabn={onGenaabn} onLuk={onClose} />
