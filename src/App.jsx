@@ -258,7 +258,16 @@ const MENU_GRUPPER = [
   // gruppen hedder stadig "drift"; det er kun gruppenoeglen, der skulle vaere unik.
   { key: "system", navn: "Drift", kunAdmin: true, sider: [["drift", "Drift"], ["aendringer", "Ændringer"]] },
 ];
-const WORKLIST_URL = import.meta.env.VITE_WORKLIST_URL || "https://jammerbugtrengoering-service.netlify.app";
+// Hover på menuen (7.10.2026): hvad der ligger bag hvert punkt. Siderne i gruppen lægges til automatisk, så teksten ikke kommer i utakt med menuen.
+const MENU_HJAELP = {
+  drift: "Ugens opgaver pr. medarbejder: planlæg, flyt og tildel, og udskriv planen. Her oprettes også nye opgaver, aktiviteter, ferie og sygdom.",
+  salg: "Kunder, henvendelser fra pjecen, tilbud og aftaler, og de produkter der kan sælges.",
+  lager: "Lagerbeholdningen — fx om der er sæbe nok.",
+  oekonomi: "Fakturering til Dinero, kundetimer, rapporter, lønunderlag og papirskemaet.",
+  ekstra: "Bestil ekstra hjælp hos Jammerbugt Rengøring.",
+  system: "Kører løsningen, og er der noget, nogen skal tage fat i? De automatiske job og ændringsloggen. Kun for administratorer.",
+};
+const WORKLIST_URL = import.meta.env.VITE_WORKLIST_URL.VITE_WORKLIST_URL || "https://jammerbugtrengoering-service.netlify.app";
 // Genveje til de to eksterne vaerktoejer i topmenuen (4.10.2026). De aabnes i et lille
 // vindue uden menulinje og vaerktoejslinje, saa de foeles som en app ved siden af planen.
 // Adresselinjen kan en browser ikke fjerne helt (Chrome viser en skrivebeskyttet) — en
@@ -6353,9 +6362,13 @@ function PlanningApp({ session, onSignOut }) {
         <nav style={styles.nav}>
           {MENU_GRUPPER.filter((gr) => (!gr.kunAdmin || isAdminUser) && (!gr.kunHr || erHrAdmin) && !gr.skjultIMenu && (!gr.kunKunde || KUNDEUDGAVE) && synligeSider(gr).length > 0).map((gr) => {
             const aktiv = gruppeFor(view).key === gr.key;
+            const sider = synligeSider(gr);
+            const tekst = (MENU_HJAELP[gr.key] || "") + (sider.length > 1 ? ` Sider: ${sider.map(([, l]) => l).join(", ")}.` : "");
             return (
-              <button key={gr.key} onClick={() => setView(synligeSider(gr)[0][0])}
-                style={aktiv ? styles.navBtnActive : styles.navBtn}>{gr.navn}</button>
+              <IkonTip key={gr.key} titel={gr.navn} tekst={tekst}>
+                <button onClick={() => setView(sider[0][0])}
+                  style={aktiv ? styles.navBtnActive : styles.navBtn}>{gr.navn}</button>
+              </IkonTip>
             );
           })}
           {/* De to eksterne apps er ikoner og ikke menupunkter (6.10.2026): de åbner i eget vindue og hører ikke til rækken af sider.
