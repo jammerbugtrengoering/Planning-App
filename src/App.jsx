@@ -20721,6 +20721,18 @@ return (
         ) : null;
       })()}
       <div style={styles.detailMetaRow}>
+        {/* Genvej til aftalen bag opgaven. Staar yderst til venstre i raekken under titlen og har samme udseende som Kopiér (7.10.2026). Rytme, ugedage og
+            klokkeslaet hoerer til AFTALEN og ikke til den enkelte dag — men det er paa den enkelte dag, man opdager at noget er galt. */}
+        {t.templateId && isAdminUser && onEditTemplate && (() => {
+          const aftale = (templates || []).find((x) => x.id === t.templateId);
+          return aftale && aftale.status === "udgaaet" ? null : (
+            <button type="button" style={{ ...styles.secondaryBtn, color: "var(--farve-moerk)", borderColor: "var(--farve-lys)", padding: "4px 12px", fontSize: 12.5 }}
+              title="Åbner hele aftalen: rytme, ugedage, klokkeslæt, varighed og pris"
+              onClick={() => { onEditTemplate(t.templateId); onClose(); }}>
+              Ret aftalen
+            </button>
+          );
+        })()}
         {locked ? (
           <TypeBadge type={t.type} />
         ) : (
@@ -20758,18 +20770,7 @@ return (
         {t.offSchedule && <span style={{ ...styles.typeChip, background: "#FEF9C3", color: "#B45309" }}>⚠️ Uden for aftale</span>}
         {t.onSchedule && !t.offSchedule && <span style={{ ...styles.typeChip, background: "#ECFDF5", color: "#16A34A" }}>✓ Aftalt dag</span>}
         {t.outsideArea && <span style={{ ...styles.typeChip, background: "#F5F3FF", color: "#7C3AED" }}>📍 Uden for område</span>}
-        {/* Genvej til aftalen bag opgaven (7.10.2026: flyttet fra en centreret raekke oeverst til samme linje som typen). Rytme, ugedage og klokkeslaet
-            hoerer til AFTALEN og ikke til den enkelte dag — men det er paa den enkelte dag, man opdager at noget er galt. */}
-        {t.templateId && isAdminUser && onEditTemplate && (() => {
-          const aftale = (templates || []).find((x) => x.id === t.templateId);
-          return aftale && aftale.status === "udgaaet" ? null : (
-            <button type="button" style={{ ...styles.addSkillBtn, marginLeft: "auto" }}
-              title="Åbner hele aftalen: rytme, ugedage, klokkeslæt, varighed og pris"
-              onClick={() => { onEditTemplate(t.templateId); onClose(); }}>
-              Ret aftalen
-            </button>
-          );
-        })()}
+        
       </div>
       {/* Klokkeslaettet stod ikke her foer, selvom 2.628 af 2.682 faste opgaver har et.
           Det er en aftale med kunden, saa det skal kunne laeses uden at aabne noget. */}
