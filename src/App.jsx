@@ -2363,7 +2363,7 @@ const MODULE_HELP = {
         "Morgentjekket skriver «intet at melde», når alt er i orden. Det er med vilje: uden den linje kunne man ikke se forskel på en rolig nat og et job, der er holdt op med at køre.",
         "Står der gult, er der gået for længe siden sidste livstegn. Står der rødt, fejlede sidste kørsel — og så står forklaringen på linjen."] },
     { h: "Backup af ugeplanen", p: [
-        "Hver fredag mellem kl. 13 og 17 sendes en PDF med de næste to ugers opgaver til alle administratorer, der har en mailadresse. Den er til dagen, hvor systemet ikke kan åbnes: hver dag står på sin egen side, delt op på medarbejdere, med adresse, kontaktoplysninger og adgangstekst.",
+        "Hver fredag mellem kl. 13 og 17 sendes en PDF med de næste to ugers opgaver til alle administratorer, der har en mailadresse. Den er til dagen, hvor systemet ikke kan åbnes: medarbejderne står i alfabetisk orden, og hver medarbejder har en side for hver uge, dag for dag, med adresse, kontaktoplysninger og adgangstekst. «Ikke tildelt» står til sidst.",
         "Klokkeslættet er den aftalte tid. Opgaver uden aftalt tid står med «—». Adgangskoder fra adgangslageret er ikke med, men adgangsteksten er — derfor er PDF'en mærket fortrolig, og den skal makuleres, når ugerne er gået.",
         "Knappen «Send en prøve til mig» sender samme PDF til din egen mail og til ingen andre. Brug den, når du vil se, hvordan backuppen ser ud.",
         "Står jobbet gult, er fredagens mail ikke gået. Tjek, at administratorerne har en mailadresse under Medarbejdere."] },

@@ -4,7 +4,7 @@ import { PDFDocument, StandardFonts, rgb } from "https://esm.sh/pdf-lib@1.17.1";
 
 // Fredagsbackup af ugeplanen (7.10.2026, Jonn).
 //
-// Hver fredag eftermiddag danner funktionen en PDF med de næste to ugers plan — uge for uge, dag for dag, medarbejder for medarbejder — og mailer den til
+// Hver fredag eftermiddag danner funktionen en PDF med de næste to ugers plan — medarbejder for medarbejder (alfabetisk), uge for uge, dag for dag — og mailer den til
 // kontorets administratorer. Det er en nødplan: er systemet nede mandag morgen, kan planen stadig læses og printes.
 //
 // Hvorfor på serveren: planen skal komme, selv om ingen har appen åben. Derfor kan den ikke bruge udskriften i planlægningsappen (den ligger i browseren) og viser
@@ -126,41 +126,42 @@ async function byg(opgaver: Opg[], emps: Map<string, string>, uger: { aar: numbe
     y -= 32;
   };
 
-  for (const u of uger) {
-    for (let di = 0; di < 7; di++) {
-      const dato = plusDage(u.mandag, di);
-      const dag = DAGE[di];
-      const dagens = opgaver.filter((o) => o.year === u.aar && o.week === u.uge && o.day === dag);
-      if (dagens.length === 0 && di >= 5) continue;          // tom weekend springes over
+  // Rækkefølge (Jonn 7.10.2026): medarbejdernes navne i alfabetisk orden, «Ikke tildelt» sidst, og under hver medarbejder ugenummer for ugenummer, dag for dag.
+  // Hver medarbejder og uge begynder på en ny side, så siderne kan deles ud eller lægges i hver sin mappe. En opgave med flere medarbejdere står hos dem alle.
+  const grupper = new Map<string, Opg[]>();
+  for (const o of opgaver) {
+    const ids = (o.assignees && o.assignees.length) ? o.assignees : ["_ingen"];
+    for (const id of ids) { if (!grupper.has(id)) grupper.set(id, []); grupper.get(id)!.push(o); }
+  }
+  const rk = [...grupper.keys()].sort((x, y2) => {
+    if (x === "_ingen") return 1; if (y2 === "_ingen") return -1;
+    return (emps.get(x) ?? x).localeCompare(emps.get(y2) ?? y2, "da");
+  });
+
+  for (const id of rk) {
+    const navn = id === "_ingen" ? "Ikke tildelt" : (emps.get(id) ?? "Ukendt medarbejder");
+    const egne = grupper.get(id)!;
+    for (const u of uger) {
+      const ugens = egne.filter((o) => o.year === u.aar && o.week === u.uge);
+      if (ugens.length === 0) continue;
       nySide();
-      overskrift = `Uge ${u.uge} · ${langDato(dato)}`;
+      overskrift = `${navn} · Uge ${u.uge}`;
       dagHoved(overskrift);
-      if (dagens.length === 0) { tekst("Ingen opgaver denne dag.", M, y - 10, 10, normal, graa); continue; }
 
-      // grupper pr. medarbejder (en opgave med flere medarbejdere står hos dem alle)
-      const grupper = new Map<string, Opg[]>();
-      for (const o of dagens) {
-        const ids = (o.assignees && o.assignees.length) ? o.assignees : ["_ingen"];
-        for (const id of ids) { if (!grupper.has(id)) grupper.set(id, []); grupper.get(id)!.push(o); }
-      }
-      const rk = [...grupper.keys()].sort((a, b) => {
-        if (a === "_ingen") return 1; if (b === "_ingen") return -1;
-        return (emps.get(a) ?? a).localeCompare(emps.get(b) ?? b, "da");
-      });
-
-      for (const id of rk) {
-        const navn = id === "_ingen" ? "Ikke tildelt" : (emps.get(id) ?? "Ukendt medarbejder");
-        const liste = grupper.get(id)!.sort((a, b) => (a.scheduled_time ?? "99:99").localeCompare(b.scheduled_time ?? "99:99"));
-        let forste = true;
-        const hoved = () => {
+      for (let di = 0; di < 7; di++) {
+        const dagens = ugens.filter((o) => o.day === DAGE[di])
+          .sort((p, q) => (p.scheduled_time ?? "99:99").localeCompare(q.scheduled_time ?? "99:99"));
+        if (dagens.length === 0) continue;
+        const dato = plusDage(u.mandag, di);
+        const dagBar = (fortsat: boolean) => {
           side.drawRectangle({ x: M, y: y - 17, width: B - 2 * M, height: 17, color: lys });
-          tekst(forste ? navn : `${navn} (fortsat)`, M + 6, y - 12, 10.5, fed);
-          y -= 22; forste = false;
+          tekst(fortsat ? `${langDato(dato)} (fortsat)` : langDato(dato), M + 6, y - 12, 10.5, fed);
+          y -= 22;
         };
         if (y - 60 < BUND) { nySide(); dagHoved(overskrift + " (fortsat)"); }
-        hoved();
+        dagBar(false);
 
-        for (const o of liste) {
+        for (const o of dagens) {
           const type = o.type === "ferie" ? "Ferie" : o.type === "sygdom" ? "Sygdom" : null;
           const min = id !== "_ingen" && o.tid_fordeling && Number(o.tid_fordeling[id]) > 0 ? Number(o.tid_fordeling[id]) : (o.duration ?? 0);
           const tid = o.scheduled_time ? o.scheduled_time.slice(0, 5) : "—";
@@ -177,7 +178,7 @@ async function byg(opgaver: Opg[], emps: Map<string, string>, uger: { aar: numbe
             if (o.access_instructions?.trim()) for (const l of ombryd("Adgang: " + o.access_instructions, fed, 8.5, bredde)) linjer.push({ t: l, f: fed, farve: roed });
           }
           const hojde = kopLinjer.length * 12 + linjer.length * 11 + 8;
-          if (y - hojde < BUND) { nySide(); dagHoved(overskrift + " (fortsat)"); hoved(); }
+          if (y - hojde < BUND) { nySide(); dagHoved(overskrift + " (fortsat)"); dagBar(true); }
           tekst(tid, M + 4, y - 10, 9.5, fed);
           if (!type) tekst(`${min} min`, M + 4, y - 21, 8, normal, graa);
           let yy = y - 10;
