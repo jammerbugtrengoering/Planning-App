@@ -123,7 +123,7 @@ Tre apps hænger sammen: **planlægningsappen** (HR-siden, ikon i topbjælken, k
 - **Områder kan slås fra (`firma.brug_omraader`, 7.10.2026).** Al planlægning går gennem `candidatesFor`, som ser bort fra områderne, når `omraaderIBrug()` er falsk; ugeplanen og medarbejderlisten skjuler filtrene. Ny vej, der bruger `areas`/`employeeAreas` direkte, skal også tjekke `omraaderIBrug()`. Kolonnen er kun lagt i Jammerbugts database; mangler den i en kundedatabase, regnes områder for slået til.
 - **Skriv aldrig «hun», «han» eller «hende» i tekster, brugeren ser** (Jonns beslutning 7.10.2026: der er mænd i virksomheden). Brug «medarbejderen», «kunden», «borgeren», «vedkommende».
 - Ikke bygget endnu: opbevaringsfrister og sletning af dokumenter, push til medarbejderen ved afgjort ferieanmodning, ferieblokering i databasen (nu i klienten via `addBlock`), stillingsfelt.
-  Funktionerne er ikke prøvet med to rigtige logins (leder + medarbejder) — gør det, før det bruges for alvor. Supabase Redirect URLs skal indeholde Personalemappens adresse.
+  MUS-flowet er afprøvet med en rigtig leder og en rigtig medarbejder (7.10.2026, Jonn). Supabase Redirect URLs skal indeholde Personalemappens adresse.
 
 ### Du rører ved tidsregistrering for Nexus eller Ældrelov
 
