@@ -2436,6 +2436,7 @@ const MODULE_HELP = {
         "Skriv timerne ud for hver linje, som medarbejderen har skrevet dem: «2», «2,5», «2:30» eller «90 min». Skærmen viser minutterne ved siden af, så du kan se, hvordan tallet blev læst.",
         "Har medarbejderen selv registreret tiden i Worklist, står den i kolonnen «Worklist». Papirets timer lægges så IKKE oveni — de bruges kun til at se, om de to er uenige (10 minutter eller mere), og opgaven tæller ikke dobbelt i løn og fakturering.",
         "Skriv også kilometerne. De bruges kun til at sammenligne — det er altid systemets egne kilometer, der gælder.",
+        "Kolonnen «Type» viser Nexus, Ældrelov, Privat eller Erhverv. Nexus og Ældrelov har fast tid: der står «Aftalt tid» i stedet for et timefelt, og tiden er altid den planlagte. Du skal kun skrive kilometer (skriv 0, hvis der ikke var kørsel), og så kan linjen godkendes.",
         "Linjerne er ugeplanen, som den ser ud lige nu. Er en opgave flyttet, aflyst eller givet til en anden, efter skemaet blev trykt, og står den stadig på papiret, så vælg den under «Vælg en opgave fra ugen» (søg på kunde, adresse, nummer eller medarbejder), eller skriv dens nummer. Så kan du skrive timer og km ud for den, der står håndskrevet.",
         "Under linjerne står «Sæt opgaverne til udført» og «Sæt som fakturagrundlag». Fakturagrundlag er slået fra, til du selv vælger det: det er det, der gør tiden til en regning til kunden.",
         "Tryk «Godkend». Tiden lægges på opgaven og kommer med under Løn data og i faktureringen som al anden registreret tid — fluebenet til løn sætter du dér, som du plejer. En linje, der er indlæst, kan ikke indlæses to gange."] },
@@ -12819,7 +12820,9 @@ function PapirskemaView({ instances, employees, kmLog, onTidIndlaest, onFakturag
   // En linje kan godkendes, når der er timer at lægge på opgaven — eller, hvis tiden allerede står i
   // Worklist, når der er noget at sammenligne (timer eller km). I det tilfælde lægges der ikke tid på.
   const kmSkrevet = (r) => typeof r.kmPapir === "number" && !Number.isNaN(r.kmPapir);
-  const attGodkende = raekker.filter((r) => !r.indlaest && (r.minutter || (r.harWorklist && kmSkrevet(r))));
+  // Nexus/Ældrelov har fast tid (fastMin), så der er ingen timer at skrive; linjen tæller først med, når der står kilometer
+  // (skriv 0, hvis der ikke var kørsel). Ellers ville hele ugens linjer lægge tid på opgaver, ingen har bekræftet.
+  const attGodkende = raekker.filter((r) => !r.indlaest && ((r.minutter && (!r.fastMin || kmSkrevet(r))) || (r.harWorklist && kmSkrevet(r))));
   const afvigelser = [
     ...raekker.filter((r) => r.tidAfv.afviger).map((r) => ({ tekst: `${r.sted}: skrev ${fmtMin(r.minutter)}, Worklist ${fmtMin(r.wl)} (${r.tidAfv.diff > 0 ? "+" : ""}${r.tidAfv.diff} min)` })),
     ...raekker.filter((r) => r.afv.afviger).map((r) => ({ tekst: `${r.sted}: skrev ${r.kmPapir} km, systemet ${r.kmSys} km (${r.afv.diff > 0 ? "+" : ""}${r.afv.diff})` })),
@@ -12929,15 +12932,16 @@ function PapirskemaView({ instances, employees, kmLog, onTidIndlaest, onFakturag
             <div style={styles.hint}>Medarbejderen har ingen opgaver i den uge.</div>
           ) : (
             <div style={{ overflowX: "auto" }}>
-              <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 840 }}>
+              <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 960 }}>
                 <thead>
                   <tr>
                     <th style={{ ...hoved, width: 60 }}>Nr.</th>
                     <th style={{ ...hoved, width: 62 }}>Dato</th>
+                    <th style={{ ...hoved, width: 78 }}>Type</th>
                     <th style={hoved}>Arbejdssted</th>
                     <th style={{ ...hoved, width: 70 }}>Planlagt</th>
                     <th style={{ ...hoved, width: 76 }}>Worklist</th>
-                    <th style={{ ...hoved, width: 100 }}>Timer (papir)</th>
+                    <th style={{ ...hoved, width: 150 }}>Timer (papir)</th>
                     <th style={{ ...hoved, width: 84 }}>Km (papir)</th>
                     <th style={{ ...hoved, width: 84 }}>Km (system)</th>
                     <th style={{ ...hoved, width: 96 }}>Afvigelse</th>
@@ -12952,21 +12956,22 @@ function PapirskemaView({ instances, employees, kmLog, onTidIndlaest, onFakturag
                         <tr style={r.indlaest ? { background: "#F0FDF4" } : undefined}>
                           <td style={{ ...celle, fontVariantNumeric: "tabular-nums", color: "#64748B" }}>{r.nr ?? ""}</td>
                           <td style={celle}>{r.dato ? `${r.dato.slice(8, 10)}.${r.dato.slice(5, 7)}` : ""}</td>
+                          <td style={celle}>{(() => { const m = contractMeta(r.t.contractType || r.t.contract_type); return <span style={{ fontSize: 11.5, fontWeight: 700, color: m.color, background: m.bg, borderRadius: 6, padding: "2px 7px" }}>{m.label}</span>; })()}</td>
                           <td style={celle}>{r.sted}{r.t.assignees?.includes(empId) ? "" : <span style={{ color: roed }}> · ikke på medarbejderens plan</span>}</td>
-                          <td style={celle}>{fmtMin(r.t.duration || 0)}</td>
+                          <td style={celle}>{fmtMin(r.fastMin ?? (r.t.duration || 0))}</td>
                           <td style={{ ...celle, color: r.harWorklist ? "#1D4ED8" : "#94A3B8", fontWeight: r.harWorklist ? 600 : 400 }}>
                             {r.harWorklist ? fmtMin(r.wl) : "–"}
                           </td>
                           <td style={celle}>
                             {r.indlaest ? <span style={{ color: "#166534", fontWeight: 600 }}>{r.harWorklist ? "Sammenlignet ✓" : "Indlæst ✓"}</span> : (
-                              r.fastMin ? <div style={{ fontSize: 12, color: "#4F46E5", fontWeight: 600 }}>Aftalt tid: {fmtMin(r.fastMin)}<div style={{ fontWeight: 400, color: "#64748B" }}>Nexus/Ældrelov: fast</div></div> : <div>
+                              r.fastMin ? <div style={{ fontSize: 12, lineHeight: 1.35, color: "#4F46E5", fontWeight: 600 }}>Aftalt tid: {fmtMin(r.fastMin)}<div style={{ fontWeight: 400, color: "#64748B" }}>fast tid — skriv kun km (0 hvis ingen)</div></div> : <div>
                                 <input aria-label={`Timer, ${r.sted}`} style={{ ...lille, width: 84, borderColor: r.timerFejl ? roed : "#CBD5E1" }}
                                   value={r.timerTekst} placeholder="fx 2,5" onChange={(e) => saet(r.t.id, "timer", e.target.value)} />
-                                {r.minutter ? <div style={{ fontSize: 11, color: r.tidAfv.afviger ? roed : "#64748B", fontWeight: r.tidAfv.afviger ? 700 : 400 }}>
+                                {r.minutter ? <div style={{ fontSize: 11, lineHeight: 1.3, marginTop: 2, color: r.tidAfv.afviger ? roed : "#64748B", fontWeight: r.tidAfv.afviger ? 700 : 400 }}>
                                     = {fmtMin(r.minutter)}{r.tidAfv.afviger ? ` (${r.tidAfv.diff > 0 ? "+" : ""}${r.tidAfv.diff} min mod Worklist)` : ""}
                                   </div>
-                                  : r.timerFejl ? <div style={{ fontSize: 11, color: roed }}>kan ikke læses</div> : null}
-                                {r.harWorklist && <div style={{ fontSize: 11, color: "#1D4ED8" }}>tid findes i Worklist: kun sammenligning</div>}
+                                  : r.timerFejl ? <div style={{ fontSize: 11, lineHeight: 1.3, color: roed }}>kan ikke læses</div> : null}
+                                {r.harWorklist && <div style={{ fontSize: 11, lineHeight: 1.3, color: "#1D4ED8", marginTop: 2 }}>Tid findes i Worklist, kun sammenligning</div>}
                               </div>
                             )}
                           </td>
@@ -12987,7 +12992,7 @@ function PapirskemaView({ instances, employees, kmLog, onTidIndlaest, onFakturag
                         {dag && (i === raekker.length - 1 || raekker[i + 1].dato !== r.dato) && dag.harKm && (
                           <tr style={{ background: "#F8FAFC" }}>
                             <td style={celle} />
-                            <td style={{ ...celle, fontSize: 12, color: "#475569" }} colSpan={5}>Hele dagen, papir mod system</td>
+                            <td style={{ ...celle, fontSize: 12, color: "#475569" }} colSpan={6}>Hele dagen, papir mod system</td>
                             <td style={{ ...celle, fontWeight: 600 }}>{Math.round(dag.papir * 10) / 10}</td>
                             <td style={{ ...celle, color: "#475569" }}>{dag.system === null ? "–" : dag.system}</td>
                             <td style={{ ...celle, fontWeight: 700, color: dag.afv.afviger ? roed : "#64748B" }}>
