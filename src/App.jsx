@@ -1822,7 +1822,7 @@ const MODULE_HELP = {
         "Det slår igennem på alle kommende opgaver på aftalen. Udførte opgaver røres ikke.",
         "Tilføjer du derimod bare en medarbejder på en enkelt opgave, gælder det kun den ene opgave. Brug det til afløsning."] },
     { h: "Når du retter på en aftale", p: [
-        "Kundenavn, adresse, kundenummer i Dinero, PO-nummer, nøgleafhentning, kontrakttype, prisform, fastpris og video arves fra aftalen ned på opgaverne. Retter du et af dem, slår det igennem på alle kommende opgaver, næste gang appen åbnes — også dem der allerede ligger i kalenderen.",
+        "Kundenavn, adresse, kundenummer i Dinero, PO-nummer, nøgleafhentning, aftaletype, prisform, fastpris og video arves fra aftalen ned på opgaverne. Retter du et af dem, slår det igennem på alle kommende opgaver, næste gang appen åbnes — også dem der allerede ligger i kalenderen.",
         "Rettelsen gemmes med det samme, så medarbejder-appen ser den samme adresse som du gør. Tidligere levede den kun i din egen browser.",
         "Opgaver der er udført, har registreret tid eller er sendt til Dinero, røres aldrig. Der er arbejdet leveret, og en senere prisændring må ikke omregne det bagud.",
         "PO-nummer og Dinero-nummer arves kun ned hvis aftalen faktisk har et. Er aftalens felt tomt, bevares det der står på den enkelte opgave — det er sådan borgerens navn bliver stående på kommunens opgaver."] },
@@ -1886,7 +1886,7 @@ const MODULE_HELP = {
         "Ugens aflyste opgaver står under «🚫 Aflyste» over ugeplanen. «Fortryd» genåbner opgaven og sætter medarbejderne på igen — også en sen aflysning, så længe den ikke er sendt til Dinero.",
         "Udførte opgaver og opgaver med registreret tid kan ikke aflyses.",
         "Grunde og frister sættes under Opsætning → Aflysning."] },
-    { h: "Weekend", p: ["Knappen Man–Fre / Man–Søn bestemmer om lørdag og søndag vises.", "Ugeplanen åbner altid på Man–Fre, så fokus er arbejdsugen. Vil du se weekenden, trykker du på knappen.", "Ligger der opgaver i weekenden, står der ved siden af knappen hvor mange der er skjult — så du ikke overser dem."] }, { h: "Sådan er «Ny aftale» og «Ret opgave» bygget op", p: ["Begge skærme er delt i tre farvede afsnit, så det er tydeligt hvad der hører sammen. Farverne betyder det samme begge steder.", "Rosa er kunden: kontrakttype, prismodel, titel, fakturakunde, adresse, fakturabeskrivelse og adgangsforhold. Det er det der ender på fakturaen.", "Grønt er selve opgaven: krævede kompetencer, varighed, tjeklister og instruktionsvideo.", "Blåt er tid: i «Ny aftale» hedder det Planlægning og rummer fast interval eller fleksibel, ansvarlig medarbejder, start- og udløbsdato, interval og ugedage.", "Klikker du på en opgave i ugeplanen, åbner serviceordren med de samme tre farver. Der hedder det blå afsnit Udførelse og rummer status, medarbejdere på opgaven, tasks og tidsregistrering.", "Under Tidsregistrering står hver registrering for sig: hvem, hvornår, hvor lang tid og medarbejderens begrundelse. Øverst står afvigelsen fra den planlagte tid for hele holdet.", "Har medarbejderen start/stop, står den målte tid der også, og afstanden til adressen ved start og ved slut. Er noget værd at se på — fx «afsluttet 3,4 km fra adressen» — står det med orange.", "I «Ny aftale» bliver Annuller og Gem og planlæg stående nederst, uanset hvor langt du har scrollet."] },
+    { h: "Weekend", p: ["Knappen Man–Fre / Man–Søn bestemmer om lørdag og søndag vises.", "Ugeplanen åbner altid på Man–Fre, så fokus er arbejdsugen. Vil du se weekenden, trykker du på knappen.", "Ligger der opgaver i weekenden, står der ved siden af knappen hvor mange der er skjult — så du ikke overser dem."] }, { h: "Sådan er «Ny aftale» og «Ret opgave» bygget op", p: ["Begge skærme er delt i tre farvede afsnit, så det er tydeligt hvad der hører sammen. Farverne betyder det samme begge steder.", "Rosa er kunden: aftaletype, prismodel, titel, fakturakunde, adresse, fakturabeskrivelse og adgangsforhold. Det er det der ender på fakturaen.", "Grønt er selve opgaven: krævede kompetencer, varighed, tjeklister og instruktionsvideo.", "Blåt er tid: i «Ny aftale» hedder det Planlægning og rummer fast interval eller fleksibel, ansvarlig medarbejder, start- og udløbsdato, interval og ugedage.", "Klikker du på en opgave i ugeplanen, åbner serviceordren med de samme tre farver. Der hedder det blå afsnit Udførelse og rummer status, medarbejdere på opgaven, tasks og tidsregistrering.", "Under Tidsregistrering står hver registrering for sig: hvem, hvornår, hvor lang tid og medarbejderens begrundelse. Øverst står afvigelsen fra den planlagte tid for hele holdet.", "Har medarbejderen start/stop, står den målte tid der også, og afstanden til adressen ved start og ved slut. Er noget værd at se på — fx «afsluttet 3,4 km fra adressen» — står det med orange.", "I «Ny aftale» bliver Annuller og Gem og planlæg stående nederst, uanset hvor langt du har scrollet."] },
     { h: "Beskeder fra medarbejderne", p: [
         "Øverst i ugeplanen kommer et banner, når en medarbejder har meldt noget ind. Der er to slags.",
         "«Ønske om ny tid» betyder at medarbejderen har aftalt et nyt tidspunkt med kunden. Tryk «Godkend og flyt», så rykkes opgaven — eller «Afvis» og skriv hvorfor, så får medarbejderen en mail.",
@@ -1931,7 +1931,7 @@ const MODULE_HELP = {
         "Afsendernavn og «Svar går til» bruges på alle mails fra systemet: påmindelser, invitationer og morgenmailen.",
         "Hovedfarve og lys/mørk menu slår igennem i planlægningen, Worklist og kundeportalen. Systemet regner selv de lyse og mørke nuancer ud.",
         "Modulerne vises her, men kan ikke ændres. Hos Jammerbugt Rengøring er alle altid med; hos en kunde er det de købte moduler, der afgør det.",
-        "Uden modulet Nexus kan man ikke vælge kontrakttyperne Nexus og Ældrelov, når man opretter opgaver og aftaler.",
+        "Uden modulet Nexus kan man ikke vælge aftaletyperne Nexus og Ældrelov, når man opretter opgaver og aftaler.",
         "Et modul, der ikke er med, forsvinder fra menuen og fra Worklist — Lager, Tilbud, Kundeportal og Start/stop. Databasen afviser det også, så det kan ikke omgås."] },
     { h: "Logo", p: [
         "PNG, JPG, SVG eller WEBP på højst 1 MB. Et kvadratisk logo ser bedst ud.",
@@ -1941,8 +1941,8 @@ const MODULE_HELP = {
         "Modulerne kan ingen slå til eller fra her, heller ikke ved et uheld. Det håndhæves også i databasen."] },
   ] },
 
-  timepriser: { title: "Timepriser", intro: "Satsen pr. time for hver kontrakttype, ekskl. moms — med den dato, den gælder fra.", blocks: [
-    { h: "Sådan sætter du en ny pris", p: ["Vælg kontrakttype, skriv satsen, og vælg hvilken dato den gælder fra. Tryk «Gem sats».",
+  timepriser: { title: "Timepriser", intro: "Satsen pr. time for hver aftaletype, ekskl. moms — med den dato, den gælder fra.", blocks: [
+    { h: "Sådan sætter du en ny pris", p: ["Vælg aftaletype, skriv satsen, og vælg hvilken dato den gælder fra. Tryk «Gem sats».",
         "Datoen foreslås som den 1. i næste måned. Du kan vælge en dato bagud i tiden, så længe den ligger efter den sidste opgave, der er " + (KUNDEUDGAVE ? "markeret som fakturagrundlag." : "sendt til Dinero."),
         "En sats rettes ikke — du lægger en ny oveni. Den gamle står i listen som historik.",
         "Gemmer du en sats med en dato, der allerede har en sats, bliver satsen for den dato rettet."] },
@@ -2080,8 +2080,8 @@ const MODULE_HELP = {
         "Tilføj punkter i den rækkefølge de skal udføres.",
         "Sæt evt. beskrivelse og video på det enkelte punkt — det ses direkte i medarbejder-appen.",
         "Vælg tjeklisten når du opretter en opgave. Der kan vælges flere."] },
-    { h: "Find en liste", p: ["Knapperne øverst — Alle, Tilbud, Privat, Erhverv, Nexus og Ældreloven — viser kun de lister, der hører til. Vælger du en kontrakttype, ser du både de lister, der er mærket med typen, og dem der gælder alle typer. «Tilbud» viser de tre lister, der kun bruges på tilbud."] },
-    { h: "Bruges til", p: ["Under «Bruges til» vælger du, hvilke kontrakttyper listen hører til: Privat, Erhverv, Nexus og/eller Ældreloven. Så vises listen kun, når man arbejder med en opgave af den type — og skriver du ingen, kan den bruges på alle.",
+    { h: "Find en liste", p: ["Knapperne øverst — Alle, Tilbud, Privat, Erhverv, Nexus og Ældreloven — viser kun de lister, der hører til. Vælger du en aftaletype, ser du både de lister, der er mærket med typen, og dem der gælder alle typer. «Tilbud» viser de tre lister, der kun bruges på tilbud."] },
+    { h: "Bruges til", p: ["Under «Bruges til» vælger du, hvilke aftaletyper listen hører til: Privat, Erhverv, Nexus og/eller Ældreloven. Så vises listen kun, når man arbejder med en opgave af den type — og skriver du ingen, kan den bruges på alle.",
         "Opretter du en ny aftale og vælger typen, bliver de lister, der hører til den type, sat på af sig selv. Skifter du type, skiftes de ud igen; lister du selv har valgt, bliver stående. En aftale, der allerede findes, får aldrig sine lister ændret af et typeskift.",
         "Skriv derfor ikke typen i navnet — det gør tjeklisten «Kommunal Rengøring 1» og ikke «Kommunal Rengøring (Nexus)1»."] },
   ], warn: "Retter du i en tjekliste, slår ændringen igennem med det samme på alle opgaver der endnu ikke er udført — også dem der allerede ligger i kalenderen. Punkter medarbejderen har sat flueben ved bevares. Udførte opgaver røres ikke, så det står fast hvad der faktisk blev gjort." },
@@ -2123,7 +2123,7 @@ const MODULE_HELP = {
         "Er alt i listen allerede sat, bliver knappen til «Fjern fakturagrundlag fra N viste». Så kan man fortryde uden at klikke sig igennem hver linje."] },
     { h: "Produkter", p: ["Produktforbrug vises som egne linjer under opgaven med antal og beløb.",
         "Hver produktlinje har sit eget flueben, men kræver at selve opgaven også er fakturagrundlag."] },
-    { h: "Timepriser", p: ["Satsen pr. kontrakttype rettes under Opsætning → Timepriser. Beløbene her regnes ud fra den.",
+    { h: "Timepriser", p: ["Satsen pr. aftaletype rettes under Opsætning → Timepriser. Beløbene her regnes ud fra den.",
         "Opgaver med fastpris bruger deres egen pris i stedet."] },
     { h: "Kommentarer og billeder fra medarbejderen", p: [
         "Har medarbejderen skrevet en kommentar eller taget billeder ude hos kunden, står de direkte under opgavens linje.",
@@ -2181,7 +2181,7 @@ const MODULE_HELP = {
   kunder: { title: "Kunder", intro: KUNDEUDGAVE ? "Kunden set samlet: omsætning, aftaler og besøg." : "Kunden set samlet — og stedet hvor kundeportalen og kundeløsningen tændes.", blocks: [
     { h: "Sådan læses listen", p: [
         "Her ser du hver kunde ét sted: hvad kunden har givet i omsætning, hvor mange aftaler der er, og hvornår der sidst var besøg.",
-        "Omsætningen er realiseret — registreret tid gange satsen for kontrakttypen, plus udførte fastprisopgaver. Planlagt tid tæller ikke med; det er ikke penge før nogen har været der.",
+        "Omsætningen er realiseret — registreret tid gange satsen for aftaletypen, plus udførte fastprisopgaver. Planlagt tid tæller ikke med; det er ikke penge før nogen har været der.",
         "Står der «aldrig besøgt», er der oprettet opgaver men endnu ikke registreret tid på nogen af dem.",
         KUNDEUDGAVE
           ? "Kunderne er jeres egen kundeliste. En ny kunde oprettes, når du skriver navnet på en aftale, en opgave eller et tilbud og vælger «＋ Opret som ny kunde»."
@@ -2246,7 +2246,7 @@ const MODULE_HELP = {
     { h: "Ekstra hjælp fra kunden", p: [
         "Kunden kan bestille ekstra hjælp fra sin egen planlægning. Bestillingen lander som en almindelig bestilling: i klokken, i den blå boks i Ugeplan og som mail til planlæggerne.",
         "Den behandles præcis som en bestilling fra kundeportalen. Svaret sendes til den, der bestilte, og kunden ser status under Ekstra hjælp."] },
-  ], warn: "Kunden ser sine opgaver med tid, tjekliste og hvem der udførte dem — men aldrig interne advarsler, kontrakttype eller lønrelevante tal. Felterne er valgt enkeltvis i databasen." },
+  ], warn: "Kunden ser sine opgaver med tid, tjekliste og hvem der udførte dem — men aldrig interne advarsler, aftaletype eller lønrelevante tal. Felterne er valgt enkeltvis i databasen." },
 
   henvendelser: { title: "Henvendelser", intro: "Borgere, der har scannet QR-koden i pjecen og bedt om at blive ringet op.", blocks: [
     { h: "Hvor de kommer fra", p: [
@@ -2264,8 +2264,8 @@ const MODULE_HELP = {
   ], warn: "Spørger borgeren om kommunal hjælp, så husk: hvem der leverer, bestemmer borgeren selv, men det er kommunens visitation, der skal have besked om skiftet." },
   tilbud: { title: "Tilbud", intro: "Tilbuddet er forløberen for aftalen. Accepterer kunden, dannes aftalen af sig selv — som kladde.", blocks: [
     { h: "Sådan laver du et", p: [
-        (KUNDEUDGAVE ? "Tryk «Nyt tilbud», find eller opret kunden," : "Tryk «Nyt tilbud», find kunden i Dinero,") + " og udfyld kontrakttype, pris og hvilke tjeklister der er med.",
-        "Timeprisen foreslås ud fra kontrakttypen, men du kan rette den. Vælger du fast pris, gælder den uanset hvor lang tid besøget tager.",
+        (KUNDEUDGAVE ? "Tryk «Nyt tilbud», find eller opret kunden," : "Tryk «Nyt tilbud», find kunden i Dinero,") + " og udfyld aftaletype, pris og hvilke tjeklister der er med.",
+        "Timeprisen foreslås ud fra aftaletypen, men du kan rette den. Vælger du fast pris, gælder den uanset hvor lang tid besøget tager.",
         "«Anslået tid pr. besøg» bliver til varigheden på aftalen ved accept. Ved timepris står det også i tilbuddet som et cirka-beløb — der faktureres stadig kun for registreret tid.",
         "Tjeklisternes punkter kommer med i PDF'en, så kunden kan se præcis hvad der bliver gjort."] },
     { h: "Opgaveliste", p: [
@@ -2292,7 +2292,7 @@ const MODULE_HELP = {
         "Kunden åbner linket, læser tilbuddet og skriver sit navn. Vi gemmer navn, tidspunkt, IP og et fingeraftryk af netop den PDF — så det kan dokumenteres at intet er ændret bagefter.",
         "Et accepteret tilbud kan ikke rettes. Det er dokumentationen for det kunden skrev under på."] },
     { h: "Hvad der sker ved accept", p: [
-        "Der dannes en aftale i kladde under Aftaler, med kontrakttype, pris, varighed og tjeklister udfyldt.",
+        "Der dannes en aftale i kladde under Aftaler, med aftaletype, pris, varighed og tjeklister udfyldt.",
         "Aftalen har ingen ugedage og står som kladde. Begge dele gør at planlægningsmotoren springer den over — en accept fredag aften giver ikke opgaver mandag morgen.",
         "Du sætter selv startdato, ugedage og medarbejder, og aktiverer den. Først dér begynder opgaverne at komme i ugeplanen.",
         "Trykker kunden accept to gange, dannes der stadig kun én aftale."] },
@@ -2300,7 +2300,7 @@ const MODULE_HELP = {
 
   contracts: { title: "Aftaler", intro: "De faste kundeaftaler, sorteret så den der udløber først står øverst.", blocks: [
     { h: "Ny aftale og Ret aftale", p: [
-        "Begge åbner i fuld skærm med samme layout. Øverst står de tre grundvalg: kontrakttype, prismodel og om aftalen er en fast interval, der gentages, eller en fleksibel enkeltopgave. Valgene styrer resten af formularen.",
+        "Begge åbner i fuld skærm med samme layout. Øverst står de tre grundvalg: aftaletype, prismodel og om aftalen er en fast interval, der gentages, eller en fleksibel enkeltopgave. Valgene styrer resten af formularen.",
         "Under dem står tre kolonner: «Aftale og kunde» (hvem der faktureres og hvor der arbejdes), «Opgaven» (medarbejder, kompetencer, varighed og tjeklister) og «Planlægning» (rytme, ugedage og datoer). På en smal skærm står de under hinanden.",
         "Nederst står det, der mangler, før aftalen kan gemmes, og knapperne. På en kladde står bemærkningen til kontoret til højre.",
         "Forklaringerne til felterne står ikke som tekst under dem, men bag et lille «i» ved feltnavnet. Hold musen over det (eller tryk på det) for at læse dem. Advarsler og det, der mangler, står stadig som tekst.",
@@ -2317,17 +2317,17 @@ const MODULE_HELP = {
         "Under «Plan parametre» vælger du først, om aftalen gentages ugentligt, månedligt eller på bestemte datoer. Ved Ugentligt og Månedligt skriver du selv antallet: hver uge, hver 2. uge, hver 3. uge og så videre op til hver 52. uge — eller hver måned, hver 3. måned og så videre op til hver 12. måned. Kadencen tælles fra startdatoen.",
         "Under valgene står en sætning og et antal besøg, fx «Gentages hver 4. uge på tirsdag» og «27 besøg i alt». Tallet regnes af den samme regel, der opretter opgaverne, så tjek det, før du godkender: står der 26 besøg, hvor du ventede 6, er rytmen ikke den, du tror.",
         "«Hver 4. uge» er ikke det samme som en gang om måneden. Det giver 13 besøg om året i stedet for 12, og dagen vandrer gennem kalenderen — et besøg den 5. bliver med tiden den 28. Til gengæld ligger det altid på den samme ugedag, og det er sådan, rengøring aftales i praksis.",
-        "Skal besøgene ligge sjældnere end hver 12. måned, eller uden fast rytme — fx hver 15. måned — så vælg «Bestemte datoer» og skriv datoerne ind én for én."] }, { h: "Aftales ved besøget", p: ["Til kunder, hvor næste besøg aftales, mens rengøringen udføres. Vælg «Aftales ved besøget» under Plan parametre. Startdatoen er det første besøg; der oprettes ingen flere opgaver af sig selv.", "Aftalen får et punkt på opgavens tjekliste: «Aftal næste besøg med kunden». I Worklist skriver medarbejderen datoen (og evt. klokkeslæt) ved punktet, før medarbejderen registrerer tiden. Så oprettes næste opgave med de samme medarbejdere, og punktet står på den igen.", "Bliver næste besøg ikke aftalt, står punktet ikke afkrydset. Dagen efter besøget kommer der en linje i klokken til kontoret: «Kontakt kunden for næste besøgsdato — sidste besøg var d. …». Den skjules en uge ad gangen med «Husk om en uge», og forsvinder, når der ligger en opgave på aftalen. På aftalekortet står næste aftalte besøg, eller «Næste besøg er ikke aftalt» med en knap til at sætte det.", "Kontraktsummen kan ikke regnes ud, for der er ingen rytme at gange med. Listen viser værdien pr. besøg og det realiserede.", "Retter du aftalen senere, bliver de opgaver, der er aftalt undervejs, stående. De ryddes ikke, som ved en fast rytme. Startdatoen må stå i fortiden på en aftale, der kører, så længe du ikke ændrer den — den er bare dagen for første besøg, og den skal passe til de opgaver, der allerede er udført og faktureret. Skifter du den, skal den være i dag eller senere."] }, { h: "Under udarbejdelse", p: ["Er du ikke færdig med en ny aftale, så tryk «Gem som kladde» i stedet for «Gem og planlæg».", "En kladde opretter ingen opgaver. Den ligger og venter, og du kan rette alle felter i den så mange gange du vil.", "Find den igen med filteret «Under udarbejdelse» øverst her på siden. Tallet i knappen viser hvor mange der ligger.", "Tryk «Åbn og godkend» for at rette videre. Inde i aftalen vælger du så «Gem kladde» hvis du stadig ikke er færdig, eller «Godkend og planlæg» når den er klar.", "«Gem kladde» findes kun på nye aftaler og kladder. Retter du en aftale, der allerede kører, gemmer du med «Godkend og planlæg» — en aftale, der kører, kan ikke laves om til en kladde, for så ville alle dens kommende opgaver blive slettet.", "Først ved godkendelsen oprettes opgaverne — fra startdatoen og frem til udløbsdatoen. Det kan være mange på én gang, så tjek datoerne inden du godkender.", "Er startdatoen løbet fra kladden, mens den lå i bunken, flytter appen den frem, når du åbner den — og siger det med blåt øverst i kolonnen til højre, med både den gamle og den nye dato.", "Den nye dato er ikke altid i morgen. Startdatoen er nemlig ankeret for rytmen: for «hver 14. dag» tæller systemet uger fra startdatoens mandag, så flytter man datoen én uge, skifter aftalen fra lige til ulige uger. Derfor vælges den første dag fra i morgen, der holder aftalen i de samme uger som før. Passer det ikke, retter du den selv.", "Datoerne kommer fra kladden. Indtil 21. september 2026 stod der «i dag» og «i dag + 1 år» uanset hvad, så en kladde med toårig løbetid blev etårig ved godkendelsen — uden at nogen fik det at vide.", "Er kladden lavet ved en indlæsning, står der en gul «Bemærkning til kontoret» med det, indlæsningen ikke kunne afgøre — manglende kundenavn, en gættet kontrakttype, noter fra det ark den kom fra. Læs den, ret det den peger på, og godkend så.", "På en bred skærm står bemærkningen i en kolonne til højre, og den bliver hængende, mens du bladrer ned gennem felterne. Den hørte før nederst, altså længst væk fra det, den handler om. Er skærmen for smal til to kolonner, står den øverst i stedet.", "Ligner kladden en aftale, der allerede findes, står advarslen øverst i den samme kolonne — med hvilken aftale, hvilken dag og hvor længe. Den regnes ud fra det, der står i felterne lige nu, så retter du adressen eller dagen, forsvinder den af sig selv.", "Feltet vises kun, så længe aftalen er en kladde. Når den er godkendt, er noten gjort op, og feltet forsvinder — teksten bliver stående i databasen, men skal ikke stå og fylde bagefter."] }, { h: "Del kladdebunken op", p: [
-        "Kladderne står efter kontraktsum, med den største øverst — uanset kontrakttype. Så kan du tage de aftaler, der er mest værd, først. De øvrige lister på siden står stadig efter udløbsdato."] }, { h: "Søg og filtrér", p: [
+        "Skal besøgene ligge sjældnere end hver 12. måned, eller uden fast rytme — fx hver 15. måned — så vælg «Bestemte datoer» og skriv datoerne ind én for én."] }, { h: "Aftales ved besøget", p: ["Til kunder, hvor næste besøg aftales, mens rengøringen udføres. Vælg «Aftales ved besøget» under Plan parametre. Startdatoen er det første besøg; der oprettes ingen flere opgaver af sig selv.", "Aftalen får et punkt på opgavens tjekliste: «Aftal næste besøg med kunden». I Worklist skriver medarbejderen datoen (og evt. klokkeslæt) ved punktet, før medarbejderen registrerer tiden. Så oprettes næste opgave med de samme medarbejdere, og punktet står på den igen.", "Bliver næste besøg ikke aftalt, står punktet ikke afkrydset. Dagen efter besøget kommer der en linje i klokken til kontoret: «Kontakt kunden for næste besøgsdato — sidste besøg var d. …». Den skjules en uge ad gangen med «Husk om en uge», og forsvinder, når der ligger en opgave på aftalen. På aftalekortet står næste aftalte besøg, eller «Næste besøg er ikke aftalt» med en knap til at sætte det.", "Kontraktsummen kan ikke regnes ud, for der er ingen rytme at gange med. Listen viser værdien pr. besøg og det realiserede.", "Retter du aftalen senere, bliver de opgaver, der er aftalt undervejs, stående. De ryddes ikke, som ved en fast rytme. Startdatoen må stå i fortiden på en aftale, der kører, så længe du ikke ændrer den — den er bare dagen for første besøg, og den skal passe til de opgaver, der allerede er udført og faktureret. Skifter du den, skal den være i dag eller senere."] }, { h: "Under udarbejdelse", p: ["Er du ikke færdig med en ny aftale, så tryk «Gem som kladde» i stedet for «Gem og planlæg».", "En kladde opretter ingen opgaver. Den ligger og venter, og du kan rette alle felter i den så mange gange du vil.", "Find den igen med filteret «Under udarbejdelse» øverst her på siden. Tallet i knappen viser hvor mange der ligger.", "Tryk «Åbn og godkend» for at rette videre. Inde i aftalen vælger du så «Gem kladde» hvis du stadig ikke er færdig, eller «Godkend og planlæg» når den er klar.", "«Gem kladde» findes kun på nye aftaler og kladder. Retter du en aftale, der allerede kører, gemmer du med «Godkend og planlæg» — en aftale, der kører, kan ikke laves om til en kladde, for så ville alle dens kommende opgaver blive slettet.", "Først ved godkendelsen oprettes opgaverne — fra startdatoen og frem til udløbsdatoen. Det kan være mange på én gang, så tjek datoerne inden du godkender.", "Er startdatoen løbet fra kladden, mens den lå i bunken, flytter appen den frem, når du åbner den — og siger det med blåt øverst i kolonnen til højre, med både den gamle og den nye dato.", "Den nye dato er ikke altid i morgen. Startdatoen er nemlig ankeret for rytmen: for «hver 14. dag» tæller systemet uger fra startdatoens mandag, så flytter man datoen én uge, skifter aftalen fra lige til ulige uger. Derfor vælges den første dag fra i morgen, der holder aftalen i de samme uger som før. Passer det ikke, retter du den selv.", "Datoerne kommer fra kladden. Indtil 21. september 2026 stod der «i dag» og «i dag + 1 år» uanset hvad, så en kladde med toårig løbetid blev etårig ved godkendelsen — uden at nogen fik det at vide.", "Er kladden lavet ved en indlæsning, står der en gul «Bemærkning til kontoret» med det, indlæsningen ikke kunne afgøre — manglende kundenavn, en gættet aftaletype, noter fra det ark den kom fra. Læs den, ret det den peger på, og godkend så.", "På en bred skærm står bemærkningen i en kolonne til højre, og den bliver hængende, mens du bladrer ned gennem felterne. Den hørte før nederst, altså længst væk fra det, den handler om. Er skærmen for smal til to kolonner, står den øverst i stedet.", "Ligner kladden en aftale, der allerede findes, står advarslen øverst i den samme kolonne — med hvilken aftale, hvilken dag og hvor længe. Den regnes ud fra det, der står i felterne lige nu, så retter du adressen eller dagen, forsvinder den af sig selv.", "Feltet vises kun, så længe aftalen er en kladde. Når den er godkendt, er noten gjort op, og feltet forsvinder — teksten bliver stående i databasen, men skal ikke stå og fylde bagefter."] }, { h: "Del kladdebunken op", p: [
+        "Kladderne står efter kontraktsum, med den største øverst — uanset aftaletype. Så kan du tage de aftaler, der er mest værd, først. De øvrige lister på siden står stadig efter udløbsdato."] }, { h: "Søg og filtrér", p: [
         "Søgefeltet under knapperne leder i kundenavn, fakturabeskrivelse, adresse og opgavetekst på én gang.",
         "At den også leder i fakturabeskrivelsen er med vilje: på Nexus- og Ældrelov-aftaler hedder kunden «Jammerbugt Kommune» på dem alle sammen, og borgerens navn står i fakturabeskrivelsen. Søger du på borgeren, finder du den rigtige aftale — søger du på kommunen, får du dem alle.",
         "Adressen er med, fordi det ofte er dét, man husker.",
-        "Den øverste knaprække filtrerer på status, den nederste på kontrakttype. De virker sammen med søgningen, så du kan fx søge på en vej og samtidig kun se de aktive.",
+        "Den øverste knaprække filtrerer på status, den nederste på aftaletype. De virker sammen med søgningen, så du kan fx søge på en vej og samtidig kun se de aktive.",
         "De to beløb står i højre side og bliver stående, mens du ruller gennem listen. De viser summen af præcis dét, listen indeholder lige nu — skifter du filter eller søger, følger tallene med.",
         "Så kan du se, hvad et udvalg er værd, mens du går det igennem: fx hvad erhvervsaftalerne tilsammen giver, eller hvor meget der er realiseret på en enkelt kunde."] },
     { h: "Redigér en aftale der kører", p: [
         "Tryk «Ret aftale» på aftalen her på siden — eller åbn en hvilken som helst opgave på den i ugeplanen (vinduet hedder «Ret opgave») og vælg «Ret aftalen». Begge veje åbner det samme.",
-        "Du kan rette alt: rytme, ugedage, klokkeslæt, varighed, pris, kontrakttype, tjeklister og fast medarbejder. Ændringerne gælder de opgaver, der dannes fremover.",
+        "Du kan rette alt: rytme, ugedage, klokkeslæt, varighed, pris, aftaletype, tjeklister og fast medarbejder. Ændringerne gælder de opgaver, der dannes fremover.",
         "Ændrer du rytmen eller ugedagene, rydder systemet selv de planlagte opgaver, der ikke passer længere, og siger hvor mange det var. Kun opgaver i fremtiden uden registreret tid og uden afslutning — udført arbejde røres aldrig.",
         "De nye opgaver dukker op, efterhånden som du bladrer gennem ugerne. Vil du se dem med det samme, så klik dig gennem de kommende uger én gang.",
         "En udgået aftale kan ikke redigeres. Skal den i gang igen, laver du en ny."] },
@@ -2366,9 +2366,9 @@ const MODULE_HELP = {
         "Under linjen står, hvor mange af de gemte ruter der er slået op i registret, og hvor mange der kom fra reserven hos OpenRouteService. Alt andet end registret er værd at kigge på: findes adressen ikke i registret, kan reserven finde på et svar — og så er kilometerne opdigtede."] },
     { h: "Cpr-numre på medarbejdernes telefoner", p: [
         "På Nexus-opgaver står borgerens cpr-nummer forrest i referencen, fordi kommunen skal bruge det på fakturaen. Worklist fjerner det, før medarbejderen ser referencen — men kun når opgaven står som Nexus.",
-        "Står en Nexus-aftale som «privat» eller «erhverv», bliver cpr-nummeret derfor vist. Det skete 23. september 2026 på 32 opgaver: aftalerne kom fra ruteplanerne, hvor kontrakttypen var gættet.",
+        "Står en Nexus-aftale som «privat» eller «erhverv», bliver cpr-nummeret derfor vist. Det skete 23. september 2026 på 32 opgaver: aftalerne kom fra ruteplanerne, hvor aftaletypen var gættet.",
         "Siden finder aftaler, der ikke står som Nexus, men har et cpr-nummer i referencen. Er der opgaver på dem, står det med rødt øverst. Er det kun kladder, står det i listen herunder — de har ingen opgaver endnu, så intet er ude på en telefon.",
-        "Er det en Nexus-aftale, så ret kontrakttypen på aftalen. Opgaverne følger med af sig selv i nat. Er det ikke, skal cpr-nummeret ud af referencen."] },
+        "Er det en Nexus-aftale, så ret aftaletypen på aftalen. Opgaverne følger med af sig selv i nat. Er det ikke, skal cpr-nummeret ud af referencen."] },
     { h: "Noget nogen skal tage stilling til", p: [
         "Listen er ikke driftsfejl. Det er arbejde, der ligger og venter, og som bliver dyrt, hvis det bliver liggende.",
         "Kladder uden kundenavn kan ikke godkendes. Medarbejdere uden mailadresse får hverken besked om planændringer eller påmindelser. Aftaler markeret til sletning danner ingen opgaver imens.",
@@ -10436,7 +10436,7 @@ function DriftView({ isAdminUser, paaSide, aftaler = [], onAabnAftale }) {
     mistaenkte.length > 0 && {
       t: `${mistaenkte.length} ${mistaenkte.length === 1 ? "aftale har" : "aftaler har"} cpr-nummer i referencen, men står ikke som Nexus`,
       s: "Worklist fjerner kun cpr-nummeret på Nexus-opgaver, så her kan medarbejderen se det. "
-        + "Er det en Nexus-aftale, så ret kontrakttypen — opgaverne følger med i nat. "
+        + "Er det en Nexus-aftale, så ret aftaletypen — opgaverne følger med i nat. "
         + "Ellers skal cpr-nummeret ud af referencen. "
         + mistaenkte.slice(0, 5).map((m) =>
             `${m.kunde}${m.adresse ? `, ${m.adresse}` : ""} (${m.kontrakttype}${m.status === "kladde" ? ", kladde" : ""})`).join(" · ")
@@ -11428,11 +11428,11 @@ function PortefoeljeRapport({ templates, instances, pricing }) {
         </div>
       ) : (
         <>
-          <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 8 }}>Fordelt på kontrakttype — {periode}</div>
+          <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 8 }}>Fordelt på aftaletype — {periode}</div>
           <div style={{ background: "#fff", borderRadius: 12, overflow: "hidden", boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
             <div style={{ display: "grid", gridTemplateColumns: "1.4fr 90px 100px 110px 130px 130px 110px",
                           padding: "10px 14px", background: "#F8FAFC", fontWeight: 700, fontSize: 12, color: "#64748B" }}>
-              <span>Kontrakttype</span>
+              <span>Aftaletype</span>
               <span style={{ textAlign: "right" }}>Aftaler</span>
               <span style={{ textAlign: "right" }}>Besøg</span>
               <span style={{ textAlign: "right" }}>Timer</span>
@@ -11894,7 +11894,7 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
             {/* Hurtigvalg (7.10.2026): de tre grundvalg staar samlet oeverst over de tre afsnit, saa de ikke ligger spredt i hver sin sektion. */}
       <div className="hurtigvalg" style={{ flex: "1 1 100%", display: "flex", gap: 24, flexWrap: "wrap", alignItems: "flex-start", background: "#fff", border: "1px solid #F1E6EB", borderRadius: 12, padding: "0 16px 8px" }}>
         <div>
-      <label style={styles.label}>Kontrakttype</label>
+      <label style={styles.label}>Aftaletype</label>
       <div style={styles.typePicker}>
         {valgbareKontrakttyper().map((c) => [c.key, c.icon + " " + c.label]).map(([k,l]) => (
           <button key={k} type="button" onClick={() => vaelgKontrakttype(k)}
@@ -14306,7 +14306,7 @@ function ContractsView({ templates: alleTemplates, instances, pricing, employees
           style={typeFilter === "all"
             ? { ...styles.typePickBtn, flex: "none", borderColor: "#4F46E5", color: "#4F46E5", background: "#EEF2FF" }
             : { ...styles.typePickBtn, flex: "none" }}>
-          Alle kontrakttyper
+          Alle aftaletyper
         </button>
         {valgbareKontrakttyper().map((ct) => (
           <button
@@ -16393,7 +16393,7 @@ const AENDRING_FELTER = {
   address_text: "Adresse", po_number: "Fakturabeskrivelse", required_skills: "Kompetencer",
   preferred_employee_id: "Fast medarbejder", days: "Dage", day_times: "Tidspunkter", day_durations: "Varighed pr. dag",
   plan_interval: "Interval", start_date: "Startdato", expiry_date: "Slutdato", cancel_reason: "Opsigelsesgrund",
-  cancelled_effective_date: "Opsagt fra", cancelled_at: "Opsagt", contract_type: "Kontrakttype",
+  cancelled_effective_date: "Opsagt fra", cancelled_at: "Opsagt", contract_type: "Aftaletype",
   pricing_type: "Prisform", fixed_price: "Fastpris", bemaerkning: "Bemærkning", warning: "Advarsel",
   deleted_at: "Slettet", invoice_ready: "Fakturagrundlag", dinero_exported: "Sendt til Dinero",
   time_log: "Tidsregistrering", checklist: "Tjekliste", completed_by_employee: "Afsluttet af",
@@ -17256,7 +17256,7 @@ function KunderView({ supabase, currentEmployeeId }) {
                     ["Kommende", k.kommende],
                     // Etiketten og ikke databasevaerdien. Kunden hedder "Ældrelov",
                     // ikke "aeldrelov" — det sidste er bare den maade det er gemt paa.
-                    ["Kontrakttype", contractLabel(k.kontrakttype)],
+                    ["Aftaletype", contractLabel(k.kontrakttype)],
                   ].map(([l, v]) => (
                     <div key={l}>
                       <div style={{ fontSize: 15, fontWeight: 700 }}>{v}</div>
@@ -17525,7 +17525,7 @@ function NytKundemoede({ supabase, employees, currentEmployeeId, onOprettet, onL
           </div>
           <div style={styles.hint}>Tiden tæller i kapaciteten — et kundemøde optager en plads i dagen.</div>
 
-          <label style={styles.label}>Kontrakttype</label>
+          <label style={styles.label}>Aftaletype</label>
           <select style={styles.input} value={kontrakt} onChange={(e) => setKontrakt(e.target.value)}>
             {valgbareKontrakttyper().map((c) => (
               <option key={c.key} value={c.key}>{c.label}</option>
@@ -18226,7 +18226,7 @@ function TilbudEditor({ supabase, checklistTemplates, pricing, currentUserName, 
             <input style={styles.input} value={titel} disabled={laast}
               onChange={(e) => setTitel(e.target.value)} placeholder="Ugentlig kontorrengøring" />
 
-            <label style={styles.label}>Kontrakttype</label>
+            <label style={styles.label}>Aftaletype</label>
             <select style={styles.input} value={kontrakt} disabled={laast} onChange={(e) => setKontrakt(e.target.value)}>
               {valgbareKontrakttyper().map((c) => (
                 <option key={c.key} value={c.key}>{c.label}</option>
@@ -18252,7 +18252,7 @@ function TilbudEditor({ supabase, checklistTemplates, pricing, currentUserName, 
                 <label style={styles.label}>Timepris (kr, ekskl. moms)</label>
                 <input style={styles.input} type="number" value={timepris} disabled={laast}
                   onChange={(e) => setTimepris(e.target.value)} />
-                <div style={styles.hint}>Foreslået ud fra kontrakttypen. Ret den hvis der er aftalt noget andet.</div>
+                <div style={styles.hint}>Foreslået ud fra aftaletypen. Ret den hvis der er aftalt noget andet.</div>
               </>
             ) : (
               <>
@@ -19331,7 +19331,7 @@ function ActivityModal({ employees, onClose, onSave, kanBookeMus = false }) {
 
       {erTilbudsmoede && maaTageTilbud && (
         <>
-          <label style={styles.label}>Kontrakttype</label>
+          <label style={styles.label}>Aftaletype</label>
           <select style={styles.input} value={kontrakt} onChange={(e) => setKontrakt(e.target.value)}>
             {valgbareKontrakttyper().map((c) => (
               <option key={c.key} value={c.key}>{c.label}</option>
@@ -21699,7 +21699,7 @@ function TimepriserView({ isAdminUser, pricing, onGemt }) {
     <div style={styles.page}>
       <div style={{ fontWeight: 700, fontSize: 18, marginBottom: 4 }}>Timepriser</div>
       <div style={{ fontSize: 13, color: "#64748B", marginBottom: 14, maxWidth: 680 }}>
-        Satsen pr. time for hver kontrakttype, ekskl. moms. En ny sats gælder fra den dato, du vælger, og
+        Satsen pr. time for hver aftaletype, ekskl. moms. En ny sats gælder fra den dato, du vælger, og
         hver opgave bruger den sats, der gjaldt på opgavens dag. Opgaver, der er
         {KUNDEUDGAVE ? " markeret som fakturagrundlag" : " sendt til Dinero"}, ændrer aldrig beløb.
       </div>
@@ -21708,7 +21708,7 @@ function TimepriserView({ isAdminUser, pricing, onGemt }) {
         <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 10 }}>Ny sats</div>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end" }}>
           <div>
-            <label style={styles.label}>Kontrakttype</label>
+            <label style={styles.label}>Aftaletype</label>
             <select style={{ ...styles.inputSm, minWidth: 160 }} value={ny.type} onChange={(e) => setNy((x) => ({ ...x, type: e.target.value }))}>
               {typer.map((c) => <option key={c.key} value={c.key}>{c.icon} {c.label}</option>)}
             </select>
