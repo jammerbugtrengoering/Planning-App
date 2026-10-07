@@ -8,6 +8,8 @@ import { supabase } from "./supabaseClient";
 import { samlPrPostnr, samlPrAdresse, adresseKoordinater, centroider, varmeAndel, varmeFarve, vaerdi, formatVaerdi, MAAL } from "./postnummer.js";
 
 const BOX = { background: "#fff", borderRadius: 14, boxShadow: "0 1px 3px rgba(0,0,0,0.06)", padding: "14px 16px", textAlign: "left" };
+// Den valgte målkolonne skal kunne ses: de fire tal står altid i tabellen, så et skift af mål ellers kun ændrer rækkefølgen og ligner, at intet sker.
+const VALGT = { background: "#FDF2F8", color: "#7A1148" };
 const FELT = { padding: "8px 10px", border: "1.5px solid #E2E8F0", borderRadius: 10, fontSize: 14, fontFamily: "inherit", background: "#fff" };
 
 export default function PostnummerRapport({ opgaver, beregn, datoAf, segmenter }) {
@@ -124,6 +126,7 @@ export default function PostnummerRapport({ opgaver, beregn, datoAf, segmenter }
 
       <div style={{ display: "flex", gap: 14, flexWrap: "wrap", alignItems: "flex-start" }}>
         <div style={{ ...BOX, flex: "1 1 460px", minWidth: 300, padding: 8 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: "#7A1148", padding: "2px 6px 8px" }}>Cirklerne viser: {maalInfo.label.toLowerCase()} · {pr ? "pr. adresse" : "pr. postnummer"} · {segment === "alle" ? "alle aftaletyper" : (segmenter.find(([k]) => k === segment) || [])[1]} · {aar === "alle" ? "alle år" : aar}</div>
           <div ref={kortEl} style={{ height: 460, borderRadius: 10, background: "#F1F5F9" }} aria-label="Kort med varme pr. postnummer" />
           {kortFejl && <div style={{ fontSize: 13, color: "#B45309", padding: "8px 6px 2px" }}>{kortFejl}</div>}
           {ruter !== null && udenKoordinater.length > 0 && (
@@ -140,27 +143,27 @@ export default function PostnummerRapport({ opgaver, beregn, datoAf, segmenter }
             <thead>
               <tr style={{ color: "#64748B", textAlign: "right" }}>
                 <th style={{ textAlign: "left", padding: "4px 6px", fontWeight: 600 }}>{pr ? "Adresse" : "Postnummer"}</th>
-                <th style={{ padding: "4px 6px", fontWeight: 600 }}>Opgaver</th>
-                <th style={{ padding: "4px 6px", fontWeight: 600 }}>Timer</th>
-                <th style={{ padding: "4px 6px", fontWeight: 600 }}>Planlagt</th>
-                <th style={{ padding: "4px 6px", fontWeight: 600 }}>Realiseret</th>
+                <th style={{ padding: "4px 6px", fontWeight: 600, ...(maal === "antal" ? VALGT : null) }}>Opgaver{maal === "antal" ? " ▼" : ""}</th>
+                <th style={{ padding: "4px 6px", fontWeight: 600, ...(maal === "timer" ? VALGT : null) }}>Timer{maal === "timer" ? " ▼" : ""}</th>
+                <th style={{ padding: "4px 6px", fontWeight: 600, ...(maal === "planlagtKr" ? VALGT : null) }}>Planlagt{maal === "planlagtKr" ? " ▼" : ""}</th>
+                <th style={{ padding: "4px 6px", fontWeight: 600, ...(maal === "realiseretKr" ? VALGT : null) }}>Realiseret{maal === "realiseretKr" ? " ▼" : ""}</th>
               </tr>
             </thead>
             <tbody>
               {sorteret.slice(0, pr ? TABEL_MAX : sorteret.length).map((r) => {
                 const andel = varmeAndel(vaerdi(r, maal), top);
                 return (
-                  <tr key={r.postnr} style={{ borderTop: "1px solid #F1F5F9", textAlign: "right" }}>
+                  <tr key={r.noegle} style={{ borderTop: "1px solid #F1F5F9", textAlign: "right" }}>
                     <td style={{ textAlign: "left", padding: "7px 6px" }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                         <span aria-hidden="true" style={{ width: 14, height: 14, borderRadius: "50%", background: varmeFarve(andel), border: "1px solid #7A1148", flexShrink: 0 }} />
                         {pr ? <span>{r.adresse}</span> : <span><b>{r.postnr}</b> {r.by}</span>}
                       </div>
                     </td>
-                    <td style={{ padding: "7px 6px", fontWeight: maal === "antal" ? 700 : 400 }}>{r.antal.toLocaleString("da-DK")}</td>
-                    <td style={{ padding: "7px 6px", fontWeight: maal === "timer" ? 700 : 400 }}>{formatVaerdi(r.timer, "timer")}</td>
-                    <td style={{ padding: "7px 6px", fontWeight: maal === "planlagtKr" ? 700 : 400 }}>{formatVaerdi(r.planlagtKr, "planlagtKr")}</td>
-                    <td style={{ padding: "7px 6px", fontWeight: maal === "realiseretKr" ? 700 : 400 }}>{formatVaerdi(r.realiseretKr, "realiseretKr")}</td>
+                    <td style={{ padding: "7px 6px", fontWeight: maal === "antal" ? 700 : 400, ...(maal === "antal" ? VALGT : null) }}>{r.antal.toLocaleString("da-DK")}</td>
+                    <td style={{ padding: "7px 6px", fontWeight: maal === "timer" ? 700 : 400, ...(maal === "timer" ? VALGT : null) }}>{formatVaerdi(r.timer, "timer")}</td>
+                    <td style={{ padding: "7px 6px", fontWeight: maal === "planlagtKr" ? 700 : 400, ...(maal === "planlagtKr" ? VALGT : null) }}>{formatVaerdi(r.planlagtKr, "planlagtKr")}</td>
+                    <td style={{ padding: "7px 6px", fontWeight: maal === "realiseretKr" ? 700 : 400, ...(maal === "realiseretKr" ? VALGT : null) }}>{formatVaerdi(r.realiseretKr, "realiseretKr")}</td>
                   </tr>
                 );
               })}
