@@ -243,7 +243,7 @@ const MENU_GRUPPER = [
   // Personalemappen (6.10.2026): HR-data, kun for HR-administratorer (tabellen hr_administratorer, funktionen er_hr_admin). Planlæggere uden HR-adgang
   // bruger «Medarbejdere» under Opsætning, der kun har planlægningsdata.
   { key: "personale", navn: "Personalemappen", kunHr: true, skjultIMenu: true, sider: [["personalemappen", "Medarbejdere"], ["fravaer", "Ferie og fravær"], ["haandbog", "Håndbog og politikker"]] },
-  { key: "opsaetning", navn: "Opsætning", sider: [["employees", "Medarbejdere"], ["kompetencer", "Kompetencer"], ["omraader", "Områder"], ["startstop", "Start/stop"], ["loenperioder", "Lønperioder"], ["checklists", "Tjeklister"], ["transport", "Transporttid"], ["aflysning", "Aflysning"], ["timepriser", "Timepriser"], ["firma", "Firma"]] },
+  { key: "opsaetning", navn: "Opsætning", skjultIMenu: true, sider: [["employees", "Medarbejdere"], ["kompetencer", "Kompetencer"], ["omraader", "Områder"], ["startstop", "Start/stop"], ["loenperioder", "Lønperioder"], ["checklists", "Tjeklister"], ["transport", "Transporttid"], ["aflysning", "Aflysning"], ["timepriser", "Timepriser"], ["firma", "Firma"]] },
   // Kun i kundeudgaven (fase 5, 29.9.2026): kundefirmaet bestiller ekstra hjaelp hos
   // Jammerbugt Rengoering. Hos Jammerbugt selv findes siden ikke — der er man den,
   // der modtager bestillingerne.
@@ -6381,6 +6381,22 @@ function PlanningApp({ session, onSignOut }) {
               )}
             </span>
           )}
+          {/* Opsætning er et ikon (7.10.2026, Jonn) og ikke et menupunkt, ligesom Personalemappen: gruppen findes stadig og viser sine faner under topbjælken, den er bare
+              skjult i rækken. Står uden for !KUNDEUDGAVE, fordi kundeudgaven ellers helt mistede vejen til opsætningen. */}
+          {(() => {
+            const ops = MENU_GRUPPER.find((g) => g.key === "opsaetning");
+            const sider = ops ? synligeSider(ops) : [];
+            if (!sider.length) return null;
+            const aktiv = gruppeFor(view).key === "opsaetning";
+            return (
+              <button type="button" onClick={() => setView(sider[0][0])}
+                title="Opsætning" aria-label="Åbn Opsætning" aria-current={aktiv ? "page" : undefined}
+                style={{ background: "none", border: "none", padding: 0, marginLeft: 8, cursor: "pointer", display: "block", lineHeight: 0, borderRadius: 10,
+                         boxShadow: aktiv ? "0 0 0 2px var(--farve)" : "none" }}>
+                <img src="/ikon-opsaetning.svg" alt="" style={{ width: 32, height: 32, borderRadius: 8, display: "block" }} />
+              </button>
+            );
+          })()}
           {/* Sprogvalg og Google Translate fjernet - planlaegningsappen bruges kun paa dansk. */}
           <KontorKlokke isAdminUser={isAdminUser}
             signal={instances.length + ":" + Object.keys(koerendeTider).length + ":" + (bestillinger?.length || 0)}
