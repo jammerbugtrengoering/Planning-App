@@ -2405,6 +2405,11 @@ const MODULE_HELP = {
   ], warn: "Siden er kun for administratorer. Den er også spærret i databasen — job_koersel kan kun læses af en administrator, så en planlægger, der skriver sig frem til siden, får ingen tal at se." },
 
   reports: { title: "Rapportering", intro: "Rapporter: budget mod faktisk omsætning, hvad aftalerne er værd, overskuddet og hvordan start/stop bliver brugt.", blocks: [
+    { h: "Postnumre (første nøgletal)", p: [
+        "Fanen «🗺 Postnumre» viser, hvor opgaverne ligger: et kort med en cirkel pr. postnummer, og en tabel ved siden af. Jo større og mørkere cirkel, jo mere. Vælg mål øverst: antal opgaver, planlagte timer, planlagt omsætning eller realiseret omsætning, og afgræns med aftaletype og år.",
+        "Postnummeret læses af adressen på opgaven («Vejnavn nr, postnummer by»). Opgaver uden postnummer er ikke på kortet, men tælles med i «I alt» og står i en gul linje under tabellen. Ret adressen på aftalen, så den kommer med.",
+        "Planlagt omsætning er tid gange satsen på opgavens dato (eller fastprisen). Realiseret er den faktureret tid, så en opgave, der ikke er udført endnu, står med 0 kr. Aflyste opgaver, ferie, sygdom og aktiviteter er ikke med.",
+        "Kortet hentes fra OpenStreetMap og placeres efter de adresser, der allerede er slået op til kørselsberegningen. Et postnummer uden opslåede adresser står kun i tabellen."] },
     { h: "Aflysninger", p: [
         "Rapporteringen åbner nu på Aftaleportefølje. Fanen «🚫 Aflysninger» viser aflyste opgaver i en periode (denne måned, sidste måned, i år eller egne datoer).",
         "Øverst: antal aflysninger (af kunden og af jer), tabt omsætning — aflyst og ikke faktureret — og hvad der er hentet hjem på sene kundeaflysninger.",
@@ -11171,6 +11176,20 @@ function AflysningRapport({ instances, pricing = {}, grunde = [] }) {
   );
 }
 
+// Nøgletal pr. postnummer (7.10.2026): hentes først, når fanen åbnes, fordi kortet (Leaflet) ellers fylder i alle kontorets opstarter.
+const PostnummerRapport = React.lazy(() => import("./PostnummerRapport.jsx"));
+// Én opgaves arbejde og værdi, regnet som de andre rapporter gør det: satsen på opgavens egen dato, fastpris for fastprisopgaver, og faktureret tid for det realiserede.
+function opgaveTal(t) {
+  const fast = t.pricingType === "fixed";
+  const minutter = samletArbejde(t);
+  const planlagtKr = fast ? (Number(t.fixedPrice) || 0) : (minutter / 60) * satsForOpgave(t);
+  let realiseretKr;
+  if (fast) {
+    const hasLog = (t.timeLog || t.time_log || []).length > 0 || t.status === "udført";
+    realiseretKr = hasLog ? (Number(t.fixedPrice) || 0) : 0;
+  } else realiseretKr = (fakturerbareMinutter(t) / 60) * satsForOpgave(t);
+  return { minutter, planlagtKr, realiseretKr };
+}
 function ReportsView({ instances, templates, pricing, budgets, onSaveBudget, isAdminUser,
                         employees, satsHistorik, kmSatser, kmLog, omkostninger,
                         onSaveOmkostning, onDeleteOmkostning,
@@ -11203,6 +11222,8 @@ function ReportsView({ instances, templates, pricing, budgets, onSaveBudget, isA
   }
 
   const isAllAreas = selectedArea === "alle";
+  // Kun egentlige opgaver: ingen ferie, sygdom, aktiviteter eller aflyste.
+  const postnrOpgaver = useMemo(() => instances.filter((t) => (t.type === "fixed" || t.type === "adhoc") && !erAflyst(t)), [instances]);
 
   const monthRows = useMemo(() => {
     const areasToSum = isAllAreas ? REPORT_AREAS.map(([k]) => k) : [selectedArea];
@@ -11266,6 +11287,7 @@ function ReportsView({ instances, templates, pricing, budgets, onSaveBudget, isA
     ["portefoelje", "📁 Aftaleportefølje"],
     ["budget", "📊 Budget og omsætning"],
     ["aflysning", "🚫 Aflysninger"],
+    ["postnummer", "🗺 Postnumre"],
     ...(isAdminUser ? [["overskud", "💰 Overskud"]] : []),
     ...(isAdminUser && harModul("start_stop") ? [["startstop", "⏱ Start/stop"]] : []),
   ];
@@ -11287,6 +11309,10 @@ function ReportsView({ instances, templates, pricing, budgets, onSaveBudget, isA
         <StartStopRapport />
       ) : rapport === "aflysning" ? (
         <AflysningRapport instances={instances} pricing={pricing} grunde={aflysningsgrunde} />
+      ) : rapport === "postnummer" ? (
+        <React.Suspense fallback={<div style={styles.hint}>Henter kortet…</div>}>
+          <PostnummerRapport opgaver={postnrOpgaver} beregn={opgaveTal} datoAf={instanceDateString} segmenter={REPORT_AREAS} />
+        </React.Suspense>
       ) : rapport === "portefoelje" ? (
         <PortefoeljeRapport templates={templates} instances={instances} pricing={pricing} />
       ) : rapport === "overskud" ? (
