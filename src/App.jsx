@@ -6362,22 +6362,26 @@ function PlanningApp({ session, onSignOut }) {
               Ikonerne ligger i public/ og er skåret ud af appernes egne logoer. */}
           {!KUNDEUDGAVE && (
             <span style={{ display: "inline-flex", alignItems: "center", gap: 8, margin: "0 6px 0 8px", paddingLeft: 12, borderLeft: "1px solid var(--menu-kant)" }}>
-              {[["SoMe", SOME_APP_URL, "some-app", "/ikon-some.png"], ["Dinero", DINERO_URL, "dinero-app", "/ikon-dinero.png"]].map(([navn, url, vinduesnavn, ikon]) => (
-                <button key={vinduesnavn} type="button" onClick={() => aabnSomApp(url, vinduesnavn)}
-                  title={`Åbn ${navn} i eget vindue`} aria-label={`Åbn ${navn} i eget vindue`}
-                  style={{ background: "none", border: "none", padding: 0, cursor: "pointer", display: "block", lineHeight: 0 }}>
-                  <img src={ikon} alt="" style={{ width: 32, height: 32, borderRadius: 8, display: "block" }} />
-                </button>
+              {[["SoMe", SOME_APP_URL, "some-app", "/ikon-some.png", "SoMe-kampagner", "Planlæg og send opslag til Facebook og Instagram. Åbner i et eget vindue."],
+                ["Dinero", DINERO_URL, "dinero-app", "/ikon-dinero.png", "Dinero", "Regnskab og fakturaer. Åbner Dinero i et eget vindue."]].map(([navn, url, vinduesnavn, ikon, titel, tekst]) => (
+                <IkonTip key={vinduesnavn} titel={titel} tekst={tekst}>
+                  <button type="button" onClick={() => aabnSomApp(url, vinduesnavn)} aria-label={`Åbn ${navn} i eget vindue`}
+                    style={{ background: "none", border: "none", padding: 0, cursor: "pointer", display: "block", lineHeight: 0 }}>
+                    <img src={ikon} alt="" style={{ width: 32, height: 32, borderRadius: 8, display: "block" }} />
+                  </button>
+                </IkonTip>
               ))}
               {/* Personalemappen (6.10.2026): ikonet står ved siden af de to andre og erstatter menupunktet. Til forskel fra dem åbner det ikke et eget vindue, men
                   siderne herinde (menugruppen «personale» findes stadig og viser sine faner under topbjælken; den er bare skjult i rækken). Kun for HR-administratorer. */}
               {erHrAdmin && (
-                <button type="button" onClick={() => setView("personalemappen")}
-                  title="Personalemappen" aria-label="Åbn Personalemappen" aria-current={gruppeFor(view).key === "personale" ? "page" : undefined}
-                  style={{ background: "none", border: "none", padding: 0, cursor: "pointer", display: "block", lineHeight: 0, borderRadius: 10,
-                           boxShadow: gruppeFor(view).key === "personale" ? "0 0 0 2px var(--farve)" : "none" }}>
-                  <img src="/ikon-personalemappen.png" alt="" style={{ width: 32, height: 32, borderRadius: 8, display: "block" }} />
-                </button>
+                <IkonTip titel="Personalemappen" tekst="Medarbejdernes ansættelse, dokumenter, løn, MUS, ferie og fravær samt håndbog. Kun for HR-administratorer.">
+                  <button type="button" onClick={() => setView("personalemappen")}
+                    aria-label="Åbn Personalemappen" aria-current={gruppeFor(view).key === "personale" ? "page" : undefined}
+                    style={{ background: "none", border: "none", padding: 0, cursor: "pointer", display: "block", lineHeight: 0, borderRadius: 10,
+                             boxShadow: gruppeFor(view).key === "personale" ? "0 0 0 2px var(--farve)" : "none" }}>
+                    <img src="/ikon-personalemappen.png" alt="" style={{ width: 32, height: 32, borderRadius: 8, display: "block" }} />
+                  </button>
+                </IkonTip>
               )}
             </span>
           )}
@@ -6389,12 +6393,16 @@ function PlanningApp({ session, onSignOut }) {
             if (!sider.length) return null;
             const aktiv = gruppeFor(view).key === "opsaetning";
             return (
-              <button type="button" onClick={() => setView(sider[0][0])}
-                title="Opsætning" aria-label="Åbn Opsætning" aria-current={aktiv ? "page" : undefined}
-                style={{ background: "none", border: "none", padding: 0, marginLeft: 8, cursor: "pointer", display: "block", lineHeight: 0, borderRadius: 10,
-                         boxShadow: aktiv ? "0 0 0 2px var(--farve)" : "none" }}>
-                <img src="/ikon-opsaetning.svg" alt="" style={{ width: 32, height: 32, borderRadius: 8, display: "block" }} />
-              </button>
+              <span style={{ marginLeft: 8, display: "inline-flex" }}>
+                <IkonTip titel="Opsætning" tekst={`${sider.map(([, l]) => l).join(", ")}.`}>
+                  <button type="button" onClick={() => setView(sider[0][0])}
+                    aria-label="Åbn Opsætning" aria-current={aktiv ? "page" : undefined}
+                    style={{ background: "none", border: "none", padding: 0, cursor: "pointer", display: "block", lineHeight: 0, borderRadius: 10,
+                             boxShadow: aktiv ? "0 0 0 2px var(--farve)" : "none" }}>
+                    <img src="/ikon-opsaetning.svg" alt="" style={{ width: 32, height: 32, borderRadius: 8, display: "block" }} />
+                  </button>
+                </IkonTip>
+              </span>
             );
           })()}
           {/* Sprogvalg og Google Translate fjernet - planlaegningsappen bruges kun paa dansk. */}
@@ -22149,6 +22157,30 @@ function Info({ children }) {
                  background: "#111", color: "#fff", fontSize: 12.5, fontWeight: 400, lineHeight: 1.5, padding: "8px 10px",
                  borderRadius: 8, boxShadow: "0 6px 20px rgba(0,0,0,0.25)", pointerEvents: "none", textTransform: "none", textAlign: "left" }}>
           {children}
+        </span>
+      )}
+    </span>
+  );
+}
+
+// Hover paa ikonerne i topbjælken (7.10.2026): et ikon fortæller ikke, hvad der ligger bag. Samme teknik som Info (position: fixed, fokus virker også);
+// står under ikonet og holdes inde i vinduet, fordi ikonerne sidder helt ude til højre.
+function IkonTip({ titel, tekst, children }) {
+  const [pos, setPos] = useState(null);
+  const vis = (el) => {
+    const r = el.getBoundingClientRect();
+    setPos({ x: Math.max(8, Math.min(r.left + r.width / 2 - 140, window.innerWidth - 288)), top: r.bottom + 8 });
+  };
+  return (
+    <span style={{ display: "inline-flex" }}
+      onMouseEnter={(e) => vis(e.currentTarget)} onMouseLeave={() => setPos(null)}
+      onFocus={(e) => vis(e.currentTarget)} onBlur={() => setPos(null)}>
+      {children}
+      {pos && (
+        <span role="tooltip" style={{ position: "fixed", left: pos.x, top: pos.top, width: 280, zIndex: 1000, background: "#111", color: "#fff",
+                 border: "1px solid #3a3a3f", fontSize: 12.5, lineHeight: 1.5, padding: "9px 11px", borderRadius: 8,
+                 boxShadow: "0 6px 20px rgba(0,0,0,0.35)", pointerEvents: "none", textAlign: "left", fontWeight: 400 }}>
+          <b style={{ display: "block", fontSize: 13, marginBottom: 2 }}>{titel}</b>{tekst}
         </span>
       )}
     </span>
