@@ -26,27 +26,62 @@ export const MAAL = [
   { key: "realiseretKr", label: "Realiseret omsætning", enhed: "kr." },
 ];
 
-// opgaver: de opgaver, der må tælle med (kalderen afgør hvilke). beregn(t) -> { minutter, planlagtKr, realiseretKr }.
-// segment: «alle» eller en aftaletype. aar: et årstal eller «alle». datoAf(t) -> «YYYY-MM-DD».
-export function samlPrPostnr(opgaver, { beregn, datoAf, segment = "alle", aar = "alle" }) {
+// Adressen som nøgle: samme adresse skal ramme samme linje, uanset store/små bogstaver og mellemrum («Rantzausvej 12,  9460 Brovst»).
+export function adresseNoegle(adresse) {
+  return String(adresse || "").toLowerCase().replace(/\s+/g, " ").replace(/\s*,\s*/g, ", ").trim();
+}
+
+function saml(opgaver, { beregn, datoAf, segment = "alle", aar = "alle" }, noegleFor) {
   const pr = new Map();
-  const uden = { antal: 0, minutter: 0, planlagtKr: 0, realiseretKr: 0 };
-  const ialt = { antal: 0, minutter: 0, planlagtKr: 0, realiseretKr: 0 };
+  const tom = () => ({ antal: 0, minutter: 0, planlagtKr: 0, realiseretKr: 0 });
+  const uden = tom();
+  const ialt = tom();
   const laegTil = (m, b) => { m.antal += 1; m.minutter += b.minutter; m.planlagtKr += b.planlagtKr; m.realiseretKr += b.realiseretKr; };
   for (const t of opgaver) {
     if (segment !== "alle" && (t.contractType || t.contract_type || "privat") !== segment) continue;
     if (aar !== "alle" && String(datoAf(t) || "").slice(0, 4) !== String(aar)) continue;
     const b = beregn(t);
     laegTil(ialt, b);
-    const p = postnrFraAdresse(t.address || t.address_text);
-    if (!p) { laegTil(uden, b); continue; }
-    let r = pr.get(p.postnr);
-    if (!r) { r = { postnr: p.postnr, by: p.by, antal: 0, minutter: 0, planlagtKr: 0, realiseretKr: 0 }; pr.set(p.postnr, r); }
-    if (!r.by && p.by) r.by = p.by;
+    const adr = t.address || t.address_text;
+    const p = postnrFraAdresse(adr);
+    const noegle = noegleFor(adr, p);
+    if (!noegle) { laegTil(uden, b); continue; }
+    let r = pr.get(noegle);
+    if (!r) { r = { noegle, postnr: p ? p.postnr : "", by: p ? p.by : "", adresse: String(adr || "").trim(), ...tom() }; pr.set(noegle, r); }
+    if (!r.by && p && p.by) r.by = p.by;
     laegTil(r, b);
   }
   const raekker = [...pr.values()].map((r) => ({ ...r, timer: r.minutter / 60 }));
   return { raekker, uden: { ...uden, timer: uden.minutter / 60 }, ialt: { ...ialt, timer: ialt.minutter / 60 } };
+}
+
+// opgaver: de opgaver, der må tælle med (kalderen afgør hvilke). beregn(t) -> { minutter, planlagtKr, realiseretKr }.
+// segment: «alle» eller en aftaletype. aar: et årstal eller «alle». datoAf(t) -> «YYYY-MM-DD».
+// Opgaver uden postnummer tælles for sig (uden) og med i ialt.
+export function samlPrPostnr(opgaver, opts) {
+  const res = saml(opgaver, opts, (adr, p) => (p ? p.postnr : null));
+  return { ...res, raekker: res.raekker.map((r) => ({ ...r, adresse: "" })) };
+}
+
+// Samme tal pr. adresse. En opgave uden adresse tælles under «uden». Adressen kan godt mangle postnummeret og står så stadig på kortet, hvis den er slået op.
+export function samlPrAdresse(opgaver, opts) {
+  return saml(opgaver, opts, (adr) => adresseNoegle(adr) || null);
+}
+
+// Koordinater pr. adresse ud fra de ruter, der allerede er slået op. Medianen, hvis samme adresse står i flere ruter (og dermed er slået op flere gange).
+export function adresseKoordinater(ruter) {
+  const samlet = new Map();
+  const tag = (adr, lat, lng) => {
+    const k = adresseNoegle(adr);
+    if (!k || lat == null || lng == null || !Number.isFinite(Number(lat)) || !Number.isFinite(Number(lng))) return;
+    if (!samlet.has(k)) samlet.set(k, { lat: [], lng: [] });
+    const s = samlet.get(k);
+    s.lat.push(Number(lat)); s.lng.push(Number(lng));
+  };
+  for (const r of ruter || []) { tag(r.addr_a, r.lat_a, r.lng_a); tag(r.addr_b, r.lat_b, r.lng_b); }
+  const ud = {};
+  for (const [k, s] of samlet) ud[k] = { lat: median(s.lat), lng: median(s.lng) };
+  return ud;
 }
 
 function median(xs) {

@@ -2409,6 +2409,7 @@ const MODULE_HELP = {
         "Fanen «🗺 Postnumre» viser, hvor opgaverne ligger: et kort med en cirkel pr. postnummer, og en tabel ved siden af. Jo større og mørkere cirkel, jo mere. Vælg mål øverst: antal opgaver, planlagte timer, planlagt omsætning eller realiseret omsætning, og afgræns med aftaletype og år.",
         "Postnummeret læses af adressen på opgaven («Vejnavn nr, postnummer by»). Opgaver uden postnummer er ikke på kortet, men tælles med i «I alt» og står i en gul linje under tabellen. Ret adressen på aftalen, så den kommer med.",
         "Planlagt omsætning er tid gange satsen på opgavens dato (eller fastprisen). Realiseret er den faktureret tid, så en opgave, der ikke er udført endnu, står med 0 kr. Aflyste opgaver, ferie, sygdom og aktiviteter er ikke med.",
+        "Vælg «Vis pr.» Adresse for at se hver enkelt adresse som en cirkel i stedet for postnumrene. Mange adresser tæt på hinanden lægger sig oven på hinanden som en varmeplet. Tabellen viser de 25 øverste adresser, og «I alt» er alle. Adresserne er private hjem, så del ikke skærmbilleder af adresseudsnittet uden for kontoret.",
         "Kortet hentes fra OpenStreetMap og placeres efter de adresser, der allerede er slået op til kørselsberegningen. Et postnummer uden opslåede adresser står kun i tabellen."] },
     { h: "Aflysninger", p: [
         "Rapporteringen åbner nu på Aftaleportefølje. Fanen «🚫 Aflysninger» viser aflyste opgaver i en periode (denne måned, sidste måned, i år eller egne datoer).",

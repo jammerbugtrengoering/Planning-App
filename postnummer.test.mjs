@@ -3,7 +3,7 @@
 // Hvad de beskytter mod: postnummeret står kun i adresseteksten, og en rapport siger aldrig selv fra, hvis den stille taber opgaver. Derfor prøves både læsningen af
 // postnummeret, at opgaver uden postnummer tælles for sig (og ikke forsvinder), og at et forkert geokodet punkt ikke flytter et postnummer på kortet.
 
-import { postnrFraAdresse, samlPrPostnr, centroider, varmeAndel, varmeFarve, formatVaerdi } from "./src/postnummer.js";
+import { postnrFraAdresse, samlPrPostnr, samlPrAdresse, adresseNoegle, adresseKoordinater, centroider, varmeAndel, varmeFarve, formatVaerdi } from "./src/postnummer.js";
 
 let fejl = 0, koert = 0;
 function er(hvad, faktisk, forventet) {
@@ -61,6 +61,24 @@ const c = centroider([
 er("Pandrup ligger stadig i Pandrup trods et gættet punkt", c["9490"].lat > 57, true);
 er("Brovst har tre punkter", c["9460"].n, 3);
 er("rute uden koordinater giver intet midtpunkt", Object.keys(centroider([{ addr_a: "X, 9000 Aalborg", lat_a: null, lng_a: null }])).length, 0);
+
+// ── Pr. adresse ─────────────────────────────────────────────────────────────
+er("adressen normaliseres", adresseNoegle("  Rantzausvej 12 ,  9460 Brovst "), "rantzausvej 12, 9460 brovst");
+const adr = [
+  { address: "A 1, 9460 Brovst", contractType: "privat", dato: "2026-03-02" },
+  { address: "a 1,  9460 Brovst", contractType: "privat", dato: "2026-03-09" },
+  { address: "B 2, 9460 Brovst", contractType: "privat", dato: "2026-03-02" },
+  { address: "Skolelodden 6, Kaas", contractType: "privat", dato: "2026-03-02" },
+  { address: "", contractType: "privat", dato: "2026-03-02" },
+];
+r = samlPrAdresse(adr, { beregn, datoAf });
+er("samme adresse skrevet to gange er én linje", r.raekker.find((x) => x.noegle === "a 1, 9460 brovst").antal, 2);
+er("adresse uden postnummer får sin egen linje", r.raekker.some((x) => x.noegle === "skolelodden 6, kaas"), true);
+er("tom adresse tælles under uden", r.uden.antal, 1);
+er("helheden går op", r.raekker.reduce((s, x) => s + x.antal, 0) + r.uden.antal, r.ialt.antal);
+const ak = adresseKoordinater([{ addr_a: "A 1, 9460 Brovst", lat_a: 57.1, lng_a: 9.5, addr_b: "B 2, 9460 Brovst", lat_b: null, lng_b: null }, { addr_a: "a 1, 9460 brovst", lat_a: 57.3, lng_a: 9.7 }, { addr_a: "a 1, 9460 brovst", lat_a: 57.1, lng_a: 9.5 }]);
+er("adressens punkt er medianen", ak["a 1, 9460 brovst"], { lat: 57.1, lng: 9.5 });
+er("adresse uden koordinater får intet punkt", ak["b 2, 9460 brovst"], undefined);
 
 // ── Varme ───────────────────────────────────────────────────────────────────
 er("ingenting er koldt", varmeAndel(0, 100), 0);
