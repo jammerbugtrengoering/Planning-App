@@ -27,7 +27,8 @@
     "excel.test.mjs",
     "simulering.test.mjs",
     "timepriser.test.mjs",
-    "postnummer.test.mjs"
+    "postnummer.test.mjs",
+    "daekningsbidrag.test.mjs"
   ],
   "rules": {
     "no-undef": "error",
