@@ -96,3 +96,5 @@ alter table public.checklist_templates add column tilbud_fase text check (tilbud
 -- ugeplan_backup_1-2 (7.10.2026): fredagsbackup af ugeplanen. Tabel backup_udsendelser(uge_fra pk, sendt_tid, antal_opgaver, modtagere), RLS til, lukket for anon/authenticated, klassificeret i persondata_register.
 --   Cron-job 'ugeplan-backup-fredag' (0 12,13 * * 5) kalder edge-funktionen ugeplan-backup med den offentlige nøgle, som helsetjek. Funktionen vælger selv fredag 13-17 dansk tid og sender kun første gang pr. uge.
 --   Hvorfor: er systemet nede mandag morgen, skal kontoret stadig kunne se og printe ugens opgaver. send-email fik valgfri vedhæftning.
+-- start_mangler_completed_tidsstempel (7.10.2026): start_mangler_behandl castede instances.completed_by_employee ->> emp til boolean, men vaerdien er et tidsstempel. Funktionen (glemt Start, hvert 5. min) fejlede fra den foerste afslutning i dagen; morgenmailen meldte det.
+--   Rettet med regexp_replace paa pg_get_functiondef: en vaerdi (ikke 'false'/'f'/'0'/'') = meldt faerdig. Den eneste funktion med den cast.
