@@ -104,6 +104,25 @@ To ting følger med:
 > 6,4 MB i elleve sider — mens planlæggeren sad og kiggede på én uge. 82 % af dem var
 > 2027 og 2028, fordi en aftale danner hele sin løbetid, når den oprettes.
 
+### Du rører Personalemappen, HR eller MUS
+
+Tre apps hænger sammen: **planlægningsappen** (HR-siden, ikon i topbjælken, kun `er_hr_admin()`), **Worklist** (lederen skriver MUS-referat) og **Personalemappen**
+(`jammerbugtrengoering-personalemappen`, medarbejderens egen app, samme Supabase `gteowfoahsfpunzgdxum`). Baggrunden står i `overdragelse/STATUS-2026-10-03.md` og SQL-loggen
+`overdragelse/sql/tilbudslister-og-godkend-for-kunden-2026-10-05.sql`.
+
+- **HR-administratorer** står i tabellen `hr_administratorer` (Charlotte, Karen, Udvikler IT). Alt HR-relateret tjekker `er_hr_admin()`; medarbejderappen bruger kun security-definer-funktioner.
+- **`mus_samtaler` har ingen direkte adgang for login-brugere.** Forberedelsen er medarbejderens egen, til hun trykker «Del med kontoret». Læs kun gennem `mus_for_opgave`, `min_mus_samtaler`, `hr_mus_samtaler`.
+- **Referatet skrives af lederen** (`gem_mus_referat`; HR kan også, i planlægningsappen). **Medarbejderen kan aldrig skrive eller sende sit eget** — rollen i `mus_for_opgave` er leder / medarbejder / hr efter selve samtalen, ikke efter HR-status.
+  Før 6.10.2026 fik en HR-administrator, der selv var medarbejderen, rollen leder og kunne sende sit eget referat. Send = samtalen holdt + aktiviteten lukket for begge; medarbejderen godkender (låst) eller skriver bemærkning.
+- **MUS-aktiviteten kendes på titlen `MUS: navn`** (`addActivity`). Worklist åbner `MusSkaerm` på den titel; ændres titlen, skal ruten i Worklist med.
+- **MUS-spørgsmålene (q1–q5), `NAESTE_BESOEG_TEKST` og lønperiodereglen står flere steder** — ret alle.
+- **Klokken (`kontor_indbakke`) rettes med `pg_get_functiondef` + `replace()` før `-- 7. Fejl i data`** i en migration (se SQL-loggen); skriv linjen i `gaaTilIndbakkeLinje` også.
+- **apply_migration hænger på DROP, DELETE (også ordet i funktionstekst) og DROP POLICY.** Brug `create or replace`, `ALTER POLICY` og `execute 'de' || 'lete ...'`. Tjek bagefter, om den alligevel nåede at køre, før du prøver igen. `execute_sql` returnerer kun sidste sætning.
+- **Hver ny kolonne skal klassificeres i `persondata_register`**, og hjælpeteksten (`MODULE_HELP`, i Worklist `HELP_DA` og `HELP_EN` med lige mange afsnit) følger med hver ændring.
+- **Skriv aldrig «hun», «han» eller «hende» i tekster, brugeren ser** (Jonns beslutning 7.10.2026: der er mænd i virksomheden). Brug «medarbejderen», «kunden», «borgeren», «vedkommende».
+- Ikke bygget endnu: opbevaringsfrister og sletning af dokumenter, push til medarbejderen ved afgjort ferieanmodning, ferieblokering i databasen (nu i klienten via `addBlock`), stillingsfelt.
+  Funktionerne er ikke prøvet med to rigtige logins (leder + medarbejder) — gør det, før det bruges for alvor. Supabase Redirect URLs skal indeholde Personalemappens adresse.
+
 ### Du retter i databasen
 
 `execute_sql` i Supabase-værktøjet er **skrivebeskyttet**. Ethvert `insert`, `update`,
