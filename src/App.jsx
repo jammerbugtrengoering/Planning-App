@@ -26,7 +26,7 @@ import {
   Plus, Download, X, Clock, AlertTriangle,
   Trash2, Pencil, Repeat, Zap, CalendarClock, Wand2, Star, ChevronLeft, ChevronRight, ChevronUp, ChevronDown,
   ClipboardList, Video, CheckCircle2, LogIn, ListChecks, Check, Lock, Navigation, Building2, Car, Copy,
-  Thermometer, Palmtree, LogOut, RotateCw,
+  Thermometer, Palmtree, LogOut, RotateCw, Maximize2, Minimize2,
 } from "lucide-react";
 
 // ---------- Opgavenoter og billeder ----------
@@ -2303,7 +2303,8 @@ const MODULE_HELP = {
         "Begge åbner i fuld skærm med samme layout. Øverst står de tre grundvalg: kontrakttype, prismodel og om opgaven er en aftale, der gentages, eller en enkelt opgave. Valgene styrer resten af formularen.",
         "Under dem står tre kolonner: «Aftale og kunde» (hvem der faktureres og hvor der arbejdes), «Opgaven» (medarbejder, kompetencer, varighed og tjeklister) og «Planlægning» (rytme, ugedage og datoer). På en smal skærm står de under hinanden.",
         "Nederst står det, der mangler, før aftalen kan gemmes, og knapperne. På en kladde står bemærkningen til kontoret til højre.",
-        "Forklaringerne til felterne står ikke som tekst under dem, men bag et lille «i» ved feltnavnet. Hold musen over det (eller tryk på det) for at læse dem. Advarsler og det, der mangler, står stadig som tekst."] },
+        "Forklaringerne til felterne står ikke som tekst under dem, men bag et lille «i» ved feltnavnet. Hold musen over det (eller tryk på det) for at læse dem. Advarsler og det, der mangler, står stadig som tekst.",
+        "Vinduet åbner i browserens fulde skærm, så adresselinjen og fanerne ikke tager plads (virker i Chrome og Edge). Knappen øverst til højre slår det til og fra, og dit valg huskes. Esc går ud af fuld skærm. Vil du have det samme resten af dagen, så installér planlægningen som app: «Åbn i app» i browserens adresselinje."] },
     { h: "Nexus og Ældrelov kræver borgerens navn", p: [
         "På de to aftaletyper er kunden kommunen, der får regningen — arbejdet foregår hjemme hos en borger.",
         "Borgerens navn skrives i «Fakturabeskrivelse». Det er dét navn, medarbejderen ser på opgaven, både i ugeplanen og i Worklist.",
@@ -11871,7 +11872,8 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
       onClose={onClose}
       title={editId ? `${erKladde ? "Rediger kladde" : "Rediger aftale"}: ${copyFrom?.title || ""}` : (copyFrom ? `Kopiér: ${copyFrom.title}` : "Ny opgave")}
       persistent
-      fullscreen>
+      fullscreen
+      browserFuldskaerm>
       {/* Modalen er fullscreen, saa uden denne kolonne bliver hvert felt over 1500 px
           bredt paa en almindelig skaerm. De tre farvede afsnit betyder det samme her
           og i serviceordren: rosa = kunden, groen = opgaven, blaa = tid.
@@ -12269,7 +12271,7 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
           )}
           
           {planInterval !== "konkrete_datoer" && rytmeValg.art !== "besoeg" && (<>
-          <label style={styles.label}>{rytmeValg.art === "maaneder" ? "Ugedag" : "Ugedage"}<Info>Sæt et klokkeslæt hvis opgaven skal starte på et bestemt tidspunkt den dag. Er intet sat, placeres opgaven på ledig tid i planen.</Info><Info>Kræver en bestemt dag mere tid — fx hovedrengøring om onsdagen — så skriv minutter i det sidste felt. Står det tomt, bruges aftalens normale varighed.</Info>{rytmeValg.art === "maaneder" && <Info>Besøget lægges på den valgte ugedag i den uge, hvor datoen i startdatoen falder — samme dato hver gang.</Info>}</label>
+          <label style={styles.label}>{rytmeValg.art === "maaneder" ? "Ugedag" : "Ugedage"}<Info>Sæt et klokkeslæt hvis opgaven skal starte på et bestemt tidspunkt den dag. Er intet sat, placeres opgaven på ledig tid i planen.<br /><br />Kræver en bestemt dag mere tid — fx hovedrengøring om onsdagen — så skriv minutter i det sidste felt. Står det tomt, bruges aftalens normale varighed.</Info>{rytmeValg.art === "maaneder" && <Info>Besøget lægges på den valgte ugedag i den uge, hvor datoen i startdatoen falder — samme dato hver gang.</Info>}</label>
           <div style={styles.skillPicker}>
             {ALL_DAYS.map((d) => <button key={d.key} type="button" onClick={() => toggleDay(d.key)} style={days.includes(d.key) ? styles.skillPickBtnActive : styles.skillPickBtn}>{d.label}</button>)}
           </div>
@@ -21955,14 +21957,52 @@ function Info({ children }) {
   );
 }
 
-function Modal({ title, children, onClose, persistent = false, fullscreen = false, bred = false }) {
+function Modal({ title, children, onClose, persistent = false, fullscreen = false, bred = false, browserFuldskaerm = false }) {
+  // Ny opgave/Rediger aftale gaar i browserens fuldskaerm (7.10.2026), saa adresselinje og faner ikke tager plads. Det er et valg, der
+  // huskes (rp_fuldskaerm): knappen i toppen slaar det til og fra. Chrome tillader kaldet i nogle sekunder efter klikket, der aabnede
+  // vinduet; afvises det (fx i Safari), staar formularen bare som foer. Vi gaar kun ud igen, hvis det var os, der gik ind.
+  const [erFuld, setErFuld] = useState(false);
+  useEffect(() => {
+    if (!browserFuldskaerm) return undefined;
+    const synk = () => setErFuld(!!document.fullscreenElement);
+    document.addEventListener("fullscreenchange", synk);
+    let valgt = "ja";
+    try { valgt = localStorage.getItem("rp_fuldskaerm") || "ja"; } catch { /* privat vindue */ }
+    let vi = false;
+    if (valgt === "ja" && !document.fullscreenElement && document.documentElement.requestFullscreen) {
+      document.documentElement.requestFullscreen().then(() => { vi = true; }).catch(() => {});
+    }
+    return () => {
+      document.removeEventListener("fullscreenchange", synk);
+      if (vi && document.fullscreenElement && document.exitFullscreen) document.exitFullscreen().catch(() => {});
+    };
+  }, [browserFuldskaerm]);
+  function skiftFuldskaerm() {
+    try {
+      if (document.fullscreenElement) {
+        localStorage.setItem("rp_fuldskaerm", "nej");
+        document.exitFullscreen();
+      } else {
+        localStorage.setItem("rp_fuldskaerm", "ja");
+        document.documentElement.requestFullscreen().catch(() => {});
+      }
+    } catch { /* ingen fuldskaerm her */ }
+  }
   return (
     <div style={fullscreen ? { ...styles.overlay, background: "rgba(0,0,0,0.1)" } : styles.overlay} onClick={persistent ? undefined : onClose}>
       <div style={fullscreen ? { ...styles.modal, width: "100%", height: "100vh", maxHeight: "100vh", borderRadius: 0, maxWidth: "100%" }
         : bred ? { ...styles.modal, width: "min(1320px, 100%)", maxHeight: "94vh" } : styles.modal} onClick={(e) => e.stopPropagation()}>
         <div style={styles.modalHeader}>
           <span style={styles.modalTitle}>{title}</span>
-          <button style={styles.iconBtnGhostInline} onClick={onClose}><X size={16} /></button>
+          <span style={{ display: "flex", gap: 4, alignItems: "center" }}>
+            {browserFuldskaerm && document.documentElement.requestFullscreen && (
+              <button type="button" style={styles.iconBtnGhostInline} onClick={skiftFuldskaerm}
+                title={erFuld ? "Forlad fuld skærm (Esc)" : "Fuld skærm: skjuler browserens linjer"} aria-label={erFuld ? "Forlad fuld skærm" : "Fuld skærm"}>
+                {erFuld ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+              </button>
+            )}
+            <button style={styles.iconBtnGhostInline} onClick={onClose}><X size={16} /></button>
+          </span>
         </div>
         <div style={fullscreen ? { ...styles.modalBody, height: "calc(100vh - 60px)", overflowY: "auto" } : styles.modalBody}>{children}</div>
       </div>
