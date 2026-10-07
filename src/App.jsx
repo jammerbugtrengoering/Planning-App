@@ -2505,6 +2505,7 @@ const MODULE_HELP = {
         "Bliver eleven fast på opgaven bagefter, fjerner du bare mærket — så faktureres medarbejderens tid igen fra den dag.",
         "Medarbejderen kan se det selv i Worklist, med besked om at tiden stadig tæller på lønnen. Ellers ville vedkommende tro, det ikke kunne betale sig at registrere den."] },
     { h: "Kørsel på en anden aktivitet", p: [
+        "«Anden aktivitet» har tre arter øverst: Aktivitet, Tilbudsmøde og MUS. Vælger du Tilbudsmøde, skifter formularen til kundemødet (kunde, adresse, hvem der tager mødet, dato, tid, minutter og aftaletype), og der oprettes et tilbud i kladde sammen med mødet — det samme som «Nyt kundemøde» under Tilbud. Det du har skrevet, følger med, når du skifter art.",
         "Skal en medarbejder have kilometerpenge for en tur, der ikke er en almindelig opgave — hente materialer, køre til kursus — opretter du en Anden aktivitet og sætter flueben i «Der skal udbetales kørsel for turen».",
         "Turen ender på aktivitetens egen adresse — den du skrev i feltet Adresse øverst. Du skal derfor kun skrive, hvor medarbejderen kører FRA.",
         "Så snart begge adresser står der, viser vinduet turens længde: «ca. 166 km». Er tallet urimeligt, er en af adresserne skrevet forkert — og det opdager du her i stedet for i lønopgørelsen en måned senere.",
@@ -19300,8 +19301,7 @@ function ActivityModal({ employees, onClose, onSave, kanBookeMus = false }) {
   const [duration, setDuration] = useState(60);
   const [description, setDescription] = useState("");
   // Et tilbudsmoede ER en aktivitet — der er ingen grund til to slags opgaver der
-  // opfoerer sig ens. Fluebenet bestemmer bare om der ogsaa oprettes et tilbud.
-  const [erTilbudsmoede, setErTilbudsmoede] = useState(false);
+  // opfoerer sig ens. Arten «tilbud» (7.10.2026, afloeser fluebenet) viser kundemoede-formularen og opretter ogsaa et tilbud.
   const [kontrakt, setKontrakt] = useState("privat");
   // Koersel er slaaet fra som udgangspunkt. De fleste aktiviteter er et sted man er,
   // ikke en straekning man koerer.
@@ -19314,13 +19314,15 @@ function ActivityModal({ employees, onClose, onSave, kanBookeMus = false }) {
   const [anslagFejl, setAnslagFejl] = useState("");
   const [anslagHenter, setAnslagHenter] = useState(false);
   // MUS (6.10.2026): en aktivitet med medarbejder OG leder, som begge får den i deres opgaveliste. Kun HR-administratorer kan booke den (databasen tjekker det i book_mus).
-  const [art, setArt] = useState("aktivitet");
+  const [art, setArt] = useState("aktivitet");   // aktivitet | tilbud | mus
+  const erTilbudsmoede = art === "tilbud";
   const [lederId, setLederId] = useState("");
   const lederEff = lederId && lederId !== employeeId ? lederId : (employees.find((e) => e.isAdmin && e.id !== employeeId)?.id || "");
 
   const valgt = employees.find((e) => e.id === employeeId);
   // Kun planlaeggere kan tage et tilbudsmoede — det er ogsaa haandhaevet i databasen.
   const maaTageTilbud = !!valgt?.isAdmin;
+  const planlaeggere = employees.filter((e) => e.isAdmin);
   // Destinationen er aktivitetens egen adresse. Derfor skal BEGGE vaere udfyldt, naar
   // der skal udbetales koersel — en tur uden et sted at koere hen findes ikke.
   const koerselKlar = !harKoersel || (kmFra.trim() && address.trim());
@@ -19363,7 +19365,7 @@ function ActivityModal({ employees, onClose, onSave, kanBookeMus = false }) {
     if (!employeeId || !date) return;
     if (!koerselKlar) return;
     onSave({ employeeId, customerName, address, date, time, duration, description,
-             erTilbudsmoede: erTilbudsmoede && maaTageTilbud, kontrakt,
+             erTilbudsmoede: false, kontrakt,
              kmFra: harKoersel ? kmFra : "", kmTurRetur: harKoersel && kmTurRetur,
              kmAnslaaet: harKoersel ? anslaaetIalt : null });
     onClose();
@@ -19374,14 +19376,71 @@ function ActivityModal({ employees, onClose, onSave, kanBookeMus = false }) {
     onSave({ erMus: true, employeeId, lederId: lederEff, date, time, duration, description });
     onClose();
   }
-  const artVaelger = kanBookeMus && (
+  // Skifter man art, bevares det skrevne (kunde, adresse, dato, tid) — kun felterne, der hører til arten, skifter. Et tilbudsmøde kan kun tages af en planlægger,
+  // så medarbejderen flyttes til den første, hvis den valgte ikke er det.
+  function vaelgArt(k) {
+    setArt(k);
+    if (k === "tilbud" && !employees.find((e) => e.id === employeeId)?.isAdmin) setEmployeeId(planlaeggere[0]?.id || employeeId);
+  }
+  const arter = [["aktivitet", "Aktivitet"], ["tilbud", "Tilbudsmøde"], ...(kanBookeMus ? [["mus", "MUS (medarbejdersamtale)"]] : [])];
+  const artVaelger = (
     <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
-      {[["aktivitet", "Aktivitet"], ["mus", "MUS (medarbejdersamtale)"]].map(([k, l]) => (
-        <button key={k} type="button" onClick={() => setArt(k)}
+      {arter.map(([k, l]) => (
+        <button key={k} type="button" onClick={() => vaelgArt(k)}
           style={art === k ? { ...styles.typePickBtn, flex: 1, borderColor: "var(--farve)", color: "var(--farve)", background: "var(--farve-lys)" } : { ...styles.typePickBtn, flex: 1 }}>{l}</button>
       ))}
     </div>
   );
+  function submitTilbud() {
+    if (!employeeId || !date || !customerName.trim() || !maaTageTilbud) return;
+    onSave({ employeeId, customerName, address, date, time, duration, description: "", erTilbudsmoede: true, kontrakt });
+    onClose();
+  }
+  if (art === "tilbud") {
+    return (
+      <Modal onClose={onClose} title="Nyt kundemøde" persistent>
+        {artVaelger}
+        <div style={styles.hint}>
+          Mødet lægges i ugeplanen, så kalenderen viser, at medarbejderen er ude, og kontoret kan se det. Samtidig oprettes et tilbud i kladde, som udfyldes ude hos kunden.
+          Det er det samme som «Nyt kundemøde» under Tilbud.
+        </div>
+        <label style={styles.label}>Hvem er mødet med?</label>
+        <input style={styles.input} value={customerName} onChange={(e) => setCustomerName(e.target.value)} placeholder="Hotel Søparken — også hvis de ikke er kunde endnu" />
+        <div style={styles.hint}>Kunden behøver ikke findes i Dinero endnu. Den kobling laver du på tilbuddet bagefter.</div>
+        <label style={styles.label}>Adresse</label>
+        <AdresseFelt vaerdi={address} onChange={setAddress} placeholder="Søparken 1, 9440 Aabybro" />
+        <label style={styles.label}>Hvem tager mødet?</label>
+        <select style={styles.input} value={employeeId} onChange={(e) => setEmployeeId(e.target.value)}>
+          {planlaeggere.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
+        </select>
+        <div style={styles.hint}>Kun planlæggere kan tage et tilbudsmøde.</div>
+        <div style={{ display: "flex", gap: 10 }}>
+          <div style={{ flex: 1 }}>
+            <label style={styles.label}>Dato</label>
+            <input type="date" style={styles.input} value={date} onChange={(e) => setDate(e.target.value)} />
+          </div>
+          <div style={{ width: 120 }}>
+            <label style={styles.label}>Tidspunkt</label>
+            <input type="time" style={styles.input} value={time} onChange={(e) => setTime(e.target.value)} />
+          </div>
+          <div style={{ width: 110 }}>
+            <label style={styles.label}>Minutter</label>
+            <input type="number" min="15" step="15" style={styles.input} value={duration} onChange={(e) => setDuration(e.target.value)} />
+          </div>
+        </div>
+        <div style={styles.hint}>Tiden tæller i kapaciteten — et kundemøde optager en plads i dagen.</div>
+        <label style={styles.label}>Aftaletype</label>
+        <select style={styles.input} value={kontrakt} onChange={(e) => setKontrakt(e.target.value)}>
+          {valgbareKontrakttyper().map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
+        </select>
+        <div style={styles.hint}>Timeprisen sættes automatisk efter typen. Den kan rettes på tilbuddet.</div>
+        <div style={styles.modalActions}>
+          <button style={styles.secondaryBtn} onClick={onClose}>Annuller</button>
+          <button style={styles.primaryBtn} disabled={!employeeId || !date || !customerName.trim() || !maaTageTilbud} onClick={submitTilbud}>Opret møde og tilbud</button>
+        </div>
+      </Modal>
+    );
+  }
   if (art === "mus") {
     return (
       <Modal onClose={onClose} title="Book MUS" persistent>
@@ -19434,40 +19493,6 @@ function ActivityModal({ employees, onClose, onSave, kanBookeMus = false }) {
       <select style={styles.input} value={employeeId} onChange={(e) => setEmployeeId(e.target.value)}>
         {employees.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
       </select>
-
-      <button type="button" disabled={!maaTageTilbud}
-        onClick={() => setErTilbudsmoede((v) => !v)}
-        style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left",
-                 padding: "11px 12px", borderRadius: 10, marginTop: 12,
-                 cursor: maaTageTilbud ? "pointer" : "default",
-                 opacity: maaTageTilbud ? 1 : 0.5,
-                 border: erTilbudsmoede ? "2px solid var(--farve-moerk)" : "1.5px solid #E2E8F0",
-                 background: erTilbudsmoede ? "var(--farve-lys)" : "#fff" }}>
-        <span style={{ width: 20, height: 20, borderRadius: 5, flexShrink: 0,
-                       border: erTilbudsmoede ? "2px solid var(--farve-moerk)" : "2px solid #CBD5E1",
-                       background: erTilbudsmoede ? "var(--farve-moerk)" : "#fff",
-                       display: "flex", alignItems: "center", justifyContent: "center" }}>
-          {erTilbudsmoede && <Check size={12} color="#fff" strokeWidth={3} />}
-        </span>
-        <span style={{ fontSize: 14 }}>📋 Det er et tilbudsmøde</span>
-      </button>
-      <div style={styles.hint}>
-        {maaTageTilbud
-          ? "Så oprettes der samtidig et tilbud i kladde, som kan udfyldes ude hos kunden i medarbejder-appen."
-          : "Kun planlæggere kan tage et tilbudsmøde. Vælg en administrator for at slå det til."}
-      </div>
-
-      {erTilbudsmoede && maaTageTilbud && (
-        <>
-          <label style={styles.label}>Aftaletype</label>
-          <select style={styles.input} value={kontrakt} onChange={(e) => setKontrakt(e.target.value)}>
-            {valgbareKontrakttyper().map((c) => (
-              <option key={c.key} value={c.key}>{c.label}</option>
-            ))}
-          </select>
-          <div style={styles.hint}>Timeprisen sættes automatisk efter typen og kan rettes på tilbuddet.</div>
-        </>
-      )}
 
       <label style={styles.label}>Dato</label>
       <input type="date" style={styles.input} value={date} onChange={(e) => setDate(e.target.value)} />
