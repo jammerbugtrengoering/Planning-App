@@ -2051,8 +2051,8 @@ const MODULE_HELP = {
   ] },
   haandbog: { title: "Håndbog og politikker", intro: "Personalehåndbogen og politikkerne, som medarbejderne læser i Personalemappen-appen.", blocks: [
     { h: "Ret teksten", p: ["Vælg et dokument øverst. Sæt flueben ved «Medarbejderne skal kvittere», hvis alle skal bekræfte, at de har læst det; så ser du her, hvem der mangler, og klokken minder dig om det efter 14 dage. Er ændringen væsentlig, så sæt også «ny version», så alle kvitterer igen. Du ser det først, som medarbejderne gør; tryk «Rediger» for at ændre det, og «Tilbage til visning» eller «Annuller», når du er færdig. Hvert afsnit har en overskrift og en tekst. Du kan flytte afsnit op og ned, fjerne dem og tilføje nye.",
-        "Tryk «Gem og vis for medarbejderne». Der er intet kladdetrin: det, du gemmer, kan medarbejderne læse med det samme.",
-        "«Sæt som udgået» bruger du, når en håndbog eller politik ikke gælder længere. Medarbejderne kan ikke se den mere, den kræver ikke kvittering, og klokken glemmer den. Den slettes ikke: udgåede dokumenter står sidst i rækken med «(udgået)», og «Sæt i brug igen» henter dem tilbage.",
+        "Tryk «Gem og vis for medarbejderne». På et aktivt dokument er der intet ekstra trin: det, du gemmer, kan medarbejderne læse med det samme.",
+        "Et dokument har en status: «Kladde» (kun HR ser det; nye dokumenter starter her), «Aktiv» (medarbejderne læser det og kvitterer, hvis du har krævet det) og «Udgået» (skjult for medarbejderne, kræver ikke kvittering, og klokken glemmer det). Skift status med knapperne over teksten. Intet slettes: udgåede og kladder står i rækken med «(udgået)» eller «(kladde)», og «Aktiv» sætter dem i brug igen.",
         "«Nyt dokument» laver fx en syge- og fraværspolitik. Skriv ikke navne på medarbejdere eller kunder i teksten, og læg ikke personlige oplysninger ind her."] },
   ] },
   personalemappen: { title: "Personalemappen", intro: "Her ligger medarbejdernes ansættelse, dokumenter, løn og nødkontakt. Kun HR-administratorer kan se siden.", blocks: [
@@ -15796,12 +15796,15 @@ function HaandbogView() {
     await laes(kladde.id);
   }
 
-  // Udgaaet (7.10.2026): dokumentet skjules for medarbejderne (databasen), kraever ingen kvittering og giver ingen linje i klokken, men bliver staaende her,
-  // saa det kan sættes i brug igen. Det slettes aldrig.
-  async function saetUdgaaet(til) {
-    if (til && !window.confirm(`Sæt «${dok.titel}» som udgået? Medarbejderne kan ikke læse det længere, og det kræver ikke kvittering. Du kan sætte det i brug igen senere.`)) return;
+  // Status (7.10.2026): kladde (kun HR ser det), aktiv (medarbejderne laeser og kvitterer) eller udgaaet (skjult, bevaret). Den skjules for medarbejderne i
+  // databasen (laes_medarbejder), ikke her. Intet slettes: et udgaaet dokument kan saettes i brug igen.
+  const STATUS_TEKST = { kladde: "Kladde", aktiv: "Aktiv", udgaaet: "Udgået" };
+  async function saetStatus(ny) {
+    if (ny === (dok.status || "aktiv")) return;
+    if ((dok.status || "aktiv") === "aktiv" && !window.confirm(`Gør «${dok.titel}» til ${ny === "udgaaet" ? "udgået" : "kladde"}? Medarbejderne kan ikke læse det længere, og det kræver ikke kvittering.`)) return;
+    if (ny === "aktiv" && dok.kraever_kvittering && !window.confirm(`Sæt «${dok.titel}» i brug? Medarbejderne kan læse det med det samme, og de skal kvittere.`)) return;
     setFejl("");
-    const { error } = await supabase.rpc("saet_haandbog_udgaaet", { p_id: dok.id, p_udgaaet: til });
+    const { error } = await supabase.rpc("saet_haandbog_status", { p_id: dok.id, p_status: ny });
     if (error) { setFejl("Kunne ikke gemmes: " + error.message); return; }
     await laes(dok.id);
   }
@@ -15810,15 +15813,15 @@ function HaandbogView() {
     <div style={styles.page}>
       <div style={{ fontWeight: 700, fontSize: 18, color: "#111111", marginBottom: 4 }}>Håndbog og politikker</div>
       <div style={{ fontSize: 13, color: "#64748B", marginBottom: 14, lineHeight: 1.55 }}>
-        Her ser du dokumenterne, som medarbejderne gør i Personalemappen-appen. Tryk «Rediger» for at rette; det, du gemmer, kan de læse med det samme. «Sæt som udgået» skjuler dokumentet for dem. Skriv ikke navne på medarbejdere eller kunder i teksten.
+        Her ser du dokumenterne, som medarbejderne gør i Personalemappen-appen. Tryk «Rediger» for at rette. Et nyt dokument starter som kladde, som kun du kan se; sæt det til «Aktiv», når medarbejderne skal læse det. På et aktivt dokument kan de læse det, du gemmer, med det samme. «Udgået» skjuler dokumentet for dem. Skriv ikke navne på medarbejdere eller kunder i teksten.
       </div>
       {dokumenter === null && !fejl && <div style={styles.hint}>Henter…</div>}
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }}>
-        {[...(dokumenter || []).filter((x) => !x.udgaaet_tid), ...(dokumenter || []).filter((x) => x.udgaaet_tid)].map((x) => (
+        {[...(dokumenter || []).filter((x) => x.status !== "udgaaet"), ...(dokumenter || []).filter((x) => x.status === "udgaaet")].map((x) => (
           <button key={x.id} type="button" onClick={() => skiftDokument(x.id)}
             style={{ ...(valgt === x.id ? { ...styles.typePickBtn, flex: "none", borderColor: "var(--farve)", color: "var(--farve)", background: "var(--farve-lys)" } : { ...styles.typePickBtn, flex: "none" }),
-                     ...(x.udgaaet_tid ? { opacity: 0.7, fontStyle: "italic" } : {}) }}>
-            {x.titel}{x.udgaaet_tid ? " (udgået)" : ""}
+                     ...(x.status === "udgaaet" || x.status === "kladde" ? { opacity: 0.75, fontStyle: "italic" } : {}) }}>
+            {x.titel}{x.status === "udgaaet" ? " (udgået)" : x.status === "kladde" ? " (kladde)" : ""}
           </button>
         ))}
         <button type="button" style={{ ...styles.secondaryBtn, padding: "6px 12px" }} onClick={nytDokument}><Plus size={14} /> Nyt dokument</button>
@@ -15832,17 +15835,27 @@ function HaandbogView() {
             </div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               <button type="button" style={styles.primaryBtn} onClick={() => setRedigerer(true)}>Rediger</button>
-              {dok.udgaaet_tid
-                ? <button type="button" style={styles.secondaryBtn} onClick={() => saetUdgaaet(false)}>Sæt i brug igen</button>
-                : <button type="button" style={{ ...styles.secondaryBtn, color: "#B91C1C", borderColor: "#FECACA" }} onClick={() => saetUdgaaet(true)}>Sæt som udgået</button>}
             </div>
           </div>
-          {dok.udgaaet_tid && (
+          <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", marginBottom: 12 }}>
+            <span style={{ fontSize: 13, fontWeight: 700, color: "#334155", marginRight: 4 }}>Status</span>
+            {["kladde", "aktiv", "udgaaet"].map((s) => {
+              const valgtS = (dok.status || "aktiv") === s;
+              const farve = s === "aktiv" ? "#166534" : s === "udgaaet" ? "#B91C1C" : "#6D28D9";
+              return (
+                <button key={s} type="button" aria-pressed={valgtS} onClick={() => saetStatus(s)}
+                  style={{ ...styles.typePickBtn, flex: "none", padding: "6px 14px", ...(valgtS ? { borderColor: farve, color: farve, background: "#fff", fontWeight: 700 } : {}) }}>{STATUS_TEKST[s]}</button>
+              );
+            })}
+          </div>
+          {(dok.status || "aktiv") !== "aktiv" && (
             <div style={{ background: "#FEF3C7", border: "1px solid #FDE68A", borderRadius: 10, padding: "9px 12px", fontSize: 13.5, color: "#92400E", lineHeight: 1.5, marginBottom: 12 }}>
-              Udgået {new Date(dok.udgaaet_tid).toLocaleDateString("da-DK", { day: "numeric", month: "long", year: "numeric" })}. Medarbejderne kan ikke se dokumentet, og det kræver ikke kvittering.
+              {dok.status === "udgaaet"
+                ? `Udgået${dok.udgaaet_tid ? " " + new Date(dok.udgaaet_tid).toLocaleDateString("da-DK", { day: "numeric", month: "long", year: "numeric" }) : ""}. Medarbejderne kan ikke se dokumentet, og det kræver ikke kvittering.`
+                : "Kladde. Kun HR kan se dokumentet. Tryk «Aktiv», når medarbejderne skal kunne læse det."}
             </div>
           )}
-          {dok.kraever_kvittering && !dok.udgaaet_tid && <HaandbogKvitteringer dok={dok} />}
+          {dok.kraever_kvittering && (dok.status || "aktiv") === "aktiv" && <HaandbogKvitteringer dok={dok} />}
           {dok.afsnit.length === 0 && <div style={styles.hint}>Dokumentet har ingen afsnit endnu. Tryk «Rediger» for at skrive.</div>}
           <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
             {dok.afsnit.map((a) => (
@@ -15887,7 +15900,7 @@ function HaandbogView() {
           <button type="button" style={{ ...styles.addSkillBtn, marginBottom: 12 }} onClick={tilfoej}><Plus size={13} /> Tilføj afsnit</button>
           {fejl && <div style={{ color: "#B91C1C", fontSize: 13, margin: "6px 0" }}>{fejl}</div>}
           <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-            <button type="button" style={{ ...styles.primaryBtn, opacity: gemmer || !aendret ? 0.6 : 1 }} disabled={gemmer || !aendret} onClick={gem}>{gemmer ? "Gemmer…" : "Gem og vis for medarbejderne"}</button>
+            <button type="button" style={{ ...styles.primaryBtn, opacity: gemmer || !aendret ? 0.6 : 1 }} disabled={gemmer || !aendret} onClick={gem}>{gemmer ? "Gemmer…" : (kladde.ny || (dok?.status || "aktiv") !== "aktiv" ? "Gem" : "Gem og vis for medarbejderne")}</button>
             <button type="button" style={styles.secondaryBtn} disabled={gemmer} onClick={stopRedigering}>{aendret ? "Annuller" : "Tilbage til visning"}</button>
             {dok?.opdateret && !aendret && <span style={styles.hint}>Sidst rettet {new Date(dok.opdateret).toLocaleDateString("da-DK", { day: "numeric", month: "long", year: "numeric" })}{gemtTid ? " — gemt" : ""}</span>}
             {aendret && <span style={{ ...styles.hint, color: "#B45309" }}>Ikke gemt</span>}
