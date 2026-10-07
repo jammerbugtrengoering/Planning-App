@@ -2302,7 +2302,8 @@ const MODULE_HELP = {
     { h: "Ny opgave og Rediger aftale", p: [
         "Begge åbner i fuld skærm med samme layout. Øverst står de tre grundvalg: kontrakttype, prismodel og om opgaven er en aftale, der gentages, eller en enkelt opgave. Valgene styrer resten af formularen.",
         "Under dem står tre kolonner: «Aftale og kunde» (hvem der faktureres og hvor der arbejdes), «Opgaven» (medarbejder, kompetencer, varighed og tjeklister) og «Planlægning» (rytme, ugedage og datoer). På en smal skærm står de under hinanden.",
-        "Nederst står det, der mangler, før aftalen kan gemmes, og knapperne. På en kladde står bemærkningen til kontoret til højre."] },
+        "Nederst står det, der mangler, før aftalen kan gemmes, og knapperne. På en kladde står bemærkningen til kontoret til højre.",
+        "Forklaringerne til felterne står ikke som tekst under dem, men bag et lille «i» ved feltnavnet. Hold musen over det (eller tryk på det) for at læse dem. Advarsler og det, der mangler, står stadig som tekst."] },
     { h: "Nexus og Ældrelov kræver borgerens navn", p: [
         "På de to aftaletyper er kunden kommunen, der får regningen — arbejdet foregår hjemme hos en borger.",
         "Borgerens navn skrives i «Fakturabeskrivelse». Det er dét navn, medarbejderen ser på opgaven, både i ugeplanen og i Worklist.",
@@ -11917,7 +11918,7 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
 
         </div>
         <div>
-          <label style={styles.label}>Opgaven er</label>
+          <label style={styles.label}>Opgaven er{type === "fixed" && <Info>Faste opgaver gentages automatisk hver uge på de valgte dage — frem til udløbsdatoen.</Info>}{type === "adhoc" && <Info>Oprettes med dags dato og lander i "Ikke tildelt", klar til at blive planlagt.</Info>}</label>
       <div style={styles.typePicker}>
         {CREATABLE_TYPES.map((k) => {
           const m = TYPE_META[k];
@@ -11926,8 +11927,8 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
           );
         })}
       </div>
-      {type === "fixed" && <div style={styles.hint}>Faste opgaver gentages automatisk hver uge på de valgte dage — frem til udløbsdatoen.</div>}
-      {type === "adhoc" && <div style={styles.hint}>Oprettes med dags dato og lander i "Ikke tildelt", klar til at blive planlagt.</div>}
+      
+      
         </div>
       </div>
 
@@ -12028,22 +12029,18 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
             placeholder="Hentes fra Dinero, kan rettes" />
         </div>
         <div style={{ flex: "1 1 200px" }}>
-          <label style={styles.label}>Kontaktperson (Att.)</label>
+          <label style={styles.label}>Kontaktperson (Att.)<Info>Udfyldes automatisk ud fra kunden, når du vælger den ovenfor. Kontoret bruger dem
+        til at kontakte kunden ved ændringer i aftalen eller de enkelte opgaver — ret dem
+        her, hvis det konkrete sted har en anden kontakt end den, der står i Dinero.</Info></label>
           <input style={styles.input} value={kontaktperson} onChange={(e) => setKontaktperson(e.target.value)}
             placeholder="Hentes fra Dinero, kan rettes" />
         </div>
       </div>
-      <div style={styles.hint}>
-        Udfyldes automatisk ud fra kunden, når du vælger den ovenfor. Kontoret bruger dem
-        til at kontakte kunden ved ændringer i aftalen eller de enkelte opgaver — ret dem
-        her, hvis det konkrete sted har en anden kontakt end den, der står i Dinero.
-      </div>
+      
 
-      <label style={styles.label}>Adgang (nøgleboks, koder, kontaktperson m.v.)</label>
+      <label style={styles.label}>Adgang (nøgleboks, koder, kontaktperson m.v.)<Info>Teksten er skjult i medarbejder-appen. Medarbejderen skal trykke for at se den, og hver åbning registreres.</Info></label>
       <textarea style={styles.textarea} rows={2} value={accessInstructions} onChange={(e) => setAccessInstructions(e.target.value)} placeholder="F.eks. Nøgleboks ved hovedindgang, kode 4471" />
-      <div style={styles.hint}>
-        Teksten er skjult i medarbejder-appen. Medarbejderen skal trykke for at se den, og hver åbning registreres.
-      </div>
+      
 
       {/* Noeglen skal hentes paa kontoret. Vises paa opgavekortet i medarbejder-appen,
           ikke inde i opgaven — hun skal se det inden hun koerer, ikke naar hun staar der. */}
@@ -12062,15 +12059,13 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
         <span style={{ fontSize: 14, color: "#111111" }}>🔑 Nøgle/adgangskort skal hentes på kontoret først</span>
       </button>
 
-      </div></div><div style={{ ...styles.formSection, flex: "1 1 360px", minWidth: 0, marginBottom: 0, borderColor: "#9ED2CB" }}><div style={{ ...styles.formSectionHead, background: "#F0FDFA", borderBottom: "1.5px solid #9ED2CB" }}><div style={{ ...styles.formSectionTitle, color: "#0F766E" }}>Opgaven</div><div style={{ ...styles.formSectionHint, color: "#149285" }}>Hvem der tager den, hvad der kræves, og hvad der skal udføres</div></div><div style={styles.formSectionBody}><label style={styles.label}>Ansvarlig Medarbejder (valgfrit)</label>
+      </div></div><div style={{ ...styles.formSection, flex: "1 1 360px", minWidth: 0, marginBottom: 0, borderColor: "#9ED2CB" }}><div style={{ ...styles.formSectionHead, background: "#F0FDFA", borderBottom: "1.5px solid #9ED2CB" }}><div style={{ ...styles.formSectionTitle, color: "#0F766E" }}>Opgaven</div><div style={{ ...styles.formSectionHint, color: "#149285" }}>Hvem der tager den, hvad der kræves, og hvad der skal udføres</div></div><div style={styles.formSectionBody}><label style={styles.label}>Ansvarlig Medarbejder (valgfrit){type === "fixed" && <Info>Vælges her, følger medarbejderen aftalen resten af perioden og sættes automatisk på alle kommende opgaver.</Info>}</label>
       <select style={styles.input} value={assignedEmployeeId} onChange={(e) => setAssignedEmployeeId(e.target.value)}>
         <option value="">- Ingen (auto-matching) -</option>
         {employees?.map(emp => <option key={emp.id} value={emp.id}>{emp.name}</option>)}
       </select>
 
-      {type === "fixed" && (
-        <div style={styles.hint}>Vælges her, følger medarbejderen aftalen resten af perioden og sættes automatisk på alle kommende opgaver.</div>
-      )}
+      
 
       {/* Fluebenet «Der udleveres produkter til kunden» er fjernet. Produkter udleveres
           nu paa kontoret under Lager, og medarbejderen bliver spurgt naar hun FAKTISK
@@ -12078,9 +12073,9 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
 
       {type === "adhoc" && assignedEmployeeId && (
         <>
-          <label style={styles.label}>Ønsket dato (når medarbejder er valgt)</label>
+          <label style={styles.label}>Ønsket dato (når medarbejder er valgt)<Info>Opgaven placeres på denne konkrete dato for den valgte medarbejder.</Info></label>
           <input type="date" style={styles.input} value={adhocDate} onChange={(e) => setAdhocDate(e.target.value)} />
-          <div style={styles.hint}>Opgaven placeres på denne konkrete dato for den valgte medarbejder.</div>
+          
         </>
       )}
 
@@ -12098,12 +12093,10 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
       ))}
       <button type="button" style={styles.addSkillBtn} onClick={addSkillRow}><Plus size={13} /> Tilføj kompetencekrav</button>
 
-      <label style={styles.label}>Varighed pr. medarbejder (minutter)</label>
+      <label style={styles.label}>Varighed pr. medarbejder (minutter)<Info>Hvor længe <strong>én</strong> medarbejder bruger på opgaven. Sætter du senere to på,
+        er der afsat {fmtMin((Number(duration) || 0) * 2)} arbejde i alt — ikke {fmtMin(Number(duration) || 0)} delt mellem dem.</Info></label>
       <input type="number" min={5} step={5} style={styles.input} value={duration} onChange={(e) => setDuration(Number(e.target.value))} />
-      <div style={styles.hint}>
-        Hvor længe <strong>én</strong> medarbejder bruger på opgaven. Sætter du senere to på,
-        er der afsat {fmtMin((Number(duration) || 0) * 2)} arbejde i alt — ikke {fmtMin(Number(duration) || 0)} delt mellem dem.
-      </div><label style={styles.label}>Tjeklister (tasks der skal udføres)</label>
+      <label style={styles.label}>Tjeklister (tasks der skal udføres)</label>
       <div style={styles.skillPicker}>
         {checklistTemplates.filter((c) => checklistTemplateIds.includes(c.id) || listeGaelderFor(c, contractType)).map((c) => (
           <button key={c.id} type="button" onClick={() => toggleTemplate(c.id)} style={checklistTemplateIds.includes(c.id) ? styles.skillPickBtnActive : styles.skillPickBtn}>
@@ -12162,7 +12155,7 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
               måned — er «Bestemte datoer». Intervallet gemmes stadig som den samme tekst i
               planInterval; intervalNoegle()/intervalValg() i src/aftalerytme.js er eneste vej
               ind og ud, så formularen aldrig kan skrive en værdi, reglen ikke kender. */}
-          <label style={styles.label}>Plan parametre</label>
+          <label style={styles.label}>Plan parametre{rytmeValg.art === "maaneder" && <Info>Højst 12 måneder. Skal besøgene ligge sjældnere eller uregelmæssigt, så brug «Bestemte datoer».</Info>}</label>
           <div style={styles.typePicker}>
             {[["uger","Ugentligt"],["maaneder","Månedligt"],["datoer","Bestemte datoer"],["besoeg","Aftales ved besøget"]].map(([art,l]) => (
               <button key={art} type="button"
@@ -12207,9 +12200,7 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
               </span>
             </div>
           )}
-          {rytmeValg.art === "maaneder" && (
-            <div style={styles.hint}>Højst 12 måneder. Skal besøgene ligge sjældnere eller uregelmæssigt, så brug «Bestemte datoer».</div>
-          )}
+          
           {/* Konkrete datoer (1.10.2026, Jonn): ugedagene skjules, saa laenge rytmen er
               valgt - de bruges ikke, og et felt, der intet betyder, bliver udfyldt
               alligevel. Valget af ugedage huskes og kommer igen, hvis man skifter
@@ -12218,7 +12209,9 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
               med aftalens varighed, naar datoen tilfoejes, og kan rettes pr. dato. */}
           {planInterval === "konkrete_datoer" && (
             <div style={{ marginBottom: 10 }}>
-              <label style={styles.label}>Datoer</label>
+              <label style={styles.label}>Datoer<Info>Opgavetiden udfyldes med aftalens varighed og kan rettes for den enkelte dato. Er klokkeslættet tomt, placeres opgaven på ledig tid den dag.</Info>{editId && !erKladde && <Info>Retter du listen, følger planen med: en ny dato får en opgave, en fjernet dato får sin kommende opgave slettet, og et nyt klokkeslæt eller en ny opgavetid rettes på opgaven. Udførte opgaver og opgaver med registreret tid røres ikke.</Info>}{rytmeValg.art === "besoeg" && <Info>Aftalen danner ingen faste opgaver. Startdatoen er det første besøg. Ved hvert besøg skriver medarbejderen datoen for
+              næste besøg på opgavens tjekliste, og så oprettes opgaven. Bliver intet aftalt, får kontoret en påmindelse i klokken
+              hver uge.</Info>}</label>
               {konkreteDatoer.length > 0 && (
                 <div style={{ display: "flex", gap: 8, fontSize: 11.5, color: "#64748B", fontWeight: 600, margin: "0 0 4px" }}>
                   <span style={{ flex: "1 1 160px" }}>Dato</span>
@@ -12259,7 +12252,7 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
                   }
                   setKonkreteDatoer([...konkreteDatoer, { dato, tid: sidste?.tid || "", min: Number(duration) || null }]);
                 }}>+ Tilføj dato</button>
-              <div style={styles.hint}>Opgavetiden udfyldes med aftalens varighed og kan rettes for den enkelte dato. Er klokkeslættet tomt, placeres opgaven på ledig tid den dag.</div>
+              
               {konkretRenset.length > 0 && (
                 <div style={{ ...styles.hint, color: "#334155" }}>
                   {konkretRenset.length} {konkretRenset.length === 1 ? "dato" : "datoer"} · første{" "}
@@ -12271,20 +12264,12 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
               )}
               {konkretDobbelt && <div style={{ ...styles.hint, color: "#B91C1C" }}>Den samme dato står to gange — fjern den ene.</div>}
               {konkretFortid && <div style={{ ...styles.hint, color: "#B91C1C" }}>En af datoerne er passeret. Ret den eller fjern den, før aftalen gemmes.</div>}
-              {editId && !erKladde && (
-                <div style={styles.hint}>Retter du listen, følger planen med: en ny dato får en opgave, en fjernet dato får sin kommende opgave slettet, og et nyt klokkeslæt eller en ny opgavetid rettes på opgaven. Udførte opgaver og opgaver med registreret tid røres ikke.</div>
-              )}
+              
             </div>
           )}
-          {rytmeValg.art === "besoeg" && (
-            <div style={styles.hint}>
-              Aftalen danner ingen faste opgaver. Startdatoen er det første besøg. Ved hvert besøg skriver medarbejderen datoen for
-              næste besøg på opgavens tjekliste, og så oprettes opgaven. Bliver intet aftalt, får kontoret en påmindelse i klokken
-              hver uge.
-            </div>
-          )}
+          
           {planInterval !== "konkrete_datoer" && rytmeValg.art !== "besoeg" && (<>
-          <label style={styles.label}>{rytmeValg.art === "maaneder" ? "Ugedag" : "Ugedage"}</label>
+          <label style={styles.label}>{rytmeValg.art === "maaneder" ? "Ugedag" : "Ugedage"}<Info>Sæt et klokkeslæt hvis opgaven skal starte på et bestemt tidspunkt den dag. Er intet sat, placeres opgaven på ledig tid i planen.</Info><Info>Kræver en bestemt dag mere tid — fx hovedrengøring om onsdagen — så skriv minutter i det sidste felt. Står det tomt, bruges aftalens normale varighed.</Info>{rytmeValg.art === "maaneder" && <Info>Besøget lægges på den valgte ugedag i den uge, hvor datoen i startdatoen falder — samme dato hver gang.</Info>}</label>
           <div style={styles.skillPicker}>
             {ALL_DAYS.map((d) => <button key={d.key} type="button" onClick={() => toggleDay(d.key)} style={days.includes(d.key) ? styles.skillPickBtnActive : styles.skillPickBtn}>{d.label}</button>)}
           </div>
@@ -12309,13 +12294,11 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
                   <span style={{ fontSize: 12, color: "#94A3B8" }}>min</span>
                 </div>
               ))}
-              <div style={styles.hint}>Sæt et klokkeslæt hvis opgaven skal starte på et bestemt tidspunkt den dag. Er intet sat, placeres opgaven på ledig tid i planen.</div>
-              <div style={styles.hint}>Kræver en bestemt dag mere tid — fx hovedrengøring om onsdagen — så skriv minutter i det sidste felt. Står det tomt, bruges aftalens normale varighed.</div>
+              
+              
             </div>
           )}
-          {rytmeValg.art === "maaneder" && (
-            <div style={styles.hint}>Besøget lægges på den valgte ugedag i den uge, hvor datoen i startdatoen falder — samme dato hver gang.</div>
-          )}
+          
           </>)}
           {planInterval !== "konkrete_datoer" && (<>
           {/* Sammendraget regnes af den regel, der danner opgaverne (besoegIPeriode), så
@@ -12346,7 +12329,7 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
 
       {type === "adhoc" && (
         <>
-          <label style={styles.label}>Senest udført dato</label>
+          <label style={styles.label}>Senest udført dato<Info>Bruges af den automatiske planlægning til at finde en ledig plads senest denne dag — opgaven oprettes stadig med dags dato og lander i "Ikke tildelt".</Info></label>
           <input type="date" style={styles.input} value={adhocDate} onChange={(e) => {
             setAdhocDate(e.target.value);
             const d = new Date(e.target.value);
@@ -12355,7 +12338,7 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
           {(() => { const dow = new Date(adhocDate).getDay(); return (dow === 0 || dow === 6) ? (
             <div style={styles.hint}>Valgt dato er i weekenden — opgaven placeres på lørdag/søndag. Husk at slå "Alle dage" til i ugeplanen for at se den.</div>
           ) : null; })()}
-          <div style={styles.hint}>Bruges af den automatiske planlægning til at finde en ledig plads senest denne dag — opgaven oprettes stadig med dags dato og lander i "Ikke tildelt".</div>
+          
           <label style={styles.label}>Ønsket starttidspunkt (valgfrit)</label>
           <input type="time" style={styles.input} value={preferredTime} onChange={(e) => setPreferredTime(e.target.value)} />
         </>
@@ -21940,6 +21923,35 @@ function Efterregulering({ opgave, employees, onOpdateret }) {
         </div>
       )}
     </div>
+  );
+}
+
+// Forklaringer paa formularen ligger som hover, ikke som tekst under feltet (7.10.2026): teksten fyldte saa meget, at man
+// skulle rulle i Ny opgave. Tooltippen er position: fixed, fordi afsnittene har overflow: hidden og ellers ville klippe den.
+// Ogsaa fokus viser den, saa den kan naas med tastatur og tryk. Advarsler og noget, der skal ses, staar stadig som tekst.
+function Info({ children }) {
+  const [pos, setPos] = useState(null);
+  const vis = (el) => {
+    const r = el.getBoundingClientRect();
+    const x = Math.max(8, Math.min(r.left, window.innerWidth - 300));
+    setPos(r.bottom > window.innerHeight - 160 ? { x, bund: window.innerHeight - r.top + 6 } : { x, top: r.bottom + 6 });
+  };
+  return (
+    <span style={{ display: "inline-block", marginLeft: 6, verticalAlign: "middle" }}>
+      <span tabIndex={0} role="img" aria-label="Forklaring"
+        onMouseEnter={(e) => vis(e.currentTarget)} onMouseLeave={() => setPos(null)}
+        onFocus={(e) => vis(e.currentTarget)} onBlur={() => setPos(null)}
+        style={{ width: 16, height: 16, borderRadius: "50%", border: "1.5px solid #94A3B8", color: "#64748B", fontSize: 11,
+                 fontWeight: 700, display: "inline-flex", alignItems: "center", justifyContent: "center", cursor: "help",
+                 lineHeight: 1, fontStyle: "normal", background: "#fff" }}>i</span>
+      {pos && (
+        <span role="tooltip" style={{ position: "fixed", left: pos.x, top: pos.top, bottom: pos.bund, width: 280, zIndex: 1000,
+                 background: "#111", color: "#fff", fontSize: 12.5, fontWeight: 400, lineHeight: 1.5, padding: "8px 10px",
+                 borderRadius: 8, boxShadow: "0 6px 20px rgba(0,0,0,0.25)", pointerEvents: "none", textTransform: "none", textAlign: "left" }}>
+          {children}
+        </span>
+      )}
+    </span>
   );
 }
 
