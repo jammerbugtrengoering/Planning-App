@@ -1771,8 +1771,8 @@ const MODULE_HELP = {
         "En medarbejder uden opgaver får alligevel en tom arbejdsdag, du kan trække ned i — det er netop medarbejderen, du leder efter, når noget skal placeres.",
         "Dit valg af visning huskes til næste gang."] },
     { h: "Udskrift", p: [
-        "«Print ugeplan» udskriver en liste med klokkeslæt, kunde, adresse, kørsel, adgang og tjekliste. Den er stående A4, og hver dag (mandag til fredag) står på sin egen side, med medarbejderens navn øverst. Den ser ikke ud som skærmen; udskriften er sat op for sig, så den kan læses i en bil.",
-        "Sæt fluebenet «Tag adgangsoplysninger med», hvis sedlen skal bruges af en, der endnu ikke har Worklist på telefonen. Så kommer nøgleboks- og alarmkoder med under hver opgave, markeret med 🔑.",
+        "«Print ugeplan» udskriver en liste med klokkeslæt, kunde, adresse, kørsel og adgang. Sæt flueben ved «Medtag tjeklister», hvis tjeklisterne også skal med på papiret som backupplan. Den er stående A4, og hver dag (mandag til fredag) står på sin egen side, med medarbejderens navn øverst. Den ser ikke ud som skærmen; udskriften er sat op for sig, så den kan læses i en bil.",
+        "Adgangsoplysninger, som de står på opgaven (fx en nøgleboksnummer), kommer altid med, og så står der et fortroligt-bånd øverst: sedlen må ikke efterlades i bilen og skal makuleres, når ugen er slut.",
         "Det er et valg, du skal tage hver gang — fluebenet huskes ikke. I appen logges hvert opslag, koden ligger kun på telefonen dagen ud, og et natligt job rydder den. Papir har ingen af delene, så selve udskriften skrives i adgangsloggen med dit navn, tidspunktet og hvilke opgaver den omfattede.",
         "Brug medarbejderfilteret, så sedlen kun indeholder den ene medarbejders uge. Ellers bærer ét ark koderne til alle ugens hjem.",
         "Udskriften får et bånd øverst om, at den er fortrolig og skal makuleres. Bliver en seddel væk, skal koderne skiftes — sig det til kontoret med det samme.",
@@ -6927,6 +6927,8 @@ function WeekView({ employees, instances, unplaced, aflyste = [], aflysningsgrun
   // staar og husker at koderne skal med, ville foer eller siden sende et ark ud af
   // huset, som ingen havde taget stilling til.
   const [visAdgang, setVisAdgang] = useState(false);
+  // Tjeklisterne er backupplanen (7.10.2026): medarbejderen har dem i Worklist, saa de fylder kun paa papiret, naar de er valgt.
+  const [visTjeklister, setVisTjeklister] = useState(false);
   const [visSkema, setVisSkema] = useState(() => localStorage.getItem("rp_printskema") === "ja");
   useEffect(() => { localStorage.setItem("rp_printskema", visSkema ? "ja" : "nej"); }, [visSkema]);
 
@@ -6952,6 +6954,12 @@ function WeekView({ employees, instances, unplaced, aflyste = [], aflysningsgrun
     ? employees
     : employees.filter((e) => employeeAreas.some((ea) => ea.employee_id === e.id && ea.area_id === selectedAreaId));
   const visibleEmployees = printEmployeeId === "all" ? areaFilteredEmployees : areaFilteredEmployees.filter((e) => e.id === printEmployeeId);
+
+  // Adgangsteksten (fx «nøgleboks kode 0169») kommer altid med på papiret, så fortrolighedsbåndet skal stå, så snart
+  // en udskrevet opgave har en (7.10.2026) — ikke kun når koderne fra adgangslageret er valgt.
+  const harAdgangPaaPapir = visAdgang || instances.some((t) => t.accessInstructions
+    && visibleDays.some((d) => d.key === t.day)
+    && visibleEmployees.some((e) => (t.assignees || []).includes(e.id)));
 
   async function udskriv() {
     if (visAdgang) {
@@ -7054,12 +7062,11 @@ function WeekView({ employees, instances, unplaced, aflyste = [], aflysningsgrun
         </label>
 
         <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5,
-                        color: visAdgang ? "#B45309" : "#64748B", cursor: "pointer",
-                        fontWeight: visAdgang ? 700 : 500 }}
-          title="Tager nøgleboks- og alarmkoder med på udskriften. Udskriften bliver skrevet i adgangsloggen.">
-          <input type="checkbox" checked={visAdgang}
-            onChange={(e) => setVisAdgang(e.target.checked)} />
-          🔑 Tag adgangsoplysninger med
+                        color: "#64748B", cursor: "pointer" }}
+          title="Tager opgavernes tjeklister med på udskriften — backupplanen, hvis telefonen ikke virker">
+          <input type="checkbox" checked={visTjeklister}
+            onChange={(e) => setVisTjeklister(e.target.checked)} />
+          ☑️ Medtag tjeklister
         </label>
 
         <div style={styles.toolbarSpacer} />
@@ -7507,12 +7514,12 @@ function WeekView({ employees, instances, unplaced, aflyste = [], aflysningsgrun
         </div>
         {/* Baandet staar KUN paa papiret. Den der finder sedlen i en bil eller en
             frokoststue, skal kunne se paa den, hvad den er — uden at kende systemet. */}
-        {visAdgang && (
+        {harAdgangPaaPapir && (
           <div style={{
             border: "2px solid #B45309", background: "#FEF3C7", color: "#7C2D12",
             padding: "8px 12px", borderRadius: 6, marginBottom: 12,
             fontSize: 12, fontWeight: 700, lineHeight: 1.4 }}>
-            FORTROLIGT · Denne seddel indeholder nøgleboks- og alarmkoder til private hjem.
+            FORTROLIGT · Denne seddel indeholder adgangsoplysninger (fx nøgleboks- og alarmkoder) til private hjem.
             Må ikke efterlades i bilen eller lægges fra sig. Makuleres når ugen er slut.
             Er den bortkommet, sig det til kontoret med det samme — koderne skal skiftes.
           </div>
@@ -7556,7 +7563,7 @@ function WeekView({ employees, instances, unplaced, aflyste = [], aflysningsgrun
                               🔑 {adgangTekst[t.id]}
                             </div>
                           ) : null}
-                          {(t.checklist || []).length > 0 ? (
+                          {visTjeklister && (t.checklist || []).length > 0 ? (
                             <ul style={{ margin: "6px 0 0", paddingLeft: 18, fontSize: 13 }}>
                               {/* Fluebenet skal med paa papiret.
                                   Her stod «☐» fast, uanset om punktet var sat. En
