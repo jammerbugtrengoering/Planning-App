@@ -11748,7 +11748,13 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
     setContractType(k);
     if (copyFrom) return;
     const nye = checklistTemplates.filter((c) => (c.kontrakttyper || []).includes(k)).map((c) => c.id);
-    setChecklistTemplateIds((prev) => [...prev.filter((id) => !autoListeIds.current.includes(id)), ...nye.filter((id) => !prev.includes(id))]);
+    // gamle tages HER: opdateringsfunktionen koerer senere, og saa var autoListeIds allerede sat til de nye, og de gamle lister blev staaende
+    // valgt (Nexus-listerne sad fast, naar man skiftede til Privat). Lister, der ikke gaelder for den nye type, fjernes ogsaa.
+    const gamle = autoListeIds.current;
+    setChecklistTemplateIds((prev) => {
+      const behold = prev.filter((id) => !gamle.includes(id)).filter((id) => { const c = checklistTemplates.find((x) => x.id === id); return !c || listeGaelderFor(c, k); });
+      return [...behold, ...nye.filter((id) => !behold.includes(id))];
+    });
     autoListeIds.current = nye;
   }
   function toggleTemplate(id) { setChecklistTemplateIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id])); }
@@ -11886,7 +11892,7 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
                     display: "flex", flexWrap: "wrap", gap: 18, alignItems: "flex-start",
                     order: bredSkaerm ? 1 : 2 }}>
             {/* Hurtigvalg (7.10.2026): de tre grundvalg staar samlet oeverst over de tre afsnit, saa de ikke ligger spredt i hver sin sektion. */}
-      <div style={{ flex: "1 1 100%", display: "flex", gap: 28, flexWrap: "wrap", alignItems: "flex-start", background: "#fff", border: "1px solid #F1E6EB", borderRadius: 12, padding: "4px 16px 14px" }}>
+      <div className="hurtigvalg" style={{ flex: "1 1 100%", display: "flex", gap: 24, flexWrap: "wrap", alignItems: "flex-start", background: "#fff", border: "1px solid #F1E6EB", borderRadius: 12, padding: "0 16px 8px" }}>
         <div>
       <label style={styles.label}>Kontrakttype</label>
       <div style={styles.typePicker}>
@@ -12100,7 +12106,7 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
       <input type="number" min={5} step={5} style={styles.input} value={duration} onChange={(e) => setDuration(Number(e.target.value))} />
       <label style={styles.label}>Tjeklister (tasks der skal udføres)</label>
       <div style={styles.skillPicker}>
-        {checklistTemplates.filter((c) => checklistTemplateIds.includes(c.id) || listeGaelderFor(c, contractType)).map((c) => (
+        {checklistTemplates.filter((c) => ((editId || copyFrom) && checklistTemplateIds.includes(c.id)) || listeGaelderFor(c, contractType)).map((c) => (
           <button key={c.id} type="button" onClick={() => toggleTemplate(c.id)} style={checklistTemplateIds.includes(c.id) ? styles.skillPickBtnActive : styles.skillPickBtn}>
             <ListChecks size={11} style={{ marginRight: 4, verticalAlign: "-2px" }} />{c.name} ({c.items.length})
           </button>
@@ -22016,6 +22022,9 @@ const globalCss = `
   html, body, #root { margin: 0; padding: 0; width: 100%; min-height: 100vh; }
   ::-webkit-scrollbar { width: 8px; height: 8px; }
   ::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 8px; }
+  /* Hurtigvalg-raekken i Ny opgave: smalle knapper paa én linje, saa raekken fylder mindst muligt. */
+  .hurtigvalg button { flex-direction: row !important; min-height: 34px !important; padding: 4px 12px !important; font-size: 13px !important; white-space: nowrap; }
+  .hurtigvalg label { margin-top: 8px !important; margin-bottom: 4px !important; }
   @media print {
     body * { visibility: hidden; }
     #print-week-plan, #print-week-plan * { visibility: visible; }
@@ -22151,7 +22160,7 @@ const styles = {
   // Sort blev valgt fra: det skurrer mod paletten, og appen har ingen dark mode at
   // skifte til hvid i (afsnittet i index.css er efterladt fra Vite-skabelonen og
   // laeses ikke af noget). Skygge og lidt luft mere goer resten.
-  formSection: { border: "1.5px solid #E2E8F0", borderRadius: 10, overflow: "hidden", marginBottom: 18, boxShadow: "0 1px 3px rgba(15,23,42,0.06)" }, formSectionHead: { padding: "9px 13px" }, formSectionTitle: { fontSize: 13.5, fontWeight: 700, display: "flex", alignItems: "center", gap: 7 }, formSectionHint: { fontSize: 11.5, marginTop: 2, opacity: 0.9 }, formSectionBody: { padding: 13, background: "#fff", textAlign: "left" },
+  formSection: { border: "1.5px solid #E2E8F0", borderRadius: 10, overflow: "hidden", marginBottom: 18, boxShadow: "0 1px 3px rgba(15,23,42,0.06)" }, formSectionHead: { padding: "6px 13px", display: "flex", alignItems: "baseline", columnGap: 10, flexWrap: "wrap", lineHeight: 1.3 }, formSectionTitle: { fontSize: 13.5, fontWeight: 700, display: "flex", alignItems: "center", gap: 7 }, formSectionHint: { fontSize: 11.5, marginTop: 0, opacity: 0.9, lineHeight: 1.3 }, formSectionBody: { padding: 13, background: "#fff", textAlign: "left" },
   modalActions: { display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 14 },
   label: { display: "block", textAlign: "left", fontSize: 12, fontWeight: 600, color: "#475569", marginTop: 12, marginBottom: 5 },
   hint: { fontSize: 11.5, color: "#64748B", marginTop: 4 },
