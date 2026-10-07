@@ -2044,7 +2044,8 @@ const MODULE_HELP = {
 
   fravaer: { title: "Ferie og fravær", intro: "Medarbejdernes anmodninger om ferie og fri.", blocks: [
     { h: "Sådan virker det", p: ["Medarbejderen anmoder i sin Personalemappen-app: ferie eller fri, første og sidste dag og evt. en bemærkning. Anmodningen står her og i klokken, til du har svaret.",
-        "Under hver anmodning står, om den er sendt med kort varsel (håndbogen siger 4 uger til ferie og 10 dage til fri), og hvor mange opgaver medarbejderen står på i perioden. Systemet afviser ikke kort varsel; du afgør det.",
+        "Under hver anmodning står, om den er sendt med kort varsel (som standard 4 uger til ferie og 10 dage til fri; tallene retter du øverst på siden under «Varsel»), og hvor mange opgaver medarbejderen står på i perioden. Systemet afviser ikke kort varsel; du afgør det.",
+        "Øverst på siden står kortet «Varsel» med to tal: hvor mange dage før første dag ferie og fri skal være søgt. Ret tallene og tryk «Gem varsel». Medarbejderens app viser det samme varsel, før medarbejderen sender, og anmodninger, der allerede er sendt, beholder det mærke, de fik, da de blev sendt.",
         "«Godkend» lægger ferien i ugeplanen som en almindelig ferieblokering. Medarbejderens opgaver i perioden frigives og kan planlægges om. Skriv gerne en besked til medarbejderen; svaret ses i appen.",
         "«Afvis» ændrer ikke planen. Skriv en begrundelse. Sygdom er ikke en anmodning og meldes som hidtil på telefonen."] },
   ] },
@@ -6585,7 +6586,7 @@ function PlanningApp({ session, onSignOut }) {
         />
       )}
       {view === "haandbog" && erHrAdmin && <HaandbogView />}
-      {view === "fravaer" && erHrAdmin && <FravaerView onAfgoer={afgoerFravaer} beroerte={opgaverIPeriode} />}
+      {view === "fravaer" && erHrAdmin && <FravaerView onAfgoer={afgoerFravaer} beroerte={opgaverIPeriode} firma={firma} medarbejderId={currentEmployeeForAuth?.id || null} onFirmaGemt={(ny) => setFirma(ny)} notify={notify} />}
       {view === "personalemappen" && erHrAdmin && (
         <PersonalemappeListe employees={employees} hrData={hrData}
           onAdd={() => { setEditEmp(null); setEmpHrAdgang(true); setShowAddEmp(true); }}
@@ -15582,7 +15583,24 @@ function LoenperioderPanel({ supabase }) {
 // afsnit i den viste rækkefølge. Der står ingen «udgivet»-trin: det, der gemmes, kan medarbejderne læse med det samme.
 // Ferie og fravær (6.10.2026): anmodninger fra medarbejdernes Personalemappen-app. Godkendes en anmodning, lægges ferien i ugeplanen (se afgoerFravaer i App), og
 // medarbejderen ser svaret i sin app. Kort varsel afvises ikke af systemet; håndbogen siger 4 uger til ferie og 10 dage til fri, og kontoret afgør undtagelser.
-function FravaerView({ onAfgoer, beroerte }) {
+// «4 uger» hvis det gaar op i uger, ellers «10 dage».
+function varselTekst(d) { const n = Number(d) || 0; return n >= 7 && n % 7 === 0 ? `${n / 7} ${n === 7 ? "uge" : "uger"}` : `${n} ${n === 1 ? "dag" : "dage"}`; }
+function FravaerView({ onAfgoer, beroerte, firma, medarbejderId, onFirmaGemt, notify }) {
+  const [ferieDage, setFerieDage] = useState(String(FIRMA.ferie_varsel_dage ?? 28));
+  const [fridagDage, setFridagDage] = useState(String(FIRMA.fridag_varsel_dage ?? 10));
+  const [gemmerVarsel, setGemmerVarsel] = useState(false);
+  useEffect(() => { setFerieDage(String(FIRMA.ferie_varsel_dage ?? 28)); setFridagDage(String(FIRMA.fridag_varsel_dage ?? 10)); }, [firma]);
+  async function gemVarsel() {
+    const f = Number(ferieDage), d = Number(fridagDage);
+    if (![f, d].every((x) => Number.isInteger(x) && x >= 0 && x <= 365)) { notify && notify("Skriv hele dage mellem 0 og 365"); return; }
+    if (!firma?.id) return;
+    setGemmerVarsel(true);
+    const { data, error } = await supabase.from("firma").update({ ferie_varsel_dage: f, fridag_varsel_dage: d, aendret_af: medarbejderId }).eq("id", firma.id).select().maybeSingle();
+    setGemmerVarsel(false);
+    if (error || !data) { notify && notify("Kunne ikke gemme: " + (error?.message || "ukendt fejl")); return; }
+    opdaterFirma(data); onFirmaGemt && onFirmaGemt(data);
+    notify && notify("Varslet er gemt");
+  }
   const [liste, setListe] = useState(null);
   const [fejl, setFejl] = useState("");
   const [noter, setNoter] = useState({});
@@ -15614,6 +15632,20 @@ function FravaerView({ onAfgoer, beroerte }) {
       <div style={{ fontSize: 13, color: "#64748B", marginBottom: 14, lineHeight: 1.55 }}>
         Anmodninger fra medarbejdernes Personalemappen-app. Godkender du, lægges ferien i ugeplanen, og medarbejderens opgaver i perioden frigives. Sygdom meldes som hidtil på telefonen.
       </div>
+      <div style={{ background: "#fff", borderRadius: 14, padding: "12px 16px", boxShadow: "0 1px 3px rgba(0,0,0,0.06)", marginBottom: 14, maxWidth: 760, textAlign: "left" }}>
+        <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 6 }}>Varsel
+          <Info>Hvor mange dage før første dag en anmodning skal være sendt. Kommer den senere, gemmes den som «kort varsel» og står med det mærke her. Den afvises ikke; du afgør. Medarbejderens app viser det samme varsel, før medarbejderen sender.</Info>
+        </div>
+        <div style={{ display: "flex", gap: 14, flexWrap: "wrap", alignItems: "flex-end" }}>
+          <div><label style={styles.label} htmlFor="vf">Ferie, mindst (dage før)</label>
+            <input id="vf" type="number" min="0" max="365" style={{ ...styles.input, width: 110 }} value={ferieDage} onChange={(e) => setFerieDage(e.target.value)} />
+            <div style={styles.hint}>= {varselTekst(ferieDage)}</div></div>
+          <div><label style={styles.label} htmlFor="vd">Fri, mindst (dage før)</label>
+            <input id="vd" type="number" min="0" max="365" style={{ ...styles.input, width: 110 }} value={fridagDage} onChange={(e) => setFridagDage(e.target.value)} />
+            <div style={styles.hint}>= {varselTekst(fridagDage)}</div></div>
+          <button type="button" style={styles.primaryBtn} disabled={gemmerVarsel || !firma} onClick={gemVarsel}>{gemmerVarsel ? "Gemmer…" : "Gem varsel"}</button>
+        </div>
+      </div>
       {fejl && <div style={{ color: "#B91C1C", fontSize: 13, marginBottom: 8 }}>{fejl}</div>}
       {liste === null && <div style={styles.hint}>Henter…</div>}
       {liste && ventende.length === 0 && <div style={{ ...styles.hint, marginBottom: 14 }}>Der er ingen anmodninger, der venter på svar.</div>}
@@ -15626,7 +15658,7 @@ function FravaerView({ onAfgoer, beroerte }) {
               <div style={{ fontSize: 14, margin: "2px 0" }}>{periode(r)}</div>
               <div style={{ display: "flex", gap: 10, flexWrap: "wrap", fontSize: 12.5, color: "#64748B" }}>
                 <span>Sendt {new Date(r.oprettet).toLocaleDateString("da-DK", { day: "numeric", month: "short" })}</span>
-                {r.for_sent && <span style={{ color: "#B45309", fontWeight: 700 }}>Kort varsel ({r.art === "ferie" ? "under 4 uger" : "under 10 dage"})</span>}
+                {r.for_sent && <span style={{ color: "#B45309", fontWeight: 700 }}>Kort varsel ({r.art === "ferie" ? `under ${varselTekst(FIRMA.ferie_varsel_dage ?? 28)}` : `under ${varselTekst(FIRMA.fridag_varsel_dage ?? 10)}`})</span>}
                 <span style={{ color: n > 0 ? "#B45309" : "#64748B", fontWeight: n > 0 ? 700 : 400 }}>{n > 0 ? `${n} ${n === 1 ? "opgave" : "opgaver"} i perioden frigives` : "Ingen opgaver berørt"}</span>
               </div>
               {r.note && <div style={{ fontSize: 13.5, marginTop: 6, color: "#334155" }}>«{r.note}»</div>}

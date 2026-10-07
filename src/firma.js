@@ -36,6 +36,8 @@ const STANDARD = KUNDEUDGAVE ? {
   modul_dinero: false,
   modul_nexus: false,
   brug_omraader: true,
+  ferie_varsel_dage: 28,
+  fridag_varsel_dage: 10,
 } : {
   navn: "Jammerbugt Rengøring",
   undertekst: "Planlægning og fakturering",
@@ -54,6 +56,8 @@ const STANDARD = KUNDEUDGAVE ? {
   modul_dinero: true,
   modul_nexus: true,
   brug_omraader: true,
+  ferie_varsel_dage: 28,
+  fridag_varsel_dage: 10,
 };
 
 // Er modulet med? Ukendt = med, saa intet forsvinder, foer indstillingerne er hentet.
