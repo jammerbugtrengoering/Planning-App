@@ -245,6 +245,11 @@ er et andet navnerum end gruppenøglerne.
 
 > 19.9.2026 fik Drift-gruppen nøglen `drift`, som Ugeplanen allerede brugte.
 
+### Du ændrer, hvad der står i ugeplanen, eller hvad en opgave indeholder
+
+Fredagsbackuppen (`supabase/functions/ugeplan-backup`, 7.10.2026) læser `instances` direkte og tegner sin egen PDF på serveren — den bruger **ikke** appens udskrift. Henter eller viser du et nyt felt på opgaven (adgang, kontakt, tid), så tag stilling til, om det også skal med i PDF'en. Funktionen viser kun aftalt tid (`scheduled_time`), aldrig den beregnede køreplan, og må aldrig vise koder fra adgangslageret.
+Prøv den med «Send en prøve til mig» på Drift. En prøve skriver ikke i `job_koersel` — med vilje.
+
 ### Du retter en edge-funktion
 
 **Mappen `supabase/functions/` er en KOPI, ikke kilden.** Funktionerne kører i Supabase og

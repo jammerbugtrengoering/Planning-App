@@ -100,7 +100,8 @@ serve(async (req) => {
       return svar({ error: "ingen_adgang" }, 401);
     }
 
-    const { email, name, subject, html } = await req.json();
+    // attachments (7.10.2026): valgfri liste af {name, content} med content som base64. Bruges af ugeplanens fredagsbackup (PDF). Brevo tager op til 4 MB.
+    const { email, name, subject, html, attachments } = await req.json();
     if (!email || !subject) return svar({ error: "mangler_felter" }, 400);
 
     // Afsendernavn og svaradresse laeses fra Opsaetning -> Firma (28.9.2026), saa
@@ -132,6 +133,10 @@ serve(async (req) => {
         to: [{ email, ...(name ? { name } : {}) }],
         subject,
         htmlContent: html,
+        ...(Array.isArray(attachments) && attachments.length
+          ? { attachment: attachments.filter((a: { name?: string; content?: string }) => a?.name && a?.content)
+                .map((a: { name: string; content: string }) => ({ name: a.name, content: a.content })) }
+          : {}),
       }),
     });
 

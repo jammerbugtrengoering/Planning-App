@@ -90,7 +90,8 @@ kopiere tilbage — og så er det filen her, der skal opdateres, ikke omvendt.
 | `slet-gamle-fotos` | Rydder billeder ældre end 12 måneder | Natligt job |
 | `kontor-beskeder` | Til planlæggerne: push hvert kvarter om det, der haster, og mail kl. 7 med alt, der venter (samme liste som klokken) | Job hvert kvarter og kl. 5+6 UTC |
 | `plan-beskeder` | Besked til medarbejdere om ændringer i planen, og påmindelse når en startet opgave (start/stop) er et kvarter over tiden | Job hvert kvarter |
-| `send-email` | Sender al mail gennem Brevo | De øvrige funktioner |
+| `send-email` | Sender al mail gennem Brevo. Kan have vedhæftninger (`attachments: [{name, content}]`, content = base64) | De øvrige funktioner |
+| `ugeplan-backup` | Hver fredag kl. 13–17 dansk tid: PDF med de næste to ugers opgaver til administratorer med mailadresse (nødplan, fortrolig). Kun én gang pr. uge (`backup_udsendelser`). En indlogget administrator kan sende en prøve til sig selv (`{proeve:true}`); prøver skriver ikke livstegn i `job_koersel` | Job `ugeplan-backup-fredag` kl. 12+13 UTC fredag, og knappen på Drift |
 | `send-push` | Push-beskeder til telefonerne | De øvrige funktioner |
 | `travel-distance` | Afstand og køretid mellem to adresser. Geokoder via Dataforsyningen (GSearch), ORS som reserve | Planlægningsappen, `compute-daily-km` |
 | `adresse-opslag` | Adresseforslag i adressefelter (GSearch, ORS som reserve). Erstatter DAWA, der lukkede 2026 | Planlægningsappen |

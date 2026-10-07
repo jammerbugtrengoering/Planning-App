@@ -2362,6 +2362,11 @@ const MODULE_HELP = {
         "Grøn betyder, at jobbet har skrevet et livstegn inden for den tid, der må gå — ikke at der skete noget sidste gang det kørte.",
         "Morgentjekket skriver «intet at melde», når alt er i orden. Det er med vilje: uden den linje kunne man ikke se forskel på en rolig nat og et job, der er holdt op med at køre.",
         "Står der gult, er der gået for længe siden sidste livstegn. Står der rødt, fejlede sidste kørsel — og så står forklaringen på linjen."] },
+    { h: "Backup af ugeplanen", p: [
+        "Hver fredag mellem kl. 13 og 17 sendes en PDF med de næste to ugers opgaver til alle administratorer, der har en mailadresse. Den er til dagen, hvor systemet ikke kan åbnes: hver dag står på sin egen side, delt op på medarbejdere, med adresse, kontaktoplysninger og adgangstekst.",
+        "Klokkeslættet er den aftalte tid. Opgaver uden aftalt tid står med «—». Adgangskoder fra adgangslageret er ikke med, men adgangsteksten er — derfor er PDF'en mærket fortrolig, og den skal makuleres, når ugerne er gået.",
+        "Knappen «Send en prøve til mig» sender samme PDF til din egen mail og til ingen andre. Brug den, når du vil se, hvordan backuppen ser ud.",
+        "Står jobbet gult, er fredagens mail ikke gået. Tjek, at administratorerne har en mailadresse under Medarbejdere."] },
     { h: "Tjenester udefra", p: [
         "Der står ikke «OK» hentet fra en offentlig statusside. Sådan en kan sagtens sige, at alt er fint, samtidig med at netop vores nøgle er udløbet.",
         "I stedet står der, hvornår tjenesten sidst svarede os, og hvad den svarede. Dinero hentede 13.650 fakturaer kl. 06.15 — det er et bevis. «OK» er en påstand.",
@@ -10215,6 +10220,8 @@ const DRIFT_JOB = [
   // supabase/functions/arvede-felter-sync). 36 timer, samme margin som de andre
   // natlige job, så en enkelt forsinket kørsel ikke i sig selv tænder en gul lampe.
   { job: "arvede-felter-sync",     timer: 36, navn: "Synk af arvede felter (aftale → opgave)" },
+  // 8.10.2026: papirbackup hver fredag. 8 dage + margin: en enkelt fredag, hvor mailen ikke gik, skal lyse gult.
+  { job: "ugeplan-backup",         timer: 192, navn: "Fredagens backup af ugeplanen (PDF)" },
 ];
 
 // En adresse, der med sikkerhed findes i Danmarks adresseregister, og som ikke hører
@@ -10289,6 +10296,17 @@ function DriftView({ isAdminUser, paaSide, aftaler = [], onAabnAftale }) {
   }, [isAdminUser]);
   const [register, setRegister] = useState("spoerger");  // spoerger | svarer | svarer_ikke | ukendt_adresse
   const [fejl, setFejl] = useState("");
+  // Prøve af fredagsbackuppen: sendes kun til den, der trykker (funktionen tjekker selv, at det er en administrator), så kontoret ikke får en ekstra mail.
+  const [proeve, setProeve] = useState({ kører: false, svar: "" });
+  async function sendBackupProeve() {
+    setProeve({ kører: true, svar: "" });
+    const { data, error } = await supabase.functions.invoke("ugeplan-backup", { body: { proeve: true } });
+    if (error || data?.error) {
+      setProeve({ kører: false, svar: "Prøven fejlede: " + (data?.error || error.message) });
+      return;
+    }
+    setProeve({ kører: false, svar: `Sendt til din egen mail (${data?.opgaver ?? "?"} opgaver). Tjek indbakken.` });
+  }
 
   useEffect(() => {
     if (!isAdminUser) return;
@@ -10595,6 +10613,23 @@ function DriftView({ isAdminUser, paaSide, aftaler = [], onAabnAftale }) {
         at der skete noget sidste gang. Morgentjekket skriver «intet at melde», når alt er
         i orden, netop så en tom linje ikke kan forveksles med et job, der er gået i stå.
       </DriftNote>
+
+      <DriftKort>
+        <div style={{ padding: "12px 15px", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+          <div style={{ flex: 1, minWidth: 220 }}>
+            <div style={{ fontWeight: 600, fontSize: 14 }}>Backup af ugeplanen</div>
+            <div style={{ fontSize: 12.5, color: "#64748B", lineHeight: 1.5 }}>
+              Hver fredag kl. 13–17 sendes en PDF med de næste to ugers opgaver til administratorerne. Prøv den her — den sendes kun til dig.
+            </div>
+            {proeve.svar && <div style={{ fontSize: 12.5, marginTop: 4, color: proeve.svar.startsWith("Prøven fejlede") ? "#B91C1C" : "#15803D" }}>{proeve.svar}</div>}
+          </div>
+          <button type="button" onClick={sendBackupProeve} disabled={proeve.kører}
+            style={{ background: "#fff", border: "1px solid #E2E8F0", borderRadius: 10, padding: "8px 14px", fontSize: 13, fontWeight: 600,
+                     color: "#334155", cursor: "pointer", fontFamily: "inherit", opacity: proeve.kører ? 0.6 : 1 }}>
+            {proeve.kører ? "Sender…" : "Send en prøve til mig"}
+          </button>
+        </div>
+      </DriftKort>
 
       <div style={{ fontSize: 14, fontWeight: 700, color: "#334155", margin: "22px 0 9px" }}>Tjenester udefra</div>
       <DriftKort>
