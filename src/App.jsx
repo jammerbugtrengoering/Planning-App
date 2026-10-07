@@ -2299,6 +2299,10 @@ const MODULE_HELP = {
   ], warn: "Linket til kunden er selve adgangen til dokumentet — der er ingen adgangskode. Send det til den rigtige mailadresse, og husk at det virker indtil tilbuddet er accepteret eller udløbet." },
 
   contracts: { title: "Aftaler", intro: "De faste kundeaftaler, sorteret så den der udløber først står øverst.", blocks: [
+    { h: "Ny opgave og Rediger aftale", p: [
+        "Begge åbner i fuld skærm med samme layout. Øverst står de tre grundvalg: kontrakttype, prismodel og om opgaven er en aftale, der gentages, eller en enkelt opgave. Valgene styrer resten af formularen.",
+        "Under dem står tre kolonner: «Aftale og kunde» (hvem der faktureres og hvor der arbejdes), «Opgaven» (medarbejder, kompetencer, varighed og tjeklister) og «Planlægning» (rytme, ugedage og datoer). På en smal skærm står de under hinanden.",
+        "Nederst står det, der mangler, før aftalen kan gemmes, og knapperne. På en kladde står bemærkningen til kontoret til højre."] },
     { h: "Nexus og Ældrelov kræver borgerens navn", p: [
         "På de to aftaletyper er kunden kommunen, der får regningen — arbejdet foregår hjemme hos en borger.",
         "Borgerens navn skrives i «Fakturabeskrivelse». Det er dét navn, medarbejderen ser på opgaven, både i ugeplanen og i Worklist.",
@@ -11874,16 +11878,13 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
           Paa en kladde staar bemaerkningen og dubletadvarslen i en kolonne ved siden
           af — se sidepanelet nedenfor. */}
       <div style={{ display: "flex", gap: 18, alignItems: "flex-start", justifyContent: "center",
-                    flexWrap: "wrap", maxWidth: visSidepanel ? 1120 : 720, margin: "0 auto" }}>
-      <div style={{ ...styles.formCol, margin: 0, flex: "1 1 600px", minWidth: 0,
+                    flexWrap: "wrap", maxWidth: 1600, margin: "0 auto" }}>
+      <div style={{ ...styles.formCol, maxWidth: "none", margin: 0, flex: "1 1 600px", minWidth: 0,
+                    display: "flex", flexWrap: "wrap", gap: 18, alignItems: "flex-start",
                     order: bredSkaerm ? 1 : 2 }}>
-      <div style={{ ...styles.formSection, borderColor: "#EFAFC9" }}>
-        <div style={{ ...styles.formSectionHead, background: "var(--farve-lys)", borderBottom: "1.5px solid #EFAFC9" }}>
-          <div style={{ ...styles.formSectionTitle, color: "var(--farve-moerk)" }}>Aftale og kunde</div>
-          <div style={{ ...styles.formSectionHint, color: "#B4436F" }}>Hvem der faktureres, hvad aftalen hedder, og hvor der arbejdes</div>
-        </div>
-        <div style={styles.formSectionBody}>
-      {/* Kontrakttype */}
+            {/* Hurtigvalg (7.10.2026): de tre grundvalg staar samlet oeverst over de tre afsnit, saa de ikke ligger spredt i hver sin sektion. */}
+      <div style={{ flex: "1 1 100%", display: "flex", gap: 28, flexWrap: "wrap", alignItems: "flex-start", background: "#fff", border: "1px solid #F1E6EB", borderRadius: 12, padding: "4px 16px 14px" }}>
+        <div>
       <label style={styles.label}>Kontrakttype</label>
       <div style={styles.typePicker}>
         {valgbareKontrakttyper().map((c) => [c.key, c.icon + " " + c.label]).map(([k,l]) => (
@@ -11896,6 +11897,8 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
 
       
 
+        </div>
+        <div>
       <label style={styles.label}>Prismodel</label>
       <div style={styles.typePicker}>
         {[["hourly","⏱️ Timebaseret"],["fixed","💰 Fastpris"]].map(([k,l]) => (
@@ -11912,6 +11915,28 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
         </>
       )}
 
+        </div>
+        <div>
+          <label style={styles.label}>Opgaven er</label>
+      <div style={styles.typePicker}>
+        {CREATABLE_TYPES.map((k) => {
+          const m = TYPE_META[k];
+          return (
+            <button key={k} type="button" onClick={() => setType(k)} style={type === k ? { ...styles.typePickBtn, borderColor: m.color, color: m.color, background: m.bg } : styles.typePickBtn}>{m.label}</button>
+          );
+        })}
+      </div>
+      {type === "fixed" && <div style={styles.hint}>Faste opgaver gentages automatisk hver uge på de valgte dage — frem til udløbsdatoen.</div>}
+      {type === "adhoc" && <div style={styles.hint}>Oprettes med dags dato og lander i "Ikke tildelt", klar til at blive planlagt.</div>}
+        </div>
+      </div>
+
+      <div style={{ ...styles.formSection, flex: "1 1 360px", minWidth: 0, marginBottom: 0, borderColor: "#EFAFC9" }}>
+        <div style={{ ...styles.formSectionHead, background: "var(--farve-lys)", borderBottom: "1.5px solid #EFAFC9" }}>
+          <div style={{ ...styles.formSectionTitle, color: "var(--farve-moerk)" }}>Aftale og kunde</div>
+          <div style={{ ...styles.formSectionHint, color: "#B4436F" }}>Hvem der faktureres, hvad aftalen hedder, og hvor der arbejdes</div>
+        </div>
+        <div style={styles.formSectionBody}>
       <label style={styles.label}>Titel</label>
       <input style={styles.input} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="F.eks. Gulvvask kontor 2. sal" />
 
@@ -12037,7 +12062,7 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
         <span style={{ fontSize: 14, color: "#111111" }}>🔑 Nøgle/adgangskort skal hentes på kontoret først</span>
       </button>
 
-      </div></div><div style={{ ...styles.formSection, borderColor: "#9ED2CB" }}><div style={{ ...styles.formSectionHead, background: "#F0FDFA", borderBottom: "1.5px solid #9ED2CB" }}><div style={{ ...styles.formSectionTitle, color: "#0F766E" }}>Opgaven</div><div style={{ ...styles.formSectionHint, color: "#149285" }}>Hvem der tager den, hvad der kræves, og hvad der skal udføres</div></div><div style={styles.formSectionBody}><label style={styles.label}>Ansvarlig Medarbejder (valgfrit)</label>
+      </div></div><div style={{ ...styles.formSection, flex: "1 1 360px", minWidth: 0, marginBottom: 0, borderColor: "#9ED2CB" }}><div style={{ ...styles.formSectionHead, background: "#F0FDFA", borderBottom: "1.5px solid #9ED2CB" }}><div style={{ ...styles.formSectionTitle, color: "#0F766E" }}>Opgaven</div><div style={{ ...styles.formSectionHint, color: "#149285" }}>Hvem der tager den, hvad der kræves, og hvad der skal udføres</div></div><div style={styles.formSectionBody}><label style={styles.label}>Ansvarlig Medarbejder (valgfrit)</label>
       <select style={styles.input} value={assignedEmployeeId} onChange={(e) => setAssignedEmployeeId(e.target.value)}>
         <option value="">- Ingen (auto-matching) -</option>
         {employees?.map(emp => <option key={emp.id} value={emp.id}>{emp.name}</option>)}
@@ -12107,17 +12132,7 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
       )}
 
       <label style={styles.label}>Link til instruktionsvideo (valgfrit)</label>
-      <input style={styles.input} value={videoUrl} onChange={(e) => setVideoUrl(e.target.value)} placeholder="https://…" /></div></div><div style={{ ...styles.formSection, borderColor: "#B9C0F4" }}><div style={{ ...styles.formSectionHead, background: "#EEF2FF", borderBottom: "1.5px solid #B9C0F4" }}><div style={{ ...styles.formSectionTitle, color: "#4F46E5" }}>Planlægning</div><div style={{ ...styles.formSectionHint, color: "#6B63EA" }}>Hvornår og hvor ofte opgaven gentages</div></div><div style={styles.formSectionBody}><label style={styles.label}>Type</label>
-      <div style={styles.typePicker}>
-        {CREATABLE_TYPES.map((k) => {
-          const m = TYPE_META[k];
-          return (
-            <button key={k} type="button" onClick={() => setType(k)} style={type === k ? { ...styles.typePickBtn, borderColor: m.color, color: m.color, background: m.bg } : styles.typePickBtn}>{m.label}</button>
-          );
-        })}
-      </div>
-      {type === "fixed" && <div style={styles.hint}>Faste opgaver gentages automatisk hver uge på de valgte dage — frem til udløbsdatoen.</div>}
-      {type === "adhoc" && <div style={styles.hint}>Oprettes med dags dato og lander i "Ikke tildelt", klar til at blive planlagt.</div>}
+      <input style={styles.input} value={videoUrl} onChange={(e) => setVideoUrl(e.target.value)} placeholder="https://…" /></div></div><div style={{ ...styles.formSection, flex: "1 1 360px", minWidth: 0, marginBottom: 0, borderColor: "#B9C0F4" }}><div style={{ ...styles.formSectionHead, background: "#EEF2FF", borderBottom: "1.5px solid #B9C0F4" }}><div style={{ ...styles.formSectionTitle, color: "#4F46E5" }}>Planlægning</div><div style={{ ...styles.formSectionHint, color: "#6B63EA" }}>Hvornår og hvor ofte opgaven gentages</div></div><div style={styles.formSectionBody}>
 
       {type === "fixed" && (
         <>
