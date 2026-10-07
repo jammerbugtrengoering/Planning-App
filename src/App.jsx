@@ -1,4 +1,5 @@
 import { aflysningPrSegment } from "./aflysningsprocent.js";
+import { postnrFraAdresse } from "./postnummer.js";
 import React, { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { samletForMedarbejder, danloenLinjer, danloenCsv } from "./loenberegning.js";
 import { loenPeriode, periodeFor, periodeTekst, erLaast as loenErLaast, isoDag } from "./loenperiode.js";
@@ -2370,6 +2371,8 @@ const MODULE_HELP = {
   ], warn: "«Månedligt» følger kalenderen: besøget lander i den uge, der indeholder samme dato som startdatoen — hver 3. måned giver altså fire besøg om året på samme tid. Er startdatoen den 31., rammes sidste dag i korte måneder, så intet kvartal springes over. «Ugentligt» med flere uger imellem tæller derimod i uger og vandrer gennem kalenderen — hver 4. uge giver 13 besøg om året, hver 6. uge 8-9, altid på samme ugedag." },
 
   drift: { title: "Drift", intro: "Kører løsningen, og er der noget, nogen skal tage fat i?", blocks: [
+    { h: "Adresser uden postnummer", p: [
+        "Under «Noget nogen skal tage stilling til» står de aktive aftaler, hvis adresse ikke har et postnummer, med en knap «Åbn aftalen» ud for hver. Ret adressen til «Vejnavn nr, postnummer by» og gem, så kommer aftalen med på kortet under Rapportering → Postnumre, og kørselsopslaget rammer rigtigt. Står der en note i adressefeltet i stedet for en adresse, så flyt noten til adgangsfeltet. Linjen forsvinder, når alle aftaler har et postnummer."] },
     { h: "Siden kan ikke sige, at noget er nede", p: [
         "Den ligger inde i det, den holder øje med. Kan du se den, virker både Netlify og Supabase — og er de nede, kan du ikke åbne den.",
         "Derfor er den et overblik, ikke en vagt. Vagten er morgenmailen fra helsetjekket, som kommer udefra og lander i din indbakke, også når appen ikke kan åbnes. Den må aldrig slukkes.",
@@ -10522,6 +10525,9 @@ function DriftView({ isAdminUser, paaSide, aftaler = [], onAabnAftale }) {
   // Kun dem, hvor et cpr-nummer faktisk ligger paa en aaben opgave. En kladde har
   // ingen opgaver endnu — den er en fejl, der venter, ikke en, der sker.
   const cprPaaTelefoner = mistaenkte.filter((m) => m.opgaver_med_cpr > 0);
+  // Aktive aftaler, hvis adresse ikke har et postnummer (7.10.2026). Rapporten Postnumre kan ikke placere dem, og kørselsopslaget finder dem svært: de står kun i tabellen.
+  const udenPostnr = aftaler.filter((x) => x.status === "aktiv" && !postnrFraAdresse(x.address))
+    .sort((a, b) => (a.customerName || "").localeCompare(b.customerName || "", "da"));
   const beslutninger = tal ? [
     mistaenkte.length > 0 && {
       t: `${mistaenkte.length} ${mistaenkte.length === 1 ? "aftale har" : "aftaler har"} cpr-nummer i referencen, men står ikke som Nexus`,
@@ -10586,6 +10592,22 @@ function DriftView({ isAdminUser, paaSide, aftaler = [], onAabnAftale }) {
             Ligger den et helt andet sted, så er adressen stavet forkert eller mangler postnummer — tryk «Åbn aftalen», ret adressen og gem, så slås den nye stavemåde op fra bunden.
             Etage og lejlighed (fx «1. sal») hører ikke til i adressefeltet: registret kender ikke dem. Skriv «Vejnavn nr, postnummer by» og sæt resten i adgangsfeltet.
           </div>
+        </div>
+      ) },
+    udenPostnr.length > 0 && { t: `${udenPostnr.length} ${udenPostnr.length === 1 ? "aftale har" : "aftaler har"} en adresse uden postnummer`,
+      s: "De kan ikke placeres på kortet under Rapportering → Postnumre, og kørselsopslaget kan ramme forkert. Tryk «Åbn aftalen», ret adressen til «Vejnavn nr, postnummer by» og gem. Er det en note og ikke en adresse, så flyt den til adgangsfeltet.",
+      knap: null, gaa: null,
+      ekstra: (
+        <div style={{ marginTop: 8 }}>
+          {udenPostnr.map((x) => (
+            <div key={x.id} style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", fontSize: 12.5, padding: "6px 0", borderTop: "1px solid #F1F5F9", color: "#475569" }}>
+              <span style={{ fontWeight: 600, color: "#334155" }}>{x.customerName || "Uden kundenavn"}</span>
+              <span>{(x.address || "").trim() || "(tom adresse)"}</span>
+              <button type="button" onClick={() => onAabnAftale && onAabnAftale(x.id)}
+                style={{ background: "#fff", border: "1px solid #E2E8F0", borderRadius: 8, padding: "3px 9px", fontSize: 12, fontWeight: 600,
+                         color: "#334155", cursor: "pointer", fontFamily: "inherit" }}>Åbn aftalen</button>
+            </div>
+          ))}
         </div>
       ) },
   ].filter(Boolean) : [];
