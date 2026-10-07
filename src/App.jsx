@@ -2052,6 +2052,7 @@ const MODULE_HELP = {
   haandbog: { title: "Håndbog og politikker", intro: "Personalehåndbogen og politikkerne, som medarbejderne læser i Personalemappen-appen.", blocks: [
     { h: "Ret teksten", p: ["Vælg et dokument øverst. Sæt flueben ved «Medarbejderne skal kvittere», hvis alle skal bekræfte, at de har læst det; så ser du her, hvem der mangler, og klokken minder dig om det efter 14 dage. Er ændringen væsentlig, så sæt også «ny version», så alle kvitterer igen. Du ser det først, som medarbejderne gør; tryk «Rediger» for at ændre det, og «Tilbage til visning» eller «Annuller», når du er færdig. Hvert afsnit har en overskrift og en tekst. Du kan flytte afsnit op og ned, fjerne dem og tilføje nye.",
         "Tryk «Gem og vis for medarbejderne». Der er intet kladdetrin: det, du gemmer, kan medarbejderne læse med det samme.",
+        "«Sæt som udgået» bruger du, når en håndbog eller politik ikke gælder længere. Medarbejderne kan ikke se den mere, den kræver ikke kvittering, og klokken glemmer den. Den slettes ikke: udgåede dokumenter står sidst i rækken med «(udgået)», og «Sæt i brug igen» henter dem tilbage.",
         "«Nyt dokument» laver fx en syge- og fraværspolitik. Skriv ikke navne på medarbejdere eller kunder i teksten, og læg ikke personlige oplysninger ind her."] },
   ] },
   personalemappen: { title: "Personalemappen", intro: "Her ligger medarbejdernes ansættelse, dokumenter, løn og nødkontakt. Kun HR-administratorer kan se siden.", blocks: [
@@ -15795,19 +15796,29 @@ function HaandbogView() {
     await laes(kladde.id);
   }
 
+  // Udgaaet (7.10.2026): dokumentet skjules for medarbejderne (databasen), kraever ingen kvittering og giver ingen linje i klokken, men bliver staaende her,
+  // saa det kan sættes i brug igen. Det slettes aldrig.
+  async function saetUdgaaet(til) {
+    if (til && !window.confirm(`Sæt «${dok.titel}» som udgået? Medarbejderne kan ikke læse det længere, og det kræver ikke kvittering. Du kan sætte det i brug igen senere.`)) return;
+    setFejl("");
+    const { error } = await supabase.rpc("saet_haandbog_udgaaet", { p_id: dok.id, p_udgaaet: til });
+    if (error) { setFejl("Kunne ikke gemmes: " + error.message); return; }
+    await laes(dok.id);
+  }
   const dok = (dokumenter || []).find((x) => x.id === valgt);
   return (
     <div style={styles.page}>
       <div style={{ fontWeight: 700, fontSize: 18, color: "#111111", marginBottom: 4 }}>Håndbog og politikker</div>
       <div style={{ fontSize: 13, color: "#64748B", marginBottom: 14, lineHeight: 1.55 }}>
-        Her ser du dokumenterne, som medarbejderne gør i Personalemappen-appen. Tryk «Rediger» for at rette; det, du gemmer, kan de læse med det samme. Skriv ikke navne på medarbejdere eller kunder i teksten.
+        Her ser du dokumenterne, som medarbejderne gør i Personalemappen-appen. Tryk «Rediger» for at rette; det, du gemmer, kan de læse med det samme. «Sæt som udgået» skjuler dokumentet for dem. Skriv ikke navne på medarbejdere eller kunder i teksten.
       </div>
       {dokumenter === null && !fejl && <div style={styles.hint}>Henter…</div>}
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }}>
-        {(dokumenter || []).map((x) => (
+        {[...(dokumenter || []).filter((x) => !x.udgaaet_tid), ...(dokumenter || []).filter((x) => x.udgaaet_tid)].map((x) => (
           <button key={x.id} type="button" onClick={() => skiftDokument(x.id)}
-            style={valgt === x.id ? { ...styles.typePickBtn, flex: "none", borderColor: "var(--farve)", color: "var(--farve)", background: "var(--farve-lys)" } : { ...styles.typePickBtn, flex: "none" }}>
-            {x.titel}
+            style={{ ...(valgt === x.id ? { ...styles.typePickBtn, flex: "none", borderColor: "var(--farve)", color: "var(--farve)", background: "var(--farve-lys)" } : { ...styles.typePickBtn, flex: "none" }),
+                     ...(x.udgaaet_tid ? { opacity: 0.7, fontStyle: "italic" } : {}) }}>
+            {x.titel}{x.udgaaet_tid ? " (udgået)" : ""}
           </button>
         ))}
         <button type="button" style={{ ...styles.secondaryBtn, padding: "6px 12px" }} onClick={nytDokument}><Plus size={14} /> Nyt dokument</button>
@@ -15819,9 +15830,19 @@ function HaandbogView() {
               <div style={{ fontWeight: 700, fontSize: 20, color: "#111111", lineHeight: 1.3 }}>{dok.titel}</div>
               <div style={styles.hint}>Sådan ser medarbejderne det. Sidst rettet {new Date(dok.opdateret).toLocaleDateString("da-DK", { day: "numeric", month: "long", year: "numeric" })}.</div>
             </div>
-            <button type="button" style={styles.primaryBtn} onClick={() => setRedigerer(true)}>Rediger</button>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <button type="button" style={styles.primaryBtn} onClick={() => setRedigerer(true)}>Rediger</button>
+              {dok.udgaaet_tid
+                ? <button type="button" style={styles.secondaryBtn} onClick={() => saetUdgaaet(false)}>Sæt i brug igen</button>
+                : <button type="button" style={{ ...styles.secondaryBtn, color: "#B91C1C", borderColor: "#FECACA" }} onClick={() => saetUdgaaet(true)}>Sæt som udgået</button>}
+            </div>
           </div>
-          {dok.kraever_kvittering && <HaandbogKvitteringer dok={dok} />}
+          {dok.udgaaet_tid && (
+            <div style={{ background: "#FEF3C7", border: "1px solid #FDE68A", borderRadius: 10, padding: "9px 12px", fontSize: 13.5, color: "#92400E", lineHeight: 1.5, marginBottom: 12 }}>
+              Udgået {new Date(dok.udgaaet_tid).toLocaleDateString("da-DK", { day: "numeric", month: "long", year: "numeric" })}. Medarbejderne kan ikke se dokumentet, og det kræver ikke kvittering.
+            </div>
+          )}
+          {dok.kraever_kvittering && !dok.udgaaet_tid && <HaandbogKvitteringer dok={dok} />}
           {dok.afsnit.length === 0 && <div style={styles.hint}>Dokumentet har ingen afsnit endnu. Tryk «Rediger» for at skrive.</div>}
           <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
             {dok.afsnit.map((a) => (
