@@ -2415,6 +2415,10 @@ const MODULE_HELP = {
         "Fanen «📈 Dækningsbidrag» (kun administratorer) viser, hvad hver aftaletype efterlader, når lønnen til opgaverne er trukket fra omsætningen. Vælg år øverst.",
         "Omsætning er den faktureret tid (fastpris for udførte fastprisopgaver). Lønnen er den registrerede tid gange medarbejderens sats på opgavens dato, uden tillæg. Kørsel, bonus og de frie omkostninger hører ikke til en aftaletype og er ikke med, så tallet er et bidrag før faste omkostninger. Overskuddet står under «Overskud».",
         "Mangler en medarbejder lønsats på datoen, regnes de timer ikke med i lønnen, og en gul linje siger hvor mange. Bidraget er så for højt, til satsen er lagt ind på medarbejderkortet. Opgaver, der ikke er udført endnu, er ikke med."] },
+    { h: "Udnyttelse", p: [
+        "Fanen «⏳ Udnyttelse» (kun administratorer) viser, hvor stor en del af medarbejdernes tid der er fyldt med opgaver hos kunderne. Vælg år og måned, eller hele året.",
+        "Kapaciteten er de timer pr. ugedag, der står på medarbejderkortet, minus ferie og sygdom. Planlagt er opgavernes tid i hele perioden; udført er den registrerede tid til og med i dag, målt mod kapaciteten for de samme dage. Kørsel og kontortid er ikke med.",
+        "Listen står med den mest ledige øverst. Gul betyder under 60 %: der er plads til flere opgaver. Rød betyder over 95 %: der er ingen luft, hvis nogen bliver syge. Står en medarbejders timer ikke på kortet, ser vedkommende ledig ud, så ret dem dér først."] },
     { h: "Aflysninger", p: [
         "Rapporteringen åbner nu på Aftaleportefølje. Fanen «🚫 Aflysninger» viser aflyste opgaver i en periode (denne måned, sidste måned, i år eller egne datoer).",
         "Øverst: antal aflysninger (af kunden og af jer), tabt omsætning — aflyst og ikke faktureret — og hvad der er hentet hjem på sene kundeaflysninger.",
@@ -11184,6 +11188,7 @@ function AflysningRapport({ instances, pricing = {}, grunde = [] }) {
 // Nøgletal pr. postnummer (7.10.2026): hentes først, når fanen åbnes, fordi kortet (Leaflet) ellers fylder i alle kontorets opstarter.
 const PostnummerRapport = React.lazy(() => import("./PostnummerRapport.jsx"));
 const DaekningsRapport = React.lazy(() => import("./DaekningsRapport.jsx"));
+const UdnyttelsesRapport = React.lazy(() => import("./UdnyttelsesRapport.jsx"));
 // Én opgaves arbejde og værdi, regnet som de andre rapporter gør det: satsen på opgavens egen dato, fastpris for fastprisopgaver, og faktureret tid for det realiserede.
 function opgaveTal(t) {
   const fast = t.pricingType === "fixed";
@@ -11294,7 +11299,7 @@ function ReportsView({ instances, templates, pricing, budgets, onSaveBudget, isA
     ["budget", "📊 Budget og omsætning"],
     ["aflysning", "🚫 Aflysninger"],
     ["postnummer", "🗺 Postnumre"],
-    ...(isAdminUser ? [["overskud", "💰 Overskud"], ["daekning", "📈 Dækningsbidrag"]] : []),
+    ...(isAdminUser ? [["overskud", "💰 Overskud"], ["daekning", "📈 Dækningsbidrag"], ["udnyttelse", "⏳ Udnyttelse"]] : []),
     ...(isAdminUser && harModul("start_stop") ? [["startstop", "⏱ Start/stop"]] : []),
   ];
 
@@ -11323,6 +11328,11 @@ function ReportsView({ instances, templates, pricing, budgets, onSaveBudget, isA
         <React.Suspense fallback={<div style={styles.hint}>Henter rapporten…</div>}>
           <DaekningsRapport opgaver={postnrOpgaver} beregn={opgaveTal} satsFor={(emp, dato) => satsPaaDato(satsHistorik, emp, dato)}
             datoAf={instanceDateString} segmenter={REPORT_AREAS} harSatser={!!satsHistorik && Object.keys(satsHistorik).length > 0} />
+        </React.Suspense>
+      ) : rapport === "udnyttelse" && isAdminUser ? (
+        <React.Suspense fallback={<div style={styles.hint}>Henter rapporten…</div>}>
+          <UdnyttelsesRapport opgaver={instances} medarbejdere={employees} datoAf={instanceDateString} planlagtFor={planlagtFor}
+            erBlok={(t) => BLOCK_TYPES.includes(t.type)} erUdelukket={(t) => t.type === "aktivitet" || erAflyst(t)} />
         </React.Suspense>
       ) : rapport === "portefoelje" ? (
         <PortefoeljeRapport templates={templates} instances={instances} pricing={pricing} />

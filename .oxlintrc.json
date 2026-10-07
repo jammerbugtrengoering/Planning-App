@@ -28,7 +28,8 @@
     "simulering.test.mjs",
     "timepriser.test.mjs",
     "postnummer.test.mjs",
-    "daekningsbidrag.test.mjs"
+    "daekningsbidrag.test.mjs",
+    "udnyttelse.test.mjs"
   ],
   "rules": {
     "no-undef": "error",
