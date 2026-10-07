@@ -2326,7 +2326,7 @@ const MODULE_HELP = {
         "De to beløb står i højre side og bliver stående, mens du ruller gennem listen. De viser summen af præcis dét, listen indeholder lige nu — skifter du filter eller søger, følger tallene med.",
         "Så kan du se, hvad et udvalg er værd, mens du går det igennem: fx hvad erhvervsaftalerne tilsammen giver, eller hvor meget der er realiseret på en enkelt kunde."] },
     { h: "Redigér en aftale der kører", p: [
-        "Tryk «Ret aftale» på aftalen her på siden — eller åbn en hvilken som helst opgave på den i ugeplanen (vinduet hedder «Ret opgave» og har samme brede layout) og vælg «Ret aftalen». Begge veje åbner det samme.",
+        "Tryk «Ret aftale» på aftalen her på siden — eller åbn en hvilken som helst opgave på den i ugeplanen (vinduet hedder «Ret opgave» og har samme brede layout) og vælg «Ret aftalen». Knappen står oppe ved siden af aftaletypen; «Markér aftalen som udgået» står nederst sammen med de andre knapper. Tasklisten står foldet sammen med antal og hvor mange der er udført — tryk på «Tasks» for at åbne den. Begge veje åbner det samme.",
         "Du kan rette alt: rytme, ugedage, klokkeslæt, varighed, pris, aftaletype, tjeklister og fast medarbejder. Ændringerne gælder de opgaver, der dannes fremover.",
         "Ændrer du rytmen eller ugedagene, rydder systemet selv de planlagte opgaver, der ikke passer længere, og siger hvor mange det var. Kun opgaver i fremtiden uden registreret tid og uden afslutning — udført arbejde røres aldrig.",
         "De nye opgaver dukker op, efterhånden som du bladrer gennem ugerne. Vil du se dem med det samme, så klik dig gennem de kommende uger én gang.",
@@ -20435,6 +20435,8 @@ function TaskDetailModal({ task, employees, templates, onSetPreferredEmployee, o
   const [addOpen, setAddOpen] = useState(false);
   const [newItemText, setNewItemText] = useState("");
   const [showTemplates, setShowTemplates] = useState(false);
+  // Tasklisten er foldet sammen fra start (7.10.2026): en lang liste skubbede resten af kolonnen ud af skaermen.
+  const [visTasks, setVisTasks] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState(false);
   const [editingSkills, setEditingSkills] = useState(false);
   const [editingSchedule, setEditingSchedule] = useState(false);
@@ -20712,35 +20714,11 @@ return (
           for let at ramme ved et uheld, naar man blot skulle tilfoeje en kollega. */}
       {t.templateId && isAdminUser && onCancelTemplate && (() => {
         const aftale = (templates || []).find((x) => x.id === t.templateId);
-        if (aftale && aftale.status === "udgaaet") {
-          return (
-            <div style={{ ...styles.cardMeta, color: "#B91C1C", fontWeight: 700, textAlign: "center", margin: "6px 0 18px" }}>
-              Aftalen er udgået · {cancelReasonLabel(aftale.cancelReason)}
-            </div>
-          );
-        }
-        return (
-          // Centreret og med god luft til begge sider, saa den ikke klaeber til
-          // hverken overskriften eller opgavetypen nedenunder.
-          <div style={{ textAlign: "center", margin: "10px 0 20px", display: "flex",
-                        gap: 8, justifyContent: "center", flexWrap: "wrap" }}>
-            {/* Genvej til aftalen bag opgaven. Rytme, ugedage og klokkeslaet hoerer
-                til AFTALEN og ikke til den enkelte dag — men det er paa den enkelte
-                dag, man opdager at noget er galt, og det er dér man staar. */}
-            {onEditTemplate && (
-              <button type="button" style={styles.addSkillBtn}
-                title="Åbner hele aftalen: rytme, ugedage, klokkeslæt, varighed og pris"
-                onClick={() => { onEditTemplate(t.templateId); onClose(); }}>
-                Ret aftalen
-              </button>
-            )}
-            <button type="button" style={{ ...styles.addSkillBtn, borderColor: "#FCA5A5", color: "#B91C1C" }}
-              title="Markerer hele aftalen som udgået og fjerner alle kommende opgaver"
-              onClick={() => { onCancelTemplate(t.templateId); onClose(); }}>
-              Markér aftalen som udgået
-            </button>
+        return aftale && aftale.status === "udgaaet" ? (
+          <div style={{ ...styles.cardMeta, color: "#B91C1C", fontWeight: 700, margin: "0 0 10px" }}>
+            Aftalen er udgået · {cancelReasonLabel(aftale.cancelReason)}
           </div>
-        );
+        ) : null;
       })()}
       <div style={styles.detailMetaRow}>
         {locked ? (
@@ -20780,6 +20758,18 @@ return (
         {t.offSchedule && <span style={{ ...styles.typeChip, background: "#FEF9C3", color: "#B45309" }}>⚠️ Uden for aftale</span>}
         {t.onSchedule && !t.offSchedule && <span style={{ ...styles.typeChip, background: "#ECFDF5", color: "#16A34A" }}>✓ Aftalt dag</span>}
         {t.outsideArea && <span style={{ ...styles.typeChip, background: "#F5F3FF", color: "#7C3AED" }}>📍 Uden for område</span>}
+        {/* Genvej til aftalen bag opgaven (7.10.2026: flyttet fra en centreret raekke oeverst til samme linje som typen). Rytme, ugedage og klokkeslaet
+            hoerer til AFTALEN og ikke til den enkelte dag — men det er paa den enkelte dag, man opdager at noget er galt. */}
+        {t.templateId && isAdminUser && onEditTemplate && (() => {
+          const aftale = (templates || []).find((x) => x.id === t.templateId);
+          return aftale && aftale.status === "udgaaet" ? null : (
+            <button type="button" style={{ ...styles.addSkillBtn, marginLeft: "auto" }}
+              title="Åbner hele aftalen: rytme, ugedage, klokkeslæt, varighed og pris"
+              onClick={() => { onEditTemplate(t.templateId); onClose(); }}>
+              Ret aftalen
+            </button>
+          );
+        })()}
       </div>
       {/* Klokkeslaettet stod ikke her foer, selvom 2.628 af 2.682 faste opgaver har et.
           Det er en aftale med kunden, saa det skal kunne laeses uden at aabne noget. */}
@@ -21275,8 +21265,15 @@ return (
         )}
       </div>
 
-      <label style={styles.label}>{(t.checklist?.length > 0) ? "Tasks" : "Tilføj tasks"}</label>
+      {(t.checklist?.length > 0) ? (
+        <button type="button" onClick={() => setVisTasks((v) => !v)} aria-expanded={visTasks}
+          style={{ ...styles.label, display: "flex", alignItems: "center", gap: 8, width: "100%", textAlign: "left", background: "none", border: "none", padding: 0, cursor: "pointer" }}>
+          {visTasks ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+          Tasks ({t.checklist.length}) · {t.checklist.filter((i) => i.done).length} af {t.checklist.length} udført
+        </button>
+      ) : <label style={styles.label}>Tilføj tasks</label>}
 
+      {(visTasks || !(t.checklist?.length > 0)) && (<>
       {/* Existing checklist items */}
       {t.checklist && t.checklist.length > 0 && (
         <div style={styles.instructionsBox}>
@@ -21339,6 +21336,7 @@ return (
         />
         <button style={styles.primaryBtn} onClick={addItem} disabled={!newItemText.trim()}>Tilføj</button>
       </div>
+      </>)}
 
       {t.videoUrl && (
         <a href={t.videoUrl} target="_blank" rel="noreferrer" style={{ ...styles.videoBtn, marginTop: 10 }}>
@@ -21471,6 +21469,16 @@ return (
               if (window.confirm(`Slet "${t.title}" helt? Det kan ikke fortrydes.`)) onDelete(t.id);
             }}><Trash2 size={14} /> Slet</button>
         )}
+        {t.templateId && isAdminUser && onCancelTemplate && (() => {
+          const aftale = (templates || []).find((x) => x.id === t.templateId);
+          return aftale && aftale.status === "udgaaet" ? null : (
+            <button type="button" style={{ ...styles.secondaryBtn, borderColor: "#FCA5A5", color: "#B91C1C" }}
+              title="Markerer hele aftalen som udgået og fjerner alle kommende opgaver"
+              onClick={() => { onCancelTemplate(t.templateId); onClose(); }}>
+              Markér aftalen som udgået
+            </button>
+          );
+        })()}
         <button style={{ ...styles.primaryBtn, marginLeft: "auto" }} onClick={onClose}>Luk</button>
       </div>
     </Modal>
