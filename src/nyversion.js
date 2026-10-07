@@ -33,8 +33,11 @@ async function bundtPaaServeren() {
   const svar = await fetch(`/index.html?t=${Date.now()}`, { cache: "no-store" });
   if (!svar.ok) return null;
   const html = await svar.text();
-  const fundne = html.match(/\/assets\/[A-Za-z0-9._-]+\.js/g);
-  return fundne && fundne.length ? fundne[fundne.length - 1].split("/").pop() : null;
+  // Kun selve indgangsscriptet. Vite lægger `modulepreload`-links til delte chunks bagefter (efter at Leaflet-kortet blev
+  // et eget stykke 7.10.2026); tog vi det sidste .js i filen, var det en chunk, fanen aldrig kører, og banneret blev
+  // hængende for evigt, også efter genindlæsning.
+  const m = html.match(/<script[^>]*type="module"[^>]*src="([^"]+\.js)"/) || html.match(/<script[^>]*src="([^"]+\.js)"[^>]*type="module"/);
+  return m ? m[1].split("/").pop() : null;
 }
 
 export async function erFanenForaeldet() {
