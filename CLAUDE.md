@@ -250,6 +250,10 @@ er et andet navnerum end gruppenøglerne.
 Fredagsbackuppen (`supabase/functions/ugeplan-backup`, 7.10.2026) læser `instances` direkte og tegner sin egen PDF på serveren — den bruger **ikke** appens udskrift. Henter eller viser du et nyt felt på opgaven (adgang, kontakt, tid), så tag stilling til, om det også skal med i PDF'en. Funktionen viser kun aftalt tid (`scheduled_time`), aldrig den beregnede køreplan, og må aldrig vise koder fra adgangslageret.
 Prøv den med «Send en prøve til mig» på Drift. En prøve skriver ikke i `job_koersel` — med vilje.
 
+### Du tilføjer et automatisk job
+
+Skriv det i `DRIFT_JOB` i `src/App.jsx` **med `foerst`** = dets første planlagte kørsel + luft (UTC). Uden den lyser Drift gult som «aldrig kørt», fra jobbet er lavet, og kontoret lærer at ignorere gult (7.10.2026, fredagsbackuppen). Med den står jobbet gråt som «venter» og bliver først gult, hvis første kørsel udebliver.
+
 ### Du retter en edge-funktion
 
 **Mappen `supabase/functions/` er en KOPI, ikke kilden.** Funktionerne kører i Supabase og

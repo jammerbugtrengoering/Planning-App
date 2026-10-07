@@ -2361,6 +2361,7 @@ const MODULE_HELP = {
     { h: "De automatiske job", p: [
         "Grøn betyder, at jobbet har skrevet et livstegn inden for den tid, der må gå — ikke at der skete noget sidste gang det kørte.",
         "Morgentjekket skriver «intet at melde», når alt er i orden. Det er med vilje: uden den linje kunne man ikke se forskel på en rolig nat og et job, der er holdt op med at køre.",
+        "Et nyt job står som «venter» (gråt), til dets første planlagte kørsel er passeret. Først derefter bliver «aldrig kørt» gult.",
         "Står der gult, er der gået for længe siden sidste livstegn. Står der rødt, fejlede sidste kørsel — og så står forklaringen på linjen."] },
     { h: "Backup af ugeplanen", p: [
         "Hver fredag mellem kl. 13 og 17 sendes en PDF med de næste to ugers opgaver til alle administratorer, der har en mailadresse. Den er til dagen, hvor systemet ikke kan åbnes: medarbejderne står i alfabetisk orden, og hver medarbejder har en side for hver uge, dag for dag, med adresse, kontaktoplysninger og adgangstekst. «Ikke tildelt» står til sidst.",
@@ -10221,7 +10222,9 @@ const DRIFT_JOB = [
   // natlige job, så en enkelt forsinket kørsel ikke i sig selv tænder en gul lampe.
   { job: "arvede-felter-sync",     timer: 36, navn: "Synk af arvede felter (aftale → opgave)" },
   // 8.10.2026: papirbackup hver fredag. 8 dage + margin: en enkelt fredag, hvor mailen ikke gik, skal lyse gult.
-  { job: "ugeplan-backup",         timer: 192, navn: "Fredagens backup af ugeplanen (PDF)" },
+  // «foerst» = tidligste tidspunkt, hvor jobbet SKAL have skrevet sit første livstegn (UTC). Før det står et nyt job som «venter», ikke «aldrig kørt» — ellers lyser Drift gult
+  // for noget, der først skal køre på fredag (Jonn 7.10.2026). Nyt job: sæt `foerst` til dets første planlagte kørsel + lidt luft.
+  { job: "ugeplan-backup",         timer: 192, navn: "Fredagens backup af ugeplanen (PDF)", foerst: "2026-10-09T15:00:00Z" },
 ];
 
 // En adresse, der med sikkerhed findes i Danmarks adresseregister, og som ikke hører
@@ -10409,6 +10412,7 @@ function DriftView({ isAdminUser, paaSide, aftaler = [], onAabnAftale }) {
   const jobRaekker = DRIFT_JOB.map((f) => {
     const r = job ? job.get(f.job) : null;
     if (!job) return { ...f, slags: "graa", tekst: "henter", r: null };
+    if (!r && f.foerst && Date.now() < new Date(f.foerst).getTime()) return { ...f, slags: "graa", tekst: "venter", r: null };
     if (!r) return { ...f, slags: "gul", tekst: "aldrig kørt", r: null };
     if (timerSiden(r.tidspunkt) > f.timer) return { ...f, slags: "gul", tekst: "for længe siden", r };
     if (!r.ok) return { ...f, slags: "roed", tekst: "fejlede", r };
@@ -10598,7 +10602,7 @@ function DriftView({ isAdminUser, paaSide, aftaler = [], onAabnAftale }) {
               <div style={{ fontWeight: 600, fontSize: 14 }}>{r.navn}</div>
               <div style={{ fontSize: 12.5, color: "#64748B", overflow: "hidden",
                             textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                {r.r ? (r.r.besked || "—") : "ingen linjer endnu"}
+                {r.r ? (r.r.besked || "—") : r.tekst === "venter" ? "venter på første planlagte kørsel" : "ingen linjer endnu"}
               </div>
             </div>
             <div style={{ fontSize: 13, color: "#334155", textAlign: "right" }}>
