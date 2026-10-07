@@ -1771,13 +1771,13 @@ const MODULE_HELP = {
         "En medarbejder uden opgaver får alligevel en tom arbejdsdag, du kan trække ned i — det er netop medarbejderen, du leder efter, når noget skal placeres.",
         "Dit valg af visning huskes til næste gang."] },
     { h: "Udskrift", p: [
-        "«Print ugeplan» udskriver en liste med klokkeslæt, kunde, adresse, kørsel, adgang og tjekliste — én medarbejder pr. side. Den ser ikke ud som skærmen; udskriften er sat op for sig, så den kan læses i en bil.",
+        "«Print ugeplan» udskriver en liste med klokkeslæt, kunde, adresse, kørsel, adgang og tjekliste. Den er stående A4, og hver dag (mandag til fredag) står på sin egen side, med medarbejderens navn øverst. Den ser ikke ud som skærmen; udskriften er sat op for sig, så den kan læses i en bil.",
         "Sæt fluebenet «Tag adgangsoplysninger med», hvis sedlen skal bruges af en, der endnu ikke har Worklist på telefonen. Så kommer nøgleboks- og alarmkoder med under hver opgave, markeret med 🔑.",
         "Det er et valg, du skal tage hver gang — fluebenet huskes ikke. I appen logges hvert opslag, koden ligger kun på telefonen dagen ud, og et natligt job rydder den. Papir har ingen af delene, så selve udskriften skrives i adgangsloggen med dit navn, tidspunktet og hvilke opgaver den omfattede.",
         "Brug medarbejderfilteret, så sedlen kun indeholder den ene medarbejders uge. Ellers bærer ét ark koderne til alle ugens hjem.",
         "Udskriften får et bånd øverst om, at den er fortrolig og skal makuleres. Bliver en seddel væk, skal koderne skiftes — sig det til kontoret med det samme.",
         "Der kommer én medarbejder pr. side, liggende A4. Vil du kun have én med, så vælg medarbejderen i listen først.",
-        "Sæt fluebenet «Tag time- og kørselsskema med», og der lægges et skema bagerst — ét pr. medarbejder, på sin egen stående side. Det er det samme skema, I hidtil har brugt på papir.",
+        "Sæt fluebenet «Tag time- og kørselsskema med», og der lægges et skema bagerst — ét pr. medarbejder, på sin egen stående side. Det er det samme skema, I hidtil har brugt på papir. Hver linje viser opgavetypen (Nexus, Ældrelov, Privat eller Erhverv) og den planlagte tid, så kontoret kan sammenholde med det, medarbejderen har skrevet.",
         "Dato og arbejdssted er skrevet ind på forhånd ud fra planen, så medarbejderen kun skal skrive timer og kilometer. Der er tomme linjer i bunden til det, der ikke stod i planen.",
         "Skemaet er til de medarbejdere, der starter på papir, før de får Worklist på telefonen. Kontoret taster tallene ind bagefter, så løn og fakturering bygger på det samme som alle andres.",
         "Det flueben huskes derimod til næste gang — i modsætning til adgangsoplysningerne er der ingen koder på skemaet.",
@@ -7523,11 +7523,14 @@ function WeekView({ employees, instances, unplaced, aflyste = [], aflysningsgrun
           return (
             <div key={emp.id} style={{ marginBottom: 28, pageBreakAfter: "always" }}>
               <div style={{ fontSize: 17, fontWeight: 700, borderBottom: "2px solid #111111", paddingBottom: 4, marginBottom: 10 }}>{medSolsikke(emp.name, emp.id)}</div>
-              {empDays.map((d) => {
+              {empDays.map((d, di) => {
                 const dayTasks = instances.filter((t) => (t.assignees || []).includes(emp.id) && t.day === d.key);
                 const schedule = computeDaySchedule(dayTasks, travelSettings, emp).filter((s) => s.type === "task");
                 return (
-                  <div key={d.key} style={{ marginBottom: 14 }}>
+                  // Hver dag paa sin egen side (7.10.2026): mandag, tirsdag, ... hver for sig, saa en dag
+                  // aldrig braekker midt i en anden. Medarbejderens navn gentages, for sedlen kan loesrives.
+                  <div key={d.key} style={{ marginBottom: 14, ...(di > 0 ? { pageBreakBefore: "always", breakBefore: "page" } : {}) }}>
+                    {di > 0 && <div style={{ fontSize: 17, fontWeight: 700, borderBottom: "2px solid #111111", paddingBottom: 4, marginBottom: 10 }}>{medSolsikke(emp.name, emp.id)}</div>}
                     <div style={{ fontSize: 14, fontWeight: 700, color: "var(--farve)", marginBottom: 6 }}>{d.label}</div>
                     {schedule.map((seg) => {
                       const t = seg.task;
@@ -12577,6 +12580,10 @@ function TimeOgKmSkema({ emp, dage, instances, ugeLabel }) {
       // Opgavenummeret (5.10.2026). Det er det, kontoret skriver ind igen, når skemaet kommer
       // tilbage udfyldt. Findes kolonnen ikke i databasen endnu, udelades den hele vejen.
       nr: t.opgave_nr ?? null,
+      // Opgavetypen (Nexus, Ældrelov, Privat, Erhverv) og den planlagte tid (7.10.2026): kontoret
+      // ser straks, hvordan linjen skal faktureres, og hvad der var aftalt, uden at slå op i planen.
+      type: contractMeta(t.contractType || t.contract_type).label,
+      planlagt: fmtMin(planlagtFor(t, emp.id)),
     };
   });
   const harNr = raekker.some((r) => r.nr);
@@ -12612,8 +12619,10 @@ function TimeOgKmSkema({ emp, dage, instances, ugeLabel }) {
           <tr>
             {harNr && <th style={{ ...hoved, width: 52, textAlign: "left" }}>Nr.:</th>}
             <th style={{ ...hoved, width: 62, textAlign: "left" }}>Dato:</th>
+            <th style={{ ...hoved, width: 58, textAlign: "left" }}>Type:</th>
             <th style={{ ...hoved, textAlign: "left" }}>Arbejdssted:</th>
-            <th style={{ ...hoved, width: 90, textAlign: "left" }}>Antal timer:</th>
+            <th style={{ ...hoved, width: 52, textAlign: "left" }}>Planlagt:</th>
+            <th style={{ ...hoved, width: 80, textAlign: "left" }}>Antal timer:</th>
             <th style={{ ...hoved, width: 110, textAlign: "left" }}>Antal km – egen bil</th>
           </tr>
         </thead>
@@ -12622,7 +12631,9 @@ function TimeOgKmSkema({ emp, dage, instances, ugeLabel }) {
             <tr key={`r${i}`}>
               {harNr && <td style={{ ...celle, fontVariantNumeric: "tabular-nums" }}>{r.nr ?? ""}</td>}
               <td style={celle}>{r.dato}</td>
+              <td style={celle}>{r.type}</td>
               <td style={celle}>{r.sted}</td>
+              <td style={celle}>{r.planlagt}</td>
               <td style={{ ...celle, height: 18 }}>&nbsp;</td>
               <td style={celle}>&nbsp;</td>
             </tr>
@@ -12634,10 +12645,14 @@ function TimeOgKmSkema({ emp, dage, instances, ugeLabel }) {
               <td style={celle}>&nbsp;</td>
               <td style={celle}>&nbsp;</td>
               <td style={celle}>&nbsp;</td>
+              <td style={celle}>&nbsp;</td>
+              <td style={celle}>&nbsp;</td>
             </tr>
           ))}
           <tr>
             {harNr && <td style={celle}>&nbsp;</td>}
+            <td style={celle}>&nbsp;</td>
+            <td style={celle}>&nbsp;</td>
             <td style={celle}>&nbsp;</td>
             <td style={celle}>&nbsp;</td>
             <td style={{ ...celle, fontWeight: 700 }}>I alt:</td>

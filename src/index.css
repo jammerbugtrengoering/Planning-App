@@ -148,7 +148,7 @@ code {
    Én medarbejder pr. side. Uden det braekker en tidslinje midt over et sideskift,
    og saa staar halvdelen af onsdagen paa den ene side og halvdelen paa den naeste. */
 @media print {
-  @page { size: A4 landscape; margin: 10mm; }
+  @page { size: A4 portrait; margin: 10mm; }
 
   /* Skaerm-kromet hoerer ikke til paa papir. */
   header, nav, .skjul-ved-print { display: none !important; }
@@ -165,8 +165,8 @@ code {
      staar om display. Det fyldte bare en tom plads paa siden.
      Udskriften tegnes af #print-week-plan. Skal noget med, skal det staa DERINDE. */
 
-  /* Hvert skema paa sin egen side, staaende. Ugeplanen er liggende, fordi den skal
-     rumme fem dage; en blanket med fire kolonner skal ikke vaere det. */
+  /* Hvert skema paa sin egen side. Siden 7.10.2026 er hele udskriften staaende: hver
+     dag har sin egen side (mandag til fredag), saa der er ikke laengere brug for bredden. */
   .timeskema { display: block !important; break-before: page; page-break-before: always; }
   .timeskema table { width: 100% !important; }
 
