@@ -311,6 +311,7 @@ for den anden. Derfor (Jonns beslutning 3.10.2026):
 
 ## Faste ting
 
+- **Ord i skærmbillederne (Jonns beslutning 7.10.2026):** *Aftale* er det, man opretter og retter («Ny aftale», «Ret aftale», «Ret aftalen»); en *opgave* er den enkelte dag, der dannes ud fra aftalen, og den åbner som «Ret opgave», hvor man også kan vælge «Ret aftalen». Brug «Ret», ikke «Rediger/Redigér», for aftale og opgave.
 - **Hjælpen skal opdateres, når funktionalitet ændres.** Det gælder alle tre apps. En
   hjælpetekst, der beskriver noget, der ikke længere passer, er værre end ingen.
 - **Kommentarer forklarer hvorfor, ikke hvad** — og gerne hvilken fejl der ligger bag, så

@@ -1886,7 +1886,7 @@ const MODULE_HELP = {
         "Ugens aflyste opgaver står under «🚫 Aflyste» over ugeplanen. «Fortryd» genåbner opgaven og sætter medarbejderne på igen — også en sen aflysning, så længe den ikke er sendt til Dinero.",
         "Udførte opgaver og opgaver med registreret tid kan ikke aflyses.",
         "Grunde og frister sættes under Opsætning → Aflysning."] },
-    { h: "Weekend", p: ["Knappen Man–Fre / Man–Søn bestemmer om lørdag og søndag vises.", "Ugeplanen åbner altid på Man–Fre, så fokus er arbejdsugen. Vil du se weekenden, trykker du på knappen.", "Ligger der opgaver i weekenden, står der ved siden af knappen hvor mange der er skjult — så du ikke overser dem."] }, { h: "Sådan er «Ny opgave» og serviceordren bygget op", p: ["Begge skærme er delt i tre farvede afsnit, så det er tydeligt hvad der hører sammen. Farverne betyder det samme begge steder.", "Rosa er kunden: kontrakttype, prismodel, titel, fakturakunde, adresse, fakturabeskrivelse og adgangsforhold. Det er det der ender på fakturaen.", "Grønt er selve opgaven: krævede kompetencer, varighed, tjeklister og instruktionsvideo.", "Blåt er tid: i «Ny opgave» hedder det Planlægning og rummer fast interval eller fleksibel, ansvarlig medarbejder, start- og udløbsdato, interval og ugedage.", "Klikker du på en opgave i ugeplanen, åbner serviceordren med de samme tre farver. Der hedder det blå afsnit Udførelse og rummer status, medarbejdere på opgaven, tasks og tidsregistrering.", "Under Tidsregistrering står hver registrering for sig: hvem, hvornår, hvor lang tid og medarbejderens begrundelse. Øverst står afvigelsen fra den planlagte tid for hele holdet.", "Har medarbejderen start/stop, står den målte tid der også, og afstanden til adressen ved start og ved slut. Er noget værd at se på — fx «afsluttet 3,4 km fra adressen» — står det med orange.", "I «Ny opgave» bliver Annuller og Gem og planlæg stående nederst, uanset hvor langt du har scrollet."] },
+    { h: "Weekend", p: ["Knappen Man–Fre / Man–Søn bestemmer om lørdag og søndag vises.", "Ugeplanen åbner altid på Man–Fre, så fokus er arbejdsugen. Vil du se weekenden, trykker du på knappen.", "Ligger der opgaver i weekenden, står der ved siden af knappen hvor mange der er skjult — så du ikke overser dem."] }, { h: "Sådan er «Ny aftale» og «Ret opgave» bygget op", p: ["Begge skærme er delt i tre farvede afsnit, så det er tydeligt hvad der hører sammen. Farverne betyder det samme begge steder.", "Rosa er kunden: kontrakttype, prismodel, titel, fakturakunde, adresse, fakturabeskrivelse og adgangsforhold. Det er det der ender på fakturaen.", "Grønt er selve opgaven: krævede kompetencer, varighed, tjeklister og instruktionsvideo.", "Blåt er tid: i «Ny aftale» hedder det Planlægning og rummer fast interval eller fleksibel, ansvarlig medarbejder, start- og udløbsdato, interval og ugedage.", "Klikker du på en opgave i ugeplanen, åbner serviceordren med de samme tre farver. Der hedder det blå afsnit Udførelse og rummer status, medarbejdere på opgaven, tasks og tidsregistrering.", "Under Tidsregistrering står hver registrering for sig: hvem, hvornår, hvor lang tid og medarbejderens begrundelse. Øverst står afvigelsen fra den planlagte tid for hele holdet.", "Har medarbejderen start/stop, står den målte tid der også, og afstanden til adressen ved start og ved slut. Er noget værd at se på — fx «afsluttet 3,4 km fra adressen» — står det med orange.", "I «Ny aftale» bliver Annuller og Gem og planlæg stående nederst, uanset hvor langt du har scrollet."] },
     { h: "Beskeder fra medarbejderne", p: [
         "Øverst i ugeplanen kommer et banner, når en medarbejder har meldt noget ind. Der er to slags.",
         "«Ønske om ny tid» betyder at medarbejderen har aftalt et nyt tidspunkt med kunden. Tryk «Godkend og flyt», så rykkes opgaven — eller «Afvis» og skriv hvorfor, så får medarbejderen en mail.",
@@ -2299,8 +2299,8 @@ const MODULE_HELP = {
   ], warn: "Linket til kunden er selve adgangen til dokumentet — der er ingen adgangskode. Send det til den rigtige mailadresse, og husk at det virker indtil tilbuddet er accepteret eller udløbet." },
 
   contracts: { title: "Aftaler", intro: "De faste kundeaftaler, sorteret så den der udløber først står øverst.", blocks: [
-    { h: "Ny opgave og Rediger aftale", p: [
-        "Begge åbner i fuld skærm med samme layout. Øverst står de tre grundvalg: kontrakttype, prismodel og om opgaven er en aftale, der gentages, eller en enkelt opgave. Valgene styrer resten af formularen.",
+    { h: "Ny aftale og Ret aftale", p: [
+        "Begge åbner i fuld skærm med samme layout. Øverst står de tre grundvalg: kontrakttype, prismodel og om aftalen er en fast interval, der gentages, eller en fleksibel enkeltopgave. Valgene styrer resten af formularen.",
         "Under dem står tre kolonner: «Aftale og kunde» (hvem der faktureres og hvor der arbejdes), «Opgaven» (medarbejder, kompetencer, varighed og tjeklister) og «Planlægning» (rytme, ugedage og datoer). På en smal skærm står de under hinanden.",
         "Nederst står det, der mangler, før aftalen kan gemmes, og knapperne. På en kladde står bemærkningen til kontoret til højre.",
         "Forklaringerne til felterne står ikke som tekst under dem, men bag et lille «i» ved feltnavnet. Hold musen over det (eller tryk på det) for at læse dem. Advarsler og det, der mangler, står stadig som tekst.",
@@ -2326,7 +2326,7 @@ const MODULE_HELP = {
         "De to beløb står i højre side og bliver stående, mens du ruller gennem listen. De viser summen af præcis dét, listen indeholder lige nu — skifter du filter eller søger, følger tallene med.",
         "Så kan du se, hvad et udvalg er værd, mens du går det igennem: fx hvad erhvervsaftalerne tilsammen giver, eller hvor meget der er realiseret på en enkelt kunde."] },
     { h: "Redigér en aftale der kører", p: [
-        "Tryk «Redigér aftale» på aftalen her på siden — eller åbn en hvilken som helst opgave på den i ugeplanen og vælg «Redigér aftalen». Begge veje åbner det samme.",
+        "Tryk «Ret aftale» på aftalen her på siden — eller åbn en hvilken som helst opgave på den i ugeplanen (vinduet hedder «Ret opgave») og vælg «Ret aftalen». Begge veje åbner det samme.",
         "Du kan rette alt: rytme, ugedage, klokkeslæt, varighed, pris, kontrakttype, tjeklister og fast medarbejder. Ændringerne gælder de opgaver, der dannes fremover.",
         "Ændrer du rytmen eller ugedagene, rydder systemet selv de planlagte opgaver, der ikke passer længere, og siger hvor mange det var. Kun opgaver i fremtiden uden registreret tid og uden afslutning — udført arbejde røres aldrig.",
         "De nye opgaver dukker op, efterhånden som du bladrer gennem ugerne. Vil du se dem med det samme, så klik dig gennem de kommende uger én gang.",
@@ -7006,7 +7006,7 @@ function WeekView({ employees, instances, unplaced, aflyste = [], aflysningsgrun
   return (
     <div style={styles.page}>
       <div style={styles.toolbar}>
-        <button style={styles.primaryBtn} onClick={onAdd}><Plus size={16} /> Ny opgave</button>
+        <button style={styles.primaryBtn} onClick={onAdd}><Plus size={16} /> Ny aftale</button>
         <button style={styles.secondaryBtn} onClick={onScheduleWeek}><Wand2 size={16} /> Planlæg</button>
         {onSimuler && <button style={styles.secondaryBtn} onClick={onSimuler} title="Se en bedre fordeling af ugen — intet gemmes">🔀 Simulér uge</button>}
         <button style={{ ...styles.secondaryBtn, color: "#B91C1C", borderColor: "#FECACA" }} onClick={onOpenAddBlock}><Thermometer size={16} /> Sygdom/Ferie</button>
@@ -11876,7 +11876,7 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
   return (
     <Modal
       onClose={onClose}
-      title={editId ? `${erKladde ? "Rediger kladde" : "Rediger aftale"}: ${copyFrom?.title || ""}` : (copyFrom ? `Kopiér: ${copyFrom.title}` : "Ny opgave")}
+      title={editId ? `${erKladde ? "Ret kladde" : "Ret aftale"}: ${copyFrom?.title || ""}` : (copyFrom ? `Kopiér: ${copyFrom.title}` : "Ny aftale")}
       persistent
       fullscreen
       browserFuldskaerm>
@@ -11926,7 +11926,7 @@ function TaskModal({ onClose, onSave, checklistTemplates, skills, copyFrom, empl
 
         </div>
         <div>
-          <label style={styles.label}>Opgaven er{type === "fixed" && <Info>Faste opgaver gentages automatisk hver uge på de valgte dage — frem til udløbsdatoen.</Info>}{type === "adhoc" && <Info>Oprettes med dags dato og lander i "Ikke tildelt", klar til at blive planlagt.</Info>}</label>
+          <label style={styles.label}>Aftalen er{type === "fixed" && <Info>Faste opgaver gentages automatisk hver uge på de valgte dage — frem til udløbsdatoen.</Info>}{type === "adhoc" && <Info>Oprettes med dags dato og lander i "Ikke tildelt", klar til at blive planlagt.</Info>}</label>
       <div style={styles.typePicker}>
         {CREATABLE_TYPES.map((k) => {
           const m = TYPE_META[k];
@@ -14406,7 +14406,7 @@ function ContractsView({ templates: alleTemplates, instances, pricing, employees
                       type="button"
                       onClick={() => onEditDraft(t)}
                       style={{ ...styles.primaryBtn, fontSize: 12, padding: "5px 10px" }}>
-                      {t.status === "kladde" ? "Åbn og godkend" : "Redigér aftale"}
+                      {t.status === "kladde" ? "Åbn og godkend" : "Ret aftale"}
                     </button>
                   </div>
                 )}
@@ -14495,7 +14495,7 @@ function ContractsView({ templates: alleTemplates, instances, pricing, employees
                         type="button"
                         onClick={() => onEditDraft(t)}
                         style={{ ...styles.primaryBtn, fontSize: 12, padding: "5px 10px" }}>
-                        {t.status === "kladde" ? "Åbn og godkend" : "Redigér aftale"}
+                        {t.status === "kladde" ? "Åbn og godkend" : "Ret aftale"}
                       </button>
                     </div>
                   )}
@@ -16079,7 +16079,7 @@ function SkillsView({ supabase, skills: skillNames, onSkillsChange }) {
         </div>
 
         <div style={{ marginTop: 12, fontSize: 12, color: "#94A3B8" }}>
-          {items.length} kompetencer · Ændringer træder i kraft straks i "Ny opgave" og "Rediger medarbejder"
+          {items.length} kompetencer · Ændringer træder i kraft straks i "Ny aftale" og "Rediger medarbejder"
         </div>
       </div>
     </div>
@@ -20701,7 +20701,7 @@ function TaskDetailModal({ task, employees, templates, onSetPreferredEmployee, o
         React.createElement("button", { style: styles.iconBtnGhostInline, title: "Annuller", onClick: () => { setTitleDraft(t.title); setIsEditingTitle(false); } }, React.createElement(X, { size: 16 }))
             )
   : React.createElement("span", { style: { display: "flex", alignItems: "center", gap: 6 } },
-      t.title,
+      "Ret opgave: " + t.title,
       isAdminUser && React.createElement("button", { style: styles.iconBtnGhostInline, title: "Ret opgavens navn", onClick: () => { setTitleDraft(t.title); setIsEditingTitle(true); } }, React.createElement(Pencil, { size: 14 }))
     );
 return (
@@ -20729,7 +20729,7 @@ return (
               <button type="button" style={styles.addSkillBtn}
                 title="Åbner hele aftalen: rytme, ugedage, klokkeslæt, varighed og pris"
                 onClick={() => { onEditTemplate(t.templateId); onClose(); }}>
-                Redigér aftalen
+                Ret aftalen
               </button>
             )}
             <button type="button" style={{ ...styles.addSkillBtn, borderColor: "#FCA5A5", color: "#B91C1C" }}
