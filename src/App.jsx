@@ -267,7 +267,7 @@ const MENU_HJAELP = {
   ekstra: "Bestil ekstra hjælp hos Jammerbugt Rengøring.",
   system: "Kører løsningen, og er der noget, nogen skal tage fat i? De automatiske job og ændringsloggen. Kun for administratorer.",
 };
-const WORKLIST_URL = import.meta.env.VITE_WORKLIST_URL.VITE_WORKLIST_URL || "https://jammerbugtrengoering-service.netlify.app";
+const WORKLIST_URL = import.meta.env.VITE_WORKLIST_URL || "https://jammerbugtrengoering-service.netlify.app";
 // Genveje til de to eksterne vaerktoejer i topmenuen (4.10.2026). De aabnes i et lille
 // vindue uden menulinje og vaerktoejslinje, saa de foeles som en app ved siden af planen.
 // Adresselinjen kan en browser ikke fjerne helt (Chrome viser en skrivebeskyttet) — en
