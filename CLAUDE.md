@@ -132,6 +132,14 @@ hvorfor.
 
 Skriv **hvorfor** i migrationen, ikke hvad. SQL'en siger selv hvad.
 
+**Claude kan ikke slette i databasen.** Værktøjet afviser enhver migration med `delete`
+eller `drop` — også inde i en funktionstekst — mens `insert` og `update` går igennem.
+Læg sletningen som fil i `overdragelse/sql/` og lad Jonn eller Charlotte køre den i SQL
+Editor. Indsæt ikke testrækker for at prøve det af; de kan ikke fjernes igen herfra.
+
+> 7.10.2026: en testrække blev sat ind i `arketyper` i SoMe-databasen; sletningen kom
+> tilbage som «cancelled». Samme mønster som `drop table` fire gange 4.10.
+
 **En upsert på `instances` skal sende hele rækken.** Sender den kun nogle af kolonnerne,
 fejler den *altid* — også når rækken findes i forvejen. Postgres tjekker NOT NULL på den
 række, der ville blive indsat, før den opdager at id'et er taget, og `title`, `type`,
