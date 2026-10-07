@@ -2326,7 +2326,7 @@ const MODULE_HELP = {
         "De to beløb står i højre side og bliver stående, mens du ruller gennem listen. De viser summen af præcis dét, listen indeholder lige nu — skifter du filter eller søger, følger tallene med.",
         "Så kan du se, hvad et udvalg er værd, mens du går det igennem: fx hvad erhvervsaftalerne tilsammen giver, eller hvor meget der er realiseret på en enkelt kunde."] },
     { h: "Redigér en aftale der kører", p: [
-        "Tryk «Ret aftale» på aftalen her på siden — eller åbn en hvilken som helst opgave på den i ugeplanen (vinduet hedder «Ret opgave» og har samme brede layout) og vælg «Ret aftalen». Knappen står oppe ved siden af aftaletypen; «Markér aftalen som udgået» står nederst sammen med de andre knapper. Tasklisten står foldet sammen med antal og hvor mange der er udført — tryk på «Tasks» for at åbne den. Begge veje åbner det samme.",
+        "Tryk «Ret aftale» på aftalen her på siden — eller åbn en hvilken som helst opgave på den i ugeplanen (vinduet hedder «Ret opgave» og har samme brede layout) og vælg «Ret aftalen». Knappen «Ret aftalen» står øverst over overskriften; «Markér aftalen som udgået» står nederst sammen med de andre knapper. Tasklisten står foldet sammen med antal og hvor mange der er udført — tryk på «Tasks» for at åbne den. Begge veje åbner det samme.",
         "Du kan rette alt: rytme, ugedage, klokkeslæt, varighed, pris, aftaletype, tjeklister og fast medarbejder. Ændringerne gælder de opgaver, der dannes fremover.",
         "Ændrer du rytmen eller ugedagene, rydder systemet selv de planlagte opgaver, der ikke passer længere, og siger hvor mange det var. Kun opgaver i fremtiden uden registreret tid og uden afslutning — udført arbejde røres aldrig.",
         "De nye opgaver dukker op, efterhånden som du bladrer gennem ugerne. Vil du se dem med det samme, så klik dig gennem de kommende uger én gang.",
@@ -20706,8 +20706,26 @@ function TaskDetailModal({ task, employees, templates, onSetPreferredEmployee, o
       "Ret opgave: " + t.title,
       isAdminUser && React.createElement("button", { style: styles.iconBtnGhostInline, title: "Ret opgavens navn", onClick: () => { setTitleDraft(t.title); setIsEditingTitle(true); } }, React.createElement(Pencil, { size: 14 }))
     );
+// «Ret aftalen» staar OVER overskriften og er den tydelige knap (7.10.2026): rytme, ugedage, klokkeslaet og pris hoerer til aftalen og ikke til
+// den enkelte dag, men det er paa dagen, man opdager at noget er galt. Skjules paa en udgaaet aftale.
+const retAftaleAftale = t.templateId ? (templates || []).find((x) => x.id === t.templateId) : null;
+const titelMedAftale = (
+  <span style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 6 }}>
+    {t.templateId && isAdminUser && onEditTemplate && !(retAftaleAftale && retAftaleAftale.status === "udgaaet") && (
+      <span style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+        <button type="button" style={{ ...styles.primaryBtn, padding: "5px 14px", fontSize: 13 }}
+          title="Åbner hele aftalen: rytme, ugedage, klokkeslæt, varighed og pris"
+          onClick={() => { onEditTemplate(t.templateId); onClose(); }}>
+          <Pencil size={13} /> Ret aftalen
+        </button>
+        <span style={{ fontSize: 12, fontWeight: 400, color: "#64748B" }}>Rytme, ugedage, klokkeslæt og pris</span>
+      </span>
+    )}
+    {titleNode}
+  </span>
+);
 return (
-    <Modal onClose={onClose} title={titleNode} persistent fullscreen>
+    <Modal onClose={onClose} title={titelMedAftale} headerExtra={40} persistent fullscreen>
       {/* Samme bredde og tre kolonner som Ny aftale (7.10.2026): Opgaven, Kunde og Status ved siden af hinanden. */}
       <div style={{ maxWidth: 1600, margin: "0 auto", textAlign: "left" }}>
       {/* Ligger oeverst og for sig selv. Stod den nede ved medarbejderne, var den
@@ -20721,18 +20739,7 @@ return (
         ) : null;
       })()}
       <div style={styles.detailMetaRow}>
-        {/* Genvej til aftalen bag opgaven. Staar yderst til venstre i raekken under titlen og har samme udseende som Kopiér (7.10.2026). Rytme, ugedage og
-            klokkeslaet hoerer til AFTALEN og ikke til den enkelte dag — men det er paa den enkelte dag, man opdager at noget er galt. */}
-        {t.templateId && isAdminUser && onEditTemplate && (() => {
-          const aftale = (templates || []).find((x) => x.id === t.templateId);
-          return aftale && aftale.status === "udgaaet" ? null : (
-            <button type="button" style={{ ...styles.secondaryBtn, color: "var(--farve-moerk)", borderColor: "var(--farve-lys)", padding: "4px 12px", fontSize: 12.5 }}
-              title="Åbner hele aftalen: rytme, ugedage, klokkeslæt, varighed og pris"
-              onClick={() => { onEditTemplate(t.templateId); onClose(); }}>
-              Ret aftalen
-            </button>
-          );
-        })()}
+        
         {locked ? (
           <TypeBadge type={t.type} />
         ) : (
@@ -21977,7 +21984,7 @@ function Info({ children }) {
   );
 }
 
-function Modal({ title, children, onClose, persistent = false, fullscreen = false, bred = false, browserFuldskaerm = false }) {
+function Modal({ title, children, onClose, persistent = false, fullscreen = false, bred = false, browserFuldskaerm = false, headerExtra = 0 }) {
   // Ny opgave/Rediger aftale gaar i browserens fuldskaerm (7.10.2026), saa adresselinje og faner ikke tager plads. Det er et valg, der
   // huskes (rp_fuldskaerm): knappen i toppen slaar det til og fra. Chrome tillader kaldet i nogle sekunder efter klikket, der aabnede
   // vinduet; afvises det (fx i Safari), staar formularen bare som foer. Vi gaar kun ud igen, hvis det var os, der gik ind.
@@ -22024,7 +22031,7 @@ function Modal({ title, children, onClose, persistent = false, fullscreen = fals
             <button style={styles.iconBtnGhostInline} onClick={onClose}><X size={16} /></button>
           </span>
         </div>
-        <div style={fullscreen ? { ...styles.modalBody, height: "calc(100vh - 60px)", overflowY: "auto" } : styles.modalBody}>{children}</div>
+        <div style={fullscreen ? { ...styles.modalBody, height: `calc(100vh - ${60 + headerExtra}px)`, overflowY: "auto" } : styles.modalBody}>{children}</div>
       </div>
     </div>
   );
