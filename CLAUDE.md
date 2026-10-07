@@ -119,6 +119,7 @@ Tre apps hænger sammen: **planlægningsappen** (HR-siden, ikon i topbjælken, k
 - **Klokken (`kontor_indbakke`) rettes med `pg_get_functiondef` + `replace()` før `-- 7. Fejl i data`** i en migration (se SQL-loggen); skriv linjen i `gaaTilIndbakkeLinje` også.
 - **apply_migration hænger på DROP, DELETE (også ordet i funktionstekst) og DROP POLICY.** Brug `create or replace`, `ALTER POLICY` og `execute 'de' || 'lete ...'`. Tjek bagefter, om den alligevel nåede at køre, før du prøver igen. `execute_sql` returnerer kun sidste sætning.
 - **Hver ny kolonne skal klassificeres i `persondata_register`**, og hjælpeteksten (`MODULE_HELP`, i Worklist `HELP_DA` og `HELP_EN` med lige mange afsnit) følger med hver ændring.
+- **Medarbejdere oprettes og får rettet navn/personoplysninger kun i Personalemappen** (HR-administratorer, Jonns beslutning 7.10.2026). Opsætning → Medarbejdere har ikke «Ny medarbejder» og ingen Person-fane; kortet åbner på Planlægning, og under Adgang oprettes login til Worklist.
 - **Skriv aldrig «hun», «han» eller «hende» i tekster, brugeren ser** (Jonns beslutning 7.10.2026: der er mænd i virksomheden). Brug «medarbejderen», «kunden», «borgeren», «vedkommende».
 - Ikke bygget endnu: opbevaringsfrister og sletning af dokumenter, push til medarbejderen ved afgjort ferieanmodning, ferieblokering i databasen (nu i klienten via `addBlock`), stillingsfelt.
   Funktionerne er ikke prøvet med to rigtige logins (leder + medarbejder) — gør det, før det bruges for alvor. Supabase Redirect URLs skal indeholde Personalemappens adresse.

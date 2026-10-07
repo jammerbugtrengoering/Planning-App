@@ -1975,7 +1975,7 @@ const MODULE_HELP = {
         "Tryk på linjen for at folde den ud. Så kommer kompetencer med niveau, områder, timer pr. dag, app-adgang og udleveringshistorik. Flere kan være åbne ad gangen, så du kan sammenligne to medarbejdere.",
         "Søgefeltet søger i både navn og kompetencer, så «vindue» finder dem der kan vinduespolering. Sorteringen og områdefilteret virker sammen med søgningen.",
         "«Mangler app-adgang først» er en hurtig vej til dem du skal oprette et login til."] },
-    { h: "Opret og redigér", p: ["Tryk «Ny medarbejder», eller «Redigér» når du har foldet en linje ud.",
+    { h: "Opret og redigér", p: ["Medarbejdere oprettes i Personalemappen (HR-administratorer), og navn og personoplysninger rettes dér. Her trykker du «Redigér», når du har foldet en linje ud: kortet åbner på Planlægning, og under Adgang opretter du login til Worklist.",
         "Mødetid bruges til at beregne hvornår dagens første opgave kan starte.",
         "Timeløn bruges til lønsummerne under Løn data. Nye medarbejdere starter på 170 kr. Ændrer du satsen, skal du angive hvornår den gælder fra — tidligere satser står nedenunder, så du kan se historikken.",
         "Dialogen er delt i fire afsnit: Personen, Kan, Tid, og Løn og transport bag hængelås.",
@@ -20024,7 +20024,7 @@ function EmployeeModal({ hrAdgang = true, emp, onClose, onSave, skills: skillLis
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16 }}>
         {[["person", "Person"], ["ansaettelse", "Ansættelse"], ["dokumenter", "Dokumenter"], ["planlaegning", "Planlægning"], ["loen", "Løn"], ["adgang", "Adgang"], ["udlevering", "Udlevering"], ["samtaler", "Samtaler og udvikling"]]
           // Planlæggerens udgave har kun det, planlægningen bruger. Resten er HR-data, som databasen heller ikke giver adgang til.
-          .filter(([k]) => hrAdgang || ["person", "planlaegning", "adgang"].includes(k)).map(([k, l]) => (
+          .filter(([k]) => hrAdgang || ["planlaegning", "adgang"].includes(k)).map(([k, l]) => (
           <button key={k} type="button" onClick={() => setFane(k)}
             style={{ padding: "7px 16px", borderRadius: 999, fontSize: 13, fontWeight: 700, cursor: "pointer",
                      border: fane === k ? "1px solid var(--farve-moerk)" : "1px solid #E2E8F0",
@@ -20034,6 +20034,7 @@ function EmployeeModal({ hrAdgang = true, emp, onClose, onSave, skills: skillLis
         ))}
       </div>
 
+      {!hrAdgang && <div style={{ ...styles.hint, marginBottom: 12 }}>Navn og personoplysninger hentes fra Personalemappen og rettes dér. Her rettes det, planlægningen bruger, og her oprettes adgangen til Worklist.</div>}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 16, alignItems: "start" }}>
 
       {fane === "person" && (<>
