@@ -242,7 +242,9 @@ const MENU_GRUPPER = [
   // tjeklister saettes op én gang og saa staar. At skulle gennem Opsaetning for at
   // se om der er saebe nok, var et led for meget.
   { key: "lager",     navn: "Lager",      sider: [["inventory", "Lager"]] },
-  { key: "oekonomi",  navn: "Økonomi",     sider: [["time", "Fakturering"], ["kundetimer", "Kundetimer"], ["reports", "Rapportering"], ["medExport", "Løn data"], ["papirskema", "Papirskema"]] },
+  { key: "oekonomi",  navn: "Økonomi",     sider: [["time", "Fakturering"], ["kundetimer", "Kundetimer"], ["medExport", "Løn data"], ["papirskema", "Papirskema"]] },
+  // Rapportering er sin egen gruppe mellem Økonomi og Drift (8.10.2026): Overblikket er indgangen til alle rapporterne og skal kunne findes uden at gå gennem Økonomi.
+  { key: "rapportering", navn: "Rapportering", sider: [["reports", "Rapportering"]] },
   // Personalemappen (6.10.2026): HR-data, kun for HR-administratorer (tabellen hr_administratorer, funktionen er_hr_admin). Planlæggere uden HR-adgang
   // bruger «Medarbejdere» under Opsætning, der kun har planlægningsdata.
   { key: "personale", navn: "Personalemappen", kunHr: true, skjultIMenu: true, sider: [["personalemappen", "Medarbejdere"], ["fravaer", "Ferie og fravær"], ["haandbog", "Håndbog og politikker"]] },
@@ -266,7 +268,8 @@ const MENU_HJAELP = {
   drift: "Ugens opgaver pr. medarbejder: planlæg, flyt og tildel, og udskriv planen. Her oprettes også nye opgaver, aktiviteter, ferie og sygdom.",
   salg: "Kunder, henvendelser fra pjecen, tilbud og aftaler, og de produkter der kan sælges.",
   lager: "Lagerbeholdningen — fx om der er sæbe nok.",
-  oekonomi: "Fakturering til Dinero, kundetimer, rapporter, lønunderlag og papirskemaet.",
+  oekonomi: "Fakturering til Dinero, kundetimer, lønunderlag og papirskemaet.",
+  rapportering: "Overblikket over virksomhedens temperatur og alle rapporterne: budget, aflysninger, postnumre, overskud, udnyttelse m.fl.",
   ekstra: "Bestil ekstra hjælp hos Jammerbugt Rengøring.",
   system: "Kører løsningen, og er der noget, nogen skal tage fat i? De automatiske job og ændringsloggen. Kun for administratorer.",
 };
