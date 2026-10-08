@@ -150,7 +150,7 @@ export default function OverblikRapport({ input, medDinero, onAabn, onSide }) {
   const antal = (k) => punkter.filter((x) => x.alvor === k).length;
   const ord = temp.niveau === "good" ? "Sund drift" : temp.niveau === "warn" ? "Følg med" : temp.niveau === "crit" ? "Under pres" : "Ingen tal endnu";
   const tekst = punkter.length === 0 ? "Intet kræver handling lige nu." : `${punkter.length} ${punkter.length === 1 ? "ting trækker" : "ting trækker"} ned eller kræver handling.`;
-  const gaa = (x) => (x.rapport ? onAabn(x.rapport) : onSide(x.side));
+  const gaa = (x) => (x.rapport ? onAabn(x.rapport) : onSide(x.side, x.arg));
 
   return (
     <div className="ob">

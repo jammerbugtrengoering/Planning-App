@@ -2458,7 +2458,7 @@ const MODULE_HELP = {
         "Listen står med den mest ledige øverst. Gul betyder under 60 %: der er plads til flere opgaver. Rød betyder over 95 %: der er ingen luft, hvis nogen bliver syge. Står en medarbejders timer ikke på kortet, ser vedkommende ledig ud, så ret dem dér først."] },
     { h: "Overblik", p: [
         "Rapportering åbner på «🌡 Overblik» (kun administratorer). Det er indgangen til de andre rapporter. Øverst står virksomhedens temperatur fra 0 til 100 med fire dele: økonomi, kunder, medarbejdere og drift. Ved siden af står de punkter, der kræver opmærksomhed, mest alvorlige først.",
-        "Hvert punkt og hvert af de otte nøgletal er en knap: tryk på det, og du kommer til rapporten bag. Fra rapporten kommer du tilbage med «← Tilbage til overblikket» øverst. Punkter om aftaler uden postnummer eller kladder fører til Drift.",
+        "Hvert punkt og hvert af de otte nøgletal er en knap: tryk på det, og du kommer til rapporten bag. Fra rapporten kommer du tilbage med «← Tilbage til overblikket» øverst. Punkter om aftaler uden postnummer eller kladder fører til Drift. Står der opgaver uden medarbejder i næste uges plan, kommer de som et kritisk punkt øverst (og i klokken), og knappen åbner næste uges plan: de bliver hverken udført eller faktureret, før de er planlagt.",
         "Tallene er de samme som i rapporterne, regnet på den periode, du vælger (måned, kvartal eller år), og de sammenlignes med forrige periode. Kurven viser de sidste tolv måneder; den stiplede streg er målet. Målene sætter I under Opsætning → Nøgletal og mål."] },
     { h: "Omsætning pr. medarbejder", p: [
         "Fanen «👤 Pr. medarbejder» (kun administratorer) viser, hvor meget af den realiserede omsætning hver medarbejder har leveret, hvad det er pr. arbejdstime, og lønnen ved siden af. Vælg år, måned og aftaletype.",
@@ -3994,7 +3994,13 @@ function PlanningApp({ session, onSignOut }) {
 
   // Fra klokken til det sted, sagen klares. Opgaver aabnes direkte, hvis de er hentet;
   // ellers vises den side, hvor sagen staar.
+  // Til en anden side fra Overblikket eller klokken. «uge» med naeste: næste uges plan (utildelte opgaver skal planlægges dér).
+  function gaaTilSide(side, arg) {
+    if (side === "uge" && arg && arg.naeste) { const m = mondayOf(new Date()); m.setDate(m.getDate() + 7); setWeekAnchor(m); }
+    setView(side);
+  }
   function gaaTilIndbakkeLinje(l) {
+    if (l.art === "utildelte") { gaaTilSide("uge", { naeste: true }); return; }
     if (l.instance_id && (l.art === "afvigelse" || l.art === "over_tiden" || l.art === "tidsrettelse" || l.art === "efter_loenluk")) {
       if (instances.some((t) => t.id === l.instance_id)) { setOpenTaskId(l.instance_id); return; }
       setView("kundetimer");
@@ -6851,7 +6857,7 @@ function PlanningApp({ session, onSignOut }) {
           omkostninger={omkostninger} onSaveOmkostning={saveOmkostning}
           onDeleteOmkostning={deleteOmkostning}
           bonus={bonus} onSaveBonus={saveBonus} onDeleteBonus={deleteBonus}
-          dineroOmsaetning={dineroOmsaetning} gaaTil={(side) => setView(side)} />
+          dineroOmsaetning={dineroOmsaetning} gaaTil={(side, arg) => gaaTilSide(side, arg)} />
       )}
 
       {/* Spærret to steder: fanen vises ikke for andre end administratorer, OG siden
@@ -11455,7 +11461,7 @@ function ReportsView({ instances, templates, pricing, budgets, onSaveBudget, isA
 
       {rapport === "overblik" && isAdminUser && overblikInput ? (
         <React.Suspense fallback={<div style={styles.hint}>Henter overblikket…</div>}>
-          <OverblikRapport input={overblikInput} medDinero={harModul("dinero")} onAabn={(k) => { setRapport(k); window.scrollTo?.(0, 0); }} onSide={(side) => gaaTil && gaaTil(side)} />
+          <OverblikRapport input={overblikInput} medDinero={harModul("dinero")} onAabn={(k) => { setRapport(k); window.scrollTo?.(0, 0); }} onSide={(side, arg) => gaaTil && gaaTil(side, arg)} />
         </React.Suspense>
       ) : rapport === "startstop" ? (
         <StartStopRapport />

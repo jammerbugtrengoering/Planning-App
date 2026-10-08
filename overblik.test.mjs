@@ -2,7 +2,7 @@
 //
 // Hvad de beskytter mod: en temperatur, der ser bedre ud end virkeligheden, fordi «lavere er bedre» er regnet omvendt, og et overblik, der viser et andet tal end rapporten bag det.
 
-import { MAAL, maalTal, opnaaelse, statusFor, temperatur, beregnPeriode, opmaerksomhed, sidsteMaaneder } from "./src/overblik.js";
+import { isoUge, utildelteNaesteUge, MAAL, maalTal, opnaaelse, statusFor, temperatur, beregnPeriode, opmaerksomhed, sidsteMaaneder } from "./src/overblik.js";
 
 let fejl = 0;
 function er(hvad, faktisk, forventet) {
@@ -59,6 +59,20 @@ er("omsætning mod budget bruger kun månedens budget", p.v.oms, 50);
 er("dækningsbidrag er det samme som rapportens", p.v.db, p.db.ialt.procent);
 er("aflysninger tæller de aflyste med i nævneren", [p.af.ialt.antal, p.af.ialt.aflyst], [3, 1]);
 er("aftaler der udløber inden 90 dage", p.v.udloeb, 1);
+// Næste uges utildelte opgaver (idag = torsdag 8.10.2026, uge 41; næste uge er 42, 12.-18.10.).
+er("ISO-uge", [isoUge("2026-10-08"), isoUge("2026-12-31"), isoUge("2027-01-03")], [{ uge: 41, aar: 2026 }, { uge: 53, aar: 2026 }, { uge: 53, aar: 2026 }]);
+const naeste = [
+  { id: "n1", week: 42, year: 2026, type: "fixed", assignees: [], duration: 60, kr: 0, planlagt: 400 },
+  { id: "n2", week: 42, year: 2026, type: "fixed", assignees: ["a"], duration: 60, planlagt: 400 },
+  { id: "n3", week: 42, year: 2026, type: "fixed", assignees: [], aflyst: true, planlagt: 400 },
+  { id: "n4", week: 43, year: 2026, type: "fixed", assignees: [], planlagt: 400 },
+  { id: "n5", week: 42, year: 2026, type: "adhoc", assignees: [], planlagt: 250 },
+];
+const u = utildelteNaesteUge({ ...inn, medAflyste: naeste, beregn: (x) => ({ planlagtKr: x.planlagt }) });
+er("utildelte næste uge: ikke tildelt, ikke aflyst, kun den uge", [u.uge, u.antal, u.kr], [42, 2, 650]);
+const ptk = opmaerksomhed({ ...inn, medAflyste: naeste, beregn: (x) => ({ planlagtKr: x.planlagt }) }, p);
+er("utildelte står øverst som kritisk og fører til næste uges plan", [ptk[0].alvor, ptk[0].side, ptk[0].arg.naeste], ["crit", "uge", true]);
+er("ingen utildelte, intet punkt", opmaerksomhed({ ...inn, medAflyste: [{ ...naeste[1] }] }, p).some((x) => x.side === "uge"), false);
 const pkt = opmaerksomhed(inn, p);
 er("kritiske punkter står først", pkt.map((x) => x.alvor)[0], "crit");
 er("alle punkter peger et sted hen", pkt.every((x) => x.rapport || x.side), true);

@@ -1,0 +1,5 @@
+-- Hvorfor: Jonn bad 8.10.2026 om, at opgaver uden medarbejder i næste uges plan kommer i klokken og på Overblikket: de bliver hverken udført eller faktureret, før de er planlagt, og det rammer økonomien.
+-- Ny linje 7a i kontor_indbakke: art 'utildelte', ref = ISO-uge («2026-42»), rød, lukker sig selv, når alle i næste uge er tildelt. Næste uge regnes efter dansk tid.
+-- Samme afgrænsning som overblikket (utildelteNaesteUge i src/overblik.js): egentlige opgaver (fixed/adhoc), ikke aflyste, uden medarbejder.
+-- Kørt som migration `klokken_utildelte_naeste_uge`. Prøvet som service_role: «34 opgaver i uge 42 har ingen medarbejder», samme tal som «Ikke tildelt (34)» i ugeplanen.
+-- Appen: gaaTilIndbakkeLinje fører `utildelte` til næste uges plan (gaaTilSide i src/App.jsx).

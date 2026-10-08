@@ -52,6 +52,24 @@ export function statusFor(nogle, v, maal = STANDARD_TAL) {
 
 const dagePlus = (iso, n) => { const d = new Date(iso + "T00:00:00Z"); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
 
+// ISO-ugen for en dato («YYYY-MM-DD»): { uge, aar }.
+export function isoUge(iso) {
+  const d = new Date(iso + "T00:00:00Z");
+  const dag = (d.getUTCDay() + 6) % 7;
+  d.setUTCDate(d.getUTCDate() - dag + 3);
+  const aar = d.getUTCFullYear();
+  const uge = Math.ceil(((d - Date.UTC(aar, 0, 1)) / 86400000 + 1) / 7);
+  return { uge, aar };
+}
+
+// Opgaver uden medarbejder i næste uges plan. De bliver hverken udført eller faktureret, før de er planlagt. Samme afgrænsning som klokken (kontor_indbakke, 7a):
+// egentlige opgaver (fixed/adhoc), ikke aflyste, ingen medarbejder. kr er planlagt omsætning, regnet som i rapporterne (beregn).
+export function utildelteNaesteUge(i) {
+  const { uge, aar } = isoUge(dagePlus(i.idag, 7));
+  const liste = i.medAflyste.filter((t) => t.week === uge && t.year === aar && !i.erAflyst(t) && (t.assignees || []).length === 0);
+  return { uge, aar, antal: liste.length, kr: liste.reduce((s, t) => s + (Number(i.beregn(t).planlagtKr) || 0), 0) };
+}
+
 // Nøgletallene for én periode. in: se felterne nedenfor (alle er funktioner eller lister fra appen).
 export function beregnPeriode(i, fra, til) {
   const { opgaver, alleOpgaver, medarbejdere, templates, budgets, beregn, satsFor, datoAf, planlagtFor, erAflyst, erSygdom, erBlok, partFor, fastFor, segmenter, idag } = i;
@@ -117,6 +135,9 @@ export function opmaerksomhed(i, p) {
   const maal = i.maal || STANDARD_TAL;
   const { alleOpgaver, templates, medarbejdere, datoAf, idag, forfaldne } = i;
   const ud = [];
+  const utild = utildelteNaesteUge(i);
+  if (utild.antal) ud.push({ alvor: "crit", titel: `${utild.antal} ${utild.antal === 1 ? "opgave" : "opgaver"} i næste uges plan (uge ${utild.uge}) er ikke tildelt`,
+    tekst: `Planlagt omsætning ca. ${Math.round(utild.kr).toLocaleString("da-DK")} kr., der ikke bliver til noget, før opgaverne har en medarbejder.`, knap: "Åbn næste uges plan", side: "uge", arg: { naeste: true } });
   const om14 = dagePlus(idag, 14);
   const ikke = p.sy.beroerte.filter((b) => b.udfald === "ikkeDaekket" && b.dato >= idag && b.dato <= om14);
   if (ikke.length) ud.push({ alvor: "crit", titel: `${ikke.length} ${ikke.length === 1 ? "opgave" : "opgaver"} de næste 14 dage har ingen afløser`, tekst: "Den faste medarbejder er sygemeldt, og ingen står på opgaven.", knap: "Åbn sygefravær", rapport: "sygefravaer" });
