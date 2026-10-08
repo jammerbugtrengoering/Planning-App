@@ -335,6 +335,7 @@ for den anden. Derfor (Jonns beslutning 3.10.2026):
 - En kopitabel lavet med `create table as` arver Supabases tildelinger: `anon` og
   `authenticated` får fuld adgang. `revoke` dem ved navn og slå RLS til — `revoke ... from
   public` gør det ikke.
+- **Sider, der hentes ved behov, skal bruge `lazyChunk(() => import(...))` og aldrig `React.lazy` direkte.** Efter en udgivelse findes de gamle filnavne ikke mere; en fane, der har stået åben, får forsiden (text/html) tilbage og siden bliver hvid (8.10.2026, Udnyttelse: «Failed to fetch dynamically imported module»). `lazyChunk` genindlæser én gang af sig selv og viser ellers en besked med en knap.
 - Ændrer du en regel, der afgør **hvad der bliver oprettet**, så husk, at en browserfane
   kører den kode, den hentede, og ikke den, der ligger ude nu. Se `src/nyversion.js`.
 - **Opgavenummeret (`instances.opgave_nr`) tildeles af databasen og skrives aldrig af appen.**

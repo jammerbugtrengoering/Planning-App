@@ -11313,12 +11313,31 @@ function AflysningRapport({ instances, pricing = {}, grunde = [] }) {
 }
 
 // Nøgletal pr. postnummer (7.10.2026): hentes først, når fanen åbnes, fordi kortet (Leaflet) ellers fylder i alle kontorets opstarter.
-const PostnummerRapport = React.lazy(() => import("./PostnummerRapport.jsx"));
-const DaekningsRapport = React.lazy(() => import("./DaekningsRapport.jsx"));
-const UdnyttelsesRapport = React.lazy(() => import("./UdnyttelsesRapport.jsx"));
-const OverblikRapport = React.lazy(() => import("./OverblikRapport.jsx"));
-const SygefravaerRapport = React.lazy(() => import("./SygefravaerRapport.jsx"));
-const MedarbejderOmsaetningRapport = React.lazy(() => import("./MedarbejderOmsaetningRapport.jsx"));
+// Rapporterne hentes først, når fanen åbnes. Efter en udgivelse findes de gamle filnavne ikke mere: en fane, der har stået åben, beder om en fil, serveren svarer med forsiden (text/html), og siden
+// blev HVID (8.10.2026, Udnyttelse). Derfor: første gang genindlæses siden af sig selv, så fanen får den nye udgave; hjælper det ikke, vises en besked i stedet for en hvid side.
+function lazyChunk(indlaes) {
+  return React.lazy(() => indlaes().then((m) => {
+    try { sessionStorage.removeItem("chunk-genindlaest"); } catch { /* privat vindue */ }
+    return m;
+  }).catch((fejl) => {
+    let allerede = false;
+    try { allerede = !!sessionStorage.getItem("chunk-genindlaest"); if (!allerede) sessionStorage.setItem("chunk-genindlaest", String(Date.now())); } catch { allerede = true; }
+    if (!allerede) { window.location.reload(); return new Promise(() => {}); }
+    console.error("Kunne ikke hente siden:", fejl);
+    return { default: () => (
+      <div style={{ background: "#FFFBEB", color: "#92400E", borderRadius: 12, padding: "14px 16px", maxWidth: 560, textAlign: "left", lineHeight: 1.5 }}>
+        <b>Der er kommet en nyere udgave.</b> Siden kunne ikke hentes, fordi din fane kører den gamle.
+        <div style={{ marginTop: 8 }}><button type="button" style={styles.primaryBtn} onClick={() => window.location.reload()}>Genindlæs</button></div>
+      </div>
+    ) };
+  }));
+}
+const PostnummerRapport = lazyChunk(() => import("./PostnummerRapport.jsx"));
+const DaekningsRapport = lazyChunk(() => import("./DaekningsRapport.jsx"));
+const UdnyttelsesRapport = lazyChunk(() => import("./UdnyttelsesRapport.jsx"));
+const OverblikRapport = lazyChunk(() => import("./OverblikRapport.jsx"));
+const SygefravaerRapport = lazyChunk(() => import("./SygefravaerRapport.jsx"));
+const MedarbejderOmsaetningRapport = lazyChunk(() => import("./MedarbejderOmsaetningRapport.jsx"));
 // Én opgaves arbejde og værdi, regnet som de andre rapporter gør det: satsen på opgavens egen dato, fastpris for fastprisopgaver, og faktureret tid for det realiserede.
 function opgaveTal(t) {
   const fast = t.pricingType === "fixed";
