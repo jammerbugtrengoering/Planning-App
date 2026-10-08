@@ -14,8 +14,10 @@ const CSS = `
 .ob .seg { display:inline-flex; background:var(--surf); border:1px solid var(--line); border-radius:10px; padding:3px; gap:2px; }
 .ob .seg button { font:600 13px inherit; font-family:inherit; border:0; background:transparent; color:var(--ink2); padding:7px 14px; border-radius:7px; cursor:pointer; }
 .ob .seg button[aria-pressed="true"] { background:var(--acc); color:#fff; }
-.ob .hero { display:grid; grid-template-columns:minmax(290px,380px) minmax(0,1fr); gap:16px; align-items:start; }
-@media (max-width:860px) { .ob .hero { grid-template-columns:minmax(0,1fr); } }
+.ob .hero { display:grid; grid-template-columns:minmax(300px,390px) minmax(0,1fr); gap:16px; align-items:stretch; }
+.ob .hoejre { display:flex; flex-direction:column; min-width:0; }
+.ob .venstre { display:flex; flex-direction:column; gap:16px; min-width:0; }
+@media (max-width:900px) { .ob .hero { grid-template-columns:minmax(0,1fr); } }
 .ob .card { background:var(--surf); border:1px solid var(--line); border-radius:16px; box-shadow:0 1px 2px rgba(60,20,45,.06),0 4px 14px rgba(60,20,45,.04); }
 .ob .temp { padding:18px; display:flex; flex-direction:column; align-items:center; gap:4px; }
 .ob .lab { font-weight:700; font-size:12px; letter-spacing:.08em; text-transform:uppercase; color:var(--ink3); align-self:flex-start; }
@@ -30,19 +32,18 @@ const CSS = `
 .ob .part b { text-align:right; }
 .ob .attn { padding:16px 16px 6px; }
 .ob .attn-head { display:flex; justify-content:space-between; align-items:baseline; flex-wrap:wrap; gap:8px; margin-bottom:6px; }
-.ob .att { display:grid; grid-template-columns:auto minmax(0,1fr) auto; gap:12px; align-items:center; padding:11px 4px; border:0; border-top:1px solid var(--line); background:transparent; width:100%; text-align:left; font:inherit; color:inherit; cursor:pointer; border-radius:10px; }
+.ob .att { display:grid; grid-template-columns:minmax(0,1fr); gap:3px; align-items:start; justify-items:start; padding:11px 4px; border:0; border-top:1px solid var(--line); background:transparent; width:100%; text-align:left; font:inherit; color:inherit; cursor:pointer; border-radius:10px; }
 .ob .att:first-of-type { border-top:0; }
 .ob .att:hover { background:var(--surf2); }
 .ob .att .tt { font-weight:600; }
 .ob .att .dd { color:var(--ink2); font-size:13px; }
 .ob .go { font-weight:600; font-size:13px; color:var(--deep); white-space:nowrap; }
-@media (max-width:560px) { .ob .att { grid-template-columns:minmax(0,1fr); gap:4px; } .ob .att .pill { justify-self:start; } }
 .ob .pill { display:inline-flex; align-items:center; gap:6px; font-weight:700; font-size:11.5px; padding:3px 9px 3px 7px; border-radius:99px; white-space:nowrap; }
 .ob .pill svg { width:11px; height:11px; flex:none; }
 .ob .pill.crit { background:var(--crits); color:var(--crit); } .ob .pill.warn { background:var(--warns); color:var(--warn); }
 .ob .pill.good { background:var(--goods); color:var(--good); } .ob .pill.info { background:var(--surf2); color:var(--ink2); } .ob .pill.ingen { background:var(--surf2); color:var(--ink3); }
 .ob .sect { display:flex; justify-content:space-between; align-items:baseline; flex-wrap:wrap; gap:8px; margin-bottom:10px; }
-.ob .tiles { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:14px; }
+.ob .tiles { display:grid; grid-template-columns:repeat(auto-fill,minmax(215px,1fr)); gap:14px; flex:1; grid-auto-rows:1fr; }
 .ob .tile { padding:14px 14px 10px; display:flex; flex-direction:column; gap:5px; min-width:0; text-align:left; font:inherit; color:inherit; cursor:pointer; }
 .ob .tile:hover { border-color:var(--acc); }
 .ob .tile .row { display:flex; justify-content:space-between; align-items:center; gap:8px; }
@@ -52,7 +53,7 @@ const CSS = `
 .ob .tile .meta { display:flex; gap:10px; flex-wrap:wrap; color:var(--ink3); font-size:12.5px; }
 .ob .gd { color:var(--good); font-weight:700; } .ob .bd { color:var(--crit); font-weight:700; }
 .ob .spark { width:100%; height:42px; display:block; overflow:visible; }
-.ob .src { color:var(--deep); font-weight:600; font-size:12.5px; margin-top:2px; }
+.ob .src { color:var(--deep); font-weight:600; font-size:12.5px; margin-top:auto; padding-top:4px; }
 .ob .foot { color:var(--ink3); font-size:12.5px; max-width:80ch; }
 .ob button:focus-visible { outline:2px solid var(--acc); outline-offset:2px; }
 `;
@@ -167,6 +168,7 @@ export default function OverblikRapport({ input, medDinero, onAabn, onSide }) {
       </div>
 
       <section className="hero">
+        <div className="venstre">
         <div className="card temp">
           <div className="lab">Temperatur</div>
           <Maaler score={temp.score} niveau={temp.niveau} />
@@ -192,14 +194,13 @@ export default function OverblikRapport({ input, medDinero, onAabn, onSide }) {
           {punkter.map((x, i) => (
             <button type="button" className="att" key={i} onClick={() => gaa(x)}>
               <Pill k={x.alvor} />
-              <span><div className="tt">{x.titel}</div><div className="dd">{x.tekst}</div></span>
+              <div><div className="tt">{x.titel}</div><div className="dd">{x.tekst}</div></div>
               <span className="go">{x.knap} →</span>
             </button>
           ))}
         </div>
-      </section>
-
-      <section>
+        </div>
+        <div className="hoejre">
         <div className="sect"><h3 style={{ fontSize: 18, fontWeight: 800 }}>Nøgletal</h3><span style={{ color: "#8B7C87", fontSize: 13 }}>Mod {raekke.mod} · kurve: de sidste tolv måneder · stiplet streg er målet</span></div>
         <div className="tiles">
           {Object.entries(MAAL).map(([k, m]) => {
@@ -218,6 +219,8 @@ export default function OverblikRapport({ input, medDinero, onAabn, onSide }) {
             );
           })}
         </div>
+        </div>
+
       </section>
 
       <p className="foot">
