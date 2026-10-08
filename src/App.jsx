@@ -1430,6 +1430,20 @@ function completionInfo(t, employees) {
   return { label: "Udført", byEmployee: true, when: null };
 }
 
+// Opgaver med flere medarbejdere (8.10.2026): opgaven er først «udført», når ALLE har afsluttet, men hver enkelt melder sig færdig for sig (completed_by_employee).
+// Uden det her stod en opgave, hvor den ene var færdig og den anden ikke, som «i gang» uden et ord om, hvem der var færdig. Ugeplanen og opgaven viser nu hvem.
+function delvisAfsluttet(t, employees) {
+  if (!t || t.status === "udført" || t.status === "aflyst") return null;
+  const gjort = t.completedByEmployee || t.completed_by_employee || {};
+  const folk = (t.assignees || []).map((id) => employees.find((e) => e.id === id)).filter(Boolean);
+  const faerdige = folk.filter((e) => gjort[e.id]);
+  if (faerdige.length === 0 || folk.length < 2) return null;
+  const mangler = folk.filter((e) => !gjort[e.id]);
+  if (mangler.length === 0) return null;
+  const fornavn = (e) => String(e.name || "").split(" ")[0];
+  return { faerdige: faerdige.map(fornavn), mangler: mangler.map(fornavn), antal: faerdige.length, ialt: folk.length };
+}
+
 function statusColor(s) { return { planlagt: "var(--farve-moerk)", udført: "#111111", unscheduled: "#94A3B8" }[s]; }
 
 
@@ -1774,7 +1788,7 @@ const MODULE_HELP = {
         "Du kan trække en opgave fra «Ikke tildelt» ned på et klokkeslæt i tidslinjen. Tidspunktet rundes til nærmeste kvarter og sættes som aftalt tid — der kommer aldrig til at stå 09:47 på en aftale.",
         "Opgaver kan også trækkes rundt inde i tidslinjen. Overståede dage er skraveret og tager ikke imod.",
         "Tiderne står ens i begge visninger: først det tidspunkt, medarbejderen reelt kan være der, og 🎯 med den aftalte tid ved siden af, når de ikke passer sammen.",
-        "Plusset på et kort sætter flere medarbejdere på opgaven — i tidslinjen såvel som i gitteret. De andre, der er på, vises med deres forbogstaver på kortet.",
+        "Plusset på et kort sætter flere medarbejdere på opgaven — i tidslinjen såvel som i gitteret. De andre, der er på, vises med deres forbogstaver på kortet. Er I flere på en opgave, bliver den først «udført», når alle har afsluttet. Er kun nogle færdige, står der på kortet og i opgaven, hvem der er færdig, og hvem der mangler.",
         "Fuldt optrukket kant betyder aftalt klokkeslæt. Stiplet betyder, at tiden er regnet ud fra hvornår dagen begynder — skrider dagen, skrider den med. Der står også «ikke aftalt tid» på blokken, når der er plads.",
         "Blokken viser det samme som brikken i gitteret: klokkeslæt, navn, adresse, opgavens art, varighed, tjeklistepunkter og hvem der har udført den hvornår. Korte opgaver viser kun det, der kan være — en afklippet adresse er værre end ingen. Hold musen over for at få det hele.",
         "En udført opgave bliver grøn med «Udført af …» og tidspunktet, ligesom i gitteret.",
@@ -7517,6 +7531,15 @@ function WeekView({ employees, instances, unplaced, aflyste = [], aflysningsgrun
                               )}
                             </div>
                             {t.address && <div style={styles.taskChipAddress}>📍 {t.address}</div>}
+                            {(() => {
+                              const delvis = delvisAfsluttet(t, employees);
+                              return delvis ? (
+                                <div style={{ ...styles.doneNote, color: "#166534", background: "#F0FDF4" }}
+                                  title="Opgaven bliver først udført, når alle på den har afsluttet">
+                                  ✓ {delvis.faerdige.join(", ")} færdig · {delvis.mangler.join(", ")} mangler
+                                </div>
+                              ) : null;
+                            })()}
                             {completion && (
                               <div style={{ ...styles.doneNote, ...(completion.byEmployee ? {} : { color: "#92400E", background: "#FFFBEB" }) }}
                                 title={completion.byEmployee
@@ -21425,6 +21448,14 @@ return (
       {candidatesFor(t, employees, areas, employeeAreas).candidates.length > 0 && t.warning === "overloaded" && <span style={styles.warnChip}><AlertTriangle size={12} /> Ingen ledig kapacitet den dag</span>}
 
       <label style={styles.label}>Status</label>
+      {(() => {
+        const delvis = delvisAfsluttet(t, employees);
+        return delvis ? (
+          <div style={{ fontSize: 13, color: "#166534", background: "#F0FDF4", border: "1px solid #BBF7D0", borderRadius: 10, padding: "8px 12px", marginBottom: 8, lineHeight: 1.5 }}>
+            I gang: {delvis.antal} af {delvis.ialt} har afsluttet ({delvis.faerdige.join(", ")}). {delvis.mangler.join(", ")} mangler. Opgaven bliver først «udført», når alle har afsluttet.
+          </div>
+        ) : null;
+      })()}
       <div style={styles.typePicker}>
         {["unscheduled", "planlagt", "udført"].map((s) => (
           <button key={s} type="button" onClick={() => {
