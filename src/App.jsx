@@ -2423,6 +2423,10 @@ const MODULE_HELP = {
         "Fanen «⏳ Udnyttelse» (kun administratorer) viser, hvor stor en del af medarbejdernes tid der er fyldt med opgaver hos kunderne. Vælg år og måned, eller hele året.",
         "Kapaciteten er de timer pr. ugedag, der står på medarbejderkortet, minus ferie og sygdom. Planlagt er opgavernes tid i hele perioden; udført er den registrerede tid til og med i dag, målt mod kapaciteten for de samme dage. Kørsel og kontortid er ikke med.",
         "Listen står med den mest ledige øverst. Gul betyder under 60 %: der er plads til flere opgaver. Rød betyder over 95 %: der er ingen luft, hvis nogen bliver syge. Står en medarbejders timer ikke på kortet, ser vedkommende ledig ud, så ret dem dér først."] },
+    { h: "Omsætning pr. medarbejder", p: [
+        "Fanen «👤 Pr. medarbejder» (kun administratorer) viser, hvor meget af den realiserede omsætning hver medarbejder har leveret, hvad det er pr. arbejdstime, og lønnen ved siden af. Vælg år, måned og aftaletype.",
+        "Omsætningen er den samme som i Budget-fanen og fordeles på dem, der leverede den: efter fakturerbare minutter på timeopgaver, efter planlagt tid på fastpris. En elev (oplæring) får ingen omsætning, men tiden tæller som løn. Kontorets egne registreringer, fx forgæves besøg, der faktureres alligevel, står for sig som «Kontoret». Summen af rækkerne er altid præcis den realiserede omsætning.",
+        "Lønnen er registreret tid gange medarbejderens sats på opgavens dato, uden tillæg. Kørsel og bonus er ikke med. Mangler en sats, regnes de timer ikke med, og en gul linje siger det. Brug tallet til at se mønstre, ikke til at bedømme en enkelt medarbejder: en medarbejder på store timeopgaver og en på små fastprisopgaver er ikke til at sammenligne en til en."] },
     { h: "Sygefravær og vikardækning", p: [
         "Fanen «🤒 Sygefravær» (kun administratorer) bygger på de sygdomsblokeringer, I lægger på en medarbejder. Vælg år og måned, eller hele året. Systemet gemmer og viser aldrig en årsag, kun dage og timer.",
         "Sygefraværet er sygedagenes timer delt med medarbejderens kapacitet i perioden, før ferie og sygdom er trukket fra. Sygemeldinger er antallet af perioder, I har registreret.",
@@ -11246,6 +11250,7 @@ const PostnummerRapport = React.lazy(() => import("./PostnummerRapport.jsx"));
 const DaekningsRapport = React.lazy(() => import("./DaekningsRapport.jsx"));
 const UdnyttelsesRapport = React.lazy(() => import("./UdnyttelsesRapport.jsx"));
 const SygefravaerRapport = React.lazy(() => import("./SygefravaerRapport.jsx"));
+const MedarbejderOmsaetningRapport = React.lazy(() => import("./MedarbejderOmsaetningRapport.jsx"));
 // Én opgaves arbejde og værdi, regnet som de andre rapporter gør det: satsen på opgavens egen dato, fastpris for fastprisopgaver, og faktureret tid for det realiserede.
 function opgaveTal(t) {
   const fast = t.pricingType === "fixed";
@@ -11356,7 +11361,7 @@ function ReportsView({ instances, templates, pricing, budgets, onSaveBudget, isA
     ["budget", "📊 Budget og omsætning"],
     ["aflysning", "🚫 Aflysninger"],
     ["postnummer", "🗺 Postnumre"],
-    ...(isAdminUser ? [["overskud", "💰 Overskud"], ["daekning", "📈 Dækningsbidrag"], ["udnyttelse", "⏳ Udnyttelse"], ["sygefravaer", "🤒 Sygefravær"]] : []),
+    ...(isAdminUser ? [["overskud", "💰 Overskud"], ["daekning", "📈 Dækningsbidrag"], ["udnyttelse", "⏳ Udnyttelse"], ["sygefravaer", "🤒 Sygefravær"], ["medarbejderomsaetning", "👤 Pr. medarbejder"]] : []),
     ...(isAdminUser && harModul("start_stop") ? [["startstop", "⏱ Start/stop"]] : []),
   ];
 
@@ -11390,6 +11395,12 @@ function ReportsView({ instances, templates, pricing, budgets, onSaveBudget, isA
         <React.Suspense fallback={<div style={styles.hint}>Henter rapporten…</div>}>
           <UdnyttelsesRapport opgaver={instances} medarbejdere={employees} datoAf={instanceDateString} planlagtFor={planlagtFor}
             erBlok={(t) => BLOCK_TYPES.includes(t.type)} erUdelukket={(t) => t.type === "aktivitet" || erAflyst(t)} />
+        </React.Suspense>
+      ) : rapport === "medarbejderomsaetning" && isAdminUser ? (
+        <React.Suspense fallback={<div style={styles.hint}>Henter rapporten…</div>}>
+          <MedarbejderOmsaetningRapport opgaver={postnrOpgaver} medarbejdere={employees} beregn={opgaveTal}
+            loenFor={(emp, dato) => satsPaaDato(satsHistorik, emp, dato)} datoAf={instanceDateString} segmenter={REPORT_AREAS}
+            harSatser={!!satsHistorik && Object.keys(satsHistorik).length > 0} />
         </React.Suspense>
       ) : rapport === "sygefravaer" && isAdminUser ? (
         <React.Suspense fallback={<div style={styles.hint}>Henter rapporten…</div>}>

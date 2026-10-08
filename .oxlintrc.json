@@ -31,7 +31,8 @@
     "daekningsbidrag.test.mjs",
     "udnyttelse.test.mjs",
     "aflysningsprocent.test.mjs",
-    "sygefravaer.test.mjs"
+    "sygefravaer.test.mjs",
+    "medarbejderomsaetning.test.mjs"
   ],
   "rules": {
     "no-undef": "error",
