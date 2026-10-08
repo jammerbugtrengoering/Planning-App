@@ -38,6 +38,8 @@ const STANDARD = KUNDEUDGAVE ? {
   brug_omraader: true,
   ferie_varsel_dage: 28,
   fridag_varsel_dage: 10,
+  // Mål for nøgletallene i Rapportering -> Overblik: {nøgle: tal}. Tom betyder standarden i src/overblik.js.
+  noegletal_maal: null,
 } : {
   navn: "Jammerbugt Rengøring",
   undertekst: "Planlægning og fakturering",
@@ -58,6 +60,8 @@ const STANDARD = KUNDEUDGAVE ? {
   brug_omraader: true,
   ferie_varsel_dage: 28,
   fridag_varsel_dage: 10,
+  // Mål for nøgletallene i Rapportering -> Overblik: {nøgle: tal}. Tom betyder standarden i src/overblik.js.
+  noegletal_maal: null,
 };
 
 // Er modulet med? Ukendt = med, saa intet forsvinder, foer indstillingerne er hentet.

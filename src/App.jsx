@@ -1,5 +1,6 @@
 import { aflysningPrSegment } from "./aflysningsprocent.js";
 import { postnrFraAdresse } from "./postnummer.js";
+import { MAAL as NOEGLETAL, maalTal } from "./overblik.js";
 import React, { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { samletForMedarbejder, danloenLinjer, danloenCsv } from "./loenberegning.js";
 import { loenPeriode, periodeFor, periodeTekst, erLaast as loenErLaast, isoDag } from "./loenperiode.js";
@@ -245,7 +246,7 @@ const MENU_GRUPPER = [
   // Personalemappen (6.10.2026): HR-data, kun for HR-administratorer (tabellen hr_administratorer, funktionen er_hr_admin). Planlæggere uden HR-adgang
   // bruger «Medarbejdere» under Opsætning, der kun har planlægningsdata.
   { key: "personale", navn: "Personalemappen", kunHr: true, skjultIMenu: true, sider: [["personalemappen", "Medarbejdere"], ["fravaer", "Ferie og fravær"], ["haandbog", "Håndbog og politikker"]] },
-  { key: "opsaetning", navn: "Opsætning", skjultIMenu: true, sider: [["employees", "Medarbejdere"], ["kompetencer", "Kompetencer"], ["omraader", "Områder"], ["startstop", "Start/stop"], ["loenperioder", "Lønperioder"], ["ferievarsel", "Ferie og fravær"], ["checklists", "Tjeklister"], ["transport", "Transporttid"], ["aflysning", "Aflysning"], ["timepriser", "Timepriser"], ["firma", "Firma"]] },
+  { key: "opsaetning", navn: "Opsætning", skjultIMenu: true, sider: [["employees", "Medarbejdere"], ["kompetencer", "Kompetencer"], ["omraader", "Områder"], ["startstop", "Start/stop"], ["loenperioder", "Lønperioder"], ["ferievarsel", "Ferie og fravær"], ["checklists", "Tjeklister"], ["transport", "Transporttid"], ["aflysning", "Aflysning"], ["timepriser", "Timepriser"], ["noegletal", "Nøgletal og mål"], ["firma", "Firma"]] },
   // Kun i kundeudgaven (fase 5, 29.9.2026): kundefirmaet bestiller ekstra hjaelp hos
   // Jammerbugt Rengoering. Hos Jammerbugt selv findes siden ikke — der er man den,
   // der modtager bestillingerne.
@@ -2079,6 +2080,12 @@ const MODULE_HELP = {
         "Skal medarbejderen tilbage, fjerner du fratrædelsesdatoen under «Redigér» og opretter en ny adgang. Det gamle login kan ikke gendannes."] },
   ], warn: "Weekendarbejde kræver flueben på medarbejderen. Uden det kan vedkommende slet ikke planlægges lørdag og søndag. Med fluebenet er der ingen timegrænse i weekenden — derfor står der Ja/Nej og ikke et timetal." },
 
+  noegletal: { title: "Nøgletal og mål", intro: "Målene, Overblikket måler virksomheden efter.", blocks: [
+    { h: "Sådan virker det", p: [
+        "Hvert nøgletal på Overblikket under Rapportering har et mål. Er tallet på den rigtige side af målet, står det grønt. Er det lidt forbi, står det gult, og er det langt fra, står det rødt. Temperaturen øverst er gennemsnittet af, hvor tæt nøgletallene er på deres mål.",
+        "Skriv målet i feltet. «Mindst» betyder, at tallet skal være mindst så højt (fx dækningsbidrag). «Højst» betyder, at det skal være højst så højt (fx sygefravær og aflysninger). Lader du et felt stå tomt, bruges standarden, som står under feltet. «Brug standarden» tømmer alle felter.",
+        "Standarderne er gæt og ikke afstemt med kontoret. Sæt dem, så grønt betyder, at I er tilfredse. Sætter du et mål meget højt, bliver næsten alt gult, og temperaturen falder."] },
+  ] },
   ferievarsel: { title: "Ferie og fravær", intro: "Hvor tidligt medarbejderne skal søge ferie og fri.", blocks: [
     { h: "Varsel", p: ["Skriv, hvor mange dage før første dag en anmodning om ferie og fri skal være sendt. Standard er 28 dage (4 uger) til ferie og 10 dage til fri. Tryk «Gem varsel».",
         "Medarbejderens Personalemappen-app viser det samme varsel, før medarbejderen sender. En anmodning, der kommer senere, afvises ikke: den gemmes med mærket «kort varsel», og du afgør den under Personalemappen → Ferie og fravær.",
@@ -2449,6 +2456,10 @@ const MODULE_HELP = {
         "Fanen «⏳ Udnyttelse» (kun administratorer) viser, hvor stor en del af medarbejdernes tid der er fyldt med opgaver hos kunderne. Vælg år og måned, eller hele året.",
         "Kapaciteten er de timer pr. ugedag, der står på medarbejderkortet, minus ferie og sygdom. Planlagt er opgavernes tid i hele perioden; udført er den registrerede tid til og med i dag, målt mod kapaciteten for de samme dage. Kørsel og kontortid er ikke med.",
         "Listen står med den mest ledige øverst. Gul betyder under 60 %: der er plads til flere opgaver. Rød betyder over 95 %: der er ingen luft, hvis nogen bliver syge. Står en medarbejders timer ikke på kortet, ser vedkommende ledig ud, så ret dem dér først."] },
+    { h: "Overblik", p: [
+        "Rapportering åbner på «🌡 Overblik» (kun administratorer). Det er indgangen til de andre rapporter. Øverst står virksomhedens temperatur fra 0 til 100 med fire dele: økonomi, kunder, medarbejdere og drift. Ved siden af står de punkter, der kræver opmærksomhed, mest alvorlige først.",
+        "Hvert punkt og hvert af de otte nøgletal er en knap: tryk på det, og du kommer til rapporten bag. Fra rapporten kommer du tilbage med «← Tilbage til overblikket» øverst. Punkter om aftaler uden postnummer eller kladder fører til Drift.",
+        "Tallene er de samme som i rapporterne, regnet på den periode, du vælger (måned, kvartal eller år), og de sammenlignes med forrige periode. Kurven viser de sidste tolv måneder; den stiplede streg er målet. Målene sætter I under Opsætning → Nøgletal og mål."] },
     { h: "Omsætning pr. medarbejder", p: [
         "Fanen «👤 Pr. medarbejder» (kun administratorer) viser, hvor meget af den realiserede omsætning hver medarbejder har leveret, hvad det er pr. arbejdstime, og lønnen ved siden af. Vælg år, måned og aftaletype.",
         "Omsætningen er den samme som i Budget-fanen og fordeles på dem, der leverede den: efter fakturerbare minutter på timeopgaver, efter planlagt tid på fastpris. En elev (oplæring) får ingen omsætning, men tiden tæller som løn. Kontorets egne registreringer, fx forgæves besøg, der faktureres alligevel, står for sig som «Kontoret». Summen af rækkerne er altid præcis den realiserede omsætning.",
@@ -6701,6 +6712,7 @@ function PlanningApp({ session, onSignOut }) {
       )}
       {view === "haandbog" && erHrAdmin && <HaandbogView />}
       {view === "fravaer" && erHrAdmin && <FravaerView onAfgoer={afgoerFravaer} beroerte={opgaverIPeriode} />}
+      {view === "noegletal" && <NoegletalMaalPanel firma={firma} medarbejderId={currentEmployeeForAuth?.id || null} onFirmaGemt={(ny) => setFirma(ny)} notify={notify} />}
       {view === "ferievarsel" && <FerieVarselPanel firma={firma} medarbejderId={currentEmployeeForAuth?.id || null} onFirmaGemt={(ny) => setFirma(ny)} notify={notify} />}
       {view === "personalemappen" && erHrAdmin && (
         <PersonalemappeListe employees={employees} hrData={hrData}
@@ -6839,7 +6851,7 @@ function PlanningApp({ session, onSignOut }) {
           omkostninger={omkostninger} onSaveOmkostning={saveOmkostning}
           onDeleteOmkostning={deleteOmkostning}
           bonus={bonus} onSaveBonus={saveBonus} onDeleteBonus={deleteBonus}
-          dineroOmsaetning={dineroOmsaetning} />
+          dineroOmsaetning={dineroOmsaetning} gaaTil={(side) => setView(side)} />
       )}
 
       {/* Spærret to steder: fanen vises ikke for andre end administratorer, OG siden
@@ -11294,6 +11306,7 @@ function AflysningRapport({ instances, pricing = {}, grunde = [] }) {
 const PostnummerRapport = React.lazy(() => import("./PostnummerRapport.jsx"));
 const DaekningsRapport = React.lazy(() => import("./DaekningsRapport.jsx"));
 const UdnyttelsesRapport = React.lazy(() => import("./UdnyttelsesRapport.jsx"));
+const OverblikRapport = React.lazy(() => import("./OverblikRapport.jsx"));
 const SygefravaerRapport = React.lazy(() => import("./SygefravaerRapport.jsx"));
 const MedarbejderOmsaetningRapport = React.lazy(() => import("./MedarbejderOmsaetningRapport.jsx"));
 // Én opgaves arbejde og værdi, regnet som de andre rapporter gør det: satsen på opgavens egen dato, fastpris for fastprisopgaver, og faktureret tid for det realiserede.
@@ -11311,14 +11324,15 @@ function opgaveTal(t) {
 function ReportsView({ instances, templates, pricing, budgets, onSaveBudget, isAdminUser,
                         employees, satsHistorik, kmSatser, kmLog, omkostninger,
                         onSaveOmkostning, onDeleteOmkostning,
-                        bonus, onSaveBonus, onDeleteBonus, dineroOmsaetning, aflysningsgrunde = [] }) {
+                        bonus, onSaveBonus, onDeleteBonus, dineroOmsaetning, aflysningsgrunde = [], gaaTil }) {
   // To rapporter, to spørgsmål. «Budget» handler om, hvad der er kommet ind måned
   // for måned. «Aftaleportefølje» handler om, hvad der ER aftalt — hvad de aftaler,
   // der ligger, er værd, og hvordan de fordeler sig. Det andet kan ikke læses ud af
   // det første: en aftale underskrevet i dag fylder ingenting i budgettet i år og
   // alligevel en halv million over sin løbetid.
   // Aftaleporteføljen er den første, man lander på (Jonn 2.10.2026).
-  const [rapport, setRapport] = useState("portefoelje");
+  // Administratorer lander på Overblikket (8.10.2026), som er indgangen til de andre rapporter; alle andre på Aftaleporteføljen.
+  const [rapport, setRapport] = useState(isAdminUser ? "overblik" : "portefoelje");
   const now = new Date();
   const [selectedArea, setSelectedArea] = useState("privat");
   const [selectedYear, setSelectedYear] = useState(now.getFullYear());
@@ -11342,6 +11356,16 @@ function ReportsView({ instances, templates, pricing, budgets, onSaveBudget, isA
   const isAllAreas = selectedArea === "alle";
   // Kun egentlige opgaver: ingen ferie, sygdom, aktiviteter eller aflyste.
   const postnrOpgaver = useMemo(() => instances.filter((t) => (t.type === "fixed" || t.type === "adhoc") && !erAflyst(t)), [instances]);
+  // Det overblikket regner på. Alt kommer fra de samme funktioner som rapporterne bag kortene (se src/overblik.js).
+  const overblikInput = useMemo(() => !isAdminUser ? null : {
+    opgaver: postnrOpgaver, alleOpgaver: instances, medAflyste: instances.filter((t) => t.type === "fixed" || t.type === "adhoc"),
+    medarbejdere: employees, templates, budgets, beregn: opgaveTal, datoAf: instanceDateString, planlagtFor, erAflyst,
+    satsFor: (emp, dato) => satsPaaDato(satsHistorik, emp, dato), erSygdom: (t) => t.type === "sygdom", erBlok: (t) => BLOCK_TYPES.includes(t.type),
+    partFor: (t) => (aflysningsgrunde.find((x) => x.id === t.aflyst_grund)?.part) || "jammerbugt",
+    fastFor: (t) => (t.templateId && templates.find((tp) => tp.id === t.templateId)?.preferredEmployeeId) || null,
+    segmenter: REPORT_AREAS, maal: FIRMA.noegletal_maal,
+    udenPostnr: templates.filter((x) => x.status === "aktiv" && !postnrFraAdresse(x.address)).length,
+  }, [isAdminUser, postnrOpgaver, instances, employees, templates, budgets, satsHistorik, aflysningsgrunde, FIRMA.noegletal_maal]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const monthRows = useMemo(() => {
     const areasToSum = isAllAreas ? REPORT_AREAS.map(([k]) => k) : [selectedArea];
@@ -11402,6 +11426,7 @@ function ReportsView({ instances, templates, pricing, budgets, onSaveBudget, isA
   const CHART_H = 160;
 
   const rapportFaner = [
+    ...(isAdminUser ? [["overblik", "🌡 Overblik"]] : []),
     ["portefoelje", "📁 Aftaleportefølje"],
     ["budget", "📊 Budget og omsætning"],
     ["aflysning", "🚫 Aflysninger"],
@@ -11423,7 +11448,16 @@ function ReportsView({ instances, templates, pricing, budgets, onSaveBudget, isA
         ))}
       </div>
 
-      {rapport === "startstop" ? (
+      {/* Fra hver rapport er der en vej tilbage til Overblikket, som er indgangen (8.10.2026). */}
+      {isAdminUser && rapport !== "overblik" && (
+        <button type="button" onClick={() => setRapport("overblik")} style={{ ...styles.secondaryBtn, marginBottom: 14 }}>← Tilbage til overblikket</button>
+      )}
+
+      {rapport === "overblik" && isAdminUser && overblikInput ? (
+        <React.Suspense fallback={<div style={styles.hint}>Henter overblikket…</div>}>
+          <OverblikRapport input={overblikInput} medDinero={harModul("dinero")} onAabn={(k) => { setRapport(k); window.scrollTo?.(0, 0); }} onSide={(side) => gaaTil && gaaTil(side)} />
+        </React.Suspense>
+      ) : rapport === "startstop" ? (
         <StartStopRapport />
       ) : rapport === "aflysning" ? (
         <AflysningRapport instances={instances} pricing={pricing} grunde={aflysningsgrunde} />
@@ -15871,6 +15905,58 @@ function FerieVarselPanel({ firma, medarbejderId, onFirmaGemt, notify }) {
             <input id="vd" type="number" min="0" max="365" style={{ ...styles.input, width: 110 }} value={fridagDage} onChange={(e) => setFridagDage(e.target.value)} />
             <div style={styles.hint}>= {varselTekst(fridagDage)}</div></div>
           <button type="button" style={styles.primaryBtn} disabled={gemmerVarsel || !firma} onClick={gemVarsel}>{gemmerVarsel ? "Gemmer…" : "Gem varsel"}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+// Mål til nøgletallene i Rapportering -> Overblik (8.10.2026). Tomt felt = standarden. Gemmes i firma.noegletal_maal som {nøgle: tal}.
+function NoegletalMaalPanel({ firma, medarbejderId, onFirmaGemt, notify }) {
+  const standard = maalTal(null);
+  const fraFirma = () => Object.fromEntries(Object.keys(NOEGLETAL).map((k) => [k, FIRMA.noegletal_maal && FIRMA.noegletal_maal[k] != null ? String(FIRMA.noegletal_maal[k]) : ""]));
+  const [felter, setFelter] = useState(fraFirma);
+  const [gemmer, setGemmer] = useState(false);
+  useEffect(() => { setFelter(fraFirma()); }, [firma]); // eslint-disable-line react-hooks/exhaustive-deps
+  async function gem() {
+    const ud = {};
+    for (const [k, v] of Object.entries(felter)) {
+      const t = String(v).trim().replace(",", ".");
+      if (t === "") continue;
+      const n = Number(t);
+      if (!Number.isFinite(n) || n <= 0) { notify && notify(`«${NOEGLETAL[k].navn}»: skriv et tal over nul, eller lad feltet stå tomt`); return; }
+      if (n !== standard[k]) ud[k] = n;
+    }
+    if (!firma?.id) return;
+    setGemmer(true);
+    const { data, error } = await supabase.from("firma").update({ noegletal_maal: Object.keys(ud).length ? ud : null, aendret_af: medarbejderId }).eq("id", firma.id).select().maybeSingle();
+    setGemmer(false);
+    if (error || !data) { notify && notify("Kunne ikke gemme: " + (error?.message || "ukendt fejl")); return; }
+    opdaterFirma(data); onFirmaGemt && onFirmaGemt(data);
+    notify && notify("Målene er gemt");
+  }
+  const raekker = Object.entries(NOEGLETAL);
+  return (
+    <div style={styles.page}>
+      <div style={{ fontWeight: 700, fontSize: 18, color: "#111111", marginBottom: 4 }}>Nøgletal og mål</div>
+      <div style={{ fontSize: 13, color: "#64748B", marginBottom: 14, lineHeight: 1.55, maxWidth: 760 }}>
+        Målene bruges på Overblikket under Rapportering: de bestemmer, om et nøgletal står grønt, gult eller rødt, og hvor varm virksomheden er. Tomt felt betyder standarden.
+      </div>
+      <div style={{ background: "#fff", borderRadius: 14, padding: "12px 16px", boxShadow: "0 1px 3px rgba(0,0,0,0.06)", maxWidth: 760, textAlign: "left" }}>
+        {raekker.map(([k, m]) => (
+          <div key={k} style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) 130px", gap: 12, alignItems: "center", padding: "8px 0", borderTop: "1px solid #F1F5F9" }}>
+            <div>
+              <label style={{ fontWeight: 600 }} htmlFor={`mal-${k}`}>{m.navn}</label>
+              <div style={styles.hint}>{m.hoej ? "Mindst" : "Højst"} · standard {standard[k].toLocaleString("da-DK")} {m.enhed}</div>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <input id={`mal-${k}`} inputMode="decimal" style={{ ...styles.input, width: 90, marginBottom: 0 }} placeholder={String(standard[k])} value={felter[k]} onChange={(e) => setFelter((f) => ({ ...f, [k]: e.target.value }))} />
+              <span style={{ color: "#64748B" }}>{m.enhed}</span>
+            </div>
+          </div>
+        ))}
+        <div style={{ marginTop: 12, display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <button type="button" style={styles.primaryBtn} disabled={gemmer || !firma} onClick={gem}>{gemmer ? "Gemmer…" : "Gem mål"}</button>
+          <button type="button" style={styles.secondaryBtn} disabled={gemmer} onClick={() => setFelter(Object.fromEntries(Object.keys(NOEGLETAL).map((k) => [k, ""])))}>Brug standarden</button>
         </div>
       </div>
     </div>

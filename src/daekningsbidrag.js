@@ -9,7 +9,8 @@
 const tom = () => ({ antal: 0, omsaetning: 0, loen: 0, minutter: 0, udenSatsMin: 0, udenSatsOpgaver: 0 });
 
 // opgaver: de opgaver, der må tælle med. beregn(t) -> { realiseretKr }. satsFor(empId, dato) -> kr/time eller null. datoAf(t) -> «YYYY-MM-DD». aar: årstal eller «alle».
-export function daekningPrSegment(opgaver, { beregn, satsFor, datoAf, aar = "alle", segmenter }) {
+// fra/til («YYYY-MM-DD», begge med) afgrænser en periode i stedet for et helt år; bruges af overblikket (src/overblik.js).
+export function daekningPrSegment(opgaver, { beregn, satsFor, datoAf, aar = "alle", fra = null, til = null, segmenter }) {
   const pr = new Map();
   for (const [k] of segmenter) pr.set(k, tom());
   const ialt = tom();
@@ -19,7 +20,8 @@ export function daekningPrSegment(opgaver, { beregn, satsFor, datoAf, aar = "all
   };
   for (const t of opgaver) {
     const dato = datoAf(t) || "";
-    if (aar !== "alle" && dato.slice(0, 4) !== String(aar)) continue;
+    if (fra && til) { if (dato < fra || dato > til) continue; }
+    else if (aar !== "alle" && dato.slice(0, 4) !== String(aar)) continue;
     const omsaetning = Number(beregn(t).realiseretKr) || 0;
     let loen = 0, minutter = 0, udenSatsMin = 0;
     for (const l of t.timeLog || t.time_log || []) {
