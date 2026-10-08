@@ -1,0 +1,6 @@
+-- Hvorfor: Jonn bad 8.10.2026 om, at alt under «Noget nogen skal tage stilling til» på Drift også kommer i klokken (kontor_indbakke).
+-- Medarbejdere uden mailadresse er undtaget med vilje: de kommer i takt med, at de onboardes. Cpr-linjen (7) fandtes. Nu er der to til, begge med art 'drift' (så
+-- gaaTilIndbakkeLinje fører til Drift uden ændring i appen) og med hver sin ref: 'kladder_uden_navn' og 'uden_postnummer'. De lukker sig selv, når tallet er 0.
+-- Kørt som migration `klokken_drift_kladder_og_postnummer` (DO-blok med pg_get_functiondef + replace, indsat før «-- 7. Fejl i data»). Prøvet som service_role: 2 linjer,
+-- samme tal som Drift (1 kladde, 1 aftale). Postnummerreglen skal følges med postnrFraAdresse i src/postnummer.js.
+-- Nye Drift-linjer under «tage stilling til» skal også i klokken, medmindre de som medarbejdermail kommer af sig selv.

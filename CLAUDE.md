@@ -116,6 +116,7 @@ Tre apps hænger sammen: **planlægningsappen** (HR-siden, ikon i topbjælken, k
   Før 6.10.2026 fik en HR-administrator, der selv var medarbejderen, rollen leder og kunne sende sit eget referat. Send = samtalen holdt + aktiviteten lukket for begge; medarbejderen godkender (låst) eller skriver bemærkning.
 - **MUS-aktiviteten kendes på titlen `MUS: navn`** (`addActivity`). Worklist åbner `MusSkaerm` på den titel; ændres titlen, skal ruten i Worklist med.
 - **MUS-spørgsmålene (q1–q5), `NAESTE_BESOEG_TEKST` og lønperiodereglen står flere steder** — ret alle.
+- **Alt under «Noget nogen skal tage stilling til» på Drift skal også i klokken** (Jonn 8.10.2026), undtagen det, der løser sig selv (medarbejdere uden mail, i takt med onboarding). Ellers ser kun dem, der selv åbner Drift, det. Ny linje: art `drift`, egen `ref`, lukker sig selv ved 0 (se `overdragelse/sql/klokken-drift-kladder-og-postnummer-2026-10-08.sql`).
 - **Klokken (`kontor_indbakke`) rettes med `pg_get_functiondef` + `replace()` før `-- 7. Fejl i data`** i en migration (se SQL-loggen); skriv linjen i `gaaTilIndbakkeLinje` også.
 - **apply_migration hænger på DROP, DELETE (også ordet i funktionstekst) og DROP POLICY.** Brug `create or replace`, `ALTER POLICY` og `execute 'de' || 'lete ...'`. Tjek bagefter, om den alligevel nåede at køre, før du prøver igen. `execute_sql` returnerer kun sidste sætning.
 - **Hver ny kolonne skal klassificeres i `persondata_register`**, og hjælpeteksten (`MODULE_HELP`, i Worklist `HELP_DA` og `HELP_EN` med lige mange afsnit) følger med hver ændring.
