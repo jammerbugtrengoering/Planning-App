@@ -14,7 +14,7 @@ const CSS = `
 .ob .seg { display:inline-flex; background:var(--surf); border:1px solid var(--line); border-radius:10px; padding:3px; gap:2px; }
 .ob .seg button { font:600 13px inherit; font-family:inherit; border:0; background:transparent; color:var(--ink2); padding:7px 14px; border-radius:7px; cursor:pointer; }
 .ob .seg button[aria-pressed="true"] { background:var(--acc); color:#fff; }
-.ob .hero { display:grid; grid-template-columns:minmax(300px,390px) minmax(0,1fr); gap:16px; align-items:stretch; }
+.ob .hero { display:grid; grid-template-columns:minmax(300px,390px) minmax(0,1fr); gap:16px; align-items:start; }
 .ob .hoejre { display:flex; flex-direction:column; min-width:0; }
 .ob .venstre { display:flex; flex-direction:column; gap:16px; min-width:0; }
 @media (max-width:900px) { .ob .hero { grid-template-columns:minmax(0,1fr); } }
@@ -38,22 +38,22 @@ const CSS = `
 .ob .att .tt { font-weight:600; }
 .ob .att .dd { color:var(--ink2); font-size:13px; }
 .ob .go { font-weight:600; font-size:13px; color:var(--deep); white-space:nowrap; }
-.ob .pill { display:inline-flex; align-items:center; gap:6px; font-weight:700; font-size:11.5px; padding:3px 9px 3px 7px; border-radius:99px; white-space:nowrap; }
+.ob .pill { display:inline-flex; align-items:center; gap:5px; font-weight:700; font-size:11px; padding:2px 8px 2px 6px; border-radius:99px; white-space:nowrap; }
 .ob .pill svg { width:11px; height:11px; flex:none; }
 .ob .pill.crit { background:var(--crits); color:var(--crit); } .ob .pill.warn { background:var(--warns); color:var(--warn); }
 .ob .pill.good { background:var(--goods); color:var(--good); } .ob .pill.info { background:var(--surf2); color:var(--ink2); } .ob .pill.ingen { background:var(--surf2); color:var(--ink3); }
 .ob .sect { display:flex; justify-content:space-between; align-items:baseline; flex-wrap:wrap; gap:8px; margin-bottom:10px; }
-.ob .tiles { display:grid; grid-template-columns:repeat(auto-fill,minmax(215px,1fr)); gap:14px; flex:1; grid-auto-rows:1fr; }
-.ob .tile { padding:14px 14px 10px; display:flex; flex-direction:column; gap:5px; min-width:0; text-align:left; font:inherit; color:inherit; cursor:pointer; }
+.ob .tiles { display:grid; grid-template-columns:repeat(auto-fill,minmax(190px,1fr)); gap:10px; }
+.ob .tile { padding:10px 12px 8px; display:flex; flex-direction:column; gap:2px; min-width:0; text-align:left; font:inherit; color:inherit; cursor:pointer; }
 .ob .tile:hover { border-color:var(--acc); }
 .ob .tile .row { display:flex; justify-content:space-between; align-items:center; gap:8px; }
-.ob .tile .name { font-weight:600; color:var(--ink2); }
-.ob .tile .val { font-weight:800; font-size:28px; letter-spacing:-.02em; font-variant-numeric:tabular-nums; }
-.ob .tile .val small { font-weight:600; font-size:14px; color:var(--ink3); margin-left:3px; letter-spacing:0; }
-.ob .tile .meta { display:flex; gap:10px; flex-wrap:wrap; color:var(--ink3); font-size:12.5px; }
+.ob .tile .name { font-weight:600; font-size:12.5px; line-height:1.25; color:var(--ink2); }
+.ob .tile .val { font-weight:800; font-size:22px; line-height:1.15; letter-spacing:-.02em; font-variant-numeric:tabular-nums; }
+.ob .tile .val small { font-weight:600; font-size:12px; color:var(--ink3); margin-left:3px; letter-spacing:0; }
+.ob .tile .meta { display:flex; gap:8px; flex-wrap:wrap; color:var(--ink3); font-size:11.5px; }
 .ob .gd { color:var(--good); font-weight:700; } .ob .bd { color:var(--crit); font-weight:700; }
-.ob .spark { width:100%; height:42px; display:block; overflow:visible; }
-.ob .src { color:var(--deep); font-weight:600; font-size:12.5px; margin-top:auto; padding-top:4px; }
+.ob .spark { width:100%; height:24px; display:block; overflow:visible; }
+.ob .src { display:none; }
 .ob .foot { color:var(--ink3); font-size:12.5px; max-width:80ch; }
 .ob button:focus-visible { outline:2px solid var(--acc); outline-offset:2px; }
 `;
@@ -98,8 +98,8 @@ function Maaler({ score, niveau }) {
 
 function Kurve({ vaerdier, mal, farve }) {
   const xs = vaerdier.filter((v) => v != null);
-  if (xs.length < 2) return <div style={{ height: 42 }} />;
-  const W = 220, H = 42, p = 4, mn = Math.min(...xs, mal), mx = Math.max(...xs, mal);
+  if (xs.length < 2) return <div style={{ height: 24 }} />;
+  const W = 220, H = 24, p = 3, mn = Math.min(...xs, mal), mx = Math.max(...xs, mal);
   const n = vaerdier.length, sx = (i) => p + (i * (W - 2 * p)) / (n - 1), sy = (v) => H - p - ((v - mn) / (mx - mn || 1)) * (H - 2 * p);
   const pts = vaerdier.map((v, i) => (v == null ? null : [sx(i), sy(v)])).filter(Boolean);
   const linje = pts.map((q, i) => `${i ? "L" : "M"}${q[0].toFixed(1)} ${q[1].toFixed(1)}`).join(" ");
@@ -209,8 +209,8 @@ export default function OverblikRapport({ input, medDinero, onAabn, onSide }) {
             const godt = d == null ? null : m.hoej ? d >= 0 : d <= 0;
             const dtxt = d == null ? "" : `${d >= 0 ? "▲" : "▼"} ${dk(Math.abs(d), m.enhed === "%" ? 1 : 0)}${m.enhed === "%" ? " pkt." : m.enhed === "kr." ? " kr." : ""}`;
             return (
-              <button type="button" className="card tile" key={k} onClick={() => onAabn(m.rapport)}>
-                <div className="row"><span className="name">{m.navn}</span><Pill k={s} tekst={s === "good" ? "I mål" : s === "warn" ? "Under mål" : s === "crit" ? "Langt fra mål" : "Ingen data"} /></div>
+              <button type="button" className="card tile" key={k} onClick={() => onAabn(m.rapport)} title={`Åbn rapporten: ${m.navn}`}>
+                <div className="row"><span className="name">{m.navn}</span><Pill k={s} tekst={s === "good" ? "I mål" : s === "warn" ? "Under" : s === "crit" ? "Langt fra" : "Ingen data"} /></div>
                 <div className="val">{fmt(k, v)}<small>{m.enhed}</small></div>
                 <div className="meta">{d != null && <span className={godt ? "gd" : "bd"}>{dtxt}</span>}<span>Mål {m.hoej ? "" : "højst "}{fmt(k, maal[k])} {m.enhed}</span></div>
                 {k !== "udloeb" && <Kurve vaerdier={serie.map((x) => x[k])} mal={maal[k]} farve={s === "crit" ? FARVE.crit : s === "warn" ? FARVE.warn : "#D6247A"} />}
