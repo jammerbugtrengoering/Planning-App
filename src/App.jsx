@@ -1444,6 +1444,18 @@ function delvisAfsluttet(t, employees) {
   return { faerdige: faerdige.map(fornavn), mangler: mangler.map(fornavn), antal: faerdige.length, ialt: folk.length };
 }
 
+// Set fra en bestemt medarbejders række eller tidslinje (8.10.2026): har DEN medarbejder afsluttet sin del, er opgaven færdig for vedkommende og skal ikke stå rød, selvom kollegaen
+// på opgaven endnu ikke er færdig (opgavens egen status bliver først «udført», når alle er det). Gitte uden Worklist afslutter først, når timeskemaet er indtastet.
+function completionForEmp(t, emp, employees) {
+  const hel = completionInfo(t, employees);
+  if (hel || !emp || t.status === "aflyst") return hel;
+  const gjort = (t.completedByEmployee || t.completed_by_employee || {})[emp.id];
+  if (!gjort) return null;
+  const when = typeof gjort === "string"
+    ? new Date(gjort).toLocaleString("da-DK", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : null;
+  return { label: `Udført af ${emp.name} (de andre på opgaven mangler)`, byEmployee: true, when, delvis: true };
+}
+
 function statusColor(s) { return { planlagt: "var(--farve-moerk)", udført: "#111111", unscheduled: "#94A3B8" }[s]; }
 
 
@@ -7461,8 +7473,8 @@ function WeekView({ employees, instances, unplaced, aflyste = [], aflysningsgrun
                         const assignedEmps = (t.assignees || []).map((id) => employees.find((e) => e.id === id)).filter(Boolean);
                         const menuOpen = addMenuTaskId === t.id;
                         const addable = employees.filter((e) => !(t.assignees || []).includes(e.id));
-                        const done = t.status === "udført";
-                        const completion = completionInfo(t, employees);
+                        const completion = completionForEmp(t, emp, employees);
+                        const done = t.status === "udført" || !!completion;
                         return (
                           <div key={t.id} draggable={!laastDag}
                             onDragStart={() => { if (!laastDag) setDragId(t.id); }}
@@ -7543,7 +7555,7 @@ function WeekView({ employees, instances, unplaced, aflyste = [], aflysningsgrun
                             {t.address && <div style={styles.taskChipAddress}>📍 {t.address}</div>}
                             {(() => {
                               const delvis = delvisAfsluttet(t, employees);
-                              return delvis ? (
+                              return delvis && !completion ? (
                                 <div style={{ ...styles.doneNote, color: "#166534", background: "#F0FDF4" }}
                                   title="Opgaven bliver først udført, når alle på den har afsluttet">
                                   ✓ {delvis.faerdige.join(", ")} færdig · {delvis.mangler.join(", ")} mangler
@@ -13907,7 +13919,7 @@ function UgeTidslinje({ emp, dage, instances, travelSettings, weekOffset, weekYe
                   const h = Math.max((t.duration || 0) * TL_PX_PR_MIN, 26);
                   const m = TYPE_META[t.type] || TYPE_META.fixed;
                   const tjek = checklistProgress(t);
-                  const udfoert = completionInfo(t, alleMedarbejdere || []);
+                  const udfoert = completionForEmp(t, emp, alleMedarbejdere || []);
                   const forSent = sg.lateBy || 0;
                   const enLinje = { whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" };
                   const Ikon = m.icon;
