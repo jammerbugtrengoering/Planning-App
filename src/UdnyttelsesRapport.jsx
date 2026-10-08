@@ -2,7 +2,7 @@
 // Kapaciteten kommer fra medarbejderkortet, så rapporten er kun så god som de timer, der står dér.
 
 import React, { useMemo, useState } from "react";
-import { udnyttelsePrMedarbejder, status, LAV_GRAENSE, HOEJ_GRAENSE } from "./udnyttelse.js";
+import { udnyttelsePrMedarbejder, status, mistetOmsaetning, mistetIAlt, LAV_GRAENSE, HOEJ_GRAENSE } from "./udnyttelse.js";
 
 const BOX = { background: "#fff", borderRadius: 14, boxShadow: "0 1px 3px rgba(0,0,0,0.06)", padding: "14px 16px", textAlign: "left", overflowX: "auto" };
 const FELT = { padding: "8px 10px", border: "1.5px solid #E2E8F0", borderRadius: 10, fontSize: 14, fontFamily: "inherit", background: "#fff" };
@@ -12,7 +12,9 @@ const t = (min) => (min / 60).toLocaleString("da-DK", { maximumFractionDigits: 0
 const pct = (p) => (p == null ? "–" : Math.round(p) + " %");
 const iso = (d) => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
 
-export default function UdnyttelsesRapport({ opgaver, medarbejdere, datoAf, planlagtFor, erBlok, erUdelukket }) {
+export default function UdnyttelsesRapport({ opgaver, medarbejdere, datoAf, planlagtFor, erBlok, erUdelukket, timepris }) {
+  // timepris: { kr, navn } = den laveste timepris i dag; mistet omsætning regnes med den (forsigtigt skøn).
+  const sats = timepris && timepris.kr > 0 ? timepris.kr : 0;
   const nu = new Date();
   const [aar, setAar] = useState(nu.getFullYear());
   const [maaned, setMaaned] = useState(nu.getMonth() + 1);   // 0 = hele året
@@ -23,6 +25,8 @@ export default function UdnyttelsesRapport({ opgaver, medarbejdere, datoAf, plan
     [medarbejdere, opgaver, fra, til, idag, datoAf, planlagtFor, erBlok, erUdelukket]);
   const sorteret = useMemo(() => [...tal.raekker].sort((a, b) => (a.planlagtPct ?? 999) - (b.planlagtPct ?? 999)), [tal]);
   const plads = tal.raekker.filter((r) => status(r.planlagtPct) === "plads").reduce((s, r) => s + Math.max(0, r.kapacitet * (LAV_GRAENSE / 100) - r.planlagt), 0);
+  const mistet = useMemo(() => mistetIAlt(tal.raekker, sats), [tal, sats]);
+  const kr = (n) => Math.round(n).toLocaleString("da-DK") + " kr.";
   const TH = { padding: "4px 6px", fontWeight: 600 };
 
   return (
@@ -45,6 +49,10 @@ export default function UdnyttelsesRapport({ opgaver, medarbejdere, datoAf, plan
           <div style={{ fontSize: 12, color: "#64748B" }}>Samlet planlagt udnyttelse</div>
           <div style={{ fontSize: 22, fontWeight: 700, color: FARVE[status(tal.ialt.planlagtPct)] }}>{pct(tal.ialt.planlagtPct)}</div>
         </div>
+        <div style={{ ...BOX, padding: "8px 14px" }} title={sats ? `Ledig tid gange den laveste timepris (${kr(sats)}${timepris.navn ? `, ${timepris.navn}` : ""})` : "Ingen timepris fundet"}>
+          <div style={{ fontSize: 12, color: "#64748B" }}>Mistet omsætning på ledig tid</div>
+          <div style={{ fontSize: 22, fontWeight: 700, color: "#B91C1C" }}>{sats ? kr(mistet.kr) : "–"}</div>
+        </div>
         <div style={{ ...BOX, padding: "8px 14px" }}>
           <div style={{ fontSize: 12, color: "#64748B" }}>Ledig tid op til {LAV_GRAENSE} %</div>
           <div style={{ fontSize: 22, fontWeight: 700, color: "#7A1148" }}>{t(plads)}</div>
@@ -60,6 +68,7 @@ export default function UdnyttelsesRapport({ opgaver, medarbejdere, datoAf, plan
               <th style={TH}>Ferie/syg</th>
               <th style={TH}>Planlagt</th>
               <th style={{ ...TH, background: "#FDF2F8", color: "#7A1148", minWidth: 150, textAlign: "left" }}>Planlagt udnyttelse ▼</th>
+              <th style={TH} title="Ledig tid (kapacitet minus planlagt) gange den laveste timepris">Mistet omsætning</th>
               <th style={TH}>Udført hidtil</th>
             </tr>
           </thead>
@@ -79,22 +88,24 @@ export default function UdnyttelsesRapport({ opgaver, medarbejdere, datoAf, plan
                     <b style={{ color: FARVE[status(r.planlagtPct)], minWidth: 44, textAlign: "right" }}>{pct(r.planlagtPct)}</b>
                   </div>
                 </td>
+                <td style={{ padding: "7px 6px", color: "#B91C1C" }}>{sats ? (() => { const m = mistetOmsaetning(r, sats); return m.kr > 0 ? kr(m.kr) : "–"; })() : "–"}</td>
                 <td style={{ padding: "7px 6px" }}>{r.kapTilDato ? `${t(r.udfoert)} · ${pct(r.udfoertPct)}` : "–"}</td>
               </tr>
             ))}
-            {sorteret.length === 0 && <tr><td colSpan={6} style={{ padding: "12px 6px", color: "#64748B" }}>Ingen medarbejdere med kapacitet i perioden.</td></tr>}
+            {sorteret.length === 0 && <tr><td colSpan={7} style={{ padding: "12px 6px", color: "#64748B" }}>Ingen medarbejdere med kapacitet i perioden.</td></tr>}
             <tr style={{ borderTop: "2px solid #E2E8F0", textAlign: "right", fontWeight: 700 }}>
               <td style={{ textAlign: "left", padding: "8px 6px" }}>I alt</td>
               <td style={{ padding: "8px 6px" }}>{t(tal.ialt.kapacitet)}</td>
               <td style={{ padding: "8px 6px" }}>{t(tal.ialt.fravaer)}</td>
               <td style={{ padding: "8px 6px" }}>{t(tal.ialt.planlagt)}</td>
               <td style={{ padding: "8px 6px", textAlign: "left" }}>{pct(tal.ialt.planlagtPct)}</td>
+              <td style={{ padding: "8px 6px", color: "#B91C1C" }}>{sats ? kr(mistet.kr) : "–"}</td>
               <td style={{ padding: "8px 6px" }}>{tal.ialt.kapTilDato ? `${t(tal.ialt.udfoert)} · ${pct(tal.ialt.udfoertPct)}` : "–"}</td>
             </tr>
           </tbody>
         </table>
         <div style={{ fontSize: 12, color: "#94A3B8", marginTop: 10, lineHeight: 1.5 }}>
-          Kapacitet er de timer pr. ugedag, der står på medarbejderkortet, minus ferie og sygdom. Planlagt er opgavernes tid i hele perioden; udført er den registrerede tid til og med i dag, målt mod kapaciteten for de samme dage. Kørsel og kontortid er ikke med. Gul: under {LAV_GRAENSE} % (plads til flere). Rød: over {HOEJ_GRAENSE} % (ingen luft til sygdom). Streg i bjælken: {LAV_GRAENSE} %. Aflyste opgaver er ikke med.
+          Kapacitet er de timer pr. ugedag, der står på medarbejderkortet, minus ferie og sygdom. Planlagt er opgavernes tid i hele perioden; udført er den registrerede tid til og med i dag, målt mod kapaciteten for de samme dage. Kørsel og kontortid er ikke med. Mistet omsætning er ledig tid (kapacitet minus planlagt, målt mod 100 %) gange den laveste timepris i dag{sats ? ` (${kr(sats)}${timepris.navn ? `, ${timepris.navn}` : ""})` : ""}: et forsigtigt skøn på, hvad tiden kunne have givet. Gul: under {LAV_GRAENSE} % (plads til flere). Rød: over {HOEJ_GRAENSE} % (ingen luft til sygdom). Streg i bjælken: {LAV_GRAENSE} %. Aflyste opgaver er ikke med.
         </div>
       </div>
     </div>

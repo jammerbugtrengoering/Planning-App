@@ -68,3 +68,13 @@ export function status(pct) {
   if (pct == null) return "ingen";
   return pct < LAV_GRAENSE ? "plads" : pct > HOEJ_GRAENSE ? "fuld" : "sund";
 }
+
+// Mistet omsætning på uudnyttet kapacitet (8.10.2026, Jonn): ledig tid (kapacitet minus planlagt, aldrig under 0) gange den LAVESTE timepris, så tallet er et forsigtigt skøn og ikke et løfte.
+// Kapaciteten er målt mod 100 %, ikke mod et mål: hver ledig time er en time, der kunne have været solgt. Overbookede medarbejdere giver 0, ikke et negativt tal, der trækker andres ledige tid ned.
+export function mistetOmsaetning(raekke, timepris) {
+  const ledigMin = Math.max(0, (raekke.kapacitet || 0) - (raekke.planlagt || 0));
+  return { ledigMin, kr: (ledigMin / 60) * (Number(timepris) || 0) };
+}
+export function mistetIAlt(raekker, timepris) {
+  return raekker.reduce((a, r) => { const m = mistetOmsaetning(r, timepris); return { ledigMin: a.ledigMin + m.ledigMin, kr: a.kr + m.kr }; }, { ledigMin: 0, kr: 0 });
+}

@@ -2,7 +2,7 @@
 //
 // Hvad de beskytter mod: en udnyttelse, der ser lav ud, fordi ferie og sygdom ikke er trukket fra kapaciteten, eller fordi en halv måneds arbejde måles mod en hel måneds kapacitet.
 
-import { udnyttelsePrMedarbejder, status } from "./src/udnyttelse.js";
+import { udnyttelsePrMedarbejder, status, mistetOmsaetning, mistetIAlt } from "./src/udnyttelse.js";
 
 let fejl = 0;
 function er(hvad, faktisk, forventet) {
@@ -41,5 +41,10 @@ er("fratrådt uden kapacitet og opgaver er ikke med", r.raekker.some((x) => x.id
 er("i alt", [r.ialt.kapacitet, r.ialt.planlagt], [1680 + 600, 1260 + 150]);
 er("før perioden er der intet udført", k("2026-10-01").ialt.udfoertPct, null);
 er("status", [status(40), status(80), status(99), status(null)], ["plads", "sund", "fuld", "ingen"]);
+// Mistet omsætning: ledig tid gange laveste timepris, aldrig negativ.
+er("ledig tid gange laveste timepris", mistetOmsaetning({ kapacitet: 600, planlagt: 300 }, 300), { ledigMin: 300, kr: 1500 });
+er("overbooket giver 0, ikke minus", mistetOmsaetning({ kapacitet: 300, planlagt: 450 }, 300), { ledigMin: 0, kr: 0 });
+er("manglende timepris giver 0", mistetOmsaetning({ kapacitet: 600, planlagt: 0 }, null).kr, 0);
+er("i alt lægger kun ledig tid sammen", mistetIAlt([{ kapacitet: 600, planlagt: 300 }, { kapacitet: 300, planlagt: 450 }], 300), { ledigMin: 300, kr: 1500 });
 if (fejl) { console.error(`udnyttelse.test.mjs: ${fejl} fejl`); process.exit(1); }
 console.log("udnyttelse.test.mjs: ok");

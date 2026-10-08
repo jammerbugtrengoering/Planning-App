@@ -2461,7 +2461,7 @@ const MODULE_HELP = {
         "Mangler en medarbejder lønsats på datoen, regnes de timer ikke med i lønnen, og en gul linje siger hvor mange. Bidraget er så for højt, til satsen er lagt ind på medarbejderkortet. Opgaver, der ikke er udført endnu, er ikke med."] },
     { h: "Udnyttelse", p: [
         "Fanen «⏳ Udnyttelse» (kun administratorer) viser, hvor stor en del af medarbejdernes tid der er fyldt med opgaver hos kunderne. Vælg år og måned, eller hele året.",
-        "Kapaciteten er de timer pr. ugedag, der står på medarbejderkortet, minus ferie og sygdom. Planlagt er opgavernes tid i hele perioden; udført er den registrerede tid til og med i dag, målt mod kapaciteten for de samme dage. Kørsel og kontortid er ikke med.",
+        "Kapaciteten er de timer pr. ugedag, der står på medarbejderkortet, minus ferie og sygdom. Planlagt er opgavernes tid i hele perioden; udført er den registrerede tid til og med i dag, målt mod kapaciteten for de samme dage. Kørsel og kontortid er ikke med. «Mistet omsætning» er den ledige tid (kapacitet minus planlagt, målt mod 100 %) gange den laveste timepris i dag, så det er et forsigtigt skøn på, hvad tiden kunne have givet. Overbookede medarbejdere giver 0.",
         "Listen står med den mest ledige øverst. Gul betyder under 60 %: der er plads til flere opgaver. Rød betyder over 95 %: der er ingen luft, hvis nogen bliver syge. Står en medarbejders timer ikke på kortet, ser vedkommende ledig ud, så ret dem dér først."] },
     { h: "Omsætning pr. medarbejder", p: [
         "Fanen «👤 Pr. medarbejder» (kun administratorer) viser, hvor meget af den realiserede omsætning hver medarbejder har leveret, hvad det er pr. arbejdstime, og lønnen ved siden af. Vælg år, måned og aftaletype.",
@@ -11512,7 +11512,12 @@ function ReportsView({ instances, templates, pricing, budgets, onSaveBudget, isA
       ) : rapport === "udnyttelse" && isAdminUser ? (
         <React.Suspense fallback={<div style={styles.hint}>Henter rapporten…</div>}>
           <UdnyttelsesRapport opgaver={instances} medarbejdere={employees} datoAf={instanceDateString} planlagtFor={planlagtFor}
-            erBlok={(t) => BLOCK_TYPES.includes(t.type)} erUdelukket={(t) => t.type === "aktivitet" || erAflyst(t)} />
+            erBlok={(t) => BLOCK_TYPES.includes(t.type)} erUdelukket={(t) => t.type === "aktivitet" || erAflyst(t)}
+            timepris={(() => {
+              // Den laveste timepris i dag: mistet omsætning skal være et forsigtigt skøn (Jonn 8.10.2026), ikke den dyreste time.
+              const sat = Object.entries(satserPaaDato(PRISLISTE, idagIso())).filter(([, v]) => Number(v) > 0).sort((a, b) => a[1] - b[1])[0];
+              return sat ? { kr: Number(sat[1]), navn: (KONTRAKT_NAVN[sat[0]] || sat[0]) } : null;
+            })()} />
         </React.Suspense>
       ) : rapport === "medarbejderomsaetning" && isAdminUser ? (
         <React.Suspense fallback={<div style={styles.hint}>Henter rapporten…</div>}>
