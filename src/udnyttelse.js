@@ -10,7 +10,7 @@ export const HOEJ_GRAENSE = 95;   // over: næsten ingen luft til sygdom og ænd
 
 const UGEDAG = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
-function dageIPerioden(fra, til) {
+export function dageIPerioden(fra, til) {
   const ud = [];
   const [ay, am, ad] = fra.split("-").map(Number);
   const slut = Date.UTC(...til.split("-").map((x, i) => (i === 1 ? Number(x) - 1 : Number(x))));

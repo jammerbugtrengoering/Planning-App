@@ -2423,6 +2423,10 @@ const MODULE_HELP = {
         "Fanen «⏳ Udnyttelse» (kun administratorer) viser, hvor stor en del af medarbejdernes tid der er fyldt med opgaver hos kunderne. Vælg år og måned, eller hele året.",
         "Kapaciteten er de timer pr. ugedag, der står på medarbejderkortet, minus ferie og sygdom. Planlagt er opgavernes tid i hele perioden; udført er den registrerede tid til og med i dag, målt mod kapaciteten for de samme dage. Kørsel og kontortid er ikke med.",
         "Listen står med den mest ledige øverst. Gul betyder under 60 %: der er plads til flere opgaver. Rød betyder over 95 %: der er ingen luft, hvis nogen bliver syge. Står en medarbejders timer ikke på kortet, ser vedkommende ledig ud, så ret dem dér først."] },
+    { h: "Sygefravær og vikardækning", p: [
+        "Fanen «🤒 Sygefravær» (kun administratorer) bygger på de sygdomsblokeringer, I lægger på en medarbejder. Vælg år og måned, eller hele året. Systemet gemmer og viser aldrig en årsag, kun dage og timer.",
+        "Sygefraværet er sygedagenes timer delt med medarbejderens kapacitet i perioden, før ferie og sygdom er trukket fra. Sygemeldinger er antallet af perioder, I har registreret.",
+        "Vikardækningen ser på opgaver, hvor aftalens faste medarbejder var syg den dag. «Dækket» betyder, at en anden står på opgaven. «Ikke dækket» betyder, at ingen står på den, eller at den faste stadig står der, og dem skal I tage fat i. «Aflyst» er aflyste opgaver. Opgaver uden fast medarbejder på aftalen og uden dato kan ikke kobles til en sygedag og er ikke med."] },
     { h: "Aflysninger", p: [
         "Øverst står aflysningsprocenten for hver af de fire aftaletyper: aflyste opgaver delt med alle opgaver i perioden, delt op i aflysninger fra kunden og fra os. Kun dage til og med i dag tæller med.",
         "Rapporteringen åbner nu på Aftaleportefølje. Fanen «🚫 Aflysninger» viser aflyste opgaver i en periode (denne måned, sidste måned, i år eller egne datoer).",
@@ -11241,6 +11245,7 @@ function AflysningRapport({ instances, pricing = {}, grunde = [] }) {
 const PostnummerRapport = React.lazy(() => import("./PostnummerRapport.jsx"));
 const DaekningsRapport = React.lazy(() => import("./DaekningsRapport.jsx"));
 const UdnyttelsesRapport = React.lazy(() => import("./UdnyttelsesRapport.jsx"));
+const SygefravaerRapport = React.lazy(() => import("./SygefravaerRapport.jsx"));
 // Én opgaves arbejde og værdi, regnet som de andre rapporter gør det: satsen på opgavens egen dato, fastpris for fastprisopgaver, og faktureret tid for det realiserede.
 function opgaveTal(t) {
   const fast = t.pricingType === "fixed";
@@ -11351,7 +11356,7 @@ function ReportsView({ instances, templates, pricing, budgets, onSaveBudget, isA
     ["budget", "📊 Budget og omsætning"],
     ["aflysning", "🚫 Aflysninger"],
     ["postnummer", "🗺 Postnumre"],
-    ...(isAdminUser ? [["overskud", "💰 Overskud"], ["daekning", "📈 Dækningsbidrag"], ["udnyttelse", "⏳ Udnyttelse"]] : []),
+    ...(isAdminUser ? [["overskud", "💰 Overskud"], ["daekning", "📈 Dækningsbidrag"], ["udnyttelse", "⏳ Udnyttelse"], ["sygefravaer", "🤒 Sygefravær"]] : []),
     ...(isAdminUser && harModul("start_stop") ? [["startstop", "⏱ Start/stop"]] : []),
   ];
 
@@ -11385,6 +11390,12 @@ function ReportsView({ instances, templates, pricing, budgets, onSaveBudget, isA
         <React.Suspense fallback={<div style={styles.hint}>Henter rapporten…</div>}>
           <UdnyttelsesRapport opgaver={instances} medarbejdere={employees} datoAf={instanceDateString} planlagtFor={planlagtFor}
             erBlok={(t) => BLOCK_TYPES.includes(t.type)} erUdelukket={(t) => t.type === "aktivitet" || erAflyst(t)} />
+        </React.Suspense>
+      ) : rapport === "sygefravaer" && isAdminUser ? (
+        <React.Suspense fallback={<div style={styles.hint}>Henter rapporten…</div>}>
+          <SygefravaerRapport opgaver={instances} medarbejdere={employees} datoAf={instanceDateString}
+            erSygdom={(t) => t.type === "sygdom"} erAflyst={erAflyst}
+            fastFor={(t) => (t.templateId && templates.find((tp) => tp.id === t.templateId)?.preferredEmployeeId) || null} />
         </React.Suspense>
       ) : rapport === "portefoelje" ? (
         <PortefoeljeRapport templates={templates} instances={instances} pricing={pricing} />

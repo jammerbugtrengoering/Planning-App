@@ -30,7 +30,8 @@
     "postnummer.test.mjs",
     "daekningsbidrag.test.mjs",
     "udnyttelse.test.mjs",
-    "aflysningsprocent.test.mjs"
+    "aflysningsprocent.test.mjs",
+    "sygefravaer.test.mjs"
   ],
   "rules": {
     "no-undef": "error",
