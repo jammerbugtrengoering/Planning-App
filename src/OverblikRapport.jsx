@@ -54,6 +54,14 @@ const CSS = `
 .ob .gd { color:var(--good); font-weight:700; } .ob .bd { color:var(--crit); font-weight:700; }
 .ob .spark { width:100%; height:24px; display:block; overflow:visible; }
 .ob .src { display:none; }
+.ob .tile.bred .stang { display:grid; grid-template-columns:70px minmax(0,1fr) 44px; gap:8px; align-items:center; font-size:12px; }
+.ob .tile.bred .stang .n { color:var(--ink2); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.ob .tile.bred .stang .sp { position:relative; height:10px; background:var(--surf2); border-radius:3px; }
+.ob .tile.bred .stang .sp i { position:absolute; inset:0 auto 0 0; border-radius:0 3px 3px 0; }
+.ob .tile.bred .stang .sp u { position:absolute; top:-3px; bottom:-3px; width:2px; background:var(--ink3); border-radius:1px; }
+.ob .tile.bred .stang b { text-align:right; font-variant-numeric:tabular-nums; }
+.ob .tile.bred .stave { display:grid; gap:5px; margin-top:4px; }
+@media (min-width:1100px) { .ob .tile.bred { grid-column:span 2; } }
 .ob .foot { color:var(--ink3); font-size:12.5px; max-width:80ch; }
 .ob button:focus-visible { outline:2px solid var(--acc); outline-offset:2px; }
 `;
@@ -194,6 +202,33 @@ export default function OverblikRapport({ input, medDinero, onAabn, onSide }) {
             const d = v != null && tidl != null ? v - tidl : null;
             const godt = d == null ? null : m.hoej ? d >= 0 : d <= 0;
             const dtxt = d == null ? "" : `${d >= 0 ? "▲" : "▼"} ${dk(Math.abs(d), m.enhed === "%" ? 1 : 0)}${m.enhed === "%" ? " pkt." : m.enhed === "kr." ? " kr." : ""}`;
+            // Dækningsbidrag vises pr. aftaletype som stænger med målstreg (8.10.2026), ikke som ét tal med kurve: det er forskellen mellem aftaletyperne, der er værd at se.
+            if (k === "db") {
+              const stave = p.db.raekker.filter((r) => r.antal > 0 && r.procent != null).sort((a, b) => b.procent - a.procent);
+              const navnFor = (key) => String((input.segmenter || []).find(([kk]) => kk === key)?.[1] || key).replace(/^[^\p{L}]+/u, "");
+              const MAXP = Math.max(100, maal.db * 1.4);
+              return (
+                <button type="button" className="card tile bred" key={k} onClick={() => onAabn(m.rapport)} title={`Åbn rapporten: ${m.navn}`}>
+                  <div className="row"><span className="name">{m.navn} pr. aftaletype</span><Pill k={s} tekst={s === "good" ? "I mål" : s === "warn" ? "Under" : s === "crit" ? "Langt fra" : "Ingen data"} /></div>
+                  <div className="val">{fmt(k, v)}<small>% i alt</small></div>
+                  <div className="meta">{d != null && <span className={godt ? "gd" : "bd"}>{dtxt}</span>}<span>Mål mindst {fmt(k, maal[k])} %</span></div>
+                  <div className="stave">
+                    {stave.length === 0 && <span style={{ color: "#8B7C87", fontSize: 12 }}>Ingen udførte opgaver i perioden.</span>}
+                    {stave.map((r) => {
+                      const fyld = Math.max(0, Math.min(100, (r.procent / MAXP) * 100));
+                      const farve = r.procent < 0 ? FARVE.crit : r.procent >= maal.db ? "#D6247A" : FARVE.warn;
+                      return (
+                        <div className="stang" key={r.noegle} title={`${navnFor(r.noegle)}: ${dk(r.procent, 1)} % · ${r.antal} opgaver`}>
+                          <span className="n">{navnFor(r.noegle)}</span>
+                          <span className="sp"><i style={{ width: `${fyld}%`, background: farve }} /><u style={{ left: `${Math.min(100, (maal.db / MAXP) * 100)}%` }} /></span>
+                          <b>{dk(r.procent, 0)} %</b>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </button>
+              );
+            }
             return (
               <button type="button" className="card tile" key={k} onClick={() => onAabn(m.rapport)} title={`Åbn rapporten: ${m.navn}`}>
                 <div className="row"><span className="name">{m.navn}</span><Pill k={s} tekst={s === "good" ? "I mål" : s === "warn" ? "Under" : s === "crit" ? "Langt fra" : "Ingen data"} /></div>
