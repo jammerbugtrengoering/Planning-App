@@ -185,20 +185,6 @@ export default function OverblikRapport({ input, medDinero, onAabn, onSide }) {
           </div>
         </div>
 
-        <div className="card attn">
-          <div className="attn-head">
-            <h3 style={{ fontSize: 18, fontWeight: 800 }}>Kræver opmærksomhed</h3>
-            <span style={{ color: "#8B7C87", fontSize: 13 }}>{antal("crit")} kritiske · {antal("warn")} til opfølgning{antal("info") ? ` · ${antal("info")} til information` : ""}</span>
-          </div>
-          {punkter.length === 0 && <div style={{ padding: "14px 4px", color: "#5E4F5B" }}>Ingen punkter. Alt er inden for mål.</div>}
-          {punkter.map((x, i) => (
-            <button type="button" className="att" key={i} onClick={() => gaa(x)}>
-              <Pill k={x.alvor} />
-              <div><div className="tt">{x.titel}</div><div className="dd">{x.tekst}</div></div>
-              <span className="go">{x.knap} →</span>
-            </button>
-          ))}
-        </div>
         </div>
         <div className="hoejre">
         <div className="sect"><h3 style={{ fontSize: 18, fontWeight: 800 }}>Nøgletal</h3><span style={{ color: "#8B7C87", fontSize: 13 }}>Mod {raekke.mod} · kurve: de sidste tolv måneder · stiplet streg er målet</span></div>
@@ -218,6 +204,21 @@ export default function OverblikRapport({ input, medDinero, onAabn, onSide }) {
               </button>
             );
           })}
+        </div>
+        <div style={{ height: 16 }} />
+        <div className="card attn">
+          <div className="attn-head">
+            <h3 style={{ fontSize: 18, fontWeight: 800 }}>Kræver opmærksomhed</h3>
+            <span style={{ color: "#8B7C87", fontSize: 13 }}>{antal("crit")} kritiske · {antal("warn")} til opfølgning{antal("info") ? ` · ${antal("info")} til information` : ""}</span>
+          </div>
+          {punkter.length === 0 && <div style={{ padding: "14px 4px", color: "#5E4F5B" }}>Ingen punkter. Alt er inden for mål.</div>}
+          {punkter.map((x, i) => (
+            <button type="button" className="att" key={i} onClick={() => gaa(x)}>
+              <Pill k={x.alvor} />
+              <div><div className="tt">{x.titel}</div><div className="dd">{x.tekst}</div></div>
+              <span className="go">{x.knap} →</span>
+            </button>
+          ))}
         </div>
         </div>
 
