@@ -2488,7 +2488,7 @@ const MODULE_HELP = {
         "«Budget og omsætning» svarer på, hvad der er kommet ind måned for måned i år.",
         "«Aftaleportefølje» svarer på, hvad der er aftalt — hvad de aftaler, I har, er værd, og hvordan de fordeler sig.",
         "Det andet kan ikke læses ud af det første. En aftale, du skriver under i dag, fylder næsten ingenting i budgettet i år og kan alligevel være en halv million værd over sin løbetid.", "«Overskud» viser overskuddet måned for måned. Kun administratorer kan se den.",
-        "Resten er nævnt nedenfor: «Aflysninger» (med aflysningsprocent pr. aftaletype), «Postnumre» (kort over, hvor opgaverne ligger), «Dækningsbidrag», «Udnyttelse», «Sygefravær» og «Pr. medarbejder». Overskud, Dækningsbidrag, Udnyttelse, Sygefravær, Pr. medarbejder og Start/stop er kun for administratorer, fordi de viser løn. Overblikket øverst samler dem alle."] }, { h: "Overskud", p: ["Overskuddet regnes som omsætning minus lønsum, kørsel og frie omkostninger, måned for måned.", "Er en måned allerede godkendt til løn og «låst», ændrer senere rettelser i lønnen ikke det overskud, der allerede er opgjort for den måned.", ...(KUNDEUDGAVE ? [] : ["«Faktureret (Dinero)» er alle bogførte fakturaer med fakturadato i måneden, hentet fra Dinero natten før. Under står, hvor meget der er betalt, og — med rødt — hvor meget der er forfaldent og ikke betalt. Hold musen over tallet for at se det hele, også kladder. Kun til sammenligning; det tæller ikke med i selve overskuddet."])] },
+        "Resten er nævnt nedenfor: «Aflysninger» (med aflysningsprocent pr. aftaletype), «Postnumre» (kort over, hvor opgaverne ligger), «Dækningsbidrag», «Udnyttelse», «Sygefravær» og «Pr. medarbejder». Overskud, Dækningsbidrag, Udnyttelse, Sygefravær, Pr. medarbejder og Start/stop er kun for administratorer, fordi de viser løn. Overblikket øverst samler dem alle."] }, { h: "Overskud", p: ["Overskuddet regnes som omsætning minus lønsum, kørsel og frie omkostninger, måned for måned.", "«Planlagt» står før omsætningen og er værdien af det, der ligger i planen for måneden ud fra aftalerne: tid gange satsen på opgavens dato, eller fastprisen. Den viser, hvad måneden ville give, hvis alt blev udført som planlagt. Forskellen til omsætningen er det, der endnu ikke er udført eller faktureret. Planlagt indgår ikke i overskuddet.", "Er en måned allerede godkendt til løn og «låst», ændrer senere rettelser i lønnen ikke det overskud, der allerede er opgjort for den måned.", ...(KUNDEUDGAVE ? [] : ["«Faktureret (Dinero)» er alle bogførte fakturaer med fakturadato i måneden, hentet fra Dinero natten før. Under står, hvor meget der er betalt, og — med rødt — hvor meget der er forfaldent og ikke betalt. Hold musen over tallet for at se det hele, også kladder. Kun til sammenligning; det tæller ikke med i selve overskuddet."])] },
     { h: "Budget og omsætning", p: ["Budget er det du selv lægger ind med «Redigér budget».",
         "Planlagt er værdien af det der ligger i kalenderen.",
         "Registreret er den tid der faktisk er logget.",
@@ -8322,8 +8322,8 @@ function ChecklistModal({ checklist, onClose, onSave }) {
 // ---------- Time & Export ----------
 // Overskud: kolonnen «Oms. (Dinero)» findes kun med Dinero-modulet (29.9.2026).
 const OVERSKUD_GRID = () => harModul("dinero")
-  ? "1fr 110px 110px 110px 110px 110px 110px 110px"
-  : "1fr 110px 0px 110px 110px 110px 110px 110px";
+  ? "1fr 110px 110px 110px 110px 110px 110px 110px 110px"
+  : "1fr 110px 110px 0px 110px 110px 110px 110px 110px";
 
 // Fakturering: kolonnen «Dinero» findes kun med Dinero-modulet (29.9.2026). I
 // kundeudgaven er den 0 bred og tom, saa de oevrige kolonner staar hvor de plejer.
@@ -10112,20 +10112,24 @@ function OverskudRapport({ instances, employees, satsHistorik, kmSatser, kmLog, 
     const dineroKr = dineroInfo ? dineroInfo.beloeb : null;
     const dineroAntal = dineroInfo ? dineroInfo.antal : null;
 
+    // Planlagt omsætning ud fra aftalerne (8.10.2026): værdien af det, der ligger i planen for måneden — tid gange satsen på opgavens dato, eller fastprisen. Samme opgaver som omsætningen,
+    // så de to kan sammenlignes: forskellen er det, der endnu ikke er udført og faktureret, eller blev til mindre end planlagt. Indgår ikke i overskuddet.
+    const planlagtKr = tasksInMonth.reduce((s2, t) => s2 + opgaveTal(t).planlagtKr, 0);
     const omkostningerIAlt = loenKr + kmKr + manuelleKr + bonusKr;
     return {
-      month, label, omsaetning, loenKr, kmKr, manuelleKr, bonusKr,
+      month, label, planlagtKr, omsaetning, loenKr, kmKr, manuelleKr, bonusKr,
       omkostningerIAlt, overskud: omsaetning - omkostningerIAlt,
       dineroKr, dineroAntal,
     };
   }), [instances, satsHistorik, kmSatser, kmLog, godkendtSet, omkostninger, bonus, pricing, selectedYear, dineroOmsaetning]);
 
   const aarTotal = monthRows.reduce((acc, r) => ({
+    planlagt: acc.planlagt + r.planlagtKr,
     omsaetning: acc.omsaetning + r.omsaetning,
     omkostninger: acc.omkostninger + r.omkostningerIAlt,
     overskud: acc.overskud + r.overskud,
     dineroKr: acc.dineroKr + (r.dineroKr || 0),
-  }), { omsaetning: 0, omkostninger: 0, overskud: 0, dineroKr: 0 });
+  }), { planlagt: 0, omsaetning: 0, omkostninger: 0, overskud: 0, dineroKr: 0 });
 
   const kr = (v) => Math.round(v).toLocaleString("da-DK") + " kr.";
 
@@ -10163,6 +10167,9 @@ function OverskudRapport({ instances, employees, satsHistorik, kmSatser, kmLog, 
     <>
       <div style={styles.toolbar}>
         <div style={styles.statBlock}>
+          <div><div style={{ ...styles.statValue, color: "#64748B" }}>{kr(aarTotal.planlagt)}</div><div style={styles.statLabel}>Planlagt {selectedYear}</div></div>
+        </div>
+        <div style={styles.statBlock}>
           <div><div style={{ ...styles.statValue, color: "#64748B" }}>{kr(aarTotal.omsaetning)}</div><div style={styles.statLabel}>Omsætning {selectedYear}</div></div>
         </div>
         <div style={styles.statBlock}>
@@ -10185,6 +10192,7 @@ function OverskudRapport({ instances, employees, satsHistorik, kmSatser, kmLog, 
 
       <div style={{ display: "grid", gridTemplateColumns: OVERSKUD_GRID(), gap: 0, background: "#F8FAFC", borderRadius: "10px 10px 0 0", padding: "8px 14px", fontSize: 10, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.04em" }}>
         <span>Måned</span>
+        <span style={{ textAlign: "right" }} title="Værdien af det, der ligger i planen for måneden, ud fra aftalerne">Planlagt</span>
         <span style={{ textAlign: "right" }}>Omsætning</span>
         <span style={{ textAlign: "right" }}>{harModul("dinero") ? "Faktureret (Dinero)" : ""}</span>
         <span style={{ textAlign: "right" }}>Løn</span>
@@ -10197,6 +10205,7 @@ function OverskudRapport({ instances, employees, satsHistorik, kmSatser, kmLog, 
         {monthRows.map((r, idx) => (
           <div key={r.month} style={{ display: "grid", gridTemplateColumns: OVERSKUD_GRID(), gap: 0, padding: "9px 14px", borderBottom: idx < monthRows.length - 1 ? "1px solid #F1F5F9" : "none", alignItems: "center" }}>
             <div style={{ fontSize: 13, fontWeight: 600, color: "#111111" }}>{r.label}</div>
+            <div style={{ fontSize: 13, color: "#94A3B8", textAlign: "right" }}>{r.planlagtKr > 0 ? kr(r.planlagtKr) : "—"}</div>
             <div style={{ fontSize: 13, color: "#334155", textAlign: "right" }}>{r.omsaetning > 0 ? kr(r.omsaetning) : "—"}</div>
             {(() => {
               if (!harModul("dinero")) return <div />;
@@ -10223,6 +10232,7 @@ function OverskudRapport({ instances, employees, satsHistorik, kmSatser, kmLog, 
       </div>
       <div style={{ display: "grid", gridTemplateColumns: OVERSKUD_GRID(), gap: 0, padding: "10px 14px", background: "var(--farve-lys)", borderRadius: 10, marginTop: 8, fontWeight: 700, fontSize: 13 }}>
         <span style={{ color: "var(--farve-moerk)" }}>I alt {selectedYear}</span>
+        <span style={{ textAlign: "right", color: "#64748B" }}>{kr(aarTotal.planlagt)}</span>
         <span style={{ textAlign: "right", color: "#111111" }}>{kr(aarTotal.omsaetning)}</span>
         <span style={{ textAlign: "right", color: "#0369A1" }}>{harModul("dinero") ? kr(Object.entries(dineroStatus)
           .filter(([k]) => k.startsWith(`${selectedYear}-`)).reduce((s2, [, d]) => s2 + d.faktureret, 0) || aarTotal.dineroKr) : ""}</span>
