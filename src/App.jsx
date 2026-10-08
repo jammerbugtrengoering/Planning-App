@@ -2512,7 +2512,7 @@ const MODULE_HELP = {
         "Skriv også kilometerne. De bruges kun til at sammenligne — det er altid systemets egne kilometer, der gælder.",
         "Kolonnen «Type» viser Nexus, Ældrelov, Privat eller Erhverv. Nexus og Ældrelov har fast tid: der står «Aftalt tid» i stedet for et timefelt, og tiden er altid den planlagte. Du skal kun skrive kilometer (skriv 0, hvis der ikke var kørsel), og så kan linjen godkendes.",
         "Linjerne er ugeplanen, som den ser ud lige nu. Er en opgave flyttet, aflyst eller givet til en anden, efter skemaet blev trykt, og står den stadig på papiret, så vælg den under «Vælg en opgave fra ugen» (søg på kunde, adresse, nummer eller medarbejder), eller skriv dens nummer. Så kan du skrive timer og km ud for den, der står håndskrevet.",
-        "Under linjerne står «Sæt opgaverne til udført» og «Sæt som fakturagrundlag». Fakturagrundlag er slået fra, til du selv vælger det: det er det, der gør tiden til en regning til kunden.",
+        "Under linjerne står «Afslut opgaven for medarbejderen» og «Sæt som fakturagrundlag». Det første afslutter medarbejderens egen del, så en medarbejder uden Worklist først står som færdig, når timeskemaet er indtastet. Er I flere på opgaven, bliver den først udført, når alle har afsluttet. Fakturagrundlag er slået fra, til du selv vælger det: det er det, der gør tiden til en regning til kunden.",
         "Tryk «Godkend». Tiden lægges på opgaven og kommer med under Løn data og i faktureringen som al anden registreret tid — fluebenet til løn sætter du dér, som du plejer. En linje, der er indlæst, kan ikke indlæses to gange."] },
     { h: "Afvigelser i kilometer", p: ["Er det, medarbejderen skrev, mere end 1,5 km og 15 % fra det, systemet har regnet, står linjen med rødt og en forskel i kilometer. Det er dem, du tager en snak om.",
         "Systemets kilometer regnes natten efter, en opgave er udført, og er turen hen til opgaven fra den forrige. Turen hjemmefra er ikke med, så dagens første opgave er mærket «Dagens første» og har ingen km. Det har opgaver, der ikke er udført endnu, heller ikke. Papirets kilometer står som regel for hele dagen og kan godt tælle turen hjemmefra med, så kig på dagslinjen under hver dag, før du trækker en konklusion.",
@@ -5913,9 +5913,19 @@ function PlanningApp({ session, onSignOut }) {
   // Papirskemaet (5.10.2026): tiden er allerede skrevet i databasen af append_time_log, som
   // giver den fulde log tilbage. Den lægges ind i planen FØR opgaven eventuelt sættes til udført,
   // for sætningen af status skriver hele opgaven igen — med den gamle log ville tiden forsvinde.
-  function papirTidIndlaest(opgaveId, log, saetUdfoert) {
+  //
+  // «Sæt til udført» gælder medarbejderens EGEN del (8.10.2026): en medarbejder uden Worklist, som Gitte, afslutter først, når timeskemaet er indtastet. På en opgave
+  // med flere sætter det kun hendes flueben (set_employee_task_status, samme funktion som Worklist bruger); opgaven bliver udført, når alle har afsluttet. Før satte det
+  // hele opgaven til udført, også mens kollegaen endnu ikke var færdig.
+  async function papirTidIndlaest(opgaveId, log, saetUdfoert, empId) {
     setInstances((prev) => prev.map((i) => (i.id === opgaveId ? { ...i, timeLog: log, time_log: log } : i)));
-    if (saetUdfoert) updateInstance(opgaveId, (t) => (t.status === "udført" ? t : withCompletion(t, "udført")));
+    if (!saetUdfoert) return;
+    if (!empId) { updateInstance(opgaveId, (t) => (t.status === "udført" ? t : withCompletion(t, "udført"))); return; }
+    const { data, error } = await supabase.rpc("set_employee_task_status", { p_instance_id: opgaveId, p_emp_id: empId, p_done: true });
+    if (dbFail(error, "afslutte opgaven for medarbejderen")) return;
+    setInstances((prev) => prev.map((i) => (i.id === opgaveId ? {
+      ...i, status: data.status, completedBy: data.completed_by ?? null, completedAt: data.completed_at ?? null,
+      completed_by_employee: data.completed_by_employee, completedByEmployee: data.completed_by_employee } : i)));
   }
   function toggleChecklistItem(taskId, itemId) {
     updateInstance(taskId, (t) => ({
@@ -13096,7 +13106,7 @@ function PapirskemaView({ instances, employees, kmLog, onTidIndlaest, onFakturag
           p_note: `Fra papirskema${r.nr ? ` (nr. ${r.nr})` : ""}`, p_klient_id: klientNoegle(empId, r.t.id),
         });
         if (error) { fejl.push(`${r.sted}: ${error.message}`); continue; }
-        onTidIndlaest(r.t.id, log, udfoert);
+        await onTidIndlaest(r.t.id, log, udfoert, empId);
         indlaeste.push(r.t.id);
       }
       const { error: e2 } = await supabase.from("papirskema_linjer").upsert({
@@ -13265,7 +13275,7 @@ function PapirskemaView({ instances, employees, kmLog, onTidIndlaest, onFakturag
           <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", marginTop: 12, paddingTop: 12, borderTop: "1px solid #E2E8F0" }}>
             <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13.5 }}>
               <input type="checkbox" checked={udfoert} onChange={(e) => setUdfoert(e.target.checked)} />
-              Sæt opgaverne til udført
+              Afslut opgaven for medarbejderen
             </label>
             <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13.5 }}>
               <input type="checkbox" checked={fakturagrundlag} onChange={(e) => setFakturagrundlag(e.target.checked)} />
