@@ -10,7 +10,7 @@ const MAANEDER = ["Januar", "Februar", "Marts", "April", "Maj", "Juni", "Juli", 
 const kr = (n) => Math.round(Number(n) || 0).toLocaleString("da-DK") + " kr.";
 const pct = (p) => (p == null ? "–" : Math.round(p) + " %");
 
-export default function MedarbejderOmsaetningRapport({ opgaver, medarbejdere, beregn, loenFor, datoAf, segmenter, harSatser }) {
+export default function MedarbejderOmsaetningRapport({ opgaver, medarbejdere, udenfor, beregn, loenFor, datoAf, segmenter, harSatser }) {
   const nu = new Date();
   const [aar, setAar] = useState(nu.getFullYear());
   const [maaned, setMaaned] = useState(0);
@@ -18,10 +18,12 @@ export default function MedarbejderOmsaetningRapport({ opgaver, medarbejdere, be
   const tal = useMemo(() => omsaetningPrMedarbejder(opgaver, { beregn, loenFor, datoAf, aar, maaned, segment }),
     [opgaver, beregn, loenFor, datoAf, aar, maaned, segment]);
   const navn = useMemo(() => Object.fromEntries(medarbejdere.map((m) => [m.id, m.name])), [medarbejdere]);
-  const raekker = useMemo(() => [...tal.raekker].sort((a, b) => (a.id === KONTORET) - (b.id === KONTORET) || b.omsaetning - a.omsaetning), [tal]);
+  // Medarbejdere, der ikke indgår i rapporterne (ejere), står ikke som rækker; deres omsætning er med i det samlede tal og nævnes i en linje under tabellen.
+  const skjulte = useMemo(() => tal.raekker.filter((r) => udenfor && udenfor.has(r.id)), [tal, udenfor]);
+  const raekker = useMemo(() => [...tal.raekker].filter((r) => !(udenfor && udenfor.has(r.id))).sort((a, b) => (a.id === KONTORET) - (b.id === KONTORET) || b.omsaetning - a.omsaetning), [tal, udenfor]);
   const toppen = Math.max(1, ...raekker.map((r) => r.omsaetning));
   const udenSats = raekker.reduce((s, r) => s + r.udenSatsMin, 0);
-  const timer = raekker.reduce((s, r) => s + r.registreretMin, 0) / 60;
+  const timer = tal.raekker.reduce((s, r) => s + r.registreretMin, 0) / 60;
   const TH = { padding: "4px 6px", fontWeight: 600 };
 
   if (!harSatser) return <div style={{ ...BOX, color: "#64748B" }}>Lønsatserne er ikke læst ind. Rapporten kan kun ses af administratorer.</div>;
@@ -94,6 +96,11 @@ export default function MedarbejderOmsaetningRapport({ opgaver, medarbejdere, be
             {raekker.length === 0 && <tr><td colSpan={8} style={{ padding: "12px 6px", color: "#64748B" }}>Ingen udførte opgaver i det valgte udsnit.</td></tr>}
           </tbody>
         </table>
+        {skjulte.length > 0 && (
+          <div style={{ marginTop: 10, fontSize: 12.5, color: "#64748B", lineHeight: 1.5 }}>
+            Ikke vist, fordi de indgår ikke i rapporterne: {skjulte.map((r) => navn[r.id] || r.id).join(", ")}. Deres omsætning ({kr(skjulte.reduce((a, r) => a + r.omsaetning, 0))}) er med i «Omsætning i alt» øverst.
+          </div>
+        )}
         {udenSats > 0 && (
           <div style={{ marginTop: 10, padding: "9px 11px", borderRadius: 10, background: "#FFFBEB", color: "#92400E", fontSize: 13, lineHeight: 1.5 }}>
             * {Math.round(udenSats / 60).toLocaleString("da-DK")} timer har ingen lønsats på opgavens dato og er ikke regnet med i lønnen. Bidraget er derfor for højt for dem. Læg sats ind på medarbejderkortet.

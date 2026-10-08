@@ -2016,6 +2016,7 @@ const MODULE_HELP = {
         "Ansættelse, dokumenter, nødkontakt og løn ligger i Personalemappen, som kun HR-administratorer kan se. Her står kun det, planlægningen bruger.",
         "Denne side er stamdata: hvem medarbejderne er, hvad de kan, hvor mange timer de har, og hvem der har adgang til appen. Hvor meget der er planlagt i en bestemt uge, står i Ugeplan — ikke her.",
         "Hver medarbejder er én linje med det aftalte timetal, weekendaftale og mødetid.",
+        "«Indgår ikke i rapporterne» (flueben på kortet) bruges til ejere, der kun tager timer, når det kniber: deres kapacitet tæller ikke med i Udnyttelse, og de står ikke i Sygefravær, Pr. medarbejder og Overblikket. Planlægningen påvirkes ikke, og omsætning og løn for de timer, de tager, er stadig med i de samlede tal.",
         "Mærkaterne til højre er det du ellers ikke kan se: manglende app-adgang, kørsel som arbejdstid, administrator, og de to første kompetencer.",
         "Tryk på linjen for at folde den ud. Så kommer kompetencer med niveau, områder, timer pr. dag, app-adgang og udleveringshistorik. Flere kan være åbne ad gangen, så du kan sammenligne to medarbejdere.",
         "Søgefeltet søger i både navn og kompetencer, så «vindue» finder dem der kan vinduespolering. Sorteringen og områdefilteret virker sammen med søgningen.",
@@ -2488,7 +2489,8 @@ const MODULE_HELP = {
         "«Budget og omsætning» svarer på, hvad der er kommet ind måned for måned i år.",
         "«Aftaleportefølje» svarer på, hvad der er aftalt — hvad de aftaler, I har, er værd, og hvordan de fordeler sig.",
         "Det andet kan ikke læses ud af det første. En aftale, du skriver under i dag, fylder næsten ingenting i budgettet i år og kan alligevel være en halv million værd over sin løbetid.", "«Overskud» viser overskuddet måned for måned. Kun administratorer kan se den.",
-        "Resten er nævnt nedenfor: «Aflysninger» (med aflysningsprocent pr. aftaletype), «Postnumre» (kort over, hvor opgaverne ligger), «Dækningsbidrag», «Udnyttelse», «Sygefravær» og «Pr. medarbejder». Overskud, Dækningsbidrag, Udnyttelse, Sygefravær, Pr. medarbejder og Start/stop er kun for administratorer, fordi de viser løn. Overblikket øverst samler dem alle."] }, { h: "Overskud", p: ["Overskuddet regnes som omsætning minus lønsum, kørsel og frie omkostninger, måned for måned.", "«Planlagt» står før omsætningen og er værdien af det, der ligger i planen for måneden ud fra aftalerne: tid gange satsen på opgavens dato, eller fastprisen. Den viser, hvad måneden ville give, hvis alt blev udført som planlagt. Forskellen til omsætningen er det, der endnu ikke er udført eller faktureret. Planlagt indgår ikke i overskuddet.", "Er en måned allerede godkendt til løn og «låst», ændrer senere rettelser i lønnen ikke det overskud, der allerede er opgjort for den måned.", ...(KUNDEUDGAVE ? [] : ["«Faktureret (Dinero)» er alle bogførte fakturaer med fakturadato i måneden, hentet fra Dinero natten før. Under står, hvor meget der er betalt, og — med rødt — hvor meget der er forfaldent og ikke betalt. Hold musen over tallet for at se det hele, også kladder. Kun til sammenligning; det tæller ikke med i selve overskuddet."])] },
+        "Resten er nævnt nedenfor: «Aflysninger» (med aflysningsprocent pr. aftaletype), «Postnumre» (kort over, hvor opgaverne ligger), «Dækningsbidrag», «Udnyttelse», «Sygefravær» og «Pr. medarbejder». Overskud, Dækningsbidrag, Udnyttelse, Sygefravær, Pr. medarbejder og Start/stop er kun for administratorer, fordi de viser løn. Overblikket øverst samler dem alle.",
+        "Ejerne, der kun tager timer, når det kniber, kan tages ud af rapporterne: sæt flueben ved «Indgår ikke i rapporterne» på medarbejderens kort under Opsætning → Medarbejdere. Så tæller vedkommendes kapacitet ikke med i Udnyttelse, og vedkommende står ikke i Sygefravær, Pr. medarbejder og Overblikket. Omsætning og løn for de timer, vedkommende tager, er stadig med i de samlede tal (Budget, Overskud, Dækningsbidrag)."] }, { h: "Overskud", p: ["Overskuddet regnes som omsætning minus lønsum, kørsel og frie omkostninger, måned for måned.", "«Planlagt» står før omsætningen og er værdien af det, der ligger i planen for måneden ud fra aftalerne: tid gange satsen på opgavens dato, eller fastprisen. Den viser, hvad måneden ville give, hvis alt blev udført som planlagt. Forskellen til omsætningen er det, der endnu ikke er udført eller faktureret. Planlagt indgår ikke i overskuddet.", "Er en måned allerede godkendt til løn og «låst», ændrer senere rettelser i lønnen ikke det overskud, der allerede er opgjort for den måned.", ...(KUNDEUDGAVE ? [] : ["«Faktureret (Dinero)» er alle bogførte fakturaer med fakturadato i måneden, hentet fra Dinero natten før. Under står, hvor meget der er betalt, og — med rødt — hvor meget der er forfaldent og ikke betalt. Hold musen over tallet for at se det hele, også kladder. Kun til sammenligning; det tæller ikke med i selve overskuddet."])] },
     { h: "Budget og omsætning", p: ["Budget er det du selv lægger ind med «Redigér budget».",
         "Planlagt er værdien af det der ligger i kalenderen.",
         "Registreret er den tid der faktisk er logget.",
@@ -3319,6 +3321,8 @@ function PlanningApp({ session, onSignOut }) {
           app_email: e.app_email ?? null,
           isAdmin: e.is_admin ?? false,
           weekendOk: e.weekend_ok ?? false,
+          // Ejere, der tager timer, når det kniber, indgår ikke i rapporternes kapacitet og tal pr. medarbejder (8.10.2026).
+          udenforRapporter: e.udenfor_rapporter ?? false,
           // Start/stop-tidsregistrering (24.9.2026). Standard FRA. Se afsnittet i
           // medarbejdervinduet og funktionen afslut_tid i databasen.
           startStop: e.start_stop ?? false,
@@ -4064,7 +4068,7 @@ function PlanningApp({ session, onSignOut }) {
 
   const syncEmployee = useCallback(async (emp) => {
     const { data: skillRows_db } = await supabase.from("skills").select("id, name");
-    const { error: empErr } = await supabase.from("employees").upsert({ id: emp.id, name: emp.name, color: emp.color, is_admin: emp.isAdmin ?? false, weekend_ok: emp.weekendOk ?? false, start_stop: emp.startStop ?? false, start_time: emp.startTime || null, danloen_nr: emp.danloenNr ?? null,
+    const { error: empErr } = await supabase.from("employees").upsert({ id: emp.id, name: emp.name, color: emp.color, is_admin: emp.isAdmin ?? false, weekend_ok: emp.weekendOk ?? false, udenfor_rapporter: emp.udenforRapporter ?? false, start_stop: emp.startStop ?? false, start_time: emp.startTime || null, danloen_nr: emp.danloenNr ?? null,
       weekend_tillaeg: emp.weekendTillaeg ?? false, sh_betaling: emp.shBetaling ?? false,
       weekend_pct_egen: emp.weekendPctEgen ?? null, sh_pct_egen: emp.shPctEgen ?? null }, { onConflict: "id" });
     if (dbFail(empErr, "gemme medarbejderen")) return;
@@ -11395,16 +11399,20 @@ function ReportsView({ instances, templates, pricing, budgets, onSaveBudget, isA
   const isAllAreas = selectedArea === "alle";
   // Kun egentlige opgaver: ingen ferie, sygdom, aktiviteter eller aflyste.
   const postnrOpgaver = useMemo(() => instances.filter((t) => (t.type === "fixed" || t.type === "adhoc") && !erAflyst(t)), [instances]);
+  // Medarbejdere, der ikke indgår i rapporterne (ejerne; Opsætning -> Medarbejdere). Deres kapacitet og tal pr. medarbejder tæller ikke med; omsætning og løn for deres timer er stadig med i de samlede tal.
+  const rapportMedarbejdere = useMemo(() => employees.filter((e) => !e.udenforRapporter), [employees]);
+  const udenforIds = useMemo(() => new Set(employees.filter((e) => e.udenforRapporter).map((e) => e.id)), [employees]);
+  const fastForRapport = (t) => { const f = (t.templateId && templates.find((tp) => tp.id === t.templateId)?.preferredEmployeeId) || null; return f && !udenforIds.has(f) ? f : null; };
   // Det overblikket regner på. Alt kommer fra de samme funktioner som rapporterne bag kortene (se src/overblik.js).
   const overblikInput = useMemo(() => !isAdminUser ? null : {
     opgaver: postnrOpgaver, alleOpgaver: instances, medAflyste: instances.filter((t) => t.type === "fixed" || t.type === "adhoc"),
-    medarbejdere: employees, templates, budgets, beregn: opgaveTal, datoAf: instanceDateString, planlagtFor, erAflyst,
+    medarbejdere: rapportMedarbejdere, templates, budgets, beregn: opgaveTal, datoAf: instanceDateString, planlagtFor, erAflyst,
     satsFor: (emp, dato) => satsPaaDato(satsHistorik, emp, dato), erSygdom: (t) => t.type === "sygdom", erBlok: (t) => BLOCK_TYPES.includes(t.type),
     partFor: (t) => (aflysningsgrunde.find((x) => x.id === t.aflyst_grund)?.part) || "jammerbugt",
-    fastFor: (t) => (t.templateId && templates.find((tp) => tp.id === t.templateId)?.preferredEmployeeId) || null,
+    fastFor: fastForRapport,
     segmenter: REPORT_AREAS, maal: FIRMA.noegletal_maal,
     udenPostnr: templates.filter((x) => x.status === "aktiv" && !postnrFraAdresse(x.address)).length,
-  }, [isAdminUser, postnrOpgaver, instances, employees, templates, budgets, satsHistorik, aflysningsgrunde, FIRMA.noegletal_maal]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isAdminUser, postnrOpgaver, instances, rapportMedarbejdere, udenforIds, templates, budgets, satsHistorik, aflysningsgrunde, FIRMA.noegletal_maal]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const monthRows = useMemo(() => {
     const areasToSum = isAllAreas ? REPORT_AREAS.map(([k]) => k) : [selectedArea];
@@ -11511,7 +11519,7 @@ function ReportsView({ instances, templates, pricing, budgets, onSaveBudget, isA
         </React.Suspense>
       ) : rapport === "udnyttelse" && isAdminUser ? (
         <React.Suspense fallback={<div style={styles.hint}>Henter rapporten…</div>}>
-          <UdnyttelsesRapport opgaver={instances} medarbejdere={employees} datoAf={instanceDateString} planlagtFor={planlagtFor}
+          <UdnyttelsesRapport opgaver={instances} medarbejdere={rapportMedarbejdere} datoAf={instanceDateString} planlagtFor={planlagtFor}
             erBlok={(t) => BLOCK_TYPES.includes(t.type)} erUdelukket={(t) => t.type === "aktivitet" || erAflyst(t)}
             timepris={(() => {
               // Den laveste timepris i dag: mistet omsætning skal være et forsigtigt skøn (Jonn 8.10.2026), ikke den dyreste time.
@@ -11521,15 +11529,14 @@ function ReportsView({ instances, templates, pricing, budgets, onSaveBudget, isA
         </React.Suspense>
       ) : rapport === "medarbejderomsaetning" && isAdminUser ? (
         <React.Suspense fallback={<div style={styles.hint}>Henter rapporten…</div>}>
-          <MedarbejderOmsaetningRapport opgaver={postnrOpgaver} medarbejdere={employees} beregn={opgaveTal}
+          <MedarbejderOmsaetningRapport opgaver={postnrOpgaver} medarbejdere={employees} udenfor={udenforIds} beregn={opgaveTal}
             loenFor={(emp, dato) => satsPaaDato(satsHistorik, emp, dato)} datoAf={instanceDateString} segmenter={REPORT_AREAS}
             harSatser={!!satsHistorik && Object.keys(satsHistorik).length > 0} />
         </React.Suspense>
       ) : rapport === "sygefravaer" && isAdminUser ? (
         <React.Suspense fallback={<div style={styles.hint}>Henter rapporten…</div>}>
-          <SygefravaerRapport opgaver={instances} medarbejdere={employees} datoAf={instanceDateString}
-            erSygdom={(t) => t.type === "sygdom"} erAflyst={erAflyst}
-            fastFor={(t) => (t.templateId && templates.find((tp) => tp.id === t.templateId)?.preferredEmployeeId) || null} />
+          <SygefravaerRapport opgaver={instances} medarbejdere={rapportMedarbejdere} datoAf={instanceDateString}
+            erSygdom={(t) => t.type === "sygdom"} erAflyst={erAflyst} fastFor={fastForRapport} />
         </React.Suspense>
       ) : rapport === "portefoelje" ? (
         <PortefoeljeRapport templates={templates} instances={instances} pricing={pricing} />
@@ -20485,6 +20492,7 @@ function EmployeeModal({ hrAdgang = true, emp, onClose, onSave, skills: skillLis
   const [homeAddress, setHomeAddress] = useState(emp?.homeAddress || "");
   const [travelInWorktime, setTravelInWorktime] = useState(emp?.travelInWorktime ?? false);
   const [weekendOk, setWeekendOk] = useState(emp?.weekendOk ?? false);
+  const [udenforRapporter, setUdenforRapporter] = useState(emp?.udenforRapporter ?? false);
   const [startStop, setStartStop] = useState(emp?.startStop ?? false);
   const [empSkills, setEmpSkills] = useState(emp?.skills || {});
   // Et tomt objekt skal ogsaa falde tilbage: en medarbejder uden raekker i
@@ -20707,6 +20715,16 @@ function EmployeeModal({ hrAdgang = true, emp, onClose, onSave, skills: skillLis
           <div style={styles.hint}>
             Uden fluebenet kan medarbejderen slet ikke planlægges lørdag og søndag. Weekendarbejde udløser tillæg.
           </div>
+          <button type="button" style={udenforRapporter ? styles.empTjekAktivGroen : styles.empTjek}
+            onClick={() => setUdenforRapporter((v) => !v)}>
+            <span style={udenforRapporter ? styles.empTjekFirkantGroen : styles.empTjekFirkant}>
+              {udenforRapporter && <Check size={11} color="#fff" strokeWidth={3} />}
+            </span>
+            <span style={{ fontSize: 13, color: "#111111" }}>Indgår ikke i rapporterne (fx en ejer, der kun tager timer, når det kniber)</span>
+          </button>
+          <div style={styles.hint}>
+            Medarbejderens kapacitet tæller ikke med i Udnyttelse, og vedkommende står ikke i Sygefravær, Pr. medarbejder og Overblikket. Omsætning og løn for de timer, vedkommende tager, tæller stadig med i de samlede tal.
+          </div>
         </StamKort>
         <StamKort titel="Kan" hint="Kompetencer og niveau — afgør hvilke opgaver medarbejderen kommer i betragtning til" bg="#F0FDFA" farve="#0F766E" hintFarve="#149285">
           {synlige.length === 0 && (
@@ -20911,7 +20929,7 @@ function EmployeeModal({ hrAdgang = true, emp, onClose, onSave, skills: skillLis
           if (gemmer) return;
           setGemmer(true);
           try {
-            await onSave({ id: emp?.id || uid("e"), name: name.trim(), skills: empSkills, color: emp?.color || color, capacity, isAdmin, weekendOk, startStop, startTime: startTime || null, hourlyWage: hourlyWage === "" ? STANDARD_TIMELOEN : Math.max(0, Number(hourlyWage)), wageFrom: hrAdgang && (satsErAendret || !emp) ? wageFrom : null, kmSats: kmSats === "" ? null : Math.max(0, Number(kmSats)), kmSatsFra: kmSats !== "" && (kmSatsErAendret || !emp) ? kmSatsFra : null, homeAddress: homeAddress.trim() || null, travelInWorktime, danloenNr: danloenNr.trim() || null,
+            await onSave({ id: emp?.id || uid("e"), name: name.trim(), skills: empSkills, color: emp?.color || color, capacity, isAdmin, weekendOk, udenforRapporter, startStop, startTime: startTime || null, hourlyWage: hourlyWage === "" ? STANDARD_TIMELOEN : Math.max(0, Number(hourlyWage)), wageFrom: hrAdgang && (satsErAendret || !emp) ? wageFrom : null, kmSats: kmSats === "" ? null : Math.max(0, Number(kmSats)), kmSatsFra: kmSats !== "" && (kmSatsErAendret || !emp) ? kmSatsFra : null, homeAddress: homeAddress.trim() || null, travelInWorktime, danloenNr: danloenNr.trim() || null,
               // Uden HR-adgang sendes ingen HR-række: den ville nulstille det, der står, og databasen afviser den alligevel.
               hr: !hrAdgang ? undefined : { telefon: hrTelefon.trim() || null, privat_email: hrPrivatEmail.trim() || null,
                     nodkontakt_navn: hrNodNavn.trim() || null, nodkontakt_relation: hrNodRelation.trim() || null,
