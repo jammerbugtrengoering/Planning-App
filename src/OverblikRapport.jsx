@@ -54,14 +54,14 @@ const CSS = `
 .ob .gd { color:var(--good); font-weight:700; } .ob .bd { color:var(--crit); font-weight:700; }
 .ob .spark { width:100%; height:24px; display:block; overflow:visible; }
 .ob .src { display:none; }
-.ob .tile.bred .stang { display:grid; grid-template-columns:70px minmax(0,1fr) 44px; gap:8px; align-items:center; font-size:12px; }
+.ob .tile.bred .stang { display:grid; grid-template-columns:54px minmax(0,1fr) 34px; gap:6px; align-items:center; font-size:11px; line-height:1.2; }
 .ob .tile.bred .stang .n { color:var(--ink2); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.ob .tile.bred .stang .sp { position:relative; height:10px; background:var(--surf2); border-radius:3px; }
+.ob .tile.bred .stang .sp { position:relative; height:7px; background:var(--surf2); border-radius:3px; }
 .ob .tile.bred .stang .sp i { position:absolute; inset:0 auto 0 0; border-radius:0 3px 3px 0; }
 .ob .tile.bred .stang .sp u { position:absolute; top:-3px; bottom:-3px; width:2px; background:var(--ink3); border-radius:1px; }
 .ob .tile.bred .stang b { text-align:right; font-variant-numeric:tabular-nums; }
-.ob .tile.bred .stave { display:grid; gap:5px; margin-top:4px; }
-@media (min-width:1100px) { .ob .tile.bred { grid-column:span 2; } }
+.ob .tile.bred .stave { display:grid; gap:3px; margin-top:3px; }
+
 .ob .foot { color:var(--ink3); font-size:12.5px; max-width:80ch; }
 .ob button:focus-visible { outline:2px solid var(--acc); outline-offset:2px; }
 `;
@@ -209,9 +209,9 @@ export default function OverblikRapport({ input, medDinero, onAabn, onSide }) {
               const MAXP = Math.max(100, maal.db * 1.4);
               return (
                 <button type="button" className="card tile bred" key={k} onClick={() => onAabn(m.rapport)} title={`Åbn rapporten: ${m.navn}`}>
-                  <div className="row"><span className="name">{m.navn} pr. aftaletype</span><Pill k={s} tekst={s === "good" ? "I mål" : s === "warn" ? "Under" : s === "crit" ? "Langt fra" : "Ingen data"} /></div>
-                  <div className="val">{fmt(k, v)}<small>% i alt</small></div>
-                  <div className="meta">{d != null && <span className={godt ? "gd" : "bd"}>{dtxt}</span>}<span>Mål mindst {fmt(k, maal[k])} %</span></div>
+                  <div className="row"><span className="name">{m.navn}</span><Pill k={s} tekst={s === "good" ? "I mål" : s === "warn" ? "Under" : s === "crit" ? "Langt fra" : "Ingen data"} /></div>
+                  <div className="val">{fmt(k, v)}<small>%</small></div>
+                  <div className="meta">{d != null && <span className={godt ? "gd" : "bd"}>{dtxt}</span>}<span>Mål {fmt(k, maal[k])} % · pr. aftaletype</span></div>
                   <div className="stave">
                     {stave.length === 0 && <span style={{ color: "#8B7C87", fontSize: 12 }}>Ingen udførte opgaver i perioden.</span>}
                     {stave.map((r) => {
