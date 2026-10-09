@@ -1,6 +1,7 @@
 import { aflysningPrSegment } from "./aflysningsprocent.js";
 import { postnrFraAdresse } from "./postnummer.js";
 import { MAAL as NOEGLETAL, maalTal } from "./overblik.js";
+import { forventetMaaned, forventetAar } from "./forventet.js";
 import React, { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { samletForMedarbejder, danloenLinjer, danloenCsv } from "./loenberegning.js";
 import { loenPeriode, periodeFor, periodeTekst, erLaast as loenErLaast, isoDag } from "./loenperiode.js";
@@ -2496,7 +2497,7 @@ const MODULE_HELP = {
         "«Aftaleportefølje» svarer på, hvad der er aftalt — hvad de aftaler, I har, er værd, og hvordan de fordeler sig.",
         "Det andet kan ikke læses ud af det første. En aftale, du skriver under i dag, fylder næsten ingenting i budgettet i år og kan alligevel være en halv million værd over sin løbetid.", "«Overskud» viser overskuddet måned for måned. Kun administratorer kan se den.",
         "Resten er nævnt nedenfor: «Aflysninger» (med aflysningsprocent pr. aftaletype), «Postnumre» (kort over, hvor opgaverne ligger), «Dækningsbidrag», «Udnyttelse», «Sygefravær» og «Pr. medarbejder». Overskud, Dækningsbidrag, Udnyttelse, Sygefravær, Pr. medarbejder og Start/stop er kun for administratorer, fordi de viser løn. Overblikket øverst samler dem alle.",
-        "Ejerne, der kun tager timer, når det kniber, kan tages ud af rapporterne: sæt flueben ved «Indgår ikke i rapporterne» på medarbejderens kort under Opsætning → Medarbejdere. Så tæller vedkommendes kapacitet ikke med i Udnyttelse, og vedkommende står ikke i Sygefravær, Pr. medarbejder og Overblikket. Omsætning og løn for de timer, vedkommende tager, er stadig med i de samlede tal (Budget, Overskud, Dækningsbidrag)."] }, { h: "Overskud", p: ["Overskuddet regnes som omsætning minus lønsum, kørsel og frie omkostninger, måned for måned.", "«Planlagt» står før omsætningen og er værdien af det, der ligger i planen for måneden ud fra aftalerne: tid gange satsen på opgavens dato, eller fastprisen. Den viser, hvad måneden ville give, hvis alt blev udført som planlagt. Forskellen til omsætningen er det, der endnu ikke er udført eller faktureret. Planlagt indgår ikke i overskuddet.", "Er en måned allerede godkendt til løn og «låst», ændrer senere rettelser i lønnen ikke det overskud, der allerede er opgjort for den måned.", ...(KUNDEUDGAVE ? [] : ["«Faktureret (Dinero)» er alle bogførte fakturaer med fakturadato i måneden, hentet fra Dinero natten før. Under står, hvor meget der er betalt, og — med rødt — hvor meget der er forfaldent og ikke betalt. Hold musen over tallet for at se det hele, også kladder. Kun til sammenligning; det tæller ikke med i selve overskuddet."])] },
+        "Ejerne, der kun tager timer, når det kniber, kan tages ud af rapporterne: sæt flueben ved «Indgår ikke i rapporterne» på medarbejderens kort under Opsætning → Medarbejdere. Så tæller vedkommendes kapacitet ikke med i Udnyttelse, og vedkommende står ikke i Sygefravær, Pr. medarbejder og Overblikket. Omsætning og løn for de timer, vedkommende tager, er stadig med i de samlede tal (Budget, Overskud, Dækningsbidrag)."] }, { h: "Overskud", p: ["Overskuddet regnes som omsætning minus lønsum, kørsel og frie omkostninger, måned for måned.", "«Planlagt» står før omsætningen og er værdien af det, der ligger i planen for måneden ud fra aftalerne: tid gange satsen på opgavens dato, eller fastprisen. Den viser, hvad måneden ville give, hvis alt blev udført som planlagt. Forskellen til omsætningen er det, der endnu ikke er udført eller faktureret. Planlagt indgår ikke i overskuddet.", "«Forventet» er en forventet omsætning: afsluttede måneder står på det, der er faktureret, og indeværende og kommende måneder på planlagt (dog aldrig under det allerede fakturerede). Under tallet står, hvor stor en del der allerede er faktureret; den er lav for kommende måneder og vokser, jo mere der faktureres. Hen over året bliver forecastet derfor mere og mere præcist, og 2027 starter med planlagt for alle 12 måneder. Før oktober 2026 tæller kun det fakturerede, fordi ikke alle opgaver lå i systemet dengang. Planlagt tæller kun opgaver med en medarbejder på.", "Er en måned allerede godkendt til løn og «låst», ændrer senere rettelser i lønnen ikke det overskud, der allerede er opgjort for den måned.", ...(KUNDEUDGAVE ? [] : ["«Faktureret (Dinero)» er alle bogførte fakturaer med fakturadato i måneden, hentet fra Dinero natten før. Under står, hvor meget der er betalt, og — med rødt — hvor meget der er forfaldent og ikke betalt. Hold musen over tallet for at se det hele, også kladder. Kun til sammenligning; det tæller ikke med i selve overskuddet."])] },
     { h: "Budget og omsætning", p: ["Budget er det du selv lægger ind med «Redigér budget».",
         "Planlagt er værdien af det der ligger i kalenderen.",
         "Registreret er den tid der faktisk er logget.",
@@ -8339,8 +8340,8 @@ function ChecklistModal({ checklist, onClose, onSave }) {
 // ---------- Time & Export ----------
 // Overskud: kolonnen «Oms. (Dinero)» findes kun med Dinero-modulet (29.9.2026).
 const OVERSKUD_GRID = () => harModul("dinero")
-  ? "1fr 110px 110px 110px 110px 110px 110px 110px 110px"
-  : "1fr 110px 110px 0px 110px 110px 110px 110px 110px";
+  ? "1fr 110px 110px 110px 130px 110px 110px 110px 110px 110px"
+  : "1fr 110px 110px 0px 0px 110px 110px 110px 110px 110px";
 
 // Fakturering: kolonnen «Dinero» findes kun med Dinero-modulet (29.9.2026). I
 // kundeudgaven er den 0 bred og tom, saa de oevrige kolonner staar hvor de plejer.
@@ -10148,6 +10149,14 @@ function OverskudRapport({ instances, employees, satsHistorik, kmSatser, kmLog, 
     dineroKr: acc.dineroKr + (r.dineroKr || 0),
   }), { planlagt: 0, omsaetning: 0, omkostninger: 0, overskud: 0, dineroKr: 0 });
 
+  // Forventet omsætning (9.10.2026): afsluttede måneder står på det fakturerede, indeværende og kommende på planlagt (aldrig under det fakturerede). Se src/forventet.js.
+  const forventetRows = monthRows.map((r) => {
+    const d = dineroStatus[`${selectedYear}-${r.month}`];
+    return forventetMaaned({ aar: selectedYear, maaned: r.month, faktureret: d ? d.faktureret : r.dineroKr, planlagt: r.planlagtKr, idag: { aar: new Date().getFullYear(), maaned: new Date().getMonth() + 1 } });
+  });
+  const forventetTotal = forventetAar(forventetRows);
+  const pct = (v) => `${Math.round(v * 100)} %`;
+
   const kr = (v) => Math.round(v).toLocaleString("da-DK") + " kr.";
 
   function tilfoejOmkostning() {
@@ -10189,6 +10198,12 @@ function OverskudRapport({ instances, employees, satsHistorik, kmSatser, kmLog, 
         <div style={styles.statBlock}>
           <div><div style={{ ...styles.statValue, color: "#64748B" }}>{kr(aarTotal.omsaetning)}</div><div style={styles.statLabel}>Omsætning {selectedYear}</div></div>
         </div>
+        {harModul("dinero") && (
+          <div style={styles.statBlock} title="Afsluttede måneder står på det fakturerede i Dinero, indeværende og kommende på planlagt. Sikkerheden er andelen, der allerede er faktureret.">
+            <div><div style={{ ...styles.statValue, color: "#0369A1" }}>{kr(forventetTotal.forventet)}</div>
+              <div style={styles.statLabel}>Forventet {selectedYear}{forventetTotal.sikkerhed != null ? ` · ${pct(forventetTotal.sikkerhed)} faktureret` : ""}</div></div>
+          </div>
+        )}
         <div style={styles.statBlock}>
           <div><div style={{ ...styles.statValue, color: "#DC2626" }}>{kr(aarTotal.omkostninger)}</div><div style={styles.statLabel}>Omkostninger i alt</div></div>
         </div>
@@ -10212,6 +10227,7 @@ function OverskudRapport({ instances, employees, satsHistorik, kmSatser, kmLog, 
         <span style={{ textAlign: "right" }} title="Værdien af det, der ligger i planen for måneden, ud fra aftalerne">Planlagt</span>
         <span style={{ textAlign: "right" }}>Omsætning</span>
         <span style={{ textAlign: "right" }}>{harModul("dinero") ? "Faktureret (Dinero)" : ""}</span>
+        <span style={{ textAlign: "right" }} title="Afsluttede måneder: det fakturerede. Indeværende og kommende: planlagt, aldrig under det fakturerede. Før oktober 2026 kun det fakturerede.">{harModul("dinero") ? "Forventet" : ""}</span>
         <span style={{ textAlign: "right" }}>Løn</span>
         <span style={{ textAlign: "right" }}>Kørsel</span>
         <span style={{ textAlign: "right" }}>Andet</span>
@@ -10239,6 +10255,21 @@ function OverskudRapport({ instances, employees, satsHistorik, kmSatser, kmLog, 
                 </div>
               );
             })()}
+            {(() => {
+              if (!harModul("dinero")) return <div />;
+              const f = forventetRows[idx];
+              if (!(f.forventet > 0)) return <div style={{ fontSize: 13, color: "#94A3B8", textAlign: "right" }}>—</div>;
+              return (
+                <div style={{ textAlign: "right", lineHeight: 1.35 }}
+                  title={f.afsluttet ? "Måneden er afsluttet (eller opgaverne lå ikke alle i systemet før oktober 2026): det fakturerede tæller" : `Planlagt ${kr(f.forventet)}, heraf faktureret ${kr(f.faktureret)}`}>
+                  <div style={{ fontSize: 13, color: f.sikkerhed === 1 ? "#111111" : "#0369A1", fontWeight: 600 }}>{kr(f.forventet)}</div>
+                  <div style={{ height: 3, background: "#E2E8F0", borderRadius: 2, margin: "3px 0 2px 24px" }}>
+                    <div style={{ height: 3, width: `${Math.round((f.sikkerhed || 0) * 100)}%`, background: "#0369A1", borderRadius: 2 }} />
+                  </div>
+                  <div style={{ fontSize: 11, color: "#64748B" }}>{f.afsluttet ? "faktureret" : `${pct(f.sikkerhed || 0)} faktureret`}</div>
+                </div>
+              );
+            })()}
             <div style={{ fontSize: 13, color: "#64748B", textAlign: "right" }}>{r.loenKr > 0 ? kr(r.loenKr) : "—"}</div>
             <div style={{ fontSize: 13, color: "#64748B", textAlign: "right" }}>{r.kmKr > 0 ? kr(r.kmKr) : "—"}</div>
             <div style={{ fontSize: 13, color: "#64748B", textAlign: "right" }}>{r.manuelleKr > 0 ? kr(r.manuelleKr) : "—"}</div>
@@ -10253,6 +10284,7 @@ function OverskudRapport({ instances, employees, satsHistorik, kmSatser, kmLog, 
         <span style={{ textAlign: "right", color: "#111111" }}>{kr(aarTotal.omsaetning)}</span>
         <span style={{ textAlign: "right", color: "#0369A1" }}>{harModul("dinero") ? kr(Object.entries(dineroStatus)
           .filter(([k]) => k.startsWith(`${selectedYear}-`)).reduce((s2, [, d]) => s2 + d.faktureret, 0) || aarTotal.dineroKr) : ""}</span>
+        <span style={{ textAlign: "right", color: "#0369A1" }}>{harModul("dinero") ? kr(forventetTotal.forventet) : ""}</span>
         <span />
         <span />
         <span />
