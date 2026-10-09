@@ -14,7 +14,10 @@ import { PDFDocument, StandardFonts, rgb } from "https://esm.sh/pdf-lib@1.17.1";
 // backup_udsendelser gør, at kun det første kald sender.
 //
 // Adgangstekster (nøgleboks, alarm) står i PDF'en, fordi planen ellers ikke kan bruges som backup. Derfor står FORTROLIGT på hver side, og PDF'en sendes kun
-// til administratorer. Koderne fra adgangslageret er IKKE med.
+// til administratorer.
+// 9.10.2026 (Jonn): teksten hentes fra adgangslageret (instance_access.adgangstekst), ikke kun fra den gamle kolonne på opgaven. Første backup (9.10.) havde kun
+// kolonnen, og der stod adgang på 1 af 420 opgaver, fordi resten ligger i lageret. Opslagene kommer ikke i adgangsloggen (de sker med service-nøglen), så mailen er
+// den eneste kopi uden for systemet. Kan lageret ikke læses, sendes der ingen backup: en plan uden adgang ser fuldstændig rigtig ud, og det er den fejl vi undgår.
 //
 // Hvem må kalde: cron'en bruger den offentlige nøgle. Den kan kun udløse det, der alligevel skal ske (en backup, fredag, én gang pr. uge).
 // force, dryRun og kunTil kræver service-nøglen; en indlogget administrator kan kun sende en prøve til sin egen adresse.
@@ -260,6 +263,15 @@ serve(async (req) => {
       .or(filter).is("deleted_at", null).is("aflyst_grund", null).neq("status", "aflyst").limit(5000);
     if (error) { await log(false, "kunne ikke hente opgaver: " + error.message); return svar({ error: error.message }, 500); }
     const opgaver = ((rae ?? []) as unknown as Opg[]).filter((o) => ["fixed", "adhoc", "aktivitet", "sygdom", "ferie"].includes(o.type));
+
+    const adgangstekster = new Map<string, string>();
+    const ider = opgaver.map((o) => o.id);
+    for (let i = 0; i < ider.length; i += 200) {
+      const { data: a, error: adgangFejl } = await admin.from("instance_access").select("instance_id,adgangstekst").in("instance_id", ider.slice(i, i + 200));
+      if (adgangFejl) { await log(false, "kunne ikke hente adgangslageret: " + adgangFejl.message); return svar({ error: adgangFejl.message }, 500); }
+      for (const r of (a ?? []) as { instance_id: string; adgangstekst: string | null }[]) if (r.adgangstekst?.trim()) adgangstekster.set(r.instance_id, r.adgangstekst);
+    }
+    for (const o of opgaver) { const v = adgangstekster.get(o.id); if (v) o.access_instructions = v; }
 
     const { data: ansatte } = await admin.from("employees").select("id,name");
     const emps = new Map<string, string>((ansatte ?? []).map((e: { id: string; name: string }) => [e.id, e.name]));

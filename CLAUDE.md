@@ -248,7 +248,7 @@ er et andet navnerum end gruppenøglerne.
 
 ### Du ændrer, hvad der står i ugeplanen, eller hvad en opgave indeholder
 
-Fredagsbackuppen (`supabase/functions/ugeplan-backup`, 7.10.2026) læser `instances` direkte og tegner sin egen PDF på serveren — den bruger **ikke** appens udskrift. Henter eller viser du et nyt felt på opgaven (adgang, kontakt, tid), så tag stilling til, om det også skal med i PDF'en. Funktionen viser kun aftalt tid (`scheduled_time`), aldrig den beregnede køreplan, og må aldrig vise koder fra adgangslageret.
+Fredagsbackuppen (`supabase/functions/ugeplan-backup`, 7.10.2026) læser `instances` direkte og tegner sin egen PDF på serveren — den bruger **ikke** appens udskrift. Henter eller viser du et nyt felt på opgaven (adgang, kontakt, tid), så tag stilling til, om det også skal med i PDF'en. Funktionen viser kun aftalt tid (`scheduled_time`), aldrig den beregnede køreplan. **Adgangsteksten hentes fra adgangslageret (`instance_access.adgangstekst`)** (Jonns beslutning 9.10.2026): første backup læste kun den gamle kolonne `instances.access_instructions`, så adgang stod på 1 af 420 opgaver og planen kunne ikke bruges som nødplan. Opslagene kommer ikke i adgangsloggen, og mailen er en kopi uden for systemet, så den er mærket FORTROLIGT og går kun til administratorer; kan lageret ikke læses, sendes der ingen backup.
 Prøv den med «Send en prøve til mig» på Drift. En prøve skriver ikke i `job_koersel` — med vilje.
 
 ### Du tilføjer et automatisk job
