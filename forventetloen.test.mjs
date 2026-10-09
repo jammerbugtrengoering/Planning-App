@@ -1,5 +1,5 @@
 // Forventet løn og kørsel (se src/forventetLoen.js). Kør: node forventetloen.test.mjs
-import { forventetLoen, koerselPrTime, forventetKoersel } from "./src/forventetLoen.js";
+import { forventetLoen, forventetKoersel, typiskTur } from "./src/forventetLoen.js";
 import assert from "node:assert/strict";
 
 const erAflyst = (t) => t.status === "aflyst";
@@ -24,37 +24,58 @@ const l = forventetLoen(opg, h);
 assert.equal(l.faktisk, 200);
 assert.equal(l.forventet, 200 + 2 * 350 + 1.5 * 150);
 
-// Kørsel pr. time: a har nok at måle på (10 timer, 100 kr), b har for lidt og får gennemsnittet.
-const linjer = [
-  { employee_id: "a", work_date: "2026-09-10", km: 50 },
-  { employee_id: "b", work_date: "2026-09-10", km: 10 },
-];
-const maal = [
-  { id: "m1", assignees: ["a"], dato: "2026-09-10", plan: 600 },
-  { id: "m2", assignees: ["b"], dato: "2026-09-10", plan: 120 },
-];
-const kmKr = (x) => x.km * 2;                       // 2 kr pr. km
-const planlagt = (t) => t.plan;
-const datoAf = (t) => t.dato;
-const prTime = koerselPrTime({ linjer, opgaver: maal, fra: "2026-09-01", til: "2026-09-30", kmKr, planlagt, datoAf, erAflyst });
-assert.equal(prTime.pr.get("a"), 100 / 10);          // 10 kr pr. time
-assert.ok(Math.abs(prTime.alle - 120 / 12) < 1e-12); // 120 kr på 12 timer
-assert.equal(prTime.pr.get("b"), prTime.alle);        // for lidt at måle på
+// Kørsel: medianen af de kendte ture er den typiske.
+assert.equal(typiskTur([4, 10, 6]), 6);
+assert.equal(typiskTur([4, 10]), 7);
+assert.equal(typiskTur([]), 0);
 
-// Forventet kørsel: beregnede linjer + skøn for fremtidige dage uden linjer; en dag, der har linjer, skønnes ikke igen.
-const frem = [
-  { id: "f1", assignees: ["a"], dato: "2026-10-12", plan: 300 },   // 5 t × 10 = 50
-  { id: "f2", assignees: ["a"], dato: "2026-10-05", plan: 300 },   // har linjer den dag: skønnes ikke
-  { id: "f3", assignees: ["a"], dato: "2026-10-12", plan: 300, status: "aflyst" },
-  { id: "f4", assignees: ["a"], dato: "2026-09-20", plan: 300 },   // før i dag og uden linjer: ingen kørsel
-];
-const oktLinjer = [{ employee_id: "a", work_date: "2026-10-05", km: 20 }];
-const k = forventetKoersel({ linjer: oktLinjer, opgaver: frem, maanedFra: "2026-10-01", maanedTil: "2026-10-31", idag: "2026-10-09", kmKr, planlagt, datoAf, erAflyst, prTime });
-assert.equal(k.beregnet, 40);
-assert.equal(k.skoen, 50);
-assert.equal(k.forventet, 90);
+const par = { "A||B": 10, "B||C": 6 };
+const km = (a, b) => par[[a, b].sort().join("||")] ?? null;
+const h2 = {
+  km, datoAf: (t) => t.dato, erAflyst, sorter: (l) => [...l].sort((x, y) => (x.tid || "99").localeCompare(y.tid || "99")), adresse: (t) => t.adr,
+  egenTur: (t) => t.fra ? { fra: t.fra, tilbage: !!t.retur } : null,
+  kmKr: (emp, dato, k) => (emp === "udensats" ? null : k * 2),   // 2 kr pr. km
+};
+const maaned = { maanedFra: "2026-10-01", maanedTil: "2026-10-31", typisk: 8, h: h2 };
 
-// Uden grundlag at måle på bliver skønnet 0, ikke NaN.
-const tom = koerselPrTime({ linjer: [], opgaver: [], fra: "a", til: "b", kmKr, planlagt, datoAf, erAflyst });
-assert.equal(tom.alle, 0);
+// b har ingen beregnede linjer: kæden A -> B -> C regnes ud fra planen (10 + 6 km = 32 kr). Samme adresse to gange giver ingen tur.
+const plan = [
+  { id: "1", assignees: ["b"], dato: "2026-10-12", tid: "08:00", adr: "A" },
+  { id: "2", assignees: ["b"], dato: "2026-10-12", tid: "09:00", adr: "A" },
+  { id: "3", assignees: ["b"], dato: "2026-10-12", tid: "10:00", adr: "B" },
+  { id: "4", assignees: ["b"], dato: "2026-10-12", tid: "11:00", adr: "C" },
+  { id: "5", assignees: ["b"], dato: "2026-10-12", tid: "12:00", adr: "C", status: "aflyst" },
+];
+let k = forventetKoersel({ linjer: [], opgaver: plan, ...maaned });
+assert.equal(k.planlagt, 32);
+assert.equal(k.skoennede, 0);
+
+// Rækkefølgen følger klokkeslættet, ikke listen.
+const omvendt = [...plan].reverse();
+assert.equal(forventetKoersel({ linjer: [], opgaver: omvendt, ...maaned }).planlagt, 32);
+
+// En dag med beregnede linjer tæller med dem og regnes ikke ud fra planen igen. En anden dag regnes ud fra planen.
+const medLinjer = forventetKoersel({ linjer: [{ employee_id: "b", work_date: "2026-10-12", km: 3 }], opgaver: plan, ...maaned });
+assert.equal(medLinjer.beregnet, 6);
+assert.equal(medLinjer.planlagt, 0);
+
+// Ukendt adressepar får den typiske tur (8 km = 16 kr) og tælles som skønnet.
+const ukendt = [
+  { id: "6", assignees: ["b"], dato: "2026-10-13", tid: "08:00", adr: "X" },
+  { id: "7", assignees: ["b"], dato: "2026-10-13", tid: "09:00", adr: "Y" },
+];
+k = forventetKoersel({ linjer: [], opgaver: ukendt, ...maaned });
+assert.equal(k.planlagt, 16);
+assert.equal(k.skoennede, 1);
+
+// Én opgave på dagen giver ingen tur. Andre måneder tæller ikke. Ingen sats giver ingen kroner.
+assert.equal(forventetKoersel({ linjer: [], opgaver: [plan[0]], ...maaned }).forventet, 0);
+assert.equal(forventetKoersel({ linjer: [], opgaver: plan.map((t) => ({ ...t, dato: "2026-11-02" })), ...maaned }).forventet, 0);
+assert.equal(forventetKoersel({ linjer: [], opgaver: plan.map((t) => ({ ...t, assignees: ["udensats"] })), ...maaned }).forventet, 0);
+
+// Egen tur: fra, til og retur. Kun med kendt par; ellers udeladt.
+const tur = [{ id: "8", assignees: ["b"], dato: "2026-10-14", adr: "B", fra: "A", retur: true }];
+assert.equal(forventetKoersel({ linjer: [], opgaver: tur, ...maaned }).planlagt, 40);   // 10 km hver vej × 2 kr
+const turUkendt = [{ id: "9", assignees: ["b"], dato: "2026-10-14", adr: "Q", fra: "R", retur: true }];
+assert.equal(forventetKoersel({ linjer: [], opgaver: turUkendt, ...maaned }).forventet, 0);
 console.log("forventetloen.test.mjs: ok");
