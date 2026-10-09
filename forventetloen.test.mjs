@@ -1,5 +1,5 @@
 // Forventet løn og kørsel (se src/forventetLoen.js). Kør: node forventetloen.test.mjs
-import { forventetLoen, forventetKoersel, typiskTur } from "./src/forventetLoen.js";
+import { forventetLoen, loenMedAftaltTid, forventetKoersel, typiskTur } from "./src/forventetLoen.js";
 import assert from "node:assert/strict";
 
 const erAflyst = (t) => t.status === "aflyst";
@@ -23,6 +23,15 @@ const h = {
 const l = forventetLoen(opg, h);
 assert.equal(l.faktisk, 200);
 assert.equal(l.forventet, 200 + 2 * 350 + 1.5 * 150);
+
+// Løn for aftalt tid: det største af opgavernes løn og den aftalte tid, pr. medarbejder. En medarbejder uden opgaver, men med aftalt tid (en ejer), tæller med.
+assert.equal(l.perEmp.get("a"), 200 + 2 * 200);
+assert.equal(l.perEmp.get("b"), 2 * 150 + 1.5 * 150);
+const m = loenMedAftaltTid(l.perEmp, new Map([["a", 1000], ["b", 100], ["ejer", 500]]));
+assert.equal(m.forventet, 1000 + (2 * 150 + 1.5 * 150) + 500);
+assert.equal(m.uudnyttet, (1000 - 600) + 0 + 500);
+// Uden aftalt tid står løn som opgavernes.
+assert.equal(loenMedAftaltTid(l.perEmp, new Map()).forventet, l.forventet);
 
 // Kørsel: medianen af de kendte ture er den typiske.
 assert.equal(typiskTur([4, 10, 6]), 6);

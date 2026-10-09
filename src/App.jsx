@@ -2,7 +2,7 @@ import { aflysningPrSegment } from "./aflysningsprocent.js";
 import { postnrFraAdresse } from "./postnummer.js";
 import { MAAL as NOEGLETAL, maalTal } from "./overblik.js";
 import { forventetMaaned, forventetAar, planenErFuld } from "./forventet.js";
-import { forventetLoen, forventetKoersel, typiskTur } from "./forventetLoen.js";
+import { forventetLoen, loenMedAftaltTid, forventetKoersel, typiskTur } from "./forventetLoen.js";
 import React, { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { samletForMedarbejder, danloenLinjer, danloenCsv } from "./loenberegning.js";
 import { loenPeriode, periodeFor, periodeTekst, erLaast as loenErLaast, isoDag } from "./loenperiode.js";
@@ -390,6 +390,8 @@ function contractIconLabel(key) { const c = contractMeta(key); return c.icon + "
 // en rigtig rengøringsopgave — blokeringer skal ikke tælle med i fakturagrundlag,
 // rapportering osv., og skal forhindre auto-planlægning af den pågældende medarbejder.
 const BLOCK_TYPES = ["sygdom", "ferie"];
+// Date.getDay() (0 = søndag) til de dagnøgler, kapaciteten bruger.
+const DAGE_NOEGLER = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 // Timeloen bruges kun til loensummerne under Loen data. Satsen ligger i sin
 // egen tabel med adgang kun for administratorer — se employee_wage_history.
 const STANDARD_TIMELOEN = 170;
@@ -2498,7 +2500,7 @@ const MODULE_HELP = {
         "«Aftaleportefølje» svarer på, hvad der er aftalt — hvad de aftaler, I har, er værd, og hvordan de fordeler sig.",
         "Det andet kan ikke læses ud af det første. En aftale, du skriver under i dag, fylder næsten ingenting i budgettet i år og kan alligevel være en halv million værd over sin løbetid.", "«Overskud» viser overskuddet måned for måned. Kun administratorer kan se den.",
         "Resten er nævnt nedenfor: «Aflysninger» (med aflysningsprocent pr. aftaletype), «Postnumre» (kort over, hvor opgaverne ligger), «Dækningsbidrag», «Udnyttelse», «Sygefravær» og «Pr. medarbejder». Overskud, Dækningsbidrag, Udnyttelse, Sygefravær, Pr. medarbejder og Start/stop er kun for administratorer, fordi de viser løn. Overblikket øverst samler dem alle.",
-        "Ejerne, der kun tager timer, når det kniber, kan tages ud af rapporterne: sæt flueben ved «Indgår ikke i rapporterne» på medarbejderens kort under Opsætning → Medarbejdere. Så tæller vedkommendes kapacitet ikke med i Udnyttelse, og vedkommende står ikke i Sygefravær, Pr. medarbejder og Overblikket. Omsætning og løn for de timer, vedkommende tager, er stadig med i de samlede tal (Budget, Overskud, Dækningsbidrag)."] }, { h: "Overskud", p: ["Overskuddet regnes som omsætning minus lønsum, kørsel og frie omkostninger, måned for måned.", "«Planlagt» står før omsætningen og er værdien af det, der ligger i planen for måneden ud fra aftalerne: tid gange satsen på opgavens dato, eller fastprisen. Den viser, hvad måneden ville give, hvis alt blev udført som planlagt. Forskellen til omsætningen er det, der endnu ikke er udført eller faktureret. Planlagt indgår ikke i overskuddet.", "«Forventet» er en forventet omsætning: afsluttede måneder står på det, der er faktureret, og indeværende og kommende måneder på planlagt (dog aldrig under det allerede fakturerede). Under tallet står, hvor stor en del der allerede er faktureret; den er lav for kommende måneder og vokser, jo mere der faktureres. Hen over året bliver forecastet derfor mere og mere præcist, og 2027 starter med planlagt for alle 12 måneder. Før oktober 2026 tæller kun det fakturerede, fordi ikke alle opgaver lå i systemet dengang. Planlagt tæller kun opgaver med en medarbejder på.", "Fra oktober 2026 regnes også en forventet løn og kørsel, så der kan stå et forventet overskud. Under Løn står «forv.»: godkendt tid, plus registreret eller planlagt tid for det, der ikke er godkendt endnu, gange timelønnen for hver medarbejder på opgaven på opgavens dato. Under Kørsel står «forv.»: beregnede kilometer (godkendt eller ej) gange medarbejderens sats. For de medarbejder-dage, hvor der ikke er beregnet noget (alle, der endnu ikke bruger Worklist, og kommende dage), regnes kørslen ud fra planen: opgaverne i dagens rækkefølge, en tur mellem hver to opgaver med forskellig adresse, kilometer fra de gemte adressepar. Et par, der endnu ikke er slået op, får den typiske tur. Før oktober 2026 vises ikke noget forventet overskud, for da lå ikke alle opgaver i systemet.", "Er en måned allerede godkendt til løn og «låst», ændrer senere rettelser i lønnen ikke det overskud, der allerede er opgjort for den måned.", ...(KUNDEUDGAVE ? [] : ["«Faktureret (Dinero)» er alle bogførte fakturaer med fakturadato i måneden, hentet fra Dinero natten før. Under står, hvor meget der er betalt, og — med rødt — hvor meget der er forfaldent og ikke betalt. Hold musen over tallet for at se det hele, også kladder. Kun til sammenligning; det tæller ikke med i selve overskuddet."])] },
+        "Ejerne, der kun tager timer, når det kniber, kan tages ud af rapporterne: sæt flueben ved «Indgår ikke i rapporterne» på medarbejderens kort under Opsætning → Medarbejdere. Så tæller vedkommendes kapacitet ikke med i Udnyttelse, og vedkommende står ikke i Sygefravær, Pr. medarbejder og Overblikket. Omsætning og løn for de timer, vedkommende tager, er stadig med i de samlede tal (Budget, Overskud, Dækningsbidrag)."] }, { h: "Overskud", p: ["Overskuddet regnes som omsætning minus lønsum, kørsel og frie omkostninger, måned for måned.", "«Planlagt» står før omsætningen og er værdien af det, der ligger i planen for måneden ud fra aftalerne: tid gange satsen på opgavens dato, eller fastprisen. Den viser, hvad måneden ville give, hvis alt blev udført som planlagt. Forskellen til omsætningen er det, der endnu ikke er udført eller faktureret. Planlagt indgår ikke i overskuddet.", "«Forventet» er en forventet omsætning: afsluttede måneder står på det, der er faktureret, og indeværende og kommende måneder på planlagt (dog aldrig under det allerede fakturerede). Under tallet står, hvor stor en del der allerede er faktureret; den er lav for kommende måneder og vokser, jo mere der faktureres. Hen over året bliver forecastet derfor mere og mere præcist, og 2027 starter med planlagt for alle 12 måneder. Før oktober 2026 tæller kun det fakturerede, fordi ikke alle opgaver lå i systemet dengang. Planlagt tæller kun opgaver med en medarbejder på.", "Fra oktober 2026 regnes også en forventet løn og kørsel, så der kan stå et forventet overskud. Under Løn står «forv.»: for hver medarbejder det største af opgavernes løn (godkendt tid, plus registreret eller planlagt tid for det, der ikke er godkendt endnu, gange timelønnen på opgavens dato) og lønnen for medarbejderens aftalte arbejdstid i måneden (kapaciteten på medarbejderkortet gange timelønnen). Der er løn for den aftalte tid, selv om den ikke er fyldt med opgaver, og ejerne er med, hvis de har aftalt tid. Hold musen over tallet for at se, hvor meget af det der er aftalt tid uden opgaver. Under Kørsel står «forv.»: beregnede kilometer (godkendt eller ej) gange medarbejderens sats. For de medarbejder-dage, hvor der ikke er beregnet noget (alle, der endnu ikke bruger Worklist, og kommende dage), regnes kørslen ud fra planen: opgaverne i dagens rækkefølge, en tur mellem hver to opgaver med forskellig adresse, kilometer fra de gemte adressepar. Et par, der endnu ikke er slået op, får den typiske tur. Før oktober 2026 vises ikke noget forventet overskud, for da lå ikke alle opgaver i systemet.", "Er en måned allerede godkendt til løn og «låst», ændrer senere rettelser i lønnen ikke det overskud, der allerede er opgjort for den måned.", ...(KUNDEUDGAVE ? [] : ["«Faktureret (Dinero)» er alle bogførte fakturaer med fakturadato i måneden, hentet fra Dinero natten før. Under står, hvor meget der er betalt, og — med rødt — hvor meget der er forfaldent og ikke betalt. Hold musen over tallet for at se det hele, også kladder. Kun til sammenligning; det tæller ikke med i selve overskuddet."])] },
     { h: "Budget og omsætning", p: ["Budget er det du selv lægger ind med «Redigér budget».",
         "Planlagt er værdien af det der ligger i kalenderen.",
         "Registreret er den tid der faktisk er logget.",
@@ -10147,17 +10149,35 @@ function OverskudRapport({ travelSettings, instances, employees, satsHistorik, k
     // så de to kan sammenlignes: forskellen er det, der endnu ikke er udført og faktureret, eller blev til mindre end planlagt. Indgår ikke i overskuddet.
     const planlagtKr = tasksInMonth.reduce((s2, t) => s2 + opgaveTal(t).planlagtKr, 0);
     // Fra oktober 2026 ligger alle opgaver i systemet, så først derfra giver «forventet» mening. Før da er det forventede det samme som det godkendte.
-    let loenForvKr = loenKr, kmForvKr = kmKr;
+    let loenForvKr = loenKr, kmForvKr = kmKr, loenUudnyttetKr = 0;
     if (planenErFuld(selectedYear, month)) {
       const loenOpgaver = instances.filter((t2) => !BLOCK_TYPES.includes(t2.type) && (t2.assignees || []).length > 0)
         .filter((t2) => { const my2 = instanceMonthYear(t2, selectedYear); return my2.month === idx && my2.year === selectedYear; });
-      loenForvKr = forventetLoen(loenOpgaver, {
+      const opgaveLoen = forventetLoen(loenOpgaver, {
         godkendt: (empId, t2) => godkendtSet.has(`timer|${empId}|${t2.id}`),
         registreret: (t2, empId) => (t2.timeLog || t2.time_log || []).filter((l) => l.empId === empId).reduce((s2, l) => s2 + (l.minutes || 0), 0),
         planlagt: planlagtFor,
         sats: (empId, t2) => satsPaaDato(satsHistorik, empId, instanceDateString(t2)),
         erAflyst,
-      }).forventet;
+      });
+      // Løn er for aftalt arbejdstid (se src/forventetLoen.js): hver medarbejders kapacitet i månedens dage gange timelønnen, til og med fratrædelsesdagen.
+      const aftaltKr = new Map();
+      const dageIMaaned = new Date(selectedYear, month, 0).getDate();
+      for (const e of employees) {
+        let kr = 0;
+        for (let d = 1; d <= dageIMaaned; d++) {
+          const iso = `${selectedYear}-${String(month).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+          if (e.fratraadtDato && iso > e.fratraadtDato) continue;
+          const min = (e.capacity || {})[DAGE_NOEGLER[new Date(selectedYear, month - 1, d).getDay()]] || 0;
+          if (!min) continue;
+          const s = satsPaaDato(satsHistorik, e.id, iso);
+          if (s != null) kr += (min / 60) * s;
+        }
+        if (kr > 0) aftaltKr.set(e.id, kr);
+      }
+      const medAftalt = loenMedAftaltTid(opgaveLoen.perEmp, aftaltKr);
+      loenForvKr = Math.max(medAftalt.forventet, loenKr);
+      loenUudnyttetKr = medAftalt.uudnyttet;
       const mm = String(month).padStart(2, "0");
       kmForvKr = forventetKoersel({ linjer: kmLog, opgaver: loenOpgaver, maanedFra: `${selectedYear}-${mm}-01`, maanedTil: `${selectedYear}-${mm}-31`, typisk,
         h: { km: kmMellem, datoAf: instanceDateString, erAflyst, sorter: sortDayTasks, adresse: (t2) => t2.address || null,
@@ -10165,12 +10185,12 @@ function OverskudRapport({ travelSettings, instances, employees, satsHistorik, k
     }
     const omkostningerIAlt = loenKr + kmKr + manuelleKr + bonusKr;
     return {
-      month, label, planlagtKr, loenForvKr, kmForvKr, omsaetning, loenKr, kmKr, manuelleKr, bonusKr,
+      month, label, planlagtKr, loenForvKr, loenUudnyttetKr, kmForvKr, omsaetning, loenKr, kmKr, manuelleKr, bonusKr,
       omkostningerIAlt, overskud: omsaetning - omkostningerIAlt,
       dineroKr, dineroAntal,
     };
   });
-  }, [instances, satsHistorik, kmSatser, kmLog, godkendtSet, omkostninger, bonus, pricing, selectedYear, dineroOmsaetning, travelSettings]);
+  }, [instances, satsHistorik, kmSatser, kmLog, godkendtSet, omkostninger, bonus, pricing, selectedYear, dineroOmsaetning, travelSettings, employees]);
 
   const aarTotal = monthRows.reduce((acc, r) => ({
     planlagt: acc.planlagt + r.planlagtKr,
@@ -10313,7 +10333,7 @@ function OverskudRapport({ travelSettings, instances, employees, satsHistorik, k
               );
             })()}
             <div style={{ fontSize: 13, color: "#64748B", textAlign: "right", lineHeight: 1.35 }}>{r.loenKr > 0 ? kr(r.loenKr) : "—"}
-              {r.loenForvKr - r.loenKr > 0.5 && <div style={{ fontSize: 11, color: "#0369A1" }} title="Forventet løn: godkendt, plus registreret eller planlagt tid for resten, gange medarbejdernes timeløn">forv. {kr(r.loenForvKr)}</div>}</div>
+              {r.loenForvKr - r.loenKr > 0.5 && <div style={{ fontSize: 11, color: "#0369A1" }} title={`Forventet løn: det største af opgavernes løn og lønnen for den aftalte arbejdstid, pr. medarbejder (ejerne med). Heraf aftalt tid uden opgaver: ${kr(r.loenUudnyttetKr)}`}>forv. {kr(r.loenForvKr)}</div>}</div>
             <div style={{ fontSize: 13, color: "#64748B", textAlign: "right", lineHeight: 1.35 }}>{r.kmKr > 0 ? kr(r.kmKr) : "—"}
               {r.kmForvKr - r.kmKr > 0.5 && <div style={{ fontSize: 11, color: "#0369A1" }} title="Forventet kørsel: beregnede kilometer, plus kilometer ud fra planen for de dage, hvor der ikke er beregnet noget">forv. {kr(r.kmForvKr)}</div>}</div>
             <div style={{ fontSize: 13, color: "#64748B", textAlign: "right" }}>{r.manuelleKr > 0 ? kr(r.manuelleKr) : "—"}</div>

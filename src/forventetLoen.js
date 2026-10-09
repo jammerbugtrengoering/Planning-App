@@ -6,23 +6,41 @@
 // kommer: løn ud fra de medarbejdere, der er på opgaverne, og deres timeløn på opgavens dato; kørsel ud fra de beregnede kilometer og, for dage uden beregnede kilometer, ud fra planen.
 //
 // Godkendt tid tæller som den er. Ikke godkendt tæller den registrerede tid, og er der ingen, den planlagte. Så ligger tallet fast, når lønnen godkendes, og kommer
-// aldrig under det, der allerede er godkendt.
+// aldrig under det, der allerede er godkendt. Se loenMedAftaltTid for, hvorfor aftalt arbejdstid også tæller.
 
 // opgaver: opgaver med medarbejdere på, uden ferie og sygdom. h: { godkendt(empId, t), registreret(t, empId), planlagt(t, empId), sats(empId, t) -> kr/time eller null, erAflyst(t) }
 export function forventetLoen(opgaver, h) {
   let faktisk = 0, forventet = 0;
+  const perEmp = new Map();
   for (const t of opgaver) {
     if (h.erAflyst(t)) continue;
     for (const empId of (t.assignees || [])) {
       const sats = h.sats(empId, t);
       if (sats == null) continue;
       const reg = Number(h.registreret(t, empId)) || 0;
-      if (h.godkendt(empId, t)) { faktisk += (reg / 60) * sats; forventet += (reg / 60) * sats; continue; }
-      const min = reg > 0 ? reg : (Number(h.planlagt(t, empId)) || 0);
-      forventet += (min / 60) * sats;
+      let kr;
+      if (h.godkendt(empId, t)) { kr = (reg / 60) * sats; faktisk += kr; }
+      else kr = ((reg > 0 ? reg : (Number(h.planlagt(t, empId)) || 0)) / 60) * sats;
+      forventet += kr;
+      perEmp.set(empId, (perEmp.get(empId) || 0) + kr);
     }
   }
-  return { faktisk, forventet };
+  return { faktisk, forventet, perEmp };
+}
+
+// Løn er for aftalt arbejdstid, ikke kun for de timer, der ligger som opgaver (9.10.2026, Jonn): 9.10. var planens løn ca. 190.000 kr. om måneden mod ca. 300.000 i
+// Dinero, og medarbejdernes aftalte tid (kapacitet) × timeløn gav ca. 296.000. Forskellen er ejerne, som får løn, men næsten ikke står på opgaver, og de timer hos de øvrige,
+// der ikke er fyldt med opgaver. Forventet løn pr. medarbejder er derfor det største af opgavernes løn og lønnen for den aftalte tid.
+// perEmp: resultatet fra forventetLoen. aftaltKr: Map empId -> løn for månedens aftalte tid. Giver { forventet, uudnyttet } (uudnyttet = det, kapaciteten er mere end opgaverne).
+export function loenMedAftaltTid(perEmp, aftaltKr) {
+  let forventet = 0, uudnyttet = 0;
+  const alle = new Set([...perEmp.keys(), ...aftaltKr.keys()]);
+  for (const e of alle) {
+    const opg = perEmp.get(e) || 0, aftalt = aftaltKr.get(e) || 0;
+    forventet += Math.max(opg, aftalt);
+    uudnyttet += Math.max(0, aftalt - opg);
+  }
+  return { forventet, uudnyttet };
 }
 
 // Forventet kørsel i en måned (9.10.2026, Jonn): kun én medarbejder arbejder 100 % i løsningen (Worklist), men alle andre har deres arbejdsplan i systemet. Natjobbet
