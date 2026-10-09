@@ -2412,6 +2412,8 @@ const MODULE_HELP = {
   ], warn: "«Månedligt» følger kalenderen: besøget lander i den uge, der indeholder samme dato som startdatoen — hver 3. måned giver altså fire besøg om året på samme tid. Er startdatoen den 31., rammes sidste dag i korte måneder, så intet kvartal springes over. «Ugentligt» med flere uger imellem tæller derimod i uger og vandrer gennem kalenderen — hver 4. uge giver 13 besøg om året, hver 6. uge 8-9, altid på samme ugedag." },
 
   drift: { title: "Drift", intro: "Kører løsningen, og er der noget, nogen skal tage fat i?", blocks: [
+    { h: "Åbn Worklist", p: [
+        "Knappen «Åbn Worklist» ved siden af fanerne åbner medarbejdernes app i en ny fane, så du kan hjælpe og se medarbejdernes liste. Du er logget ind som dig selv; brug «Se plan for» i Worklist for at se en medarbejders dag."] },
     { h: "Adresser uden postnummer", p: [
         "Under «Noget nogen skal tage stilling til» står de aktive aftaler, hvis adresse ikke har et postnummer, med en knap «Åbn aftalen» ud for hver. Ret adressen til «Vejnavn nr, postnummer by» og gem, så kommer aftalen med på kortet under Rapportering → Postnumre, og kørselsopslaget rammer rigtigt. Står der en note i adressefeltet i stedet for en adresse, så flyt noten til adgangsfeltet. Linjen forsvinder, når alle aftaler har et postnummer."] },
     { h: "Siden kan ikke sige, at noget er nede", p: [
@@ -6532,6 +6534,13 @@ function PlanningApp({ session, onSignOut }) {
             <button key={k} onClick={() => setView(k)}
               style={view === k ? styles.underNavAktiv : styles.underNavBtn}>{l}</button>
           ))}
+          {/* Åbn Worklist (9.10.2026): planlæggeren skal kunne se medarbejdernes liste og hjælpe, så den åbnes i en ny fane og ikke i et lille vindue som SoMe og Dinero.
+              noopener, så Worklist ikke kan styre denne fane. Står kun under Drift, hvor de øvrige værktøjer til support ligger. */}
+          {gruppeFor(view).key === "system" && (
+            <button type="button" onClick={() => window.open(WORKLIST_URL, "_blank", "noopener")}
+              title="Åbner Worklist i en ny fane. Brug «Se plan for» der for at se en medarbejders liste."
+              style={styles.underNavBtn}>Åbn Worklist ↗</button>
+          )}
         </div>
       )}
 
