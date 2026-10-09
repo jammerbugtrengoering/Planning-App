@@ -2567,6 +2567,7 @@ const MODULE_HELP = {
         "Ændrer du en sats, bliver du spurgt hvornår den gælder fra. Skal stigningen gælde bagud, sætter du bare datoen tilbage, og de berørte måneder regner om af sig selv.",
         "Står der en streg i stedet for et beløb, fandtes der ingen sats den dag. Det sker kun hvis opgaven ligger før medarbejderens første sats.",
         "«Planlagt løn» er den afsatte tid gange medarbejderens sats. «Registreret løn» er den tid, der faktisk er registreret.",
+        "Bonus tilføjes og godkendes på medarbejderens kort under Løn, i feltet Bonus: vælg år og kvartal, skriv beløbet og tryk Tilføj bonus. Bonussen starter som «Afventer» og tæller først med i Overskud, når du sætter flueben ved Godkendt. Den lægges i kvartalets sidste måned. Et ⚠️ viser, hvis medarbejderen har haft en sygedag i kvartalet. Det er en advarsel, du afgør selv.",
         "Under Lønarter sætter du de koder, Danløn skal bruge — én for timer og én for kilometer. De står i jeres egen Danløn-opsætning, ikke i denne app.",
         "Samme sted står, hvem der mangler et Danløn-nummer. En medarbejder uden nummer kommer ikke med i løneksporten, og nummeret sættes på medarbejderens stamkort under Medarbejdere.",
         "Fluebenet foran hver linje betyder «godkendt til løn». Kun linjer med flueben kommer med i Danløn-filen — hverken timer eller kilometer sendes automatisk.",
@@ -5932,7 +5933,7 @@ function PlanningApp({ session, onSignOut }) {
   }
   // Ny individuel kvartalsbonus — starter IKKE godkendt, ligesom timer og km,
   // saa den foerst taeller med i overskudstallet naar den er godkendt (afsnit
-  // "Bonus" i OverskudRapport haandterer selve godkendelsen).
+  // medarbejderkortet under Loen haandterer selve godkendelsen, siden 9.10.2026).
   async function saveBonus(empId, aar, kvartal, beloeb) {
     const { data, error: bonusErr } = await supabase.from("bonus")
       .insert({ employee_id: empId, aar, kvartal, beloeb: Number(beloeb) || 0, oprettet_af: currentEmployeeForAuth?.auth_user_id || null })
@@ -6939,7 +6940,7 @@ function PlanningApp({ session, onSignOut }) {
           travelSettings={travelSettings} onClose={() => setVisSimulering(false)}
           onAnvend={anvendSimulering} onRulTilbage={rulSimuleringTilbage} />
       )}
-      {showAddEmp && <EmployeeModal hrAdgang={empHrAdgang} emp={editEmp} onClose={() => { setShowAddEmp(false); setEditEmp(null); }} onSave={saveEmployee} skills={skills} hr={editEmp ? hrData[editEmp.id] : null} brugerId={currentEmployeeForAuth?.id} onFratraed={(id) => { setShowAddEmp(false); setEditEmp(null); setSletMedarbejder(id); }} satsHistorik={editEmp ? satsHistorik[editEmp.id] : null} kmSatser={editEmp ? kmSatser[editEmp.id] : null} />}
+      {showAddEmp && <EmployeeModal hrAdgang={empHrAdgang} emp={editEmp} onClose={() => { setShowAddEmp(false); setEditEmp(null); }} onSave={saveEmployee} skills={skills} hr={editEmp ? hrData[editEmp.id] : null} brugerId={currentEmployeeForAuth?.id} onFratraed={(id) => { setShowAddEmp(false); setEditEmp(null); setSletMedarbejder(id); }} satsHistorik={editEmp ? satsHistorik[editEmp.id] : null} kmSatser={editEmp ? kmSatser[editEmp.id] : null} bonus={bonus} onSaveBonus={saveBonus} onDeleteBonus={deleteBonus} instances={instances} />}
       {showAddBlock && <BlockModal employees={aktiveEmployees} onClose={() => setShowAddBlock(false)} onSave={addBlock} />}
       {showAddActivity && <ActivityModal kanBookeMus={erHrAdmin} employees={aktiveEmployees} onClose={() => setShowAddActivity(false)} onSave={addActivity} />}
       {/* Transporttid ligger under Opsaetning (28.9.2026). Den saettes én gang og
@@ -9992,7 +9993,7 @@ const KVARTAL_MAANEDER = { 1: [1, 2, 3], 2: [4, 5, 6], 3: [7, 8, 9], 4: [10, 11,
 
 // Bonussen skal kun udbetales uden sygdom i kvartalet — men det er en advarsel,
 // ikke en spærre: administrator ser den og godkender eller afviser selv, se
-// afsnittet "Bonus" nedenfor. Genbruger sygdomsblokkene fra planlægningen
+// medarbejderkortets afsnit «Bonus» (Løn). Genbruger sygdomsblokkene fra planlægningen
 // (BLOCK_TYPES), ikke en ny fraværstabel.
 function harSygdomIKvartal(instances, empId, aar, kvartal) {
   const maaneder = KVARTAL_MAANEDER[kvartal] || [];
@@ -10062,9 +10063,6 @@ function OverskudRapport({ travelSettings, instances, employees, satsHistorik, k
   const [nyBeloeb, setNyBeloeb] = useState("");
   const [nyMaaned, setNyMaaned] = useState(now.getMonth() + 1);
 
-  const [bonusEmpId, setBonusEmpId] = useState("");
-  const [bonusKvartal, setBonusKvartal] = useState(Math.floor(now.getMonth() / 3) + 1);
-  const [bonusBeloeb, setBonusBeloeb] = useState("");
 
   // Forventet løn og kørsel (9.10.2026): se src/forventetLoen.js. Kørsel regnes ud fra planen for de medarbejder-dage, der ikke har beregnede kilometer.
   const monthRows = useMemo(() => {
@@ -10219,31 +10217,6 @@ function OverskudRapport({ travelSettings, instances, employees, satsHistorik, k
     onSaveOmkostning(selectedYear, Number(nyMaaned), nyBeskrivelse.trim(), nyBeloeb);
     setNyBeskrivelse(""); setNyBeloeb("");
   }
-  function tilfoejBonus() {
-    if (!bonusEmpId || !bonusBeloeb) return;
-    onSaveBonus(bonusEmpId, selectedYear, Number(bonusKvartal), bonusBeloeb);
-    setBonusBeloeb("");
-  }
-  // Bonus har sin egen godkendelse, ligesom timer og km — genbruger samme
-  // loen_godkendelser-tabel med slags="bonus".
-  async function saetBonusGodkendt(bonusId, empId, til) {
-    if (til) {
-      const { error } = await supabase.from("loen_godkendelser")
-        .upsert({ slags: "bonus", employee_id: empId, reference: String(bonusId) }, { onConflict: "slags,employee_id,reference" });
-      if (error) { setGodkFejl(error.message); return; }
-    } else {
-      const { error } = await supabase.from("loen_godkendelser").delete()
-        .eq("slags", "bonus").eq("employee_id", empId).eq("reference", String(bonusId));
-      if (error) { setGodkFejl(error.message); return; }
-    }
-    setGodkendtSet((f) => {
-      const n = new Set(f);
-      const noegle = `bonus|${empId}|${bonusId}`;
-      if (til) n.add(noegle); else n.delete(noegle);
-      return n;
-    });
-  }
-
   return (
     <>
       <div style={styles.toolbar}>
@@ -10261,7 +10234,7 @@ function OverskudRapport({ travelSettings, instances, employees, satsHistorik, k
         )}
         {harModul("dinero") && forventetRows.some((f) => f.overskudForv != null) && (
           <div style={{ ...styles.statBlock, borderLeft: `3px solid ${overskudForvTotal >= 0 ? "#0369A1" : "#DC2626"}` }}
-            title="Forventet omsætning minus forventet løn, kørsel, frie omkostninger og bonus. Løn regnes ud fra medarbejderne på opgaverne og deres timeløn; kørsel ud fra de beregnede kilometer og et gennemsnit pr. planlagt time for dagene, der ikke er kørt endnu.">
+            title="Forventet omsætning minus forventet løn, kørsel, frie omkostninger og bonus. Løn regnes ud fra medarbejderne på opgaverne og deres timeløn; kørsel ud fra de beregnede kilometer og, for dage uden beregnede kilometer, ud fra planen.">
             <div><div style={{ ...styles.statValue, color: overskudForvTotal >= 0 ? "#0369A1" : "#DC2626" }}>{kr(overskudForvTotal)}</div>
               <div style={styles.statLabel}>{overskudForvAlleMaaneder ? `Forventet overskud ${selectedYear}` : "Forventet overskud fra oktober"}</div></div>
           </div>
@@ -10401,49 +10374,8 @@ function OverskudRapport({ travelSettings, instances, employees, satsHistorik, k
           </div>
           <div style={{ ...styles.hint, marginBottom: 20 }}>Rettes på den enkelte medarbejders kort, samme sted som timelønnen.</div>
 
-          <div style={{ fontWeight: 700, fontSize: 14, color: "#111111", margin: "10px 0 10px" }}>Bonus (kvartalsvis, individuel)</div>
-          <div style={{ background: "#fff", borderRadius: 10, boxShadow: "0 1px 3px rgba(0,0,0,0.06)", overflow: "hidden", marginBottom: 10 }}>
-            {bonus.filter((b) => b.aar === selectedYear).length === 0 && (
-              <div style={{ padding: "12px 14px", fontSize: 12.5, color: "#94A3B8" }}>Ingen bonusser for {selectedYear} endnu.</div>
-            )}
-            {bonus.filter((b) => b.aar === selectedYear).sort((a, b) => a.kvartal - b.kvartal).map((b, i, arr) => {
-              const emp = employees.find((e) => e.id === b.employee_id);
-              const godkendt = godkendtSet.has(`bonus|${b.employee_id}|${b.id}`);
-              // Advarsel, ikke en spærre — administrator ser den og godkender eller
-              // afviser selv, se KVARTAL_MAANEDER/harSygdomIKvartal ovenfor.
-              const harSygdom = harSygdomIKvartal(instances, b.employee_id, b.aar, b.kvartal);
-              return (
-                <div key={b.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 14px", borderBottom: i < arr.length - 1 ? "1px solid #F1F5F9" : "none" }}>
-                  <span style={{ fontSize: 12.5, fontWeight: 600, color: "#64748B", width: 40 }}>Q{b.kvartal}</span>
-                  <span style={{ fontSize: 13, flex: 1 }}>
-                    {emp?.name || "Ukendt medarbejder"}
-                    {harSygdom && (
-                      <span style={{ marginLeft: 8, fontSize: 11.5, fontWeight: 600, color: "#B45309" }} title="Medarbejderen har haft en sygedag registreret i dette kvartal.">
-                        ⚠️ Sygemeldt i kvartalet
-                      </span>
-                    )}
-                  </span>
-                  <span style={{ fontSize: 13, fontWeight: 600 }}>{kr(b.beloeb)}</span>
-                  <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, color: godkendt ? "#16A34A" : "#94A3B8", cursor: "pointer" }}>
-                    <input type="checkbox" checked={godkendt} onChange={(e) => saetBonusGodkendt(b.id, b.employee_id, e.target.checked)} />
-                    {godkendt ? "Godkendt" : "Afventer"}
-                  </label>
-                  <button style={styles.iconBtnGhostInline} onClick={() => onDeleteBonus(b.id)} title="Slet"><Trash2 size={14} /></button>
-                </div>
-              );
-            })}
-          </div>
-          <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 10 }}>
-            <select style={{ ...styles.inputSm, flex: 2 }} value={bonusEmpId} onChange={(e) => setBonusEmpId(e.target.value)}>
-              <option value="">Vælg medarbejder…</option>
-              {employees.filter((e) => !e.fratraadtDato).map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
-            </select>
-            <select style={{ ...styles.inputSm, flex: "none", width: 80 }} value={bonusKvartal} onChange={(e) => setBonusKvartal(e.target.value)}>
-              {[1, 2, 3, 4].map((q) => <option key={q} value={q}>Q{q}</option>)}
-            </select>
-            <input style={{ ...styles.inputSm, flex: "none", width: 110 }} type="number" min={0} placeholder="Kr." value={bonusBeloeb} onChange={(e) => setBonusBeloeb(e.target.value)} />
-            <button style={styles.secondaryBtn} onClick={tilfoejBonus}><Plus size={14} /> Tilføj bonus</button>
-          </div>
+          <div style={{ fontWeight: 700, fontSize: 14, color: "#111111", margin: "10px 0 6px" }}>Bonus</div>
+          <div style={styles.hint}>Bonus tilføjes og godkendes på medarbejderens kort under Løn (Opsætning → Medarbejdere). Kun godkendte bonusser tæller med her, i kvartalets sidste måned.</div>
         </>
       )}
     </>
@@ -20547,9 +20479,30 @@ function StamKort({ titel, hint, bg, farve, hintFarve, children }) {
   );
 }
 
-function EmployeeModal({ hrAdgang = true, emp, onClose, onSave, skills: skillList, satsHistorik, kmSatser, hr, brugerId, onFratraed }) {
+function EmployeeModal({ hrAdgang = true, emp, onClose, onSave, skills: skillList, satsHistorik, kmSatser, hr, brugerId, onFratraed, bonus = [], onSaveBonus, onDeleteBonus, instances = [] }) {
   // Eksisterende medarbejder aabner paa Planlaegning (7.10.2026): det er dér, man oftest retter noget. Navnet rettes i Personalemappen. En ny medarbejder starter paa Person.
   const [fane, setFane] = useState(emp ? "planlaegning" : "person");
+  // Bonus (9.10.2026, Jonn): tilføjes og godkendes på medarbejderens kort under Løn. Godkendelsen er den samme som før (loen_godkendelser, slags = «bonus»), så den tæller med i
+  // Overskud-rapporten, der kun medregner godkendte bonusser. Før lå den under Overskud.
+  const [bonusGodkendt, setBonusGodkendt] = useState(() => new Set());
+  const [bonusAar, setBonusAar] = useState(new Date().getFullYear());
+  const [bonusKvartal, setBonusKvartal] = useState(Math.floor(new Date().getMonth() / 3) + 1);
+  const [bonusBeloeb, setBonusBeloeb] = useState("");
+  const [bonusFejl, setBonusFejl] = useState("");
+  useEffect(() => {
+    if (!emp?.id) return;
+    supabase.from("loen_godkendelser").select("reference").eq("slags", "bonus").eq("employee_id", emp.id)
+      .then(({ data }) => setBonusGodkendt(new Set((data || []).map((r) => String(r.reference)))));
+  }, [emp?.id]);
+  async function saetBonusGodkendt(bonusId, til) {
+    setBonusFejl("");
+    const q = supabase.from("loen_godkendelser");
+    const { error } = til
+      ? await q.upsert({ slags: "bonus", employee_id: emp.id, reference: String(bonusId) }, { onConflict: "slags,employee_id,reference" })
+      : await q.delete().eq("slags", "bonus").eq("employee_id", emp.id).eq("reference", String(bonusId));
+    if (error) { setBonusFejl(error.message); return; }
+    setBonusGodkendt((f) => { const n = new Set(f); if (til) n.add(String(bonusId)); else n.delete(String(bonusId)); return n; });
+  }
   // HR-oplysninger (6.10.2026) ligger i employee_hr, kun synlig for administratorer. Datoer som tekst «ÅÅÅÅ-MM-DD», tomt = ikke angivet.
   const [hrTelefon, setHrTelefon] = useState(hr?.telefon || "");
   const [hrPrivatEmail, setHrPrivatEmail] = useState(hr?.privat_email || "");
@@ -20992,6 +20945,49 @@ function EmployeeModal({ hrAdgang = true, emp, onClose, onSave, skills: skillLis
           )}
 
         </StamKort>
+        {emp?.id && (
+          <StamKort titel="🔒 Bonus" hint="Kvartalsvis og individuel. Tæller først med i Overskud, når den er godkendt" bg="#F1F5F9" farve="#334155" hintFarve="#64748B">
+            {bonus.filter((b) => b.employee_id === emp.id).length === 0 && (
+              <div style={{ fontSize: 12.5, color: "#94A3B8", marginBottom: 8 }}>Ingen bonusser endnu.</div>
+            )}
+            {bonus.filter((b) => b.employee_id === emp.id).sort((x, y) => (y.aar - x.aar) || (y.kvartal - x.kvartal)).map((b) => {
+              const godkendt = bonusGodkendt.has(String(b.id));
+              // Advarsel, ikke en spærre: bonussen skal kun udbetales uden sygdom i kvartalet, men planlæggeren afgør det selv.
+              const harSygdom = harSygdomIKvartal(instances, emp.id, b.aar, b.kvartal);
+              return (
+                <div key={b.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 0", borderBottom: "1px solid #E2E8F0", flexWrap: "wrap" }}>
+                  <span style={{ fontSize: 12.5, fontWeight: 600, color: "#64748B", width: 80 }}>{b.aar} · Q{b.kvartal}</span>
+                  <span style={{ fontSize: 13, fontWeight: 600, flex: 1 }}>
+                    {Number(b.beloeb).toLocaleString("da-DK")} kr.
+                    {harSygdom && <span style={{ marginLeft: 8, fontSize: 11.5, fontWeight: 600, color: "#B45309" }} title="Medarbejderen har haft en sygedag registreret i dette kvartal.">⚠️ Sygemeldt i kvartalet</span>}
+                  </span>
+                  <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, color: godkendt ? "#16A34A" : "#94A3B8", cursor: "pointer" }}>
+                    <input type="checkbox" checked={godkendt} onChange={(e) => saetBonusGodkendt(b.id, e.target.checked)} />
+                    {godkendt ? "Godkendt" : "Afventer"}
+                  </label>
+                  <button type="button" style={styles.iconBtnGhostInline} onClick={() => onDeleteBonus && onDeleteBonus(b.id)} title="Slet bonussen"><Trash2 size={14} /></button>
+                </div>
+              );
+            })}
+            {bonusFejl && <div style={{ color: "#DC2626", fontSize: 12.5, marginTop: 6 }}>{bonusFejl}</div>}
+            <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 10, flexWrap: "wrap" }}>
+              <span style={{ fontSize: 12, color: "#64748B" }}>År</span>
+              <select style={{ ...styles.inputSm, flex: "none", width: 90 }} value={bonusAar} onChange={(e) => setBonusAar(Number(e.target.value))}>
+                {[new Date().getFullYear() - 1, new Date().getFullYear(), new Date().getFullYear() + 1].map((y) => <option key={y} value={y}>{y}</option>)}
+              </select>
+              <span style={{ fontSize: 12, color: "#64748B" }}>Kvartal</span>
+              <select style={{ ...styles.inputSm, flex: "none", width: 80 }} value={bonusKvartal} onChange={(e) => setBonusKvartal(Number(e.target.value))}>
+                {[1, 2, 3, 4].map((q) => <option key={q} value={q}>Q{q}</option>)}
+              </select>
+              <input style={{ ...styles.inputSm, flex: "none", width: 110 }} type="number" min={0} placeholder="Kr." value={bonusBeloeb} onChange={(e) => setBonusBeloeb(e.target.value)} />
+              <button type="button" style={styles.secondaryBtn} disabled={!(Number(bonusBeloeb) > 0) || !onSaveBonus}
+                onClick={async () => { await onSaveBonus(emp.id, bonusAar, bonusKvartal, bonusBeloeb); setBonusBeloeb(""); }}>
+                <Plus size={14} /> Tilføj bonus
+              </button>
+            </div>
+            <div style={styles.hint}>Bonussen lægges i kvartalets sidste måned i Overskud-rapporten og starter som «Afventer».</div>
+          </StamKort>
+        )}
         <StamKort titel="🔒 Tillæg" hint="Weekend og søn- og helligdage" bg="#F1F5F9" farve="#334155" hintFarve="#64748B">
           {/* Tillaeg. Fluebenet siger OM hun faar det; feltet ved siden af siger
               hvor meget, og staar det tomt, bruges den faelles sats fra Loenarter.
