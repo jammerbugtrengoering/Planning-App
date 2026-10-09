@@ -32,6 +32,7 @@
     "udnyttelse.test.mjs",
     "aflysningsprocent.test.mjs",
     "forventet.test.mjs",
+    "forventetloen.test.mjs",
     "overblik.test.mjs",
     "sygefravaer.test.mjs",
     "medarbejderomsaetning.test.mjs"
