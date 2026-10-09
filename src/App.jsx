@@ -948,6 +948,10 @@ function scheduleWeek(weekInstances, employees, autoOnly = false, areas = [], em
     return [...scheduleWeek(weekInstances.filter((t) => !erAflyst(t)), employees, autoOnly, areas,
       employeeAreas, restrictToIds, travelSettings), ...weekInstances.filter(erAflyst)];
   }
+  // Fratrådte må aldrig auto-planlægges (9.10.2026): runAuto, runScheduleWeek, runAutoAllWeeks og
+  // planTaskNow gav alle `employees` med, også dem der er stoppet — en opgave blev lagt på Michelle
+  // Pedersen, fratrådt 7.9. Værnet står her, så ingen indgang kan glemme det.
+  employees = employees.filter((e) => !e.fratraadtDato);
   let list = weekInstances.map((t) => ({ ...t }));
 
   // En medarbejder må aldrig auto-planlægges på en dag hvor de har en
