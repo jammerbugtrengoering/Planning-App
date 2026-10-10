@@ -8459,6 +8459,9 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
 
   const placed = instances
     .filter((t) => !BLOCK_TYPES.includes(t.type))
+    // En aflyst opgave kommer kun med her, hvis den er en sen kundeaflysning, der skal faktureres (udført af kontoret med den planlagte tid). Alle andre aflysninger (ferie, sygdom, kunden
+    // aflyste i god tid) har intet at fakturere. 9.10.2026 stod fem af dem i listen for uge 42 med mærket «Aflyst · faktureret», fordi mærket kun så på, om opgaven var aflyst.
+    .filter((t) => !erAflyst(t) || t.aflyst_faktureret)
     // Måned: opgavens faktiske dato, så en uge over et månedsskift fordeles rigtigt.
     // Uge: hele ugen, uanset måned.
     .filter(iVisning)
@@ -8702,7 +8705,7 @@ function TimeView({ instances, employees, totalLogged, onExportToDinero, weekLab
               <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
                 {/* Sen kundeaflysning (2.10.2026): ingen medarbejder med vilje — kunden betaler,
                     ingen får løn. Den skal ikke ligne en glemt opgave. */}
-                {erAflyst(t) ? (
+                {erAflyst(t) && t.aflyst_faktureret ? (
                   <span title={t.aflyst_forklaring ? `Aflyst: ${t.aflyst_forklaring}` : "Kunden aflyste for sent"}
                     style={{ fontSize: 11, fontWeight: 700, color: "#B45309", background: "#FFFBEB", border: "1px solid #FDE68A",
                              borderRadius: 99, padding: "2px 8px", whiteSpace: "nowrap" }}>
