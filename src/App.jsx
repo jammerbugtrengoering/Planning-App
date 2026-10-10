@@ -340,7 +340,7 @@ function opgaveIdentitet(t) {
 //
 // DEN MAA ALDRIG NAA DATA. Loenfilen til Danloen, CSV-eksporterne, mails og alt der
 // gaar til Dinero laeser navnet fra employees.name og roerer ikke den her funktion.
-// Solsikken saettes foerst i det oejeblik navnet TEGNES paa skaermen. Havde den
+// Solsikken (og Karens hundebillede) saettes foerst i det oejeblik navnet TEGNES paa skaermen. Havde den
 // ligget i datalaget, var den foer eller siden endt i en faktura.
 //
 // Charlotte findes paa sit id og ikke paa sit navn. Foerste udgave slog op paa
@@ -361,6 +361,19 @@ let seerErPlanlaegger = false;
 function saetSolsikkeSeer(erPlanlaegger) { seerErPlanlaegger = !!erPlanlaegger; }
 
 function medSolsikke(navn, empId) {
+  // Karen (10.10.2026): et lille rundt billede af hunden ved navnet, som solsikken ved Charlotte. Et element og ikke tekst, så det må ikke bruges i en streng (se medSolsikkeTekst).
+  if (empId === HUND_ID && seerErPlanlaegger) {
+    return (
+      <span style={{ whiteSpace: "nowrap" }}>{navn}{" "}
+        <img src="/hund.jpg" alt="" aria-hidden="true" style={{ width: 18, height: 18, borderRadius: "50%", objectFit: "cover", verticalAlign: "-4px", marginLeft: 2, border: "1px solid #E2E8F0" }} />
+      </span>
+    );
+  }
+  if (empId !== SOLSIKKE_ID) return navn;
+  return seerErPlanlaegger ? navn + " \u{1F33B}" : navn;
+}
+// Samme som medSolsikke, men altid en streng: til titler og andet, der ikke kan indeholde et billede. Karen står her uden billede.
+function medSolsikkeTekst(navn, empId) {
   if (empId !== SOLSIKKE_ID) return navn;
   return seerErPlanlaegger ? navn + " \u{1F33B}" : navn;
 }
@@ -20619,7 +20632,7 @@ function EmployeeModal({ hrAdgang = true, emp, onClose, onSave, skills: skillLis
   const synlige = visAlleKompetencer ? (skillList || []) : valgte;
 
   return (
-    <Modal onClose={onClose} title={emp ? `Rediger ${medSolsikke(emp.name, emp.id)}` : "Ny medarbejder"} persistent bred>
+    <Modal onClose={onClose} title={emp ? `Rediger ${medSolsikkeTekst(emp.name, emp.id)}` : "Ny medarbejder"} persistent bred>
       {/* Stamkortet er delt i fire faner (6.10.2026), og hver fane er et gitter af kort i op til tre kolonner. Kommer der flere
           HR-oplysninger, sættes de som et nyt kort i fanen «Ansættelse» — resten af vinduet røres ikke. Alle faner gemmes med
           den samme knap, så en rettelse i én fane aldrig går tabt, fordi man skiftede fane. */}
