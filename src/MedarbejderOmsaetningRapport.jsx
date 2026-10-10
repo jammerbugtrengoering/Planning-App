@@ -8,9 +8,10 @@ const BOX = { background: "#fff", borderRadius: 14, boxShadow: "0 1px 3px rgba(0
 const FELT = { padding: "8px 10px", border: "1.5px solid #E2E8F0", borderRadius: 10, fontSize: 14, fontFamily: "inherit", background: "#fff" };
 const MAANEDER = ["Januar", "Februar", "Marts", "April", "Maj", "Juni", "Juli", "August", "September", "Oktober", "November", "December"];
 const kr = (n) => Math.round(Number(n) || 0).toLocaleString("da-DK") + " kr.";
+const tal0 = (n) => Math.round(Number(n) || 0).toLocaleString("da-DK");
 const pct = (p) => (p == null ? "–" : Math.round(p) + " %");
 
-export default function MedarbejderOmsaetningRapport({ opgaver, medarbejdere, udenfor, beregn, loenFor, datoAf, segmenter, harSatser }) {
+export default function MedarbejderOmsaetningRapport({ opgaver, medarbejdere, udenfor, beregn, loenFor, datoAf, segmenter, harSatser, farver = {} }) {
   const nu = new Date();
   const [aar, setAar] = useState(nu.getFullYear());
   const [maaned, setMaaned] = useState(0);
@@ -33,6 +34,14 @@ export default function MedarbejderOmsaetningRapport({ opgaver, medarbejdere, ud
       <div style={{ fontWeight: 700, fontSize: 18, marginBottom: 4 }}>Omsætning pr. medarbejder</div>
       <div style={{ fontSize: 13, color: "#64748B", marginBottom: 14, lineHeight: 1.55, maxWidth: 820 }}>
         Hvor meget af den faktureredes omsætning hver medarbejder har leveret, og hvad det er pr. arbejdstime. Brug det til at se, hvem der bærer driften, og hvor timerne ikke giver omsætning.
+      </div>
+      {/* Forklaring til farverne i Omsætning-kolonnen (10.10.2026): én farve pr. aftaletype, de samme som i de andre rapporter. */}
+      <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginBottom: 12, fontSize: 12.5, color: "#475569" }} aria-label="Forklaring til farverne">
+        {segmenter.map(([k, l]) => (
+          <span key={k} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+            <span aria-hidden="true" style={{ width: 11, height: 11, borderRadius: 3, background: farver[k] || "#94A3B8", display: "inline-block" }} />{l.replace(/^\S+\s/, "")}
+          </span>
+        ))}
       </div>
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 14, alignItems: "flex-end" }}>
         <div><label htmlFor="mo-aar" style={{ display: "block", fontSize: 12.5, fontWeight: 600, color: "#475569", marginBottom: 3 }}>År</label>
@@ -80,9 +89,26 @@ export default function MedarbejderOmsaetningRapport({ opgaver, medarbejdere, ud
                 <td style={{ padding: "7px 6px" }}>{r.id === KONTORET ? "–" : r.opgaver}</td>
                 <td style={{ padding: "7px 6px" }}>{r.id === KONTORET ? "–" : r.timer.toLocaleString("da-DK", { maximumFractionDigits: 0 }) + " t"}</td>
                 <td style={{ padding: "7px 6px", textAlign: "left", background: "#FDF2F8" }}>
+                  {/* De fire aftaletyper med hver sin farve over totalen, og en stak stang, der er delt i de samme farver. Stangens længde følger totalen, så den største medarbejder stadig er fuld bredde. */}
+                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap", fontSize: 11.5, marginBottom: 3 }}
+                    aria-label={segmenter.map(([k, l]) => `${l.replace(/^\S+\s/, "")} ${kr((r.perType || {})[k] || 0)}`).join(", ")}>
+                    {segmenter.map(([k, l]) => {
+                      const v = (r.perType || {})[k] || 0;
+                      return (
+                        <span key={k} title={`${l.replace(/^\S+\s/, "")}: ${kr(v)}`} style={{ color: v > 0 ? (farver[k] || "#334155") : "#CBD5E1", fontWeight: v > 0 ? 600 : 400, whiteSpace: "nowrap" }}>
+                          <span aria-hidden="true" style={{ display: "inline-block", width: 8, height: 8, borderRadius: 2, background: v > 0 ? (farver[k] || "#94A3B8") : "#E2E8F0", marginRight: 4 }} />{v > 0 ? tal0(v) : "–"}
+                        </span>
+                      );
+                    })}
+                  </div>
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <div aria-hidden="true" style={{ flex: 1, height: 8, borderRadius: 4, background: "#F1F5F9", minWidth: 60 }}>
-                      <div style={{ width: `${Math.round((r.omsaetning / toppen) * 100)}%`, height: "100%", borderRadius: 4, background: "#D6247A" }} />
+                    <div aria-hidden="true" style={{ flex: 1, height: 8, borderRadius: 4, background: "#F1F5F9", minWidth: 60, overflow: "hidden" }}>
+                      <div style={{ width: `${Math.round((r.omsaetning / toppen) * 100)}%`, height: "100%", display: "flex" }}>
+                        {segmenter.map(([k]) => {
+                          const v = (r.perType || {})[k] || 0;
+                          return v > 0 && r.omsaetning > 0 ? <div key={k} style={{ width: `${(v / r.omsaetning) * 100}%`, background: farver[k] || "#94A3B8" }} /> : null;
+                        })}
+                      </div>
                     </div>
                     <b style={{ minWidth: 84, textAlign: "right", color: "#7A1148" }}>{kr(r.omsaetning)}</b>
                   </div>
@@ -107,7 +133,7 @@ export default function MedarbejderOmsaetningRapport({ opgaver, medarbejdere, ud
           </div>
         )}
         <div style={{ fontSize: 12, color: "#94A3B8", marginTop: 10, lineHeight: 1.5 }}>
-          Omsætningen er den realiserede (faktureret tid, eller fastprisen for udførte fastprisopgaver) og fordeles på dem, der leverede den: efter fakturerbare minutter på timeopgaver, efter planlagt tid på fastpris. En elev (oplæring) får ingen omsætning, men tiden tæller som løn. «Pr. time» er omsætning delt med al registreret tid. Løn er registreret tid gange medarbejderens sats på opgavens dato, uden tillæg; kørsel og bonus er ikke med. Summen af rækkerne er præcis den realiserede omsætning i Budget-fanen.
+          Farverne viser, hvordan omsætningen fordeler sig på aftaletyperne. Omsætningen er den realiserede (faktureret tid, eller fastprisen for udførte fastprisopgaver) og fordeles på dem, der leverede den: efter fakturerbare minutter på timeopgaver, efter planlagt tid på fastpris. En elev (oplæring) får ingen omsætning, men tiden tæller som løn. «Pr. time» er omsætning delt med al registreret tid. Løn er registreret tid gange medarbejderens sats på opgavens dato, uden tillæg; kørsel og bonus er ikke med. Summen af rækkerne er præcis den realiserede omsætning i Budget-fanen.
         </div>
       </div>
     </div>

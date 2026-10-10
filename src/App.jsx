@@ -2476,6 +2476,7 @@ const MODULE_HELP = {
         "Listen står med den mest ledige øverst. Gul betyder under 60 %: der er plads til flere opgaver. Rød betyder over 95 %: der er ingen luft, hvis nogen bliver syge. Står en medarbejders timer ikke på kortet, ser vedkommende ledig ud, så ret dem dér først."] },
     { h: "Omsætning pr. medarbejder", p: [
         "Fanen «👤 Pr. medarbejder» (kun administratorer) viser, hvor meget af den realiserede omsætning hver medarbejder har leveret, hvad det er pr. arbejdstime, og lønnen ved siden af. Vælg år, måned og aftaletype.",
+        "Under hver medarbejders omsætning står de fire aftaletyper (Privat, Erhverv, Nexus og Ældrelov) hver med sin farve og sit beløb, og stangen er delt i de samme farver. En streg betyder, at medarbejderen ikke har haft omsætning på den type i perioden. Forklaringen til farverne står øverst, og farverne er de samme som i de andre rapporter. Summen af de fire er medarbejderens samlede omsætning.",
         "Omsætningen er den samme som i Budget-fanen og fordeles på dem, der leverede den: efter fakturerbare minutter på timeopgaver, efter planlagt tid på fastpris. En elev (oplæring) får ingen omsætning, men tiden tæller som løn. Kontorets egne registreringer, fx forgæves besøg, der faktureres alligevel, står for sig som «Kontoret». Summen af rækkerne er altid præcis den realiserede omsætning.",
         "Lønnen er registreret tid gange medarbejderens sats på opgavens dato, uden tillæg. Kørsel og bonus er ikke med. Mangler en sats, regnes de timer ikke med, og en gul linje siger det. Brug tallet til at se mønstre, ikke til at bedømme en enkelt medarbejder: en medarbejder på store timeopgaver og en på små fastprisopgaver er ikke til at sammenligne en til en."] },
     { h: "Sygefravær og vikardækning", p: [
@@ -11580,7 +11581,7 @@ function ReportsView({ travelSettings, instances, templates, pricing, budgets, o
       ) : rapport === "medarbejderomsaetning" && isAdminUser ? (
         <React.Suspense fallback={<div style={styles.hint}>Henter rapporten…</div>}>
           <MedarbejderOmsaetningRapport opgaver={postnrOpgaver} medarbejdere={employees} udenfor={udenforIds} beregn={opgaveTal}
-            loenFor={(emp, dato) => satsPaaDato(satsHistorik, emp, dato)} datoAf={instanceDateString} segmenter={REPORT_AREAS}
+            loenFor={(emp, dato) => satsPaaDato(satsHistorik, emp, dato)} datoAf={instanceDateString} segmenter={REPORT_AREAS} farver={REPORT_AREA_COLORS}
             harSatser={!!satsHistorik && Object.keys(satsHistorik).length > 0} />
         </React.Suspense>
       ) : rapport === "sygefravaer" && isAdminUser ? (

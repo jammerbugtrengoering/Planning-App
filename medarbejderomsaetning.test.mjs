@@ -49,6 +49,19 @@ er("uden sats", [raekke(r, "x").loen, raekke(r, "x").udenSatsMin], [0, 60]);
 er("andet år tæller ikke", k([{ ...t1, dato: "2025-03-02" }]).ialt, 0);
 er("måned", k([t1, { ...t1, dato: "2026-04-01" }], { maaned: 3 }).ialt, 1000);
 er("aftaletype", k([{ ...t1, contractType: "erhverv" }], { segment: "privat" }).ialt, 0);
+// Omsætning pr. aftaletype: summen af typerne er altid lig medarbejderens omsætning, også ved fordeling og hos kontoret.
+{
+  const blandet = k([
+    { ...t1, contractType: "privat" },
+    { ...t1, id: "n1", contractType: "nexus", dato: "2026-03-03" },
+    { ...t1, id: "e1", contractType: "erhverv", dato: "2026-03-04", timeLog: [{ empId: "planner", minutes: 60 }] },
+  ]);
+  for (const rk of blandet.raekker) {
+    const s = Object.values(rk.perType).reduce((a, b) => a + b, 0);
+    if (Math.abs(s - rk.omsaetning) > 1e-6) { fejl++; console.error("perType går ikke op for", rk.id, s, rk.omsaetning); }
+  }
+  er("kontoret har sin egen type", Math.round(raekke(blandet, KONTORET).perType.erhverv || 0), 1000);
+}
 // Opgave uden omsætning koster stadig løn.
 er("løn uden omsætning", raekke(k([{ dato: "2026-03-07", kr: 0, timeLog: [{ empId: "a", minutes: 60 }] }]), "a").loen, 200);
 if (fejl) { console.error(`medarbejderomsaetning.test.mjs: ${fejl} fejl`); process.exit(1); }

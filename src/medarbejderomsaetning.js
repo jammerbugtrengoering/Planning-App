@@ -34,7 +34,7 @@ function andele(t) {
 // periode: { aar, maaned } (maaned 0 = hele året). segment: «alle» eller en aftaletype.
 export function omsaetningPrMedarbejder(opgaver, { beregn, loenFor, datoAf, aar, maaned = 0, segment = "alle" }) {
   const pr = new Map();
-  const ny = () => ({ omsaetning: 0, fakturerbarMin: 0, registreretMin: 0, loen: 0, udenSatsMin: 0, opgaver: 0 });
+  const ny = () => ({ omsaetning: 0, fakturerbarMin: 0, registreretMin: 0, loen: 0, udenSatsMin: 0, opgaver: 0, perType: {} });
   const get = (e) => { if (!pr.has(e)) pr.set(e, ny()); return pr.get(e); };
   let ialt = 0;
   for (const t of opgaver) {
@@ -58,9 +58,12 @@ export function omsaetningPrMedarbejder(opgaver, { beregn, loenFor, datoAf, aar,
     const v = andele(t);
     const sum = [...v.values()].reduce((s, x) => s + x, 0);
     ialt += kr;
-    if (sum <= 0) { get(KONTORET).omsaetning += kr; continue; }
+    // Omsætningen pr. aftaletype (10.10.2026), så rapporten kan vise de fire typer ved siden af totalen. Summen af typerne er altid lig omsaetning.
+    const type = t.contractType || t.contract_type || "privat";
+    if (sum <= 0) { const k = get(KONTORET); k.omsaetning += kr; k.perType[type] = (k.perType[type] || 0) + kr; continue; }
     for (const [e, vaegt] of v) {
       const m = get(e);
+      m.perType[type] = (m.perType[type] || 0) + kr * (vaegt / sum);
       m.omsaetning += kr * (vaegt / sum);
       m.fakturerbarMin += (t.pricingType || t.pricing_type) === "fixed" ? 0 : vaegt;
     }
