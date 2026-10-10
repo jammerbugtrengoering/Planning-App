@@ -11586,7 +11586,7 @@ function ReportsView({ travelSettings, instances, templates, pricing, budgets, o
         </React.Suspense>
       ) : rapport === "sygefravaer" && isAdminUser ? (
         <React.Suspense fallback={<div style={styles.hint}>Henter rapporten…</div>}>
-          <SygefravaerRapport opgaver={instances} medarbejdere={rapportMedarbejdere} datoAf={instanceDateString}
+          <SygefravaerRapport opgaver={instances} medarbejdere={rapportMedarbejdere} alleMedarbejdere={employees} datoAf={instanceDateString}
             erSygdom={(t) => t.type === "sygdom"} erAflyst={erAflyst} fastFor={fastForRapport} />
         </React.Suspense>
       ) : rapport === "portefoelje" ? (

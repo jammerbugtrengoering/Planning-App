@@ -18,7 +18,7 @@ const iso = (d) => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOSt
 const dk = (d) => d.split("-").reverse().join(".");
 const MAX_OPGAVER = 50;
 
-export default function SygefravaerRapport({ opgaver, medarbejdere, datoAf, erSygdom, erAflyst, fastFor }) {
+export default function SygefravaerRapport({ opgaver, medarbejdere, alleMedarbejdere, datoAf, erSygdom, erAflyst, fastFor }) {
   const nu = new Date();
   const [aar, setAar] = useState(nu.getFullYear());
   const [maaned, setMaaned] = useState(0);   // 0 = hele året
@@ -26,7 +26,9 @@ export default function SygefravaerRapport({ opgaver, medarbejdere, datoAf, erSy
   const til = maaned ? iso(new Date(aar, maaned, 0)) : `${aar}-12-31`;
   const tal = useMemo(() => sygefravaerOgVikar({ medarbejdere, opgaver, fra, til, datoAf, erSygdom, erAflyst, fastFor }),
     [medarbejdere, opgaver, fra, til, datoAf, erSygdom, erAflyst, fastFor]);
-  const navn = useMemo(() => Object.fromEntries(medarbejdere.map((m) => [m.id, m.name])), [medarbejdere]);
+  // Navnene slås op blandt ALLE medarbejdere, ikke kun dem, der indgår i rapporten: en ejer, der tog en sygedags opgave (afløser), er uden for rapporterne, men skal stå med navn.
+  // Før 10.10.2026 stod vedkommende med sit id («e5», «evfebxn6»).
+  const navn = useMemo(() => Object.fromEntries((alleMedarbejdere || medarbejdere).map((m) => [m.id, m.name])), [alleMedarbejdere, medarbejdere]);
   const raekker = useMemo(() => [...tal.raekker].filter((r) => r.sygeDage > 0).sort((a, b) => b.sygMin - a.sygMin), [tal]);
   // Ikke dækket først: det er dem, planlæggeren skal gøre noget ved.
   const rang = { ikkeDaekket: 0, daekket: 1, aflyst: 2 };
