@@ -348,7 +348,7 @@ function opgaveIdentitet(t) {
 // omdoebt til "Udvikler IT". Dermed holdt solsikken op med at vise sig, uden at nogen
 // kunne se hvorfor: der var ingen fejl, kun en streng der ikke passede paa noget mere.
 const SOLSIKKE_ID = "e5";                  // Charlotte Thorsager Kronborg
-// Et paaskeaeg til Karen (10.10.2026): tre hurtige klik paa firmanavnet i toppen viser et billede af hunden. Kun naar Karen selv er logget ind, og kun paa skaermen: billedet
+// Et paaskeaeg til Karen (10.10.2026): et klik paa firmanavnet i toppen viser et billede af hunden. Kun naar Karen selv er logget ind, og kun paa skaermen: billedet
 // ligger i public/hund.jpg og har intet med data at goere. Karen findes paa sit id ligesom Charlotte, ikke paa sit navn.
 const HUND_ID = "evfebxn6";                // Karen Jensen
 
@@ -2989,7 +2989,6 @@ function PlanningApp({ session, onSignOut }) {
   const [editEmp, setEditEmp] = useState(null);
   const [toast, setToast] = useState(null);
   const [hundSynlig, setHundSynlig] = useState(false);
-  const hundKlik = useRef({ n: 0, t: 0 });
   const [running, setRunning] = useState({});
   const [dragId, setDragId] = useState(null);
   const [openTaskId, setOpenTaskId] = useState(null);
@@ -6467,12 +6466,8 @@ function PlanningApp({ session, onSignOut }) {
           </button>
           <div>
             <div style={styles.brandTitle} onClick={() => {
-              // Paaskeaeg: se HUND_ID.
-              if (currentEmployeeForAuth?.id !== HUND_ID) return;
-              const nu2 = Date.now();
-              const k = hundKlik.current;
-              k.n = nu2 - k.t < 1500 ? k.n + 1 : 1; k.t = nu2;
-              if (k.n >= 3) { k.n = 0; setHundSynlig(true); }
+              // Paaskeaeg: se HUND_ID. Ét klik; kun Karens eget login reagerer.
+              if (currentEmployeeForAuth?.id === HUND_ID) setHundSynlig(true);
             }}>{firma?.navn || "Jammerbugt Rengøring"}</div>
             <div style={styles.brandSub}>{firma?.undertekst ?? L.sub}</div>
           </div>
