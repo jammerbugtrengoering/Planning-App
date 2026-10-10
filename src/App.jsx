@@ -348,6 +348,9 @@ function opgaveIdentitet(t) {
 // omdoebt til "Udvikler IT". Dermed holdt solsikken op med at vise sig, uden at nogen
 // kunne se hvorfor: der var ingen fejl, kun en streng der ikke passede paa noget mere.
 const SOLSIKKE_ID = "e5";                  // Charlotte Thorsager Kronborg
+// Et paaskeaeg til Karen (10.10.2026): tre hurtige klik paa firmanavnet i toppen viser et billede af hunden. Kun naar Karen selv er logget ind, og kun paa skaermen: billedet
+// ligger i public/hund.jpg og har intet med data at goere. Karen findes paa sit id ligesom Charlotte, ikke paa sit navn.
+const HUND_ID = "evfebxn6";                // Karen Jensen
 
 // Hvem der maa se den: alle planlaeggere. Ikke en liste over bestemte personer.
 //
@@ -2985,6 +2988,8 @@ function PlanningApp({ session, onSignOut }) {
   const [showAddEmp, setShowAddEmp] = useState(false);
   const [editEmp, setEditEmp] = useState(null);
   const [toast, setToast] = useState(null);
+  const [hundSynlig, setHundSynlig] = useState(false);
+  const hundKlik = useRef({ n: 0, t: 0 });
   const [running, setRunning] = useState({});
   const [dragId, setDragId] = useState(null);
   const [openTaskId, setOpenTaskId] = useState(null);
@@ -6461,7 +6466,14 @@ function PlanningApp({ session, onSignOut }) {
             <img src={firma?.logo_url || "/app-icon.png"} alt={firma?.navn || "Jammerbugt Rengøring"} style={{ width: 36, height: 36, minWidth: 36, borderRadius: 10, objectFit: "cover", background: "#000", display: "block" }} />
           </button>
           <div>
-            <div style={styles.brandTitle}>{firma?.navn || "Jammerbugt Rengøring"}</div>
+            <div style={styles.brandTitle} onClick={() => {
+              // Paaskeaeg: se HUND_ID.
+              if (currentEmployeeForAuth?.id !== HUND_ID) return;
+              const nu2 = Date.now();
+              const k = hundKlik.current;
+              k.n = nu2 - k.t < 1500 ? k.n + 1 : 1; k.t = nu2;
+              if (k.n >= 3) { k.n = 0; setHundSynlig(true); }
+            }}>{firma?.navn || "Jammerbugt Rengøring"}</div>
             <div style={styles.brandSub}>{firma?.undertekst ?? L.sub}</div>
           </div>
           {/* Genindlæs: installeret som app findes hverken adresselinje eller genindlæs-knap. Står ved logoet (6.10.2026), så den ikke
@@ -6561,6 +6573,17 @@ function PlanningApp({ session, onSignOut }) {
       )}
 
       {toast && <div style={styles.toast}>{toast}</div>}
+
+      {hundSynlig && (
+        <div role="dialog" aria-label="En hilsen til Karen" onClick={() => setHundSynlig(false)}
+          style={{ position: "fixed", inset: 0, zIndex: 9999, background: "rgba(15,23,42,0.72)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16, cursor: "pointer" }}>
+          <div style={{ background: "#fff", borderRadius: 18, padding: 14, maxWidth: 380, width: "100%", textAlign: "center", boxShadow: "0 20px 50px rgba(0,0,0,0.35)" }}>
+            <img src="/hund.jpg" alt="En våd og meget alvorlig golden retriever" style={{ width: "100%", borderRadius: 12, display: "block" }} />
+            <div style={{ marginTop: 10, fontSize: 16, fontWeight: 700, color: "#111111" }}>Godt fundet, Karen 🐾</div>
+            <div style={{ fontSize: 12.5, color: "#64748B", marginTop: 2 }}>Tryk for at lukke</div>
+          </div>
+        </div>
+      )}
 
       {/* Modulhjælp: knappen ligger i selve modulet og aabner hjaelp for netop det view man staar i. */}
       {MODULE_HELP[view] && <HelpButton onClick={() => setShowHelp(true)} />}
